@@ -71,12 +71,17 @@ enum LocalSpeechEngine: String, Codable, Sendable {
 
 struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
+    /// Canonical segment timestamp derived from the source-audio interval, not callback time.
     let createdAt: Date
     let audioStartedAt: Date
     let audioEndedAt: Date
     let text: String
     let containsMio: Bool
+    /// True only when usable source audio overlapped an app-background interval.
+    /// The time at which the recognition callback arrived is irrelevant.
     let wasObservedInBackground: Bool
+    /// True when Apple's result range was finite and nonnegative. This alone is not
+    /// evidence that audio was captured while the app was in the background.
     let audioTimingIsValid: Bool
 
     init(

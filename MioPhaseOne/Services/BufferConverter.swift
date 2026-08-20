@@ -1,7 +1,7 @@
 import AVFoundation
 
 /// Converts the microphone format to the format requested by SpeechAnalyzer.
-/// This follows Apple's iOS 26 speech-transcription sample.
+/// Priming is disabled so conversion does not insert artificial latency into live buffers.
 final class BufferConverter {
     enum ConversionError: Error {
         case failedToCreateConverter

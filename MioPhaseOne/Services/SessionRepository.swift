@@ -1,5 +1,7 @@
 import Foundation
 
+/// Stores protected transcript diagnostics inside the app sandbox. Raw audio is never stored;
+/// shareable exports are temporary files and persistent sessions are excluded from backup.
 actor SessionRepository {
     private let fileManager: FileManager
     private let storageURL: URL
@@ -49,6 +51,8 @@ actor SessionRepository {
     }
 
     func deleteAll() throws {
+        // This removes app-owned storage and temporary exports. Copies already shared to
+        // Files, mail or another app are outside this sandbox and cannot be recalled here.
         if fileManager.fileExists(atPath: storageURL.path) {
             try fileManager.removeItem(at: storageURL)
         }
@@ -73,6 +77,8 @@ actor SessionRepository {
             .appendingPathComponent("Mio-fas-1-\(formatter.string(from: session.startedAt)).json")
         let data = try Self.exportEncoder.encode(session)
         try data.write(to: exportURL, options: .atomic)
+        // This protection remains writable after the first device unlock, which is required
+        // for an ongoing background audio session while the screen is locked.
         try? fileManager.setAttributes(
             [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
             ofItemAtPath: exportURL.path
@@ -89,6 +95,7 @@ actor SessionRepository {
             [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
             ofItemAtPath: storageURL.path
         )
+        // Diagnostic transcripts are intentionally kept out of device backups.
         var resourceValues = URLResourceValues()
         resourceValues.isExcludedFromBackup = true
         var mutableDirectory = directory

@@ -22,6 +22,7 @@ final class PhaseOneViewModel {
 
     @ObservationIgnored private let repository: SessionRepository
     @ObservationIgnored private var pipeline: LiveTranscriptionPipeline?
+    /// Generation token used to reject callbacks from a pipeline that is no longer active.
     @ObservationIgnored private var activePipelineID: UUID?
     @ObservationIgnored private var pauseTask: Task<Void, Never>?
     @ObservationIgnored private var startupTask: Task<Void, Never>?
@@ -238,7 +239,7 @@ final class PhaseOneViewModel {
                     self.pauseTask = nil
                     self.beginListening()
                 } catch {
-                    // The task is cancelled when the user resumes or stops manually.
+                    // Expected when scheduled resume is replaced or the session ends manually.
                 }
             }
         } else {
@@ -252,6 +253,8 @@ final class PhaseOneViewModel {
 
     func handleScenePhase(_ phase: ScenePhase) {
         guard currentSession?.endedAt == nil else { return }
+        // Scene callbacks open and close background intervals. Only a transcript's usable
+        // source-audio time—not callback delivery time—can overlap one as evidence.
         switch phase {
         case .active:
             closeOpenBackgroundInterval(at: .now)
@@ -572,7 +575,7 @@ final class PhaseOneViewModel {
                 self.lastPersistedAt = .now
                 self.saveTask = nil
             } catch is CancellationError {
-                // A newer snapshot will be saved instead.
+                // Expected when saves are coalesced or an immediate save supersedes this task.
             } catch {
                 self.errorMessage = "Kunde inte spara testdata under körningen: \(error.localizedDescription)"
             }

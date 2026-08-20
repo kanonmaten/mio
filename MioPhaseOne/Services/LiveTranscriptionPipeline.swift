@@ -3,6 +3,8 @@ import CoreMedia
 import Foundation
 import Speech
 
+/// A one-shot speech pipeline. Once shutdown begins, this instance cannot be restarted.
+/// Startup and shutdown are serialized explicitly; audio delivery has a single consumer.
 final class LiveTranscriptionPipeline: @unchecked Sendable {
     struct Handlers {
         let result: (
@@ -23,6 +25,8 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
         let engine: LocalSpeechEngine
     }
 
+    /// The unchecked boundary is limited to the tap-to-audio-task handoff. The task is
+    /// the sole consumer and treats the captured PCM buffer as read-only.
     private struct CapturedAudioBuffer: @unchecked Sendable {
         let buffer: AVAudioPCMBuffer
         let capturedUptime: TimeInterval
@@ -102,7 +106,7 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                         }
                         await Self.flush(pendingResult, handlers: handlers)
                     } catch is CancellationError {
-                        // Expected if setup fails before the analyzer starts.
+                        // Expected when result consumption is cancelled during teardown.
                     } catch {
                         await Self.flush(pendingResult, handlers: handlers)
                         handlers.failure(error)
@@ -137,7 +141,7 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                         }
                         await Self.flush(pendingResult, handlers: handlers)
                     } catch is CancellationError {
-                        // Expected if setup fails before the analyzer starts.
+                        // Expected when result consumption is cancelled during teardown.
                     } catch {
                         await Self.flush(pendingResult, handlers: handlers)
                         handlers.failure(error)
@@ -159,6 +163,8 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
             )
         }
 
+        /// Maps a usable analyzer-relative range onto wall-clock dates. Invalid ranges
+        /// deliberately remain ineligible for background evidence.
         private static func wallClockDates(
             for range: CMTimeRange,
             origin: Date
@@ -180,6 +186,7 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
     private let audioSession = AVAudioSession.sharedInstance()
     private let converter = BufferConverter()
     private let dropCountLock = NSLock()
+    /// Guards shutdown state and gates audio startup; it does not protect every property.
     private let lifecycleLock = NSLock()
 
     private var backend: TranscriptionBackend?
@@ -195,6 +202,7 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
     private var analyzerStarted = false
     private var stopping = false
     private var droppedBufferCount = 0
+    // Paired wall-clock and monotonic origins map analyzer-relative ranges back to dates.
     private var timelineWallClockOrigin = Date.now
     private var timelineUptimeOrigin: TimeInterval = 0
     private var lastAnalyzerInputEndTime = CMTime.zero
@@ -307,7 +315,7 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                 try await analyzer?.finalizeAndFinishThroughEndOfInput()
                 finalizedSuccessfully = true
             } catch where error is CancellationError {
-                // Expected if iOS tears down audio while the app is stopping.
+                // Cancellation is normal during teardown.
             } catch {
                 handlers.failure(error)
             }
@@ -415,7 +423,7 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                 try await analyzer?.finalizeAndFinishThroughEndOfInput()
                 finalizedSuccessfully = true
             } catch {
-                // This backend has already failed. The fallback result is more useful.
+                // Cleanup must not replace the setup error that triggered backend fallback.
             }
             if finalizedSuccessfully, let resultTask {
                 await resultTask.value
@@ -481,6 +489,7 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                         seconds: elapsed,
                         preferredTimescale: 1_000_000_000
                     )
+                    // Preserve real host-time gaps, but never overlap a preceding input.
                     let bufferStartTime = CMTimeCompare(
                         desiredStart,
                         lastAnalyzerInputEndTime
