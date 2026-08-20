@@ -1,16 +1,16 @@
-# Installera Mio på hennes iPhone — exakt steg för steg
+# Alternativ: installera Mio direkt från Xcode på en modern Mac
 
-> **Macen kör Monterey?** Följ inte Xcode-stegen nedan. Xcode 26 kräver minst macOS Sequoia 15.6. Använd i stället [START_HAR_MONTEREY.md](../START_HAR_MONTEREY.md), som bygger på GitHub och installerar från Windows med AltStore.
+> **Macen kör Monterey?** Följ inte Xcode-stegen nedan. Den genomförda huvudvägen använder [GitHub Actions och SideStore](../START_HAR_MONTEREY.md) och kräver ingen modern utvecklings-Mac lokalt.
 
-Den här guiden förutsätter att ni är nybörjare. Gör punkterna i ordning. Ni behöver inte skapa en app i App Store och ni ska inte skriva in någon OpenAI-nyckel.
+Det här dokumentet gäller endast alternativet där en kompatibel Mac kör Xcode 26 direkt. Guiden förutsätter att ni är nybörjare. Ni behöver inte skapa en app i App Store och ni ska inte skriva in någon OpenAI-nyckel.
 
 ## Det ni behöver
 
-- En **Mac**. En egen iPhone-app kan inte byggas och signeras från Windows.
+- En **Mac som kan köra Xcode 26**. Windows kan inte köra Xcode, men huvudvägen med molnbygge och SideStore fungerar utan en modern Mac lokalt.
 - Hennes **iPhone 13 med iOS 26 eller senare**.
 - En USB-kabel som klarar data, inte bara laddning.
 - Ett vanligt Apple-konto. Gratis **Personal Team** räcker.
-- Projektmappen `MioPhaseOne` eller ZIP-filen `MioPhaseOne.zip`.
+- Tillgång till det privata GitHub-repot `kanonmaten/mio`.
 
 Apple-kontot som ni lägger till i Xcode behöver inte vara samma Apple-konto som hon använder för iCloud på telefonen.
 
@@ -41,16 +41,13 @@ Projektet kan inte byggas för äldre iOS eftersom Apples nya lokala SpeechAnaly
 7. Låt Xcode installera sina extra komponenter. Det kan ta en stund.
 8. Om Xcode saknar iOS-stöd: öppna **Xcode > Settings > Components** och installera iOS Platform Support. Apple beskriver detta i [komponentguiden](https://developer.apple.com/documentation/xcode/downloading-and-installing-additional-xcode-components).
 
-## Del 3 — flytta projektet till Macen
+## Del 3 — klona projektet till Macen
 
-Om ni har fått `MioPhaseOne.zip`:
-
-1. Flytta ZIP-filen till Macen via exempelvis USB-minne, AirDrop, iCloud Drive eller Google Drive.
-2. Dubbelklicka på ZIP-filen i Finder.
-3. En mapp som heter `MioPhaseOne` skapas.
-4. Lägg gärna mappen i **Dokument** så att den inte raderas av misstag.
-
-Öppna sedan mappen och dubbelklicka på:
+1. Öppna Xcode och välj **Clone Git Repository** i välkomstfönstret. Samma val finns normalt under **Source Control**.
+2. Ange repots GitHub-adress och logga in om Xcode frågar.
+3. Välj en beständig lokal plats, exempelvis **Dokument**.
+4. Vänta tills kloningen är klar.
+5. Öppna den klonade mappen och dubbelklicka på:
 
 > `MioPhaseOne.xcodeproj`
 

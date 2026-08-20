@@ -4,3 +4,14 @@ DerivedData/
 xcuserdata/
 *.ipa
 *.dSYM.zip
+*.xcarchive
+*.xcresult
+Mio-fas-1-*.json
+*.mobiledevicepairing
+*.mobileprovision
+*.p12
+*.cer
+*.pem
+*.key
+.env
+.env.*

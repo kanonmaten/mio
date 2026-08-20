@@ -2,11 +2,13 @@
 
 Målet är inte att visa en snygg demo. Målet är att samla pålitliga bevis från just hennes iPhone 13.
 
+Ett kort rökprov genomfördes den 20 augusti 2026. Det verifierade svensk `DictationTranscriber`, Mio-detektion och ett kort bakgrundssegment, men ersätter inte testerna nedan. Se [TESTRESULTAT_FAS_1.md](TESTRESULTAT_FAS_1.md).
+
 ## Före testet
 
 1. Kontrollera att iPhone kör iOS 26 eller senare.
 2. Stäng av Strömsparläge för första standardtestet. Senare kan ni göra ett separat test med Strömsparläge.
-3. Stoppa Xcodes körning, koppla ur Mac-/laddkabeln och öppna Mio från telefonens hemskärm. Annars förvränger laddning och debugger batteritestet.
+3. Koppla ur all USB/laddning och öppna Mio från telefonens hemskärm. Om appen installerades via Xcode-alternativet ska även debuggern stoppas. Laddning och debugger förvränger batteritestet.
 4. Notera ungefärlig batteriprocent.
 5. Ha wifi vid första starten så att Apple kan hämta svensk språkmodell.
 6. Använd först telefonens inbyggda mikrofon, inte AirPods.
