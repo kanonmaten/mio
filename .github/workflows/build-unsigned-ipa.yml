@@ -1,0 +1,102 @@
+name: Bygg Mio IPA
+
+run-name: "Bygg Mio IPA #${{ github.run_number }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mio-phase-one-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Kompilera med Xcode 26
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
+    steps:
+      - name: Hämta projektet
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Visa byggmiljön
+        run: |
+          set -euo pipefail
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Kontrollera projektfiler
+        run: |
+          set -euo pipefail
+          test -f MioPhaseOne.xcodeproj/project.pbxproj
+          test -f MioPhaseOne/Info.plist
+          test -f MioPhaseOne/PrivacyInfo.xcprivacy
+          plutil -lint MioPhaseOne/Info.plist
+          plutil -lint MioPhaseOne/PrivacyInfo.xcprivacy
+
+      - name: Bygg osignerad iPhone-app
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project MioPhaseOne.xcodeproj \
+            -scheme MioPhaseOne \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY='' \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            build
+
+      - name: Skapa IPA-filen
+        run: |
+          set -euo pipefail
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/MioPhaseOne.app"
+          test -d "$APP_PATH"
+          test -x "$APP_PATH/MioPhaseOne"
+          test -f "$APP_PATH/PrivacyInfo.xcprivacy"
+
+          rm -rf "$RUNNER_TEMP/Payload"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          ditto "$APP_PATH" "$RUNNER_TEMP/Payload/MioPhaseOne.app"
+
+          (
+            cd "$RUNNER_TEMP"
+            /usr/bin/zip -qry "$GITHUB_WORKSPACE/MioPhaseOne-unsigned.ipa" Payload
+          )
+
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/MioPhaseOne-unsigned.ipa"
+          /usr/bin/lipo -archs "$APP_PATH/MioPhaseOne" | /usr/bin/grep -qw arm64
+
+          {
+            echo "Mio Fas 1 – osignerad molnbyggnad"
+            echo "GitHub run: $GITHUB_RUN_ID"
+            echo "Commit: $GITHUB_SHA"
+            sw_vers -productVersion | sed 's/^/macOS: /'
+            xcodebuild -version | tr '\n' ' '
+            echo
+            xcrun --sdk iphoneos --show-sdk-version | sed 's/^/iPhoneOS SDK: /'
+            /usr/bin/shasum -a 256 "$GITHUB_WORKSPACE/MioPhaseOne-unsigned.ipa"
+          } > "$GITHUB_WORKSPACE/MioPhaseOne-buildinfo.txt"
+
+      - name: Ladda upp färdig IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: MioPhaseOne-IPA
+          path: |
+            MioPhaseOne-unsigned.ipa
+            MioPhaseOne-buildinfo.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

@@ -1,0 +1,499 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B10000000000000000000001 /* MioPhaseOneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000001 /* MioPhaseOneApp.swift */; };
+		B10000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000002 /* ContentView.swift */; };
+		B10000000000000000000003 /* PhaseOneViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000003 /* PhaseOneViewModel.swift */; };
+		B10000000000000000000004 /* PhaseOneModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000004 /* PhaseOneModels.swift */; };
+		B10000000000000000000005 /* MioWakeWordDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000005 /* MioWakeWordDetector.swift */; };
+		B10000000000000000000006 /* SessionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000006 /* SessionRepository.swift */; };
+		B10000000000000000000007 /* BufferConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000007 /* BufferConverter.swift */; };
+		B10000000000000000000008 /* SpeechCapabilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000008 /* SpeechCapabilityService.swift */; };
+		B10000000000000000000009 /* LiveTranscriptionPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000009 /* LiveTranscriptionPipeline.swift */; };
+		B1000000000000000000000A /* MioWakeWordDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000000B /* MioWakeWordDetectorTests.swift */; };
+		B1000000000000000000000B /* PhaseOneModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000000C /* PhaseOneModelsTests.swift */; };
+		B1000000000000000000000C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000000F /* PrivacyInfo.xcprivacy */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		C10000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 010000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000001;
+			remoteInfo = MioPhaseOne;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		F10000000000000000000001 /* MioPhaseOneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioPhaseOneApp.swift; sourceTree = "<group>"; };
+		F10000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		F10000000000000000000003 /* PhaseOneViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseOneViewModel.swift; sourceTree = "<group>"; };
+		F10000000000000000000004 /* PhaseOneModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseOneModels.swift; sourceTree = "<group>"; };
+		F10000000000000000000005 /* MioWakeWordDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWakeWordDetector.swift; sourceTree = "<group>"; };
+		F10000000000000000000006 /* SessionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRepository.swift; sourceTree = "<group>"; };
+		F10000000000000000000007 /* BufferConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BufferConverter.swift; sourceTree = "<group>"; };
+		F10000000000000000000008 /* SpeechCapabilityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechCapabilityService.swift; sourceTree = "<group>"; };
+		F10000000000000000000009 /* LiveTranscriptionPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveTranscriptionPipeline.swift; sourceTree = "<group>"; };
+		F1000000000000000000000A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F1000000000000000000000B /* MioWakeWordDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWakeWordDetectorTests.swift; sourceTree = "<group>"; };
+		F1000000000000000000000C /* PhaseOneModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseOneModelsTests.swift; sourceTree = "<group>"; };
+		F1000000000000000000000D /* MioPhaseOne.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MioPhaseOne.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F1000000000000000000000E /* MioPhaseOneTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MioPhaseOneTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F1000000000000000000000F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F20000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F20000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		710000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				710000000000000000000002 /* MioPhaseOne */,
+				710000000000000000000005 /* MioPhaseOneTests */,
+				710000000000000000000006 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		710000000000000000000002 /* MioPhaseOne */ = {
+			isa = PBXGroup;
+			children = (
+				F10000000000000000000001 /* MioPhaseOneApp.swift */,
+				F10000000000000000000002 /* ContentView.swift */,
+				F10000000000000000000003 /* PhaseOneViewModel.swift */,
+				710000000000000000000003 /* Models */,
+				710000000000000000000004 /* Services */,
+				F1000000000000000000000A /* Info.plist */,
+				F1000000000000000000000F /* PrivacyInfo.xcprivacy */,
+			);
+			path = MioPhaseOne;
+			sourceTree = "<group>";
+		};
+		710000000000000000000003 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				F10000000000000000000004 /* PhaseOneModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		710000000000000000000004 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				F10000000000000000000005 /* MioWakeWordDetector.swift */,
+				F10000000000000000000006 /* SessionRepository.swift */,
+				F10000000000000000000007 /* BufferConverter.swift */,
+				F10000000000000000000008 /* SpeechCapabilityService.swift */,
+				F10000000000000000000009 /* LiveTranscriptionPipeline.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		710000000000000000000005 /* MioPhaseOneTests */ = {
+			isa = PBXGroup;
+			children = (
+				F1000000000000000000000B /* MioWakeWordDetectorTests.swift */,
+				F1000000000000000000000C /* PhaseOneModelsTests.swift */,
+			);
+			path = MioPhaseOneTests;
+			sourceTree = "<group>";
+		};
+		710000000000000000000006 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F1000000000000000000000D /* MioPhaseOne.app */,
+				F1000000000000000000000E /* MioPhaseOneTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000000000000000000001 /* MioPhaseOne */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E10000000000000000000005 /* Build configuration list for PBXNativeTarget "MioPhaseOne" */;
+			buildPhases = (
+				910000000000000000000001 /* Sources */,
+				F20000000000000000000001 /* Frameworks */,
+				810000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MioPhaseOne;
+			productName = MioPhaseOne;
+			productReference = F1000000000000000000000D /* MioPhaseOne.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A10000000000000000000002 /* MioPhaseOneTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E10000000000000000000008 /* Build configuration list for PBXNativeTarget "MioPhaseOneTests" */;
+			buildPhases = (
+				910000000000000000000002 /* Sources */,
+				F20000000000000000000002 /* Frameworks */,
+				810000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D10000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = MioPhaseOneTests;
+			productName = MioPhaseOneTests;
+			productReference = F1000000000000000000000E /* MioPhaseOneTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		010000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					A10000000000000000000001 = {
+						CreatedOnToolsVersion = 26.0;
+						SystemCapabilities = {
+							com.apple.BackgroundModes = {
+								enabled = 1;
+							};
+						};
+					};
+					A10000000000000000000002 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = A10000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = E10000000000000000000000 /* Build configuration list for PBXProject "MioPhaseOne" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				sv,
+			);
+			mainGroup = 710000000000000000000001;
+			productRefGroup = 710000000000000000000006 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000000000000000000001 /* MioPhaseOne */,
+				A10000000000000000000002 /* MioPhaseOneTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		810000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1000000000000000000000C /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		810000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		910000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000001 /* MioPhaseOneApp.swift in Sources */,
+				B10000000000000000000002 /* ContentView.swift in Sources */,
+				B10000000000000000000003 /* PhaseOneViewModel.swift in Sources */,
+				B10000000000000000000004 /* PhaseOneModels.swift in Sources */,
+				B10000000000000000000005 /* MioWakeWordDetector.swift in Sources */,
+				B10000000000000000000006 /* SessionRepository.swift in Sources */,
+				B10000000000000000000007 /* BufferConverter.swift in Sources */,
+				B10000000000000000000008 /* SpeechCapabilityService.swift in Sources */,
+				B10000000000000000000009 /* LiveTranscriptionPipeline.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		910000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1000000000000000000000A /* MioWakeWordDetectorTests.swift in Sources */,
+				B1000000000000000000000B /* PhaseOneModelsTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D10000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000001 /* MioPhaseOne */;
+			targetProxy = C10000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		E10000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E10000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		E10000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MioPhaseOne/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioPhaseOne;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		E10000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MioPhaseOne/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioPhaseOne;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		E10000000000000000000006 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioPhaseOneTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MioPhaseOne.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MioPhaseOne";
+			};
+			name = Debug;
+		};
+		E10000000000000000000007 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioPhaseOneTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MioPhaseOne.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MioPhaseOne";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E10000000000000000000000 /* Build configuration list for PBXProject "MioPhaseOne" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E10000000000000000000001 /* Debug */,
+				E10000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E10000000000000000000005 /* Build configuration list for PBXNativeTarget "MioPhaseOne" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E10000000000000000000003 /* Debug */,
+				E10000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E10000000000000000000008 /* Build configuration list for PBXNativeTarget "MioPhaseOneTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E10000000000000000000006 /* Debug */,
+				E10000000000000000000007 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 010000000000000000000001 /* Project object */;
+}
