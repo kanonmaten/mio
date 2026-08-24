@@ -49,7 +49,7 @@ For phase 2 work, also read `docs/DATAMODELL_FAS_2.md`, `docs/KRAVMATRIS_FAS_2.m
 ## Build and verification
 
 - The local Windows environment cannot compile this iOS 26 project.
-- `.github/workflows/build-unsigned-ipa.yml` is the authoritative cloud build and uses Xcode 26.
+- `.github/workflows/build-unsigned-ipa.yml` keeps Xcode 26.6 as the authoritative stable build, test and IPA environment. Its separate `xcode-27` public-preview job is non-blocking, creates no IPA and is only an early compatibility signal.
 - GitHub Actions produces an unsigned IPA. SideStore signs and installs it with the user's Apple Account.
 - Run all safe static checks available on Windows. State clearly which checks still require GitHub Actions or the physical iPhone.
 - Do not describe a new revision as compiled, Actions-built, installed or phone-verified without evidence for that exact revision.

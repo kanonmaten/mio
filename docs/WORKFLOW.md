@@ -22,7 +22,7 @@ Filer i C:\Users\eyvin\Documents\GitHub\mio
         ↓
 GitHub Desktop: granska → commit → push
         ↓
-GitHub Actions: kör XCTest + bygg osignerad IPA
+GitHub Actions: stabil Xcode 26.6 bygger IPA + Xcode 27 preview kontrollerar kompatibilitet
         ↓
 SideStore: signera → installera → förnya
         ↓
@@ -43,6 +43,8 @@ Använd dessa nivåer i statusrapporter och dokument:
 6. **Verifierad på iPhone** — ett namngivet testfall har körts med observerat resultat.
 
 En äldre grön build eller ett äldre telefonprov gäller inte automatiskt efter kodändringar. Fas 2 ska dokumenteras i `KRAVMATRIS_FAS_2.md` och `TESTRESULTAT_FAS_2.md`; fas 1-resultatet från den 20 augusti ska ligga kvar som historik.
+
+I **Bygg Mio IPA** är Xcode 26.6-jobbet den obligatoriska källan till IPA:n. Xcode 27-jobbet är en icke blockerande previewkontroll och skapar ingen IPA. Ett grönt previewjobb är extra kompatibilitetsevidens, inte en ersättning för stabil build eller fysisk telefonverifiering.
 
 ## Inför varje ändring
 
@@ -85,7 +87,7 @@ Commit eller push inte utan att jag uttryckligen ber om det.
    - `test: täck Mio-detektion med skiljetecken`
 
 5. Klicka **Commit to main** och därefter **Push origin**.
-6. Öppna GitHub **Actions > Bygg Mio IPA > Run workflow** när en ny telefonbyggnad behövs.
+6. Öppna GitHub **Actions > Bygg Mio IPA > Run workflow** när en ny telefonbyggnad behövs. Låt **Kör även den icke blockerande Xcode 27-previewkontrollen** vara vald för normal kompatibilitetskontroll; avmarkera endast om GitHubs previewrunner är otillgänglig eller har lång kö.
 7. Hämta artifact-ZIP, packa upp den en gång och installera `.ipa` via SideStore.
 8. Exportera viktig lokal testdata före uppdatering. Inför första fas 2-installationen ska åtminstone befintlig fas 1-session exporteras privat.
 9. Installera över befintlig Mio med samma Apple-konto och bundle identifier; radera inte appen i onödan.

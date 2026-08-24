@@ -12,6 +12,7 @@ Mio är en privat iPhone-app för en användare. Fas 2 bygger vidare på den lok
 | Fas 2, statisk Windows-granskning | Godkänd inom miljöns gränser |
 | Fas 2, Xcode-kompilering och XCTest | Inte körda ännu |
 | Fas 2, GitHub Actions och ny IPA | Inte körda ännu |
+| Fas 2, Xcode 27-previewkontroll | Konfigurerad men inte körd ännu |
 | Fas 2, installation och iPhone-test | Inte genomförda ännu |
 | OpenAI, EventKit och systemalarm | Inte inkluderade i fas 2 |
 
@@ -58,7 +59,9 @@ Detta är en beskrivning av källkoden, inte ett påstående om att den nya revi
 
 ### Huvudväg: GitHub Actions + SideStore
 
-Den lokala Macen kör Monterey och kan inte köra Xcode 26. Koden pushas därför till det privata GitHub-repot, GitHub Actions kompilerar med Xcode 26.6, kör XCTest i en iOS 26-simulator och bygger IPA:n. SideStore signerar sedan den osignerade IPA-filen med ett personligt Apple-konto på telefonen.
+Den lokala Macen kör Monterey och kan inte köra Xcode 26. Koden pushas därför till det privata GitHub-repot. Det obligatoriska jobbet använder den pinnade stabila Xcode 26.6-miljön, kör XCTest på den senaste tillgängliga iOS 26-simulatorn och bygger IPA:n. En separat, icke blockerande kontroll använder den senaste Xcode 27-preview som GitHub tillhandahåller och kör Release-kompilering samt XCTest på iOS 27; previewjobbet producerar ingen IPA.
+
+Projektets deployment target är iOS 26.0, så den stabila IPA:n är avsedd för iOS 26 och senare, inklusive iOS 27. Previewjobbet ger ett tidigt kompatibilitetsbesked men ersätter inte en grön stabil build eller ett test på den verkliga telefonen.
 
 En modern Mac behövs inte lokalt för denna väg. Windows kör inte Xcode men används för GitHub Desktop och SideStores första iLoader-installation.
 

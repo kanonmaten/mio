@@ -73,3 +73,9 @@ Detta är ett arkitekturbeslut, inte ett nytt telefonresultat. Både installatio
 ## 2026-08-24 – Inga externa integrationer i fas 2
 
 Fas 2 gör inga OpenAI-anrop, använder inte EventKit och skapar inga systemalarm. Kalenderfliken visar endast lokala planer och Morgon är en lokal vy. OpenAI hör tidigast till fas 5 och kräver ett separat server-, samtyckes- och kostnadsbeslut.
+
+## 2026-08-24 – Stabil Xcode 26 bygger IPA, Xcode 27 är previewkontroll
+
+GitHub Actions behåller `macos-26` och den pinnade Xcode 26.6 som obligatorisk bygg-, test- och IPA-miljö. Det ger en reproducerbar stabil byggnad med deployment target iOS 26.0. Simulatorvalet ska välja den numeriskt senaste tillgängliga iOS 26-runtimen i stället för att ta den första listposten.
+
+`xcode-27` används endast i ett separat, icke blockerande kompatibilitetsjobb som följer den senaste previewmiljö GitHub tillhandahåller, kompilerar Release och kör XCTest på iOS 27. Previewjobbet skapar ingen distribuerad IPA och får inte ersätta den stabila miljön förrän Xcode 27-runnern är allmänt tillgänglig. En lyckad simulatorkörning ersätter inte ett verkligt iOS 27-enhetstest.

@@ -12,6 +12,7 @@ Den lokala fas 2-implementationen finns i arbetskopian, men den aktuella revisio
 | Statisk Windows-kontroll | Godkänd inom miljöns gränser; ingen Swift-kompilator finns |
 | XCTest | Testkod finns men har inte körts |
 | GitHub Actions Release-build | Ej körd för fas 2-revisionen |
+| Xcode 27-previewkontroll | Konfigurerad men inte körd för fas 2-revisionen |
 | Osignerad IPA | Inte skapad för fas 2-revisionen |
 | SideStore-installation | Ej genomförd för fas 2-revisionen |
 | iPhone 13 | Inga fas 2-resultat |
@@ -26,6 +27,7 @@ Fyll i först när en bestämd revision testas:
 | GitHub Actions-körning | Ej körd |
 | IPA SHA-256 | Ej skapad |
 | Xcode-version | Ej verifierad för revisionen |
+| Xcode 27-previewversion | Ej verifierad för revisionen; följer GitHubs aktuella previewimage |
 | iPhone | iPhone 13, test ej genomfört |
 | iOS-version | Ej noterad för fas 2-test |
 | Installationssätt | Planerat: SideStore över befintlig app |
@@ -57,6 +59,8 @@ Godkänt i den aktuella arbetskopian:
 - projekt-, plist-, scheme- och workspace-XML kan läsas;
 - Swift-filernas avgränsare är balanserade och ingen `Task`-namnkrock eller uppenbart async-anrop i en XCTest-autoclosure hittades;
 - relativa dokumentlänkar fungerar och `git diff --check` har inga whitespacefel;
+- byggworkflowen har en pinnad stabil Xcode 26.6-väg för IPA och en separat, icke blockerande Xcode 27-previewväg utan IPA-publicering;
+- simulatorvalet är versionsmedvetet och väljer numeriskt senaste tillgängliga iOS 26- respektive iOS 27-runtime;
 - integritetsdeklarationen anger ingen tracking eller insamlad datatyp;
 - källkodssökning hittade ingen skrivning till råljudsfil och ingen OpenAI-, API-nyckel-, EventKit-, notifierings- eller nätverksintegration;
 - inga känsliga export-, inspelnings-, certifikat- eller provisioneringsfiler hittades bland ändringarna.
@@ -102,6 +106,7 @@ Status för samtliga: **Ej körda**.
 ## Kända öppna verifieringsrisker
 
 - Den nya koden kan innehålla kompilerings- eller API-fel som Windows inte kan avgöra.
+- Varken det stabila Xcode 26.6-jobbet eller Xcode 27-previewjobbet har körts för arbetskopian; previewimagen kan dessutom vara instabil eller ligga efter Apples senaste beta.
 - Samspelet mellan `SpeechAnalyzer`, vald transkriptionsmodul och `AssetInventory`-asset måste kompileras med Xcode 26 och provas på iOS 26.
 - Uppgradering över verklig befintlig `sessions.json` måste testas utan att appen raderas.
 - Persistens, filskydd, total radering och den gemensamma exporten måste verifieras på telefonen.
@@ -110,8 +115,9 @@ Status för samtliga: **Ej körda**.
 
 ## Nästa verifieringsordning
 
-1. Kör XCTest och Release-build med Xcode 26 i GitHub Actions eller på kompatibel Mac.
-2. Installera exakt den byggda IPA:n över befintlig Mio via SideStore.
-3. Kör [TESTPLAN_FAS_2.md](TESTPLAN_FAS_2.md).
-4. Kör kvarvarande delar av [TESTPLAN_FAS_1.md](TESTPLAN_FAS_1.md) som regression och långtest.
-5. Dokumentera endast avidentifierade slutsatser här; behåll råexporter privat utanför repot.
+1. Kör det stabila Xcode 26.6-jobbet med XCTest, Release-build och IPA-validering i GitHub Actions.
+2. Om GitHubs previewrunner är tillgänglig, granska resultatet från det separata, icke blockerande Xcode 27-previewjobbet; detta är inte en spärr för den stabila IPA:n.
+3. Installera exakt den stabilt byggda IPA:n över befintlig Mio via SideStore.
+4. Kör [TESTPLAN_FAS_2.md](TESTPLAN_FAS_2.md).
+5. Kör kvarvarande delar av [TESTPLAN_FAS_1.md](TESTPLAN_FAS_1.md) som regression och långtest.
+6. Dokumentera endast avidentifierade slutsatser här; behåll råexporter privat utanför repot.

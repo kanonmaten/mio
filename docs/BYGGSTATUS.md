@@ -10,6 +10,7 @@ Senast uppdaterad: 24 augusti 2026.
 | Statisk projektgranskning på Windows | Godkänd för dåvarande revision | Godkänd inom Windows-miljöns gränser |
 | Xcode 26-kompilering | Godkänd i GitHub Actions | Inte körd |
 | XCTest | Inte körd | Testkod finns, inte körd |
+| Xcode 27-preview | Inte körd för fas 1-revisionen | Separat icke blockerande jobb konfigurerat, inte körd |
 | arm64-IPA | Skapad och validerad | Inte skapad |
 | SideStore-installation | Godkänd | Inte genomförd |
 | iPhone 13-rökprov | Kort godkänt | Inte genomfört |
@@ -61,11 +62,13 @@ Följande kontroller är godkända i den aktuella arbetskopian:
 - projekt-, plist-, scheme- och workspace-XML kan läsas;
 - Swift-filernas avgränsare är balanserade och inga tabbar eller uppenbara async-anrop i XCTest-autoclosures hittades;
 - relativa Markdown-länkar pekar på befintliga filer och `git diff --check` har inga whitespacefel;
+- workflowen använder aktuella `actions/checkout@v7` och `actions/upload-artifact@v7`, pinnar den stabila IPA-miljön till Xcode 26.6 och isolerar Xcode 27 till ett icke blockerande previewjobb;
+- simulatorvalet filtrerar på förväntad iOS-major och väljer numeriskt senaste tillgängliga runtime för respektive jobb;
 - integritetsdeklarationen har ingen tracking eller insamlad datatyp;
 - källkodssökning hittade ingen råljudsfilskrivning, OpenAI-klient, API-nyckel, EventKit-, notifierings- eller nätverksintegration;
 - inga känsliga export-, inspelnings-, certifikat- eller provisioneringsfiler har lagts till.
 
-Kontrollen är inte en Swift-kompilering och bevisar inte runtimebeteende. Windows-miljön saknar Swift/Xcode, så Xcode 26 och telefonen är fortfarande facit.
+Kontrollen är inte en Swift-kompilering och bevisar inte runtimebeteende. Windows-miljön saknar Swift/Xcode. Den stabila Xcode 26.6-körningen är facit för IPA:n, Xcode 27-previewjobbet ger endast ett tidigt kompatibilitetsbesked och telefonen är facit för verkligt beteende.
 
 Bundle identifier förblir avsiktligt `se.eyvin.MioPhaseOne` så att den nya builden kan ersätta den befintliga appen och läsa dess lokala container.
 
@@ -77,5 +80,7 @@ Bundle identifier förblir avsiktligt `se.eyvin.MioPhaseOne` så att den nya bui
 4. Funktionerna i [TESTPLAN_FAS_2.md](TESTPLAN_FAS_2.md) på iPhone 13.
 5. Mikrofon-, paus-, lokal transkriptions- och exportregression på den nya IPA:n.
 6. De kvarvarande långa proven i [TESTPLAN_FAS_1.md](TESTPLAN_FAS_1.md).
+
+Xcode 27-previewjobbet bör köras när GitHubs previewrunner är tillgänglig, men är inte en spärr för den stabila IPA:n eller fas 2-verifieringen på måltelefonens iOS 26.
 
 Tills dessa steg har verklig evidens är korrekt status **implementerad i arbetskopian, inte bygg- eller enhetsverifierad**.

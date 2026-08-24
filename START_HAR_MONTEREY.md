@@ -4,7 +4,7 @@ Detta är huvudguiden för den valda miljön:
 
 - utvecklings-Macen är låst till macOS Monterey;
 - hennes iPhone 13 kör iOS 26;
-- GitHub Actions bygger med Xcode 26.6;
+- GitHub Actions bygger IPA:n med stabil Xcode 26.6 och kan samtidigt kontrollera Xcode 27-preview;
 - SideStore signerar, installerar och förnyar appen;
 - appen publiceras inte i App Store.
 
@@ -17,7 +17,7 @@ Lokalt repo
    │ GitHub Desktop: commit + push
    ▼
 Privat GitHub-repo
-   │ GitHub Actions: Xcode 26.6
+   │ GitHub Actions: Xcode 26.6 stabil + separat Xcode 27-previewkontroll
    ▼
 MioPhaseTwo-unsigned.ipa
    │ SideStore + personligt Apple-konto
@@ -46,19 +46,23 @@ Läs [docs/WORKFLOW.md](docs/WORKFLOW.md) för hela arbetsrutinen.
 1. Öppna repot på GitHub.
 2. Välj **Actions**.
 3. Klicka **Bygg Mio IPA** i vänsterspalten.
-4. Klicka **Run workflow**, välj `main` och bekräfta.
-5. Öppna körningen och vänta på en grön bock.
+4. Klicka **Run workflow** och välj `main`.
+5. Låt **Kör även den icke blockerande Xcode 27-previewkontrollen** vara vald. Den kan avmarkeras om GitHubs previewrunner är otillgänglig eller har lång kö.
+6. Bekräfta och öppna körningen. Det stabila Xcode 26.6-jobbet måste bli grönt innan IPA:n används.
 
 Workflowen:
 
 - hämtar repot på en tillfällig GitHub-Mac;
-- väljer Xcode 26.6;
+- väljer den pinnade stabila Xcode 26.6-miljön för den distribuerade byggnaden;
 - validerar projekt- och integritetsfiler;
 - bygger en riktig arm64-app för iPhone;
-- kompilerar och kör XCTest i en tillgänglig iOS 26-simulator;
-- kontrollerar IPA:n och publicerar den som artifact i 14 dagar.
+- kompilerar och kör XCTest i den numeriskt senaste tillgängliga iOS 26-simulatorn;
+- kontrollerar IPA:n och publicerar den som artifact i 14 dagar;
+- kör, när valet är aktiverat, ett separat icke blockerande jobb med GitHubs aktuella Xcode 27-preview, Release-kompilering och XCTest på iOS 27 utan att skapa en andra IPA.
 
-Om körningen blir röd: öppna det första röda steget och skicka den första tydliga felraden samt stegets namn till Codex. Senare rader är ofta följdfel.
+Projektets deployment target är iOS 26.0. Den stabila IPA:n är därför avsedd för iOS 26 och senare, inklusive iOS 27, medan previewjobbet ger en tidig extra kontroll. Bara en riktig installation kan verifiera beteendet på en fysisk iOS 27-enhet.
+
+Om det stabila Xcode 26.6-jobbet blir rött: öppna det första röda steget och skicka den första tydliga felraden samt stegets namn till Codex. Senare rader är ofta följdfel. Ett fel i det icke blockerande Xcode 27-previewjobbet ska också granskas, men det gör inte i sig den stabilt byggda IPA:n ogiltig.
 
 ### 3. Hämta IPA-filen
 
@@ -248,3 +252,5 @@ Det första iPhone-testet visade detta och appen gick korrekt över till `Dictat
 - [SideStore: felsökning](https://docs.sidestore.io/docs/troubleshooting)
 - [GitHub Actions och workflows](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflows)
 - [GitHubs macOS 26-runner](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)
+- [GitHubs aktuella runnerlabels](https://github.com/actions/runner-images/blob/main/README.md#available-images)
+- [GitHubs Xcode 27-public-preview](https://github.com/actions/runner-images/issues/14404)

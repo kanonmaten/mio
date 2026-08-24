@@ -8,6 +8,8 @@ Senast uppdaterad: 24 augusti 2026.
 |---|---|---|---|---|---|
 | Projekt, mappar, targets, scheme, produkt och artifacts heter `MioPhaseTwo` | Implementerat i arbetskopian | Godkänd statisk namn- och projektkontroll | Ej körd | Ej testat | Kompilera och kontrollera artifactnamn |
 | Bundle identifier är fortsatt `se.eyvin.MioPhaseOne` för uppgradering på plats | Implementerat i projektet | Godkänd statisk projektkontroll | Ej körd | Ej testat | Installera över befintlig app och verifiera dataåtkomst |
+| Deployment target är iOS 26.0 och stabil IPA byggs med Xcode 26.6 | Implementerat i projekt och workflow | Godkänd statisk projekt- och workflowkontroll | Ej körd | Ej testat | Kör det stabila jobbet och verifiera bygginformationen |
+| Separat Xcode 27-preview kompilerar Release och kör XCTest på iOS 27 | Icke blockerande jobb konfigurerat; producerar ingen IPA | Godkänd statisk workflowkontroll | Ej körd | Ej testat | Kör när previewrunnern är tillgänglig; blockerar inte stabil IPA; testa senare på verklig iOS 27-enhet |
 | Fem flikar: Mio, Tidslinje, Kalender, Anteckningar och Morgon | Implementerat i källkod | Ingen UI-körning | Ej körd | Ej testat | Kompilera och gå igenom alla flikar |
 | Gemensam modell för fem innehållstyper | Implementerat i källkod | Testkod finns, ej körd | Ej körd | Ej testat | Kör Codable- och modelltester |
 | Skapa och redigera manuella poster | Implementerat i källkod | Ingen körd UI-verifiering | Ej körd | Ej testat | Testa varje typ på telefonen |

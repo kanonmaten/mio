@@ -46,7 +46,7 @@ Implementerat i källkod:
 - en gemensam lokal `SpeechAnalyzer` som kör `SpeechTranscriber` när dess svenska asset är installerad och annars förbereder `DictationTranscriber` direkt, utan att sessionsstarten väntar på hämtning;
 - ingen OpenAI-, EventKit- eller alarmintegration.
 
-Den säkra statiska Windows-kontrollen är genomförd. Workflowen är även uppdaterad för att kompilera och faktiskt köra XCTest på en tillgänglig iOS 26-simulator innan IPA:n publiceras, men den aktuella revisionen har ännu inte körts i Actions.
+Den säkra statiska Windows-kontrollen är genomförd. Workflowen är uppdaterad så att det stabila Xcode 26.6-jobbet kompilerar, kör XCTest på den senaste tillgängliga iOS 26-simulatorn och ensamt producerar IPA:n. En separat, icke blockerande `xcode-27`-previewkontroll kompilerar Release och kör XCTest på iOS 27. Inget av jobben har ännu körts för den aktuella revisionen.
 
 Bundle identifier förblir avsiktligt `se.eyvin.MioPhaseOne` så att fas 2 kan installeras över den befintliga appen och migrera dess lokala data.
 
@@ -57,6 +57,8 @@ Bundle identifier förblir avsiktligt `se.eyvin.MioPhaseOne` så att fas 2 kan i
 - installation över befintlig app och migreringskontroll på iPhone 13;
 - alla testfall i `TESTPLAN_FAS_2.md`;
 - regressionsprov av fas 1:s mikrofon-, paus- och transkriptionsflöde på den nya IPA:n.
+
+Den icke blockerande Xcode 27-previewkontrollen bör köras när GitHubs previewrunner är tillgänglig, men är ett framåtblickande kompatibilitetsbesked och inte en spärr för den stabila iOS 26-IPA:n.
 
 ## Fas 3 – diskret Mio-flöde
 
