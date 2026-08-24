@@ -22,7 +22,7 @@ final class MioContentViewModel {
         do {
             items = try await repository.loadItems()
         } catch {
-            errorMessage = "Kunde inte läsa lokalt innehåll: \(error.localizedDescription)"
+            errorMessage = "Kunde inte läsa lokalt innehål: \(error.localizedDescription)"
         }
     }
 
@@ -44,7 +44,7 @@ final class MioContentViewModel {
         }
 
         let existing = id.flatMap { item(id: $0) }
-        let item = MioContentItem(
+        let contentItem = MioContentItem(
             id: existing?.id ?? UUID(),
             kind: kind,
             title: cleanTitle,
@@ -58,7 +58,7 @@ final class MioContentViewModel {
             sessionID: sessionID
         )
         do {
-            items = try await repository.upsert(item)
+            items = try await repository.upsert(contentItem)
             exportURL = nil
             errorMessage = nil
             return true
@@ -130,7 +130,7 @@ final class MioContentViewModel {
             exportURL = nil
             errorMessage = nil
         } catch {
-            errorMessage = "Kunde inte radera lokalt innehåll: \(error.localizedDescription)"
+            errorMessage = "Kunde inte radera lokalt innehål: \(error.localizedDescription)"
         }
     }
 
