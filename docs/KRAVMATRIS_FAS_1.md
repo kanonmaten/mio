@@ -7,8 +7,8 @@ Telefonresultaten bygger på rökprovet den 20 augusti 2026. **Kort godkänt** b
 | Mikrofon på/av | Ja | Start, paus och användarstopp loggades | Kontrollera indikatorn manuellt vid alla lägen |
 | Tydlig status | Ja | Appen kunde startas och pausas | Visuell check enligt testplan |
 | Låst skärm/bakgrund | Ja, konfigurerat | Kort godkänt: 1 giltigt segment under 11 s total bakgrund | Minst 10 min med uttryckligen låst skärm |
-| Apples avancerade motor | Ja, nytt status-/reservations-/installationsflöde i arbetskopian | `transcription.sv` blev `Not Installing` i det historiska provet | Testa fas 2-flödet på telefonen; markera inte installerad utan nytt bevis |
-| Svensk lokal reservmotor | Ja | Godkänt: `DictationTranscriber`, `sv_SE` | Längre kvalitets- och stabilitetstest |
+| `SpeechAnalyzer` med nyare `SpeechTranscriber`-modul | Ja, nytt status-/reservations-/installationsflöde i arbetskopian | `transcription.sv` blev `Not Installing` i det historiska provet | Testa fas 2-flödet på telefonen; markera inte installerad utan nytt bevis |
+| `SpeechAnalyzer` med svensk `DictationTranscriber`-fallback | Ja | Godkänt: `DictationTranscriber`, `sv_SE` | Längre kvalitets- och stabilitetstest |
 | Tidsstämplad text | Ja | Godkänt: 5 segment med giltig ljudtid | Långt test och kontroll efter avbrott |
 | Paus 30 minuter | Ja | Inte testad | Testa tidsstyrd fortsättning |
 | Paus 1 timme/tills start | Ja | “Tills start” stängde flödet i korttest; 1 timme inte testad | Manuell fortsättning och 1-timmesläge |

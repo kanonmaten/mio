@@ -32,15 +32,18 @@ Fyll i först när en bestämd revision testas:
 
 ## Det som har implementerats men inte körverifierats
 
+- projekt, app- och testmappar, targets, scheme, produkt, Swift-modul och artifacts under namnet `MioPhaseTwo`;
 - fem flikar: Mio, Tidslinje, Kalender, Anteckningar och Morgon;
 - en gemensam modell för tidslinjepost, anteckning, uppgift, plan och uttryckligt minne;
 - separat versionsmärkt lagring i `MioPhaseTwo/content-v1.json`;
-- bevarad befintlig sessionsfil i `MioPhaseOne/sessions.json`;
+- sessionslagring i `MioPhaseTwo/sessions.json` med kontrollerad flytt från äldre `MioPhaseOne/sessions.json`;
 - valfri sessionskoppling från manuellt innehåll;
 - sessionstitel, manuell anteckning och rättad visningstext med bevarat original och bevarade ljudtider;
 - svensk sökning, redigering, radering och gemensam JSON-export;
-- förbättrad `AssetInventory`-status, explicit reservation och separat installationsknapp för den avancerade svenska modellen;
-- bevarad `DictationTranscriber`-fallback;
+- gemensam `SpeechAnalyzer` som tar emot tidsatta ljudbuffertar och kör vald transkriptionsmodul;
+- förbättrad `AssetInventory`-status, explicit reservation och separat förinstallation av den svenska `SpeechTranscriber`-asseten;
+- direkt fallback vid sessionsstart när `SpeechTranscriber`-asseten inte redan är installerad, utan att start blockeras av dess hämtning;
+- bevarad `DictationTranscriber`-fallback i en ny analyzer om den första förberedelsen misslyckas;
 - fortsatt avsaknad av OpenAI-, EventKit- och alarmintegration enligt fas 2-designen.
 
 Punkterna ovan beskriver källkodens avsikt. De bevisar inte kompilering eller beteende.
@@ -49,6 +52,7 @@ Punkterna ovan beskriver källkodens avsikt. De bevisar inte kompilering eller b
 
 Godkänt i den aktuella arbetskopian:
 
+- aktiva projekt-, mapp-, target-, scheme-, Swift-modul-, produkt- och artifactnamn använder `MioPhaseTwo`; `MioPhaseOne` återstår endast i uttryckliga kompatibilitetsreferenser för bundle identifier, lagringsmigrering och äldre exporter;
 - Xcode-projektets nya app- och testfiler är registrerade i rätt Sources-target;
 - projekt-, plist-, scheme- och workspace-XML kan läsas;
 - Swift-filernas avgränsare är balanserade och ingen `Task`-namnkrock eller uppenbart async-anrop i en XCTest-autoclosure hittades;
@@ -68,8 +72,10 @@ Följande testområden har testkod men ingen dokumenterad körning ännu:
 - stabil tidslinjeordning;
 - rättad sessionstext med bevarat original och ljudtid;
 - äldre sessions-JSON utan fas 2-metadata;
+- flytt av en äldre sessionsfil till fas 2-sökvägen utan ändrade sessioner;
+- backendregeln att endast installerad assetstatus får välja `SpeechTranscriber`;
 - skapa, läsa, uppdatera och radera i det nya repositoryt;
-- isolering mellan fas 1- och fas 2-lagren;
+- isolering mellan sessions- och innehållslagren;
 - versionsmärkt export utan råljudsfält;
 - skydd mot överskrivning av okänd schemaversion.
 
@@ -89,14 +95,14 @@ Status för samtliga: **Ej körda**.
 | H — gemensam export | Ej körd | Ingen export skapad |
 | I — radering | Ej körd | Kör endast med exporterad testdata |
 | J — offline och inga integrationer | Ej körd | Kräver iPhone-build |
-| K — avancerad modell och fallback | Ej körd | Kräver fysisk iPhone och wifi |
+| K — SpeechAnalyzer, SpeechTranscriber och fallback | Ej körd | Kräver fysisk iPhone och wifi |
 | L — mikrofon och fas 1-regression | Ej körd | Kräver fysisk iPhone |
 | M — tillgänglighet | Ej körd | Kräver fysisk iPhone |
 
 ## Kända öppna verifieringsrisker
 
 - Den nya koden kan innehålla kompilerings- eller API-fel som Windows inte kan avgöra.
-- `AssetInventory`-reservation, hämtning och slutstatus måste provas med Xcode 26 och iOS 26.
+- Samspelet mellan `SpeechAnalyzer`, vald transkriptionsmodul och `AssetInventory`-asset måste kompileras med Xcode 26 och provas på iOS 26.
 - Uppgradering över verklig befintlig `sessions.json` måste testas utan att appen raderas.
 - Persistens, filskydd, total radering och den gemensamma exporten måste verifieras på telefonen.
 - Den nya UI-strukturen behöver ett regressionsprov av mikrofon, paus, bakgrund och lokal transkription.

@@ -40,12 +40,15 @@ Implementerat i källkod:
 - lokal sessionsindelning med tydlig start och stopp samt redigerbar titel och anteckning efter stopp;
 - korrigerad visningstext som bevarar originaltranskription och ljudtider;
 - valfri `sessionID`-koppling från en manuell post till en session;
-- separat versionsmärkt `MioPhaseTwo/content-v1.json` och bevarad `MioPhaseOne/sessions.json`;
+- tekniska projekt-, mapp-, target-, scheme-, produkt- och artifactnamn under `MioPhaseTwo`;
+- separat versionsmärkt `MioPhaseTwo/content-v1.json` och `MioPhaseTwo/sessions.json`, med migrering från den äldre sessionssökvägen;
 - gemensam versionsmärkt JSON-export;
-- förbättrat lokalt flöde för status och installation av Apples avancerade svenska modell, med bevarad `DictationTranscriber`-fallback;
+- en gemensam lokal `SpeechAnalyzer` som kör `SpeechTranscriber` när dess svenska asset är installerad och annars förbereder `DictationTranscriber` direkt, utan att sessionsstarten väntar på hämtning;
 - ingen OpenAI-, EventKit- eller alarmintegration.
 
 Den säkra statiska Windows-kontrollen är genomförd. Workflowen är även uppdaterad för att kompilera och faktiskt köra XCTest på en tillgänglig iOS 26-simulator innan IPA:n publiceras, men den aktuella revisionen har ännu inte körts i Actions.
+
+Bundle identifier förblir avsiktligt `se.eyvin.MioPhaseOne` så att fas 2 kan installeras över den befintliga appen och migrera dess lokala data.
 
 Återstår innan fas 2 kan markeras verifierad:
 

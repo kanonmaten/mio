@@ -38,12 +38,15 @@ Följande finns i källkoden men är ännu inte kompilerings- eller körverifier
 - femflikars navigering med Mio, Tidslinje, Kalender, Anteckningar och Morgon;
 - gemensam modell och manuella flöden för fem lokala innehållstyper;
 - svensk sökning, tidsordning, uppgiftsstatus, redigering och radering;
-- separat versionsmärkt `MioPhaseTwo/content-v1.json` och bevarad `MioPhaseOne/sessions.json`;
+- tekniska projekt-, mapp-, target-, scheme-, produkt- och artifactnamn under `MioPhaseTwo`;
+- separat versionsmärkt `MioPhaseTwo/content-v1.json` och `MioPhaseTwo/sessions.json`, med flytt från äldre sessionssökväg;
 - valfri sessionskoppling;
 - sessionstitel, manuell anteckning och rättad visningstext som bevarar original och ljudtider;
 - gemensam versionsmärkt lokal JSON-export;
-- förbättrad status, reservation och installationsåtgärd för svensk `SpeechTranscriber`-asset;
-- bevarad `DictationTranscriber`-fallback;
+- gemensam `SpeechAnalyzer` som kör en transkriptionsmodul åt gången och loggar vilken modul som faktiskt startade;
+- förbättrad status, reservation och förinstallation för svensk `SpeechTranscriber`-asset;
+- direkt sessionsstart med fallback i stället för automatisk `SpeechTranscriber`-hämtning när asseten saknas;
+- bevarad `DictationTranscriber`-fallback i en ny analyzer;
 - ingen avsiktlig OpenAI-, EventKit- eller alarmintegration.
 
 Testfiler finns för centrala modeller, lagring, export, äldre sessionsdata och Mio-detektion, men ingen aktuell XCTest-körning finns. Se [TESTRESULTAT_FAS_2.md](TESTRESULTAT_FAS_2.md).
@@ -52,6 +55,8 @@ Testfiler finns för centrala modeller, lagring, export, äldre sessionsdata och
 
 Följande kontroller är godkända i den aktuella arbetskopian:
 
+- aktiva projekt-, mapp-, target-, scheme-, modul-, produkt- och artifactnamn pekar konsekvent på `MioPhaseTwo`;
+- kvarvarande `MioPhaseOne`-strängar är begränsade till kompatibel bundle identifier, migreringskälla, historiska exportnamn och fas 1-dokument;
 - alla nya app- och testfiler finns i rätt Xcode-grupp och Sources-target;
 - projekt-, plist-, scheme- och workspace-XML kan läsas;
 - Swift-filernas avgränsare är balanserade och inga tabbar eller uppenbara async-anrop i XCTest-autoclosures hittades;
@@ -61,6 +66,8 @@ Följande kontroller är godkända i den aktuella arbetskopian:
 - inga känsliga export-, inspelnings-, certifikat- eller provisioneringsfiler har lagts till.
 
 Kontrollen är inte en Swift-kompilering och bevisar inte runtimebeteende. Windows-miljön saknar Swift/Xcode, så Xcode 26 och telefonen är fortfarande facit.
+
+Bundle identifier förblir avsiktligt `se.eyvin.MioPhaseOne` så att den nya builden kan ersätta den befintliga appen och läsa dess lokala container.
 
 ## Måste verifieras för fas 2-revisionen
 

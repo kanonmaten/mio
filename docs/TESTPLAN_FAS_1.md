@@ -10,7 +10,7 @@ Ett kort rökprov genomfördes den 20 augusti 2026. Det verifierade svensk `Dict
 2. Stäng av Strömsparläge för första standardtestet. Senare kan ni göra ett separat test med Strömsparläge.
 3. Koppla ur all USB/laddning och öppna Mio från telefonens hemskärm. Om appen installerades via Xcode-alternativet ska även debuggern stoppas. Laddning och debugger förvränger batteritestet.
 4. Notera ungefärlig batteriprocent.
-5. Ha wifi vid första starten så att Apple kan hämta svensk språkmodell.
+5. Ha wifi vid första starten. `DictationTranscriber`-asseten kan behöva hämtas vid sessionsstart; `SpeechTranscriber` förinstalleras endast med den separata knappen i **Telefonens stöd**.
 6. Använd först telefonens inbyggda mikrofon, inte AirPods.
 7. Gör testet i en kontrollerad miljö. Spela inte in klasskamrater, lärare, kollegor eller andra personer utan deras tydliga tillstånd, och följ skolans eller arbetsplatsens regler.
 
@@ -18,20 +18,21 @@ Ett kort rökprov genomfördes den 20 augusti 2026. Det verifierade svensk `Dict
 
 1. Öppna Mio.
 2. Läs kortet **Telefonens stöd**.
-3. Kontrollera att **Vald motor** visar antingen:
+3. Kontrollera att **Vald transkriptionsmodul** visar antingen:
 
-   - `SpeechTranscriber (avancerad)`, eller
-   - `DictationTranscriber (lokal reservmotor)`.
+   - `SpeechTranscriber (nyare modul)`, eller
+   - `DictationTranscriber (fallback)`.
 
 4. Tryck **Starta ny session**.
 5. Tillåt mikrofonen.
-6. Läs följande testtext långsamt:
+6. Kontrollera i händelseloggen att `SpeechAnalyzer` startade med den modul som faktiskt används.
+7. Läs följande testtext långsamt:
 
    > I dag testar vi Mio på svenska. På matematiklektionen gick vi igenom procent och förändringsfaktor. Läraren sa att provet är på fredag. Mio, kom ihåg att matteprovet är på fredag. Jag ska träffa Emma efter skolan.
 
-7. Vänta tio sekunder.
-8. Kontrollera att tidsstämplad text visas.
-9. Kontrollera att **Mio upptäckt** är minst 1.
+8. Vänta tio sekunder.
+9. Kontrollera att tidsstämplad text visas.
+10. Kontrollera att **Mio upptäckt** är minst 1.
 
 Godkänt: svensk text skapas och Mio hittas som eget ord.
 
@@ -74,7 +75,7 @@ Godkänt: pausen stänger mikrofonen och manuell fortsättning fungerar utan att
 
 Gör detta när det passar; ring inte någon utan deras vetskap.
 
-1. Starta Mio.
+1. Tryck **Starta ny session** och vänta tills **Mio lyssnar**.
 2. Ta emot ett kort telefonsamtal eller låt ett alarm ringa.
 3. Avsluta avbrottet.
 4. Säg en ny testmening.
@@ -89,19 +90,19 @@ Godkänt: början och slutet på ljudavbrottet loggas. Om iOS ger `shouldResume`
 3. Lås skärmen en del av tiden och prata ibland.
 4. Tryck **Stoppa sessionen** efter 60 minuter.
 5. Läs **Batteriskillnad** och antalet batteriprover.
-6. Skapa och spara testfilen.
+6. Tryck **Skapa lokal export** och spara den privat via **Dela lokal export**.
 
 Gör senare ett längre 3–4-timmarstest om timtestet ser rimligt ut. Vi sätter ingen godtycklig godkänd procent i förväg; först behöver vi ett verkligt basvärde från telefonen och hennes normala användning.
 
 ## Test F — ljudvägsbyte, frivilligt
 
-1. Starta Mio med telefonens mikrofon.
+1. Tryck **Starta ny session** med telefonens mikrofon och vänta tills **Mio lyssnar**.
 2. Anslut AirPods.
 3. Säg en mening.
 4. Koppla bort AirPods och säg en ny mening.
 5. Kontrollera loggen.
 
-Fas 1 loggar bytet men bygger inte om hela ljudmotorn automatiskt. Om texten stannar ska ni stoppa och starta testet. Resultatet visar vad fas 2 behöver hantera.
+Fas 1 loggar bytet men bygger inte om hela transkriptionspipelinen automatiskt. Om texten stannar ska ni stoppa och starta testet. Resultatet visar vad fas 2 behöver hantera.
 
 ## Exportera resultatet
 
@@ -117,14 +118,14 @@ Spara också följande tillsammans med filen:
 
 - iPhone-modell: iPhone 13.
 - exakt iOS-version.
-- vald talmotor i appen.
+- vald transkriptionsmodul i appen.
 - om Strömsparläge var på eller av.
 - ungefär hur länge skärmen var låst.
 - om AirPods användes.
 
 ## Fas 1 är klar när
 
-- en svensk lokal Apple-motor är identifierad, eller frånvaron är dokumenterad;
+- en svensk lokal Apple-transkriptionsmodul är identifierad, eller frånvaron är dokumenterad;
 - svensk textkvalitet har bedömts i ett normalt och ett kontrollerat bullrigare rum, utan att spela in ovetande personer;
 - text har skapats under låst skärm;
 - Mio har upptäckts lokalt;

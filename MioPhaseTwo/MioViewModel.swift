@@ -6,11 +6,11 @@ import UIKit
 
 @MainActor
 @Observable
-final class PhaseOneViewModel {
+final class MioViewModel {
     var runState: MioRunState = .off
     var support = SpeechSupportSnapshot()
-    var currentSession: PhaseOneSession?
-    var previousSessions: [PhaseOneSession] = []
+    var currentSession: MioSession?
+    var previousSessions: [MioSession] = []
     var liveTranscript = ""
     var statusMessage = "Tryck på kontrollen för att starta en lokal session."
     var errorMessage: String?
@@ -107,13 +107,13 @@ final class PhaseOneViewModel {
             }
             await refreshSupport()
             statusMessage = downloaded
-                ? "Den avancerade svenska modellen är installerad och provas först i nästa session."
-                : "Den avancerade svenska modellen var redan installerad och provas först i nästa session."
+                ? "SpeechTranscribers svenska modell är installerad och provas först i nästa SpeechAnalyzer-session."
+                : "SpeechTranscribers svenska modell var redan installerad och provas först i nästa SpeechAnalyzer-session."
         } catch {
             await refreshSupport()
             let details = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            errorMessage = "Den avancerade modellen kunde inte göras klar. \(details) Fallbacken finns kvar."
-            statusMessage = "Den lokala reservmotorn används tills iOS har installerat den avancerade modellen."
+            errorMessage = "SpeechTranscribers modell kunde inte göras klar. \(details) DictationTranscriber finns kvar som fallback."
+            statusMessage = "SpeechAnalyzer använder DictationTranscriber tills iOS har installerat SpeechTranscribers modell."
         }
         isInstallingAdvancedModel = false
     }
@@ -161,7 +161,7 @@ final class PhaseOneViewModel {
         exportURL = nil
 
         if currentSession == nil || currentSession?.endedAt != nil {
-            currentSession = PhaseOneSession()
+            currentSession = MioSession()
             lastPersistedAt = nil
             appendEvent(
                 kind: .info,
@@ -173,7 +173,7 @@ final class PhaseOneViewModel {
         }
 
         runState = .preparing
-        statusMessage = "Kontrollerar mikrofon och svensk talmodell …"
+        statusMessage = "Kontrollerar mikrofon, SpeechAnalyzer och svensk transkriptionsmodul …"
 
         let newPipeline = makePipeline()
         pipeline = newPipeline
@@ -185,7 +185,7 @@ final class PhaseOneViewModel {
             statusMessage = "Lyssnar på svenska lokalt. Säg några meningar och ordet Mio."
             appendEvent(
                 kind: .info,
-                message: "Mikrofonen och \(details.engine.title) startade (\(details.localeIdentifier))."
+                message: "Mikrofonen och SpeechAnalyzer startade med \(details.engine.title) (\(details.localeIdentifier))."
             )
             if details.downloadedModel {
                 appendEvent(kind: .info, message: "Apples svenska språkmodell hämtades till telefonen.")
@@ -231,7 +231,7 @@ final class PhaseOneViewModel {
         pauseUntil = nil
         let activePipeline = pipeline
         pipeline = nil
-        statusMessage = "Avslutar den lokala talmotorn …"
+        statusMessage = "Avslutar SpeechAnalyzer och mikrofonen …"
         await activePipeline?.stop()
         activePipelineID = nil
 
@@ -414,7 +414,7 @@ final class PhaseOneViewModel {
         currentSession?.duration(at: now) ?? 0
     }
 
-    var allSessions: [PhaseOneSession] {
+    var allSessions: [MioSession] {
         var sessions = previousSessions
         if let currentSession,
            !sessions.contains(where: { $0.id == currentSession.id }) {
@@ -423,7 +423,7 @@ final class PhaseOneViewModel {
         return sessions.sorted { $0.startedAt > $1.startedAt }
     }
 
-    func session(id: UUID) -> PhaseOneSession? {
+    func session(id: UUID) -> MioSession? {
         if currentSession?.id == id {
             return currentSession
         }
@@ -598,8 +598,8 @@ final class PhaseOneViewModel {
         }
         errorMessage = message
         statusMessage = message
-        if let phaseOneError = error as? MioPhaseOneError {
-            switch phaseOneError {
+        if let mioError = error as? MioError {
+            switch mioError {
             case .speechTranscriberUnavailable, .swedishUnavailable:
                 runState = .unavailable
             default:
@@ -643,7 +643,7 @@ final class PhaseOneViewModel {
         persistSoon()
     }
 
-    private func replaceSessionInMemory(_ session: PhaseOneSession) {
+    private func replaceSessionInMemory(_ session: MioSession) {
         if currentSession?.id == session.id {
             currentSession = session
         }

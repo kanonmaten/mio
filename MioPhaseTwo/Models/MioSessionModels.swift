@@ -82,8 +82,8 @@ enum LocalSpeechEngine: String, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .speechTranscriber: "SpeechTranscriber (avancerad)"
-        case .dictationTranscriber: "DictationTranscriber (lokal reservmotor)"
+        case .speechTranscriber: "SpeechTranscriber (nyare modul)"
+        case .dictationTranscriber: "DictationTranscriber (fallback)"
         }
     }
 }
@@ -214,7 +214,7 @@ struct BatteryReading: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
-struct PhaseOneSession: Identifiable, Codable, Hashable, Sendable {
+struct MioSession: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     let startedAt: Date
     var endedAt: Date?
@@ -325,7 +325,7 @@ enum PipelineEvent: Sendable {
     case mediaServicesReset
 }
 
-enum MioPhaseOneError: LocalizedError {
+enum MioError: LocalizedError {
     case microphoneDenied
     case speechTranscriberUnavailable
     case swedishUnavailable
@@ -341,11 +341,11 @@ enum MioPhaseOneError: LocalizedError {
         case .speechTranscriberUnavailable:
             "Apples SpeechTranscriber finns inte på den här telefonen. Det är ett viktigt resultat från fas 1."
         case .swedishUnavailable:
-            "Apples lokala talmotor erbjuder inte svenska på den här telefonen."
+            "Varken SpeechTranscriber eller DictationTranscriber erbjuder svenska på den här telefonen."
         case .missingAudioFormat:
-            "iOS kunde inte hitta ett ljudformat som den svenska talmodellen kan använda."
+            "iOS kunde inte hitta ett ljudformat som den valda svenska transkriptionsmodulen kan använda."
         case .invalidAudioStream:
-            "Ljudströmmen kunde inte kopplas till talmotorn."
+            "Ljudströmmen kunde inte kopplas till SpeechAnalyzer."
         case let .speechAssetUnsupported(engine):
             "iOS rapporterar att modellasseten för \(engine) inte stöds på den här telefonen."
         case let .speechAssetNotReady(details):

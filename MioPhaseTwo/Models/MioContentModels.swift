@@ -116,13 +116,13 @@ struct MioLocalExport: Codable, Sendable {
     let schemaVersion: Int
     let exportedAt: Date
     let content: [MioContentItem]
-    let sessions: [PhaseOneSession]
+    let sessions: [MioSession]
 
     init(
         schemaVersion: Int = MioContentStoreDocument.currentSchemaVersion,
         exportedAt: Date = .now,
         content: [MioContentItem],
-        sessions: [PhaseOneSession]
+        sessions: [MioSession]
     ) {
         self.schemaVersion = schemaVersion
         self.exportedAt = exportedAt

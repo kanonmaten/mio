@@ -108,7 +108,7 @@ final class MioContentViewModel {
         }
     }
 
-    func prepareExport(sessions: [PhaseOneSession]) async {
+    func prepareExport(sessions: [MioSession]) async {
         guard !isPreparingExport else { return }
         isPreparingExport = true
         defer { isPreparingExport = false }

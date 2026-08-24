@@ -23,9 +23,11 @@ For phase 2 work, also read `docs/DATAMODELL_FAS_2.md`, `docs/KRAVMATRIS_FAS_2.m
 - Phase 2 is implemented in the working copy as a local, manual MVP. This does not waive any remaining phase 1 device test.
 - The phase 2 working copy has not yet been compiled with Xcode, built in GitHub Actions or verified on the iPhone. Keep implementation, build and device status separate in every report.
 - Phase 2 intentionally contains no OpenAI calls, account system, EventKit integration, system alarm integration or saved raw audio.
-- The real device selected `DictationTranscriber` with `sv_SE`. The advanced Swedish `SpeechTranscriber` asset could not be installed in the first test.
-- Phase 2 improves advanced-model handling with `AssetInventory` status, explicit Swedish reservation, a separate install action and final installed-state verification. Treat this as unverified until a new device test; keep `DictationTranscriber` as fallback.
-- Phase 2 stores manual content in versioned `MioPhaseTwo/content-v1.json` while preserving `MioPhaseOne/sessions.json`. Session corrections are overlays: original transcript text, audio timing and evidence fields must remain intact.
+- `SpeechAnalyzer` is the shared analysis engine. Mio feeds it timed audio buffers and configures one transcription module at a time: `SpeechTranscriber` when its Swedish asset is installed, otherwise `DictationTranscriber` as fallback. `AssetInventory` manages module assets; it is not a separate analyzer model.
+- The real device selected `DictationTranscriber` with `sv_SE`. The newer Swedish `SpeechTranscriber` asset could not be installed in the first test.
+- Phase 2 improves `SpeechTranscriber` asset handling with `AssetInventory` status, explicit Swedish reservation, a separate install action and final installed-state verification. Session start does not initiate that download: if the asset is not already installed, use `DictationTranscriber` immediately. Treat this as unverified until a new device test.
+- Active project, source, test, target, scheme and product names use `MioPhaseTwo`. The main bundle identifier intentionally remains `se.eyvin.MioPhaseOne` for in-place upgrades.
+- Phase 2 stores content in versioned `MioPhaseTwo/content-v1.json` and sessions in `MioPhaseTwo/sessions.json`. If the new sessions file is absent, a legacy `MioPhaseOne/sessions.json` is migrated on first read. Session corrections are overlays: original transcript text, audio timing and evidence fields must remain intact.
 - See `docs/TESTRESULTAT_FAS_1.md` for the historical phone result and `docs/TESTRESULTAT_FAS_2.md` for current phase 2 verification status.
 
 ## Non-negotiable privacy rules

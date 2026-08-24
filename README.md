@@ -24,10 +24,11 @@ Det första telefonprovet var 2 minuter 30 sekunder. Det bevisar den korta fas 1
 - Manuell skapa, redigera, söka, slutföra uppgift och radera.
 - Lokal, stabil tidsordning och valfri koppling mellan en manuell post och en transkriptionssession.
 - Sessionstitel, manuell sessionsanteckning och korrigerad visningstext utan att originaltext eller ljudtider skrivs över.
-- Versionsmärkt lagring i `MioPhaseTwo/content-v1.json`; befintliga `MioPhaseOne/sessions.json` behålls separat.
+- Versionsmärkt lagring i `MioPhaseTwo/content-v1.json` och `MioPhaseTwo/sessions.json`; om den nya sessionsfilen saknas flyttas en äldre `MioPhaseOne/sessions.json` säkert vid första läsningen.
 - Gemensam versionsmärkt JSON-export med manuellt innehåll och sessioner.
-- Tydligare status för Apples avancerade svenska modell, explicit reservation, separat installationsknapp och verifiering före användning.
-- `DictationTranscriber` med `sv_SE` finns kvar som den verifierade reservvägen från fas 1.
+- `SpeechAnalyzer` tar emot de tidsatta ljudbuffertarna och kör en transkriptionsmodul åt gången; det är analysmotorn, inte en tredje språkmodell.
+- `SpeechTranscriber` med sin nyare lokala modell provas först när den svenska asseten har verifierats som installerad. `DictationTranscriber` med `sv_SE` finns kvar som den verifierade kompatibilitetsfallbacken från fas 1.
+- `AssetInventory` visar, reserverar och installerar assetar för modulerna. En separat installationsknapp kan förbereda `SpeechTranscriber` före sessionsstart.
 
 Detta är en beskrivning av källkoden, inte ett påstående om att den nya revisionen kompilerar eller fungerar på iPhone. Följ [kravmatrisen](docs/KRAVMATRIS_FAS_2.md) och [testplanen](docs/TESTPLAN_FAS_2.md) för verifiering.
 
@@ -69,19 +70,19 @@ En Mac som stöder en Xcode 26-version kan bygga, signera och installera projekt
 
 ```text
 .github/workflows/           Molnbygget
-MioPhaseOne.xcodeproj/       Xcode-projektets befintliga tekniska namn
-MioPhaseOne/                 Appkod, lokala modeller och integritetsfiler
+MioPhaseTwo.xcodeproj/       Xcode-projektet
+MioPhaseTwo/                 Appkod, lokala modeller och integritetsfiler
   Models/
   Services/
-MioPhaseOneTests/            Automatiska tester
+MioPhaseTwoTests/            Automatiska tester
 docs/                        Vision, beslut, datamodell, status och testplaner
 AGENTS.md                    Varaktig kontext för Codex
 START_HAR_MONTEREY.md        GitHub Actions + SideStore
 ```
 
-Projekt- och targetnamnet `MioPhaseOne` behålls tills ett separat migreringsbeslut tas. Appens användarnamn är **Mio**. Ett namnbyte får inte av misstag ändra bundle identifier och därmed bryta uppgraderingsvägen eller lokal data.
+Projekt, appmapp, testmapp, target, scheme, produkt och artifacts heter nu `MioPhaseTwo`. Appens användarnamn är fortfarande **Mio**. Bundle identifier är avsiktligt kvar som `se.eyvin.MioPhaseOne`, eftersom den identifierar den redan installerade appen och dess lokala container.
 
-Exporterade `Mio-fas-1-*.json`, `Mio-lokal-export-*.json`, IPA-filer, pairing-filer, certifikat och hemligheter hör aldrig hemma i repot.
+Exporterade `Mio-fas-1-*.json`, `Mio-fas-2-session-*.json`, `Mio-lokal-export-*.json`, IPA-filer, pairing-filer, certifikat och hemligheter hör aldrig hemma i repot.
 
 ## Viktiga begränsningar
 
@@ -89,13 +90,14 @@ Exporterade `Mio-fas-1-*.json`, `Mio-lokal-export-*.json`, IPA-filer, pairing-fi
 - Bakgrundsljud kan hålla en användarstartad session aktiv. iOS återstartar inte mikrofonen efter tvångsavslutning, omstart eller systemterminering.
 - En tidsstyrd paus stänger mikrofonen. iOS kan då vila appen, så fortsatt lyssning kan kräva att appen öppnas igen.
 - Ett ljudvägsbyte kan ändra mikrofonformatet. Stoppa och starta om sessionen om texten upphör.
-- Den avancerade svenska modellen får inte väljas förrän `AssetInventory` rapporterar att den är installerad. Annars används reservmotorn.
+- `SpeechTranscriber` får inte startas i `SpeechAnalyzer` förrän `AssetInventory` rapporterar att modulens svenska asset är installerad. Vid fel förbereds en ny `SpeechAnalyzer` med `DictationTranscriber`.
 - Ingen ska spelas in utan tydligt tillstånd och utan att skolans, arbetsplatsens och lagens regler följs.
 
 ## Apple-källor för kärnarkitekturen
 
 - [SpeechTranscriber](https://developer.apple.com/documentation/speech/speechtranscriber)
 - [DictationTranscriber](https://developer.apple.com/documentation/speech/dictationtranscriber)
+- [SpeechAnalyzer](https://developer.apple.com/documentation/speech/speechanalyzer)
 - [AssetInventory](https://developer.apple.com/documentation/speech/assetinventory)
 - [Apples SpeechAnalyzer-exempel](https://developer.apple.com/documentation/speech/bringing-advanced-speech-to-text-capabilities-to-your-app)
 - [AnalyzerInput med explicit starttid](https://developer.apple.com/documentation/speech/analyzerinput/init%28buffer%3Abufferstarttime%3A%29)

@@ -19,7 +19,7 @@ Lokalt repo
 Privat GitHub-repo
    │ GitHub Actions: Xcode 26.6
    ▼
-MioPhaseOne-unsigned.ipa
+MioPhaseTwo-unsigned.ipa
    │ SideStore + personligt Apple-konto
    ▼
 iPhone 13
@@ -64,13 +64,13 @@ Om körningen blir röd: öppna det första röda steget och skicka den första 
 
 1. Öppna den gröna körningens sammanfattning.
 2. Scrolla till **Artifacts**.
-3. Klicka **MioPhaseOne-IPA**.
+3. Klicka **MioPhaseTwo-IPA**.
 4. Packa upp den nedladdade artifact-ZIP-filen en gång.
 5. Kontrollera att mappen innehåller:
 
    ```text
-   MioPhaseOne-unsigned.ipa
-   MioPhaseOne-buildinfo.txt
+   MioPhaseTwo-unsigned.ipa
+   MioPhaseTwo-buildinfo.txt
    ```
 
 6. Packa inte upp själva `.ipa`-filen.
@@ -81,7 +81,7 @@ Om körningen blir röd: öppna det första röda steget och skicka den första 
 
 Använd en privat filväg som ni redan litar på, exempelvis OneDrive eller iCloud Drive:
 
-1. Lägg `MioPhaseOne-unsigned.ipa` i den valda mappen på Windows.
+1. Lägg `MioPhaseTwo-unsigned.ipa` i den valda mappen på Windows.
 2. Vänta tills filen är synkroniserad.
 3. Öppna **Filer** på iPhone och hämta filen lokalt om en molnsymbol visas.
 
@@ -93,7 +93,7 @@ IPA:n innehåller appkod men inga sparade Mio-sessioner.
 2. Anslut iPhone till vanligt Wi‑Fi; enbart mobildata räcker inte för SideStores normala flöde.
 3. Öppna **LocalDevVPN** och anslut.
 4. Öppna **SideStore > My Apps**.
-5. Tryck `+` och välj `MioPhaseOne-unsigned.ipa` i Filer.
+5. Tryck `+` och välj `MioPhaseTwo-unsigned.ipa` i Filer.
 6. Vänta medan SideStore signerar och installerar appen.
 7. Kontrollera att **Mio** visas under My Apps och går att öppna.
 
@@ -152,8 +152,8 @@ Koppla ur USB/laddning före batteritestet. Mio behöver i fas 2 inte behörighe
 1. Öppna **Mio**.
 2. Gå igenom flikarna **Mio**, **Tidslinje**, **Kalender**, **Anteckningar** och **Morgon**.
 3. Vänta tills kortet **Telefonens stöd** är färdigt.
-4. Om den avancerade svenska modellen stöds men inte är installerad kan ni, med wifi och appen öppen, trycka **Försök installera avancerad modell**. Starta ingen session under installationen.
-5. Tryck **Kontrollera igen** och notera status. `SpeechTranscriber` ska inte väljas före installerad status; annars används `DictationTranscriber` med `sv_SE`.
+4. Om den svenska `SpeechTranscriber`-modellen stöds men inte är installerad kan ni, med wifi och appen öppen, trycka **Installera SpeechTranscriber-modell**. Starta ingen session under installationen.
+5. Tryck **Kontrollera igen** och notera status. `SpeechTranscriber` ska inte väljas före installerad assetstatus; annars kör `SpeechAnalyzer` `DictationTranscriber` med `sv_SE`.
 6. Tryck **Starta ny session** och tillåt mikrofonen.
 7. Vänta tills rubriken visar **Mio lyssnar** och kontrollera den orange mikrofonindikatorn.
 8. Följ [docs/TESTPLAN_FAS_2.md](docs/TESTPLAN_FAS_2.md).
@@ -228,14 +228,14 @@ Ett gratis Apple-konto har tre aktiva appplatser och SideStore använder en. Ava
 
 Signaturen har sannolikt löpt ut. Förnya i SideStore. Radera inte Mio först om ni vill behålla lokal data.
 
-### Ingen avancerad svensk motor
+### SpeechTranscriber-modellen kan inte installeras
 
-Det första iPhone-testet visade detta och appen gick korrekt över till `DictationTranscriber` med `sv_SE`. Det är den historiskt verifierade vägen på telefonen. Fas 2 visar nu `AssetInventory`-status och har en separat installationsknapp, men detta nya flöde är inte verifierat förrän den aktuella IPA:n har testats på telefonen.
+Det första iPhone-testet visade detta och appen gick korrekt över till `DictationTranscriber` med `sv_SE` i `SpeechAnalyzer`. Det är den historiskt verifierade vägen på telefonen. Fas 2 visar nu `AssetInventory`-status och har en separat installationsknapp, men detta nya flöde är inte verifierat förrän den aktuella IPA:n har testats på telefonen.
 
 ## Säkerhetsregler
 
 - Lägg aldrig Apple-lösenord, API-nycklar, pairing-filer eller certifikat i GitHub.
-- Ladda aldrig upp `Mio-fas-1-*.json`, `Mio-lokal-export-*.json` eller andra exporterade Mio-sessioner till kodrepot.
+- Ladda aldrig upp `Mio-fas-1-*.json`, `Mio-fas-2-session-*.json`, `Mio-lokal-export-*.json` eller andra exporterade Mio-sessioner till kodrepot.
 - Installera iLoader, SideStore och LocalDevVPN endast via SideStores officiella dokumentation och länkade officiella källor.
 - Exportera testdata före ominstallation eller större uppdatering.
 - GitHub-workflowen behöver inga hemligheter för den osignerade byggnaden.

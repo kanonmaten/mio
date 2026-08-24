@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 struct ContentView: View {
-    @Bindable var model: PhaseOneViewModel
+    @Bindable var model: MioViewModel
     @Bindable var contentModel: MioContentViewModel
     @Environment(\.scenePhase) private var scenePhase
 
@@ -34,7 +34,7 @@ struct ContentView: View {
 }
 
 private struct MioTabView: View {
-    @Bindable var model: PhaseOneViewModel
+    @Bindable var model: MioViewModel
     @Bindable var contentModel: MioContentViewModel
     @State private var showDeleteConfirmation = false
 
@@ -96,7 +96,7 @@ private struct MioTabView: View {
 }
 
 private struct StatusHeader: View {
-    let model: PhaseOneViewModel
+    let model: MioViewModel
 
     var body: some View {
         VStack(spacing: 12) {
@@ -152,7 +152,7 @@ private struct StatusHeader: View {
 }
 
 private struct ControlsCard: View {
-    let model: PhaseOneViewModel
+    let model: MioViewModel
 
     var body: some View {
         Card {
@@ -168,7 +168,7 @@ private struct ControlsCard: View {
                 case .preparing:
                     HStack(spacing: 12) {
                         ProgressView()
-                        Text("Förbereder lokal talmotor …")
+                        Text("Förbereder SpeechAnalyzer och transkriptionsmodul …")
                             .font(.headline)
                     }
                     .frame(maxWidth: .infinity)
@@ -181,7 +181,7 @@ private struct ControlsCard: View {
                 case .stopping:
                     HStack(spacing: 12) {
                         ProgressView()
-                        Text("Stänger mikrofon och talmotor säkert …")
+                        Text("Stänger mikrofon och SpeechAnalyzer säkert …")
                             .font(.headline)
                     }
                     .frame(maxWidth: .infinity)
@@ -242,7 +242,7 @@ private struct ControlsCard: View {
 }
 
 private struct CapabilityCard: View {
-    let model: PhaseOneViewModel
+    let model: MioViewModel
 
     var body: some View {
         Card(title: "Telefonens stöd", symbol: "checklist") {
@@ -260,20 +260,26 @@ private struct CapabilityCard: View {
                 )
                 Divider()
                 CheckRow(
-                    title: "Avancerad talmotor",
-                    detail: advancedSpeechDetail,
-                    result: advancedSpeechResult
+                    title: "SpeechAnalyzer",
+                    detail: "Gemensam lokal analysmotor som kör vald transkriptionsmodul",
+                    result: isIOS26OrLater
                 )
                 Divider()
                 CheckRow(
-                    title: "Svensk lokal reservmotor",
+                    title: "SpeechTranscriber (nyare modul)",
+                    detail: speechTranscriberDetail,
+                    result: speechTranscriberResult
+                )
+                Divider()
+                CheckRow(
+                    title: "DictationTranscriber (fallback)",
                     detail: dictationDetail,
                     result: model.support.dictationLocaleIdentifier != nil
                 )
                 Divider()
                 CheckRow(
-                    title: "Vald motor",
-                    detail: model.support.selectedEngine?.title ?? "Ingen svensk motor hittades",
+                    title: "Vald transkriptionsmodul",
+                    detail: model.support.selectedEngine?.title ?? "Ingen svensk modul hittades",
                     result: model.support.selectedEngine != nil
                 )
                 Divider()
@@ -297,11 +303,11 @@ private struct CapabilityCard: View {
                         if model.isInstallingAdvancedModel {
                             HStack {
                                 ProgressView()
-                                Text("Installerar avancerad modell …")
+                                Text("Installerar SpeechTranscriber-modell …")
                             }
                             .frame(maxWidth: .infinity)
                         } else {
-                            Label("Försök installera avancerad modell", systemImage: "arrow.down.circle")
+                            Label("Installera SpeechTranscriber-modell", systemImage: "arrow.down.circle")
                                 .frame(maxWidth: .infinity)
                         }
                     }
@@ -339,7 +345,7 @@ private struct CapabilityCard: View {
         }
     }
 
-    private var advancedSpeechDetail: String {
+    private var speechTranscriberDetail: String {
         if model.support.speechTranscriberAvailable == false {
             return "SpeechTranscriber saknas på enheten"
         }
@@ -351,7 +357,7 @@ private struct CapabilityCard: View {
         return "Finns, men svenska hittades inte"
     }
 
-    private var advancedSpeechResult: Bool? {
+    private var speechTranscriberResult: Bool? {
         switch model.support.advancedAssetStatus {
         case .installed: true
         case .unsupported: false
@@ -375,7 +381,7 @@ private struct PrivacyCard: View {
     var body: some View {
         Card(title: "Integritet", symbol: "hand.raised.fill") {
             VStack(alignment: .leading, spacing: 10) {
-                PrivacyLine(symbol: "iphone", text: "Tal till text sker med Apples lokala motor på telefonen.")
+                PrivacyLine(symbol: "iphone", text: "Tal till text sker lokalt i SpeechAnalyzer med SpeechTranscriber eller DictationTranscriber.")
                 PrivacyLine(symbol: "waveform.slash", text: "Mikrofonljud bearbetas tillfälligt i minnet men sparas aldrig som ljudfil.")
                 PrivacyLine(symbol: "cloud.slash", text: "Ingen OpenAI-nyckel finns i appen och inget skickas till OpenAI.")
                 PrivacyLine(symbol: "mic.slash", text: "Stoppa eller pausa stänger AVAudioEngine och mikrofonens ljudsession.")
@@ -386,8 +392,8 @@ private struct PrivacyCard: View {
 }
 
 private struct LiveTranscriptCard: View {
-    let model: PhaseOneViewModel
-    let session: PhaseOneSession
+    let model: MioViewModel
+    let session: MioSession
 
     var body: some View {
         Card(title: "Live-test", symbol: "quote.bubble") {
@@ -428,8 +434,8 @@ private struct LiveTranscriptCard: View {
 }
 
 private struct SessionStatisticsCard: View {
-    let model: PhaseOneViewModel
-    let session: PhaseOneSession
+    let model: MioViewModel
+    let session: MioSession
 
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
 
@@ -458,7 +464,7 @@ private struct SessionStatisticsCard: View {
 }
 
 private struct EvidenceCard: View {
-    let session: PhaseOneSession
+    let session: MioSession
 
     var body: some View {
         Card(title: "Bevis från telefonen", symbol: "doc.text.magnifyingglass") {
@@ -492,7 +498,7 @@ private struct EvidenceCard: View {
 }
 
 private struct TranscriptCard: View {
-    let session: PhaseOneSession
+    let session: MioSession
 
     var body: some View {
         Card(title: "Tidsstämplad text", symbol: "text.document") {
@@ -546,7 +552,7 @@ private struct TranscriptCard: View {
 }
 
 private struct DiagnosticCard: View {
-    let session: PhaseOneSession
+    let session: MioSession
 
     var body: some View {
         Card(title: "Händelselogg", symbol: "list.bullet.rectangle") {
@@ -599,7 +605,7 @@ private struct DiagnosticCard: View {
 }
 
 private struct DataCard: View {
-    let model: PhaseOneViewModel
+    let model: MioViewModel
     let contentModel: MioContentViewModel
     @Binding var showDeleteConfirmation: Bool
 
@@ -650,7 +656,7 @@ private struct FirstRunCard: View {
     var body: some View {
         Card(title: "Börja med en lokal session", symbol: "1.circle") {
             VStack(alignment: .leading, spacing: 9) {
-                Text("1. Tryck Starta och tillåt mikrofonen.")
+                Text("1. Tryck Starta ny session och tillåt mikrofonen.")
                 Text("2. Säg svenska meningar och ordet Mio.")
                 Text("3. Lås telefonen i minst fem minuter och fortsätt prata ibland.")
                 Text("4. Lås upp, kontrollera texten och stoppa sessionen.")

@@ -98,7 +98,7 @@ Fortsätt samma task när ni felsöker eller förfinar samma mål. Starta en ny 
 ## Filer som aldrig ska checkas in
 
 - `*.ipa` och nedladdade artifacts
-- `Mio-fas-1-*.json`, `Mio-lokal-export-*.json` och andra riktiga testexporter
+- `Mio-fas-1-*.json`, `Mio-fas-2-session-*.json`, `Mio-lokal-export-*.json` och andra riktiga testexporter
 - `*.mobiledevicepairing`
 - `*.p12`, `*.mobileprovision`, `*.cer`, `*.pem`, `*.key` och andra certifikat/nycklar
 - `.env`, API-nycklar och Apple-inloggning

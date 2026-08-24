@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A10000000000000000000001"
-               BuildableName = "MioPhaseOne.app"
-               BlueprintName = "MioPhaseOne"
-               ReferencedContainer = "container:MioPhaseOne.xcodeproj">
+               BuildableName = "MioPhaseTwo.app"
+               BlueprintName = "MioPhaseTwo"
+               ReferencedContainer = "container:MioPhaseTwo.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -35,9 +35,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A10000000000000000000002"
-               BuildableName = "MioPhaseOneTests.xctest"
-               BlueprintName = "MioPhaseOneTests"
-               ReferencedContainer = "container:MioPhaseOne.xcodeproj">
+               BuildableName = "MioPhaseTwoTests.xctest"
+               BlueprintName = "MioPhaseTwoTests"
+               ReferencedContainer = "container:MioPhaseTwo.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -56,9 +56,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A10000000000000000000001"
-            BuildableName = "MioPhaseOne.app"
-            BlueprintName = "MioPhaseOne"
-            ReferencedContainer = "container:MioPhaseOne.xcodeproj">
+            BuildableName = "MioPhaseTwo.app"
+            BlueprintName = "MioPhaseTwo"
+            ReferencedContainer = "container:MioPhaseTwo.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A10000000000000000000001"
-            BuildableName = "MioPhaseOne.app"
-            BlueprintName = "MioPhaseOne"
-            ReferencedContainer = "container:MioPhaseOne.xcodeproj">
+            BuildableName = "MioPhaseTwo.app"
+            BlueprintName = "MioPhaseTwo"
+            ReferencedContainer = "container:MioPhaseTwo.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

@@ -20,7 +20,7 @@ Använd endast följande resultat per test:
 3. Exportera viktig befintlig fas 1-data innan uppdateringen.
 4. Installera över den befintliga appen med samma Apple-konto och bundle identifier. Radera inte appen inför migreringstestet.
 5. Använd endast syntetiska poster och röster från personer som uttryckligen samtycker.
-6. Ha wifi för testet av Apples avancerade modell. Övriga manuella tester ska även köras offline.
+6. Ha wifi för den separata installationen av `SpeechTranscriber`-modellen. Övriga manuella tester ska även köras offline.
 
 ## Test A — uppgradering och första start
 
@@ -30,8 +30,9 @@ Använd endast följande resultat per test:
 4. Kontrollera att appen inte kraschar och att befintliga sessioner fortfarande går att läsa.
 5. Kontrollera att äldre sessioner utan fas 2-metadata visas utan påhittad titel, anteckning eller rättning.
 6. Kontrollera att det nya manuella innehållslagret börjar tomt om inga fas 2-poster skapats tidigare.
+7. Stäng appen helt, öppna den igen och kontrollera att de migrerade sessionerna fortfarande visas från fas 2-lagringen.
 
-Godkänt: gammal sessionsdata finns kvar oförändrad och den nya datamodellen startar utan fel.
+Godkänt: gammal sessionsdata har flyttats från den äldre interna sökvägen utan ändrade sessioner, finns kvar efter omstart och den nya datamodellen startar utan fel.
 
 ## Test B — fem flikar
 
@@ -133,18 +134,19 @@ Godkänt: enskild radering består, sessionsrelationen lossas utan att posten f�
 
 Godkänt: de manuella funktionerna fungerar lokalt och inga externa integrationer aktiveras.
 
-## Test K — avancerad svensk modell och fallback
+## Test K — SpeechAnalyzer, SpeechTranscriber och fallback
 
 1. Stäng av flygplansläge, anslut wifi och håll appen öppen.
 2. Stoppa eventuell aktiv session.
-3. Läs statusen för den avancerade modellen i **Telefonens stöd**.
-4. Om svenska stöds men inte är installerad, tryck **Försök installera avancerad modell**.
+3. Läs statusen för `SpeechTranscriber` i **Telefonens stöd**.
+4. Om svenska stöds men inte är installerad, tryck **Installera SpeechTranscriber-modell**.
 5. Dokumentera varje visad status: stödd, hämtas, installerad eller inte stödd/fel.
 6. Tryck **Kontrollera igen**.
-7. Starta en ny session först efter kontrollen och notera vald motor.
-8. Om installationen inte blir klar, kontrollera att `DictationTranscriber` med `sv_SE` fortfarande kan väljas och skapa svensk text.
+7. Starta en ny session först efter kontrollen. Kontrollera i händelseloggen att `SpeechAnalyzer` startade och notera vilken transkriptionsmodul den använde.
+8. Om `SpeechTranscriber` installerades, kontrollera att den valdes och skapade svensk text.
+9. Om installationen inte blir klar, kontrollera att sessionsstarten inte väntar på en ny `SpeechTranscriber`-hämtning och att `SpeechAnalyzer` med `DictationTranscriber` och `sv_SE` startar och skapar svensk text.
 
-Godkänt: appen använder inte `SpeechTranscriber` före bekräftad installerad status, visar ett begripligt installationsresultat och behåller fungerande fallback. Att iOS vägrar installera asseten ska dokumenteras som enhetsresultat, inte döljas.
+Godkänt: appen använder `SpeechAnalyzer` med `SpeechTranscriber` först efter bekräftad installerad assetstatus, visar ett begripligt installationsresultat och behåller en fungerande `DictationTranscriber`-fallback. Att iOS vägrar installera asseten ska dokumenteras som enhetsresultat, inte döljas.
 
 ## Test L — mikrofon och fas 1-regression
 

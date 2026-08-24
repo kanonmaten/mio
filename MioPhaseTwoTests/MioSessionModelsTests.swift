@@ -1,10 +1,10 @@
 import Foundation
 import XCTest
-@testable import MioPhaseOne
+@testable import MioPhaseTwo
 
-final class PhaseOneModelsTests: XCTestCase {
+final class MioSessionModelsTests: XCTestCase {
     func testBatteryDropUsesFirstAndLastKnownReading() {
-        let session = PhaseOneSession(
+        let session = MioSession(
             batteryReadings: [
                 BatteryReading(level: -1, state: .unknown),
                 BatteryReading(level: 0.82, state: .unplugged),
@@ -16,7 +16,7 @@ final class PhaseOneModelsTests: XCTestCase {
     }
 
     func testSessionCountsMioAndInterruptions() {
-        let session = PhaseOneSession(
+        let session = MioSession(
             transcripts: [
                 TranscriptSegment(text: "Vanlig text", containsMio: false),
                 TranscriptSegment(text: "Mio hittades", containsMio: true)
@@ -36,6 +36,21 @@ final class PhaseOneModelsTests: XCTestCase {
         XCTAssertEqual(PauseLength.thirtyMinutes.interval, 1_800)
         XCTAssertEqual(PauseLength.oneHour.interval, 3_600)
         XCTAssertNil(PauseLength.untilResumed.interval)
+    }
+
+    func testSpeechTranscriberRequiresInstalledAsset() {
+        XCTAssertTrue(
+            SpeechCapabilityService.shouldUseSpeechTranscriber(assetState: .installed)
+        )
+        XCTAssertFalse(
+            SpeechCapabilityService.shouldUseSpeechTranscriber(assetState: .supported)
+        )
+        XCTAssertFalse(
+            SpeechCapabilityService.shouldUseSpeechTranscriber(assetState: .downloading)
+        )
+        XCTAssertFalse(
+            SpeechCapabilityService.shouldUseSpeechTranscriber(assetState: .unsupported)
+        )
     }
 
     func testBackgroundIntervalRequiresRealAudioOverlap() {
@@ -64,7 +79,7 @@ final class PhaseOneModelsTests: XCTestCase {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
 
-        let session = try decoder.decode(PhaseOneSession.self, from: Data(legacyJSON.utf8))
+        let session = try decoder.decode(MioSession.self, from: Data(legacyJSON.utf8))
 
         XCTAssertNil(session.title)
         XCTAssertNil(session.manualNote)

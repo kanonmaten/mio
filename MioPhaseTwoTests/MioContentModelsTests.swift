@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import MioPhaseOne
+@testable import MioPhaseTwo
 
 final class MioContentModelsTests: XCTestCase {
     func testAllFiveKindsRoundTripThroughCodable() throws {
@@ -72,7 +72,7 @@ final class MioContentModelsTests: XCTestCase {
             containsMio: false,
             wasObservedInBackground: true
         )
-        let session = PhaseOneSession(startedAt: originalStart, transcripts: [segment])
+        let session = MioSession(startedAt: originalStart, transcripts: [segment])
 
         XCTAssertTrue(session.matches(searchText: "fredag"))
         XCTAssertEqual(session.transcripts[0].text, "Matematik på torsdag")

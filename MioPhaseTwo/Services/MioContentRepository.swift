@@ -92,7 +92,7 @@ actor MioContentRepository {
 
     func makeExportFile(
         content: [MioContentItem],
-        sessions: [PhaseOneSession]
+        sessions: [MioSession]
     ) throws -> URL {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "sv-SE")

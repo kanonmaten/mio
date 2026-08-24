@@ -1,20 +1,20 @@
 import Foundation
 import XCTest
-@testable import MioPhaseOne
+@testable import MioPhaseTwo
 
 final class MioContentRepositoryTests: XCTestCase {
-    func testUpsertReloadDeleteAndPhaseOneIsolation() async throws {
+    func testUpsertReloadDeleteAndSessionIsolation() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
-        let phaseOneURL = fixture.root
-            .appendingPathComponent("MioPhaseOne", isDirectory: true)
+        let sessionURL = fixture.root
+            .appendingPathComponent("MioPhaseTwo", isDirectory: true)
             .appendingPathComponent("sessions.json")
         try FileManager.default.createDirectory(
-            at: phaseOneURL.deletingLastPathComponent(),
+            at: sessionURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let phaseOneSentinel = Data("private phase one fixture".utf8)
-        try phaseOneSentinel.write(to: phaseOneURL)
+        let sessionSentinel = Data("private session fixture".utf8)
+        try sessionSentinel.write(to: sessionURL)
 
         let repository = MioContentRepository(
             storageURL: fixture.storageURL,
@@ -40,7 +40,44 @@ final class MioContentRepositoryTests: XCTestCase {
         let itemsAfterDelete = try await reloadedRepository.loadItems()
         XCTAssertTrue(itemsAfterDelete.isEmpty)
         try await reloadedRepository.deleteAll()
-        XCTAssertEqual(try Data(contentsOf: phaseOneURL), phaseOneSentinel)
+        XCTAssertEqual(try Data(contentsOf: sessionURL), sessionSentinel)
+    }
+
+    func testSessionRepositoryMigratesLegacyPhaseOneFile() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let legacyURL = fixture.root
+            .appendingPathComponent("MioPhaseOne", isDirectory: true)
+            .appendingPathComponent("sessions.json")
+        let phaseTwoURL = fixture.root
+            .appendingPathComponent("MioPhaseTwo", isDirectory: true)
+            .appendingPathComponent("sessions.json")
+        try FileManager.default.createDirectory(
+            at: legacyURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let expected = [
+            MioSession(
+                id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+                startedAt: Date(timeIntervalSince1970: 2_000),
+                endedAt: Date(timeIntervalSince1970: 2_010)
+            )
+        ]
+        try Self.encoder.encode(expected).write(to: legacyURL, options: .atomic)
+
+        let repository = SessionRepository(
+            storageURL: phaseTwoURL,
+            legacyStorageURL: legacyURL
+        )
+        let loaded = try await repository.loadSessions()
+
+        XCTAssertEqual(loaded, expected)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: phaseTwoURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
+
+        let reloadedRepository = SessionRepository(storageURL: phaseTwoURL)
+        let reloaded = try await reloadedRepository.loadSessions()
+        XCTAssertEqual(reloaded, expected)
     }
 
     func testExportIsVersionedAndContainsNoRawAudioField() async throws {
@@ -111,5 +148,11 @@ final class MioContentRepositoryTests: XCTestCase {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
+    }()
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
     }()
 }

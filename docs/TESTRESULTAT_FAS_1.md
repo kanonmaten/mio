@@ -12,8 +12,8 @@ Den exporterade råfilen innehåller transkriberad text och förvaras privat uta
 
 | Område | Resultat | Bedömning |
 |---|---|---|
-| Avancerad svensk motor | `transcription.sv` kunde inte installeras; status `Not Installing` | Inte tillgänglig i detta test |
-| Lokal reservmotor | `DictationTranscriber`, `sv_SE` | Godkänd i korttest |
+| `SpeechTranscriber`-modul | `transcription.sv` kunde inte installeras; status `Not Installing` | Inte tillgänglig i detta test |
+| `DictationTranscriber`-fallback | `DictationTranscriber`, `sv_SE` | Godkänd i korttest |
 | Text | 5 finala segment, alla med giltig ljudtid | Pipeline och export fungerar |
 | Mio-detektion | 2 segment innehöll fristående Mio | Godkänd i korttest |
 | Bakgrund | 2 intervall, totalt 11 sekunder; 1 segment låg helt i bakgrunden och innehöll Mio | Äkta kort bakgrundsbevis; lång stabilitet återstår |

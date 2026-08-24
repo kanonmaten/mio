@@ -23,7 +23,7 @@ enum SpeechCapabilityService {
             snapshot.advancedLocaleReserved = reservedLocales.contains { locale in
                 locale.identifier(.bcp47) == speechLocale.identifier(.bcp47)
             }
-            if state == .installed {
+            if shouldUseSpeechTranscriber(assetState: state) {
                 snapshot.selectedEngine = .speechTranscriber
             }
         }
@@ -43,16 +43,16 @@ enum SpeechCapabilityService {
         switch snapshot.selectedEngine {
         case .speechTranscriber:
             snapshot.details = snapshot.swedishModelInstalled == true
-                ? "Svenska stöds av Apples avancerade lokala talmotor och modellen är installerad."
-                : "Svenska stöds av Apples avancerade lokala talmotor. Status: \(snapshot.advancedAssetStatus?.title ?? "okänd")."
+                ? "SpeechAnalyzer använder SpeechTranscriber för svenska. Den nyare lokala modellasseten är installerad."
+                : "SpeechTranscriber stöder svenska. Modellassetens status är \(snapshot.advancedAssetStatus?.title.lowercased() ?? "okänd")."
         case .dictationTranscriber:
             if snapshot.swedishLocaleIdentifier != nil,
                snapshot.advancedAssetStatus != .installed {
-                snapshot.details = "Den lokala reservmotorn är vald. Avancerad modell: \(snapshot.advancedAssetStatus?.title.lowercased() ?? "okänd status")."
+                snapshot.details = "SpeechAnalyzer använder DictationTranscriber som fallback. SpeechTranscriber-asset: \(snapshot.advancedAssetStatus?.title.lowercased() ?? "okänd status")."
             } else {
                 snapshot.details = snapshot.dictationModelInstalled == true
-                    ? "Svenska stöds via Apples lokala dikteringsmotor och modellen är installerad."
-                    : "Svenska stöds via Apples lokala dikteringsmotor. Status: \(snapshot.dictationAssetStatus?.title ?? "okänd")."
+                    ? "SpeechAnalyzer använder DictationTranscriber för svenska och dess lokala modellasset är installerad."
+                    : "DictationTranscriber stöder svenska. Modellassetens status är \(snapshot.dictationAssetStatus?.title.lowercased() ?? "okänd")."
             }
         case nil:
             snapshot.details = "Varken SpeechTranscriber eller DictationTranscriber erbjuder svenska på telefonen."
@@ -64,10 +64,10 @@ enum SpeechCapabilityService {
         status: @escaping (String) -> Void
     ) async throws -> Bool {
         guard SpeechTranscriber.isAvailable else {
-            throw MioPhaseOneError.speechTranscriberUnavailable
+            throw MioError.speechTranscriberUnavailable
         }
         guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
-            throw MioPhaseOneError.swedishUnavailable
+            throw MioError.swedishUnavailable
         }
         let module = SpeechTranscriber(
             locale: locale,
@@ -92,11 +92,11 @@ enum SpeechCapabilityService {
         case .installed:
             return false
         case .unsupported:
-            throw MioPhaseOneError.speechAssetUnsupported(engineTitle)
+            throw MioError.speechAssetUnsupported(engineTitle)
         case .downloading:
-            status("iOS fortsätter hämta modellasseten för \(locale.identifier) …")
+            status("iOS fortsätter hämta modellasseten för \(engineTitle), \(locale.identifier) …")
         case .supported:
-            status("Reserverar svenska modellasseten på telefonen …")
+            status("Reserverar modellasseten för \(engineTitle) på telefonen …")
         }
 
         // Although the installation request normally reserves a locale automatically,
@@ -107,14 +107,14 @@ enum SpeechCapabilityService {
         if let installation = try await AssetInventory.assetInstallationRequest(
             supporting: modules
         ) {
-            status("Hämtar och installerar svenska modellasseten. Behåll wifi och appen öppen …")
+            status("Hämtar modellasseten för \(engineTitle). Behåll wifi och appen öppen …")
             try await installation.downloadAndInstall()
             try Task.checkCancellation()
         }
 
         let finalState = await assetState(for: modules)
         guard finalState == .installed else {
-            throw MioPhaseOneError.speechAssetNotReady(
+            throw MioError.speechAssetNotReady(
                 "iOS-status är \(finalState.title.lowercased()). Systemet kan fortsätta försöka senare; prova igen med wifi."
             )
         }
@@ -129,6 +129,10 @@ enum SpeechCapabilityService {
         case .unsupported: .unsupported
         @unknown default: .unsupported
         }
+    }
+
+    static func shouldUseSpeechTranscriber(assetState: SpeechAssetState) -> Bool {
+        assetState == .installed
     }
 
     static func makeResponsiveLongDictation(locale: Locale) -> DictationTranscriber {

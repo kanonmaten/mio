@@ -12,9 +12,9 @@ Appen byggs i SwiftUI och använder Apples iOS 26-API:er. iPhone 13 med iOS 26 �
 
 ## 2026-08-20 – Lokal taligenkänning först
 
-Heldagsljud ska inte skickas till OpenAI. Appen provar `SpeechTranscriber` och faller tillbaka till `DictationTranscriber` för svenska när det behövs.
+Heldagsljud ska inte skickas till OpenAI. `SpeechAnalyzer` är den gemensamma analysmotorn som tar emot tidsatta ljudbuffertar. Mio konfigurerar den med en `SpeechModule` åt gången: den nyare `SpeechTranscriber` provas först och `DictationTranscriber` är kompatibilitetsfallback för svenska när det behövs. `AssetInventory` hanterar modulernas modellassetar; `SpeechAnalyzer` är inte en tredje språkmodell.
 
-Första enhetstestet visade att den avancerade svenska modellen inte kunde installeras (`transcription.sv`, status `Not Installing`). `DictationTranscriber` med `sv_SE` startade och fungerade. Arkitekturen ska därför behandla reservmotorn som den verifierade huvudvägen på den här telefonen tills ett senare test visar något annat.
+Första enhetstestet visade att den svenska `SpeechTranscriber`-asseten inte kunde installeras (`transcription.sv`, status `Not Installing`). `DictationTranscriber` med `sv_SE` startade och fungerade. Arkitekturen ska därför behandla den modulen som den verifierade fallbackvägen på den här telefonen tills ett senare test visar något annat.
 
 ## 2026-08-20 – Inget sparat råljud
 
@@ -48,19 +48,25 @@ Implementation, Xcode-kompilering, GitHub Actions-build, installation och telefo
 
 ## 2026-08-24 – Fas 2-data lagras separat och versionsmärkt
 
-Manuellt innehåll lagras i `MioPhaseTwo/content-v1.json` med `schemaVersion: 1`. De befintliga sessionerna ligger kvar i `MioPhaseOne/sessions.json` och migreras inte automatiskt till manuella poster. En manuell post kan ha en valfri `sessionID`-relation till en session.
+Manuellt innehåll lagras i `MioPhaseTwo/content-v1.json` med `schemaVersion: 1`. Sessioner lagras i `MioPhaseTwo/sessions.json`. Om den nya sessionsfilen saknas flyttas en äldre `MioPhaseOne/sessions.json` dit först efter lyckad avkodning och atomisk skrivning. Sessionerna migreras inte till manuella poster. En manuell post kan ha en valfri `sessionID`-relation till en session.
 
 De fem gemensamma typerna är tidslinjepost, anteckning, uppgift, plan och uttryckligt minne. En plan är lokal och ett uttryckligt minne skapas manuellt; inget av dem skrivs till en extern tjänst.
 
 En okänd innehållsschemaversion ska ge ett synligt fel och får inte tyst skrivas över. Den gemensamma exporten är också versionsmärkt och innehåller manuellt innehåll och sessioner, men aldrig råljud.
 
+## 2026-08-24 – Aktiva tekniska namn följer fas 2
+
+Xcode-projektet, app- och testmapparna, targets, scheme, produkt, Swift-modul och byggartifacts heter `MioPhaseTwo`. Aktiva Swift-typer använder neutrala namn som `MioSession`, `MioViewModel` och `MioError` i stället för fas 1-namn.
+
+Huvudappens bundle identifier förblir `se.eyvin.MioPhaseOne`. Det är en kompatibilitetsidentitet, inte ett synligt produktnamn; ett byte skulle få iOS att behandla fas 2 som en annan app och tappa åtkomsten till den befintliga lokala containern. Fas 1:s historiska testdokument behåller sina ursprungliga namn och resultat.
+
 ## 2026-08-24 – Sessionsredigering är ett bevarande lager
 
 Fas 2 får lägga till titel och manuell anteckning på en avslutad session samt en rättad visningstext på ett transkriptionssegment. Originaltext, originalets ljudtider, Mio-detektion, bakgrundsbevis och övrig diagnostik ska förbli oförändrade och finnas kvar i exporten. Det gör manuella rättningar möjliga utan att skriva om tekniskt testbevis.
 
-## 2026-08-24 – Den avancerade svenska modellen kräver installerad status
+## 2026-08-24 – SpeechTranscriber-asseten kräver installerad status
 
-`SpeechTranscriber` får väljas först när `AssetInventory` rapporterar att den svenska asseten är installerad. Appen visar assetstatus, reserverar svenska explicit, erbjuder en separat installationsåtgärd och kontrollerar slutstatus före användning. Om installationen inte är klar används den lokala `DictationTranscriber`-fallbacken.
+`SpeechTranscriber` får läggas i den aktiva `SpeechAnalyzer` först när `AssetInventory` rapporterar att modulens svenska asset är installerad. Appen visar assetstatus, reserverar svenska explicit och erbjuder en separat förinstallation som kontrollerar slutstatus. Sessionsstarten ska inte blockera på hämtning av den nyare modellen: om asseten inte redan är installerad startas `DictationTranscriber` direkt. Om en installerad `SpeechTranscriber` ändå inte kan förberedas stängs den analysen och en ny `SpeechAnalyzer` förbereds med `DictationTranscriber`.
 
 Detta är ett arkitekturbeslut, inte ett nytt telefonresultat. Både installation och fallback ska verifieras på iPhone 13.
 

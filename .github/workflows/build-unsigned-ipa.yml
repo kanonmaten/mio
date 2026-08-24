@@ -36,21 +36,21 @@ jobs:
       - name: Kontrollera projektfiler
         run: |
           set -euo pipefail
-          test -f MioPhaseOne.xcodeproj/project.pbxproj
-          test -f MioPhaseOne/Info.plist
-          test -f MioPhaseOne/PrivacyInfo.xcprivacy
-          test -f MioPhaseOne/Models/MioContentModels.swift
-          test -f MioPhaseOne/Services/MioContentRepository.swift
-          test -f MioPhaseOne/PhaseTwoViews.swift
-          plutil -lint MioPhaseOne/Info.plist
-          plutil -lint MioPhaseOne/PrivacyInfo.xcprivacy
+          test -f MioPhaseTwo.xcodeproj/project.pbxproj
+          test -f MioPhaseTwo/Info.plist
+          test -f MioPhaseTwo/PrivacyInfo.xcprivacy
+          test -f MioPhaseTwo/Models/MioContentModels.swift
+          test -f MioPhaseTwo/Services/MioContentRepository.swift
+          test -f MioPhaseTwo/PhaseTwoViews.swift
+          plutil -lint MioPhaseTwo/Info.plist
+          plutil -lint MioPhaseTwo/PrivacyInfo.xcprivacy
 
       - name: Bygg osignerad iPhone-app
         run: |
           set -euo pipefail
           xcodebuild \
-            -project MioPhaseOne.xcodeproj \
-            -scheme MioPhaseOne \
+            -project MioPhaseTwo.xcodeproj \
+            -scheme MioPhaseTwo \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
@@ -66,8 +66,8 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild \
-            -project MioPhaseOne.xcodeproj \
-            -scheme MioPhaseOne \
+            -project MioPhaseTwo.xcodeproj \
+            -scheme MioPhaseTwo \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
@@ -97,8 +97,8 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
           trap 'xcrun simctl shutdown "$SIMULATOR_UDID" || true' EXIT
           xcodebuild \
-            -project MioPhaseOne.xcodeproj \
-            -scheme MioPhaseOne \
+            -project MioPhaseTwo.xcodeproj \
+            -scheme MioPhaseTwo \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
@@ -112,22 +112,22 @@ jobs:
       - name: Skapa IPA-filen
         run: |
           set -euo pipefail
-          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/MioPhaseOne.app"
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/MioPhaseTwo.app"
           test -d "$APP_PATH"
-          test -x "$APP_PATH/MioPhaseOne"
+          test -x "$APP_PATH/MioPhaseTwo"
           test -f "$APP_PATH/PrivacyInfo.xcprivacy"
 
           rm -rf "$RUNNER_TEMP/Payload"
           mkdir -p "$RUNNER_TEMP/Payload"
-          ditto "$APP_PATH" "$RUNNER_TEMP/Payload/MioPhaseOne.app"
+          ditto "$APP_PATH" "$RUNNER_TEMP/Payload/MioPhaseTwo.app"
 
           (
             cd "$RUNNER_TEMP"
-            /usr/bin/zip -qry "$GITHUB_WORKSPACE/MioPhaseOne-unsigned.ipa" Payload
+            /usr/bin/zip -qry "$GITHUB_WORKSPACE/MioPhaseTwo-unsigned.ipa" Payload
           )
 
-          /usr/bin/unzip -t "$GITHUB_WORKSPACE/MioPhaseOne-unsigned.ipa"
-          /usr/bin/lipo -archs "$APP_PATH/MioPhaseOne" | /usr/bin/grep -qw arm64
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/MioPhaseTwo-unsigned.ipa"
+          /usr/bin/lipo -archs "$APP_PATH/MioPhaseTwo" | /usr/bin/grep -qw arm64
 
           {
             echo "Mio fas 2 – osignerad molnbyggnad"
@@ -137,16 +137,16 @@ jobs:
             xcodebuild -version | tr '\n' ' '
             echo
             xcrun --sdk iphoneos --show-sdk-version | sed 's/^/iPhoneOS SDK: /'
-            /usr/bin/shasum -a 256 "$GITHUB_WORKSPACE/MioPhaseOne-unsigned.ipa"
-          } > "$GITHUB_WORKSPACE/MioPhaseOne-buildinfo.txt"
+            /usr/bin/shasum -a 256 "$GITHUB_WORKSPACE/MioPhaseTwo-unsigned.ipa"
+          } > "$GITHUB_WORKSPACE/MioPhaseTwo-buildinfo.txt"
 
       - name: Ladda upp färdig IPA
         uses: actions/upload-artifact@v7
         with:
-          name: MioPhaseOne-IPA
+          name: MioPhaseTwo-IPA
           path: |
-            MioPhaseOne-unsigned.ipa
-            MioPhaseOne-buildinfo.txt
+            MioPhaseTwo-unsigned.ipa
+            MioPhaseTwo-buildinfo.txt
           if-no-files-found: error
           retention-days: 14
           compression-level: 0

@@ -3,7 +3,7 @@ import SwiftUI
 
 struct TimelineTabView: View {
     @Bindable var contentModel: MioContentViewModel
-    @Bindable var sessionModel: PhaseOneViewModel
+    @Bindable var sessionModel: MioViewModel
 
     @State private var searchText = ""
     @State private var editorRoute: ContentEditorRoute?
@@ -140,7 +140,7 @@ struct TimelineTabView: View {
 
 struct CalendarTabView: View {
     @Bindable var contentModel: MioContentViewModel
-    @Bindable var sessionModel: PhaseOneViewModel
+    @Bindable var sessionModel: MioViewModel
 
     @State private var searchText = ""
     @State private var editorRoute: ContentEditorRoute?
@@ -289,7 +289,7 @@ struct CalendarTabView: View {
 
 struct NotesTabView: View {
     @Bindable var contentModel: MioContentViewModel
-    @Bindable var sessionModel: PhaseOneViewModel
+    @Bindable var sessionModel: MioViewModel
 
     @State private var searchText = ""
     @State private var filter: NotesFilter = .all
@@ -521,7 +521,7 @@ private struct ContentEditorRoute: Identifiable {
 
 private enum TimelineElement: Identifiable {
     case content(MioContentItem)
-    case session(PhaseOneSession)
+    case session(MioSession)
 
     var id: String {
         switch self {
@@ -589,7 +589,7 @@ private struct ContentEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @Bindable var contentModel: MioContentViewModel
-    @Bindable var sessionModel: PhaseOneViewModel
+    @Bindable var sessionModel: MioViewModel
 
     let item: MioContentItem?
 
@@ -604,7 +604,7 @@ private struct ContentEditorView: View {
 
     init(
         contentModel: MioContentViewModel,
-        sessionModel: PhaseOneViewModel,
+        sessionModel: MioViewModel,
         item: MioContentItem?,
         initialKind: MioContentKind
     ) {
@@ -782,7 +782,7 @@ private struct SessionEditorView: View {
 
     let sessionID: UUID
     @Bindable var contentModel: MioContentViewModel
-    @Bindable var sessionModel: PhaseOneViewModel
+    @Bindable var sessionModel: MioViewModel
 
     @State private var title = ""
     @State private var note = ""
@@ -836,7 +836,7 @@ private struct SessionEditorView: View {
     }
 
     @ViewBuilder
-    private func sessionSection(_ session: PhaseOneSession) -> some View {
+    private func sessionSection(_ session: MioSession) -> some View {
         Section {
             TextField("Titel", text: $title)
                 .disabled(session.endedAt == nil)
@@ -874,7 +874,7 @@ private struct SessionEditorView: View {
     }
 
     @ViewBuilder
-    private func transcriptSection(_ session: PhaseOneSession) -> some View {
+    private func transcriptSection(_ session: MioSession) -> some View {
         Section {
             if session.transcripts.isEmpty {
                 Text("Sessionen innehåller ingen färdig text.")
@@ -961,7 +961,7 @@ private struct SessionEditorView: View {
     }
 
     @ViewBuilder
-    private func deletionSection(_ session: PhaseOneSession) -> some View {
+    private func deletionSection(_ session: MioSession) -> some View {
         if session.endedAt != nil {
             Section {
                 Button("Radera sessionen", role: .destructive) {
@@ -1105,7 +1105,7 @@ private struct ContentItemRow: View {
 }
 
 private struct SessionTimelineRow: View {
-    let session: PhaseOneSession
+    let session: MioSession
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -1158,7 +1158,7 @@ private struct SessionTimelineRow: View {
     }
 }
 
-private func displayTitle(for session: PhaseOneSession) -> String {
+private func displayTitle(for session: MioSession) -> String {
     let cleanTitle = session.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     if !cleanTitle.isEmpty {
         return cleanTitle
@@ -1166,7 +1166,7 @@ private func displayTitle(for session: PhaseOneSession) -> String {
     return "Session \(session.startedAt.formatted(date: .abbreviated, time: .shortened))"
 }
 
-private func sessionDateDescription(_ session: PhaseOneSession) -> String {
+private func sessionDateDescription(_ session: MioSession) -> String {
     let start = session.startedAt.formatted(date: .abbreviated, time: .shortened)
     guard let endedAt = session.endedAt else {
         return "Startad \(start). Sessionen pågår."

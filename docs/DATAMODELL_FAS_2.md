@@ -10,10 +10,10 @@ Fas 2 lägger till ett gemensamt, helt lokalt innehållslager för manuella post
 
 | Sökväg i appens Application Support | Innehåll | Versionsregel |
 |---|---|---|
-| `MioPhaseOne/sessions.json` | Sessioner, originaltranskriptioner, ljudtider, diagnostik och batteriprover | Befintligt format behålls. Nya valfria metadatafält kan saknas i äldre filer. |
+| `MioPhaseTwo/sessions.json` | Sessioner, originaltranskriptioner, ljudtider, diagnostik och batteriprover | Befintligt format behålls. Nya valfria metadatafält kan saknas i äldre filer. |
 | `MioPhaseTwo/content-v1.json` | Manuellt innehåll från fas 2 | Dokumentet innehåller `schemaVersion: 1`. Okända versioner ska rapporteras och får inte skrivas över. |
 
-Fas 2 konverterar alltså inte automatiskt gamla sessioner till manuella poster. En manuell post kan i stället ha en valfri koppling till en session genom `sessionID`.
+Vid en uppgradering med samma bundle identifier letar appen efter äldre `MioPhaseOne/sessions.json` om den nya sessionsfilen saknas. Filen avkodas först, skrivs atomiskt till `MioPhaseTwo/sessions.json` och tas därefter bort från den äldre platsen. Sessionsschema, fältvärden och identiteter bevaras semantiskt även om JSON-formateringen kan ändras vid återkodning. Migreringen gör inte om sessioner till manuella poster; en manuell post kan i stället ha en valfri koppling genom `sessionID`.
 
 ## Gemensam innehållspost
 
@@ -29,7 +29,7 @@ Alla fem manuella typer använder samma grundmodell:
 | `updatedAt` | tidpunkt | Uppdateras när posten ändras. |
 | `scheduledAt` | tidpunkt | Den lokala tid som visas i tidslinje eller planering. Det är inte en systemkalenderpost. |
 | `completedAt` | tidpunkt eller null | Används endast för uppgifter. Övriga typer ska lagra null. |
-| `sessionID` | UUID eller null | Valfri relation till en lokal session i fas 1-lagret. |
+| `sessionID` | UUID eller null | Valfri relation till en session i aktiva `MioPhaseTwo/sessions.json`, inklusive en migrerad fas 1-session. |
 
 Typerna visas på svenska som **Tidslinjepost**, **Anteckning**, **Uppgift**, **Plan** och **Uttryckligt minne**. Ett uttryckligt minne skapas manuellt av användaren; appen bygger ingen dold profil från vanlig text.
 
@@ -92,4 +92,3 @@ Exportformatet är versionsmärkt men fas 2 innehåller ingen importfunktion. En
 - Morgonfliken skapar inga systemalarm eller lokala notiser i fas 2.
 - Ingen post skickas till OpenAI eller någon annan extern AI-tjänst.
 - Automatisk plan-, uppgifts- eller minnesdetektion hör till senare faser och kräver då uttrycklig bekräftelse.
-

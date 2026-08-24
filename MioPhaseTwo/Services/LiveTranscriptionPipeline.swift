@@ -207,9 +207,9 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
         }
         do {
             guard await SpeechCapabilityService.requestMicrophonePermission() else {
-                throw MioPhaseOneError.microphoneDenied
+                throw MioError.microphoneDenied
             }
-            handlers.status("Förbereder Apples svenska talmodell …")
+            handlers.status("Förbereder SpeechAnalyzer och en svensk transkriptionsmodul …")
             let dictationLocale = await DictationTranscriber.supportedLocale(
                 equivalentTo: SpeechCapabilityService.requestedLocale
             )
@@ -225,22 +225,43 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                     ),
                     locale: locale
                 )
-                do {
-                    details = try await prepare(advancedBackend)
-                } catch {
-                    try Task.checkCancellation()
-                    guard let dictationLocale else { throw error }
+                let advancedState = await SpeechCapabilityService.assetState(
+                    for: [advancedBackend.module]
+                )
+                if SpeechCapabilityService.shouldUseSpeechTranscriber(assetState: advancedState) {
+                    do {
+                        details = try await prepare(advancedBackend)
+                    } catch {
+                        try Task.checkCancellation()
+                        guard let dictationLocale else { throw error }
+                        handlers.event(
+                            .backendFallback(
+                                "SpeechTranscriber kunde inte starta (\(error.localizedDescription)). Provar DictationTranscriber i en ny SpeechAnalyzer."
+                            )
+                        )
+                        await discardPreparedBackend()
+                        details = try await prepare(
+                            .dictation(
+                                SpeechCapabilityService.makeResponsiveLongDictation(locale: dictationLocale),
+                                locale: dictationLocale
+                            )
+                        )
+                    }
+                } else if let dictationLocale {
                     handlers.event(
                         .backendFallback(
-                            "Den avancerade motorn kunde inte starta (\(error.localizedDescription)). Provar lokal diktering."
+                            "SpeechTranscribers svenska modell är \(advancedState.title.lowercased()), inte installerad. Startar DictationTranscriber i SpeechAnalyzer; installera den nyare modellen separat."
                         )
                     )
-                    await discardPreparedBackend()
                     details = try await prepare(
                         .dictation(
                             SpeechCapabilityService.makeResponsiveLongDictation(locale: dictationLocale),
                             locale: dictationLocale
                         )
+                    )
+                } else {
+                    throw MioError.speechAssetNotReady(
+                        "SpeechTranscribers svenska modell är \(advancedState.title.lowercased()). Installera modellen innan du startar en session."
                     )
                 }
             } else if let dictationLocale {
@@ -251,12 +272,12 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                     )
                 )
             } else {
-                throw MioPhaseOneError.swedishUnavailable
+                throw MioError.swedishUnavailable
             }
 
             try startAudioResourcesIfAllowed()
 
-            handlers.status("Svenska bearbetas lokalt på telefonen.")
+            handlers.status("SpeechAnalyzer bearbetar svenska lokalt på telefonen.")
             return details
         } catch {
             await stop()
@@ -358,7 +379,7 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
         guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
             compatibleWith: modules
         ) else {
-            throw MioPhaseOneError.missingAudioFormat
+            throw MioError.missingAudioFormat
         }
         try Task.checkCancellation()
         self.analyzerFormat = analyzerFormat
@@ -413,7 +434,7 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
 
     private func startMicrophoneStream() throws {
         guard let analyzerFormat else {
-            throw MioPhaseOneError.invalidAudioStream
+            throw MioError.invalidAudioStream
         }
 
         var localContinuation: AsyncStream<CapturedAudioBuffer>.Continuation?
@@ -421,14 +442,14 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
             localContinuation = $0
         }
         guard let localContinuation else {
-            throw MioPhaseOneError.invalidAudioStream
+            throw MioError.invalidAudioStream
         }
         microphoneOutput = localContinuation
 
         let inputNode = audioEngine.inputNode
         let microphoneFormat = inputNode.outputFormat(forBus: 0)
         guard microphoneFormat.channelCount > 0, microphoneFormat.sampleRate > 0 else {
-            throw MioPhaseOneError.invalidAudioStream
+            throw MioError.invalidAudioStream
         }
 
         inputNode.installTap(
