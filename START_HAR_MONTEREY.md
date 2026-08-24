@@ -8,7 +8,7 @@ Detta är huvudguiden för den valda miljön:
 - SideStore signerar, installerar och förnyar appen;
 - appen publiceras inte i App Store.
 
-Molnbygget och den första SideStore-installationen har redan lyckats. Avsnitten om engångsinstallation finns kvar för en ny dator eller ominstallation.
+Molnbygget och den första SideStore-installationen lyckades för fas 1-revisionen den 20 augusti 2026. Den aktuella fas 2-arbetskopian är ännu inte byggd eller installerad. Avsnitten om engångsinstallation finns kvar för en ny dator eller ominstallation.
 
 ## Kedjan
 
@@ -25,7 +25,7 @@ MioPhaseOne-unsigned.ipa
 iPhone 13
 ```
 
-GitHub får källkoden men inga Apple-lösenord eller Mio-sessioner. SideStore får IPA-filen och använder Apple-kontot för personlig signering. Fas 1 skickar inga transkriptioner eller mikrofondata till GitHub, SideStore eller OpenAI.
+GitHub får källkoden men inga Apple-lösenord eller Mio-sessioner. SideStore får IPA-filen och använder Apple-kontot för personlig signering. Fas 2 innehåller ingen OpenAI-, EventKit- eller alarmintegration och skickar inte transkriptioner eller mikrofondata till GitHub, SideStore eller OpenAI.
 
 ## Det löpande arbetsflödet
 
@@ -55,6 +55,7 @@ Workflowen:
 - väljer Xcode 26.6;
 - validerar projekt- och integritetsfiler;
 - bygger en riktig arm64-app för iPhone;
+- kompilerar och kör XCTest i en tillgänglig iOS 26-simulator;
 - kontrollerar IPA:n och publicerar den som artifact i 14 dagar.
 
 Om körningen blir röd: öppna det första röda steget och skicka den första tydliga felraden samt stegets namn till Codex. Senare rader är ofta följdfel.
@@ -88,13 +89,13 @@ IPA:n innehåller appkod men inga sparade Mio-sessioner.
 
 ### 5. Installera eller uppdatera Mio med SideStore
 
-1. Exportera viktig testdata från den befintliga Mio-appen först.
+1. Exportera viktig lokal data från den befintliga Mio-appen först. Inför första fas 2-uppdateringen ska en viktig fas 1-session exporteras privat.
 2. Anslut iPhone till vanligt Wi‑Fi; enbart mobildata räcker inte för SideStores normala flöde.
 3. Öppna **LocalDevVPN** och anslut.
 4. Öppna **SideStore > My Apps**.
 5. Tryck `+` och välj `MioPhaseOne-unsigned.ipa` i Filer.
 6. Vänta medan SideStore signerar och installerar appen.
-7. Kontrollera att **Mio Fas 1** visas under My Apps och går att öppna.
+7. Kontrollera att **Mio** visas under My Apps och går att öppna.
 
 Använd samma Apple-konto och samma bundle identifier vid uppdateringar. Installera över den befintliga appen och radera den inte i onödan; det ger bäst chans att behålla lokal data.
 
@@ -132,7 +133,7 @@ Första gången Mio frågar: välj **Tillåt**.
 
 Om behörigheten nekades:
 
-> **Inställningar > Integritet och säkerhet > Mikrofon > Mio Fas 1: På**
+> **Inställningar > Integritet och säkerhet > Mikrofon > Mio: På**
 
 ### SideStore
 
@@ -144,18 +145,21 @@ Om behörigheten nekades:
 
 > **Inställningar > Batteri > Strömsparläge: Av**
 
-Koppla ur USB/laddning före batteritestet. Mio behöver inte behörighet till kontakter, plats, kamera, bilder eller den äldre separata taligenkänningsprompten i fas 1.
+Koppla ur USB/laddning före batteritestet. Mio behöver i fas 2 inte behörighet till kontakter, plats, kalender, kamera, bilder eller den äldre separata taligenkänningsprompten.
 
 ## Första start och telefonprov
 
-1. Öppna **Mio Fas 1**.
-2. Vänta tills kortet **Telefonens stöd** är färdigt.
-3. Tryck **Starta fas 1-test** och tillåt mikrofonen.
-4. Vänta tills rubriken visar **Mio lyssnar**.
-5. Kontrollera den orange mikrofonindikatorn.
-6. Följ [docs/TESTPLAN_FAS_1.md](docs/TESTPLAN_FAS_1.md).
-7. Stoppa testet och exportera JSON-filen.
-8. Lägg inte testfilen i GitHub-repot. Skicka den privat till Codex vid analys.
+1. Öppna **Mio**.
+2. Gå igenom flikarna **Mio**, **Tidslinje**, **Kalender**, **Anteckningar** och **Morgon**.
+3. Vänta tills kortet **Telefonens stöd** är färdigt.
+4. Om den avancerade svenska modellen stöds men inte är installerad kan ni, med wifi och appen öppen, trycka **Försök installera avancerad modell**. Starta ingen session under installationen.
+5. Tryck **Kontrollera igen** och notera status. `SpeechTranscriber` ska inte väljas före installerad status; annars används `DictationTranscriber` med `sv_SE`.
+6. Tryck **Starta ny session** och tillåt mikrofonen.
+7. Vänta tills rubriken visar **Mio lyssnar** och kontrollera den orange mikrofonindikatorn.
+8. Följ [docs/TESTPLAN_FAS_2.md](docs/TESTPLAN_FAS_2.md).
+9. Följ även kvarvarande regression och långtest i [docs/TESTPLAN_FAS_1.md](docs/TESTPLAN_FAS_1.md).
+10. Stoppa sessionen och skapa den gemensamma lokala JSON-exporten.
+11. Lägg aldrig exportfilen i GitHub-repot. Skicka den endast privat vid analys.
 
 Spela aldrig in lärare, klasskamrater, kollegor eller andra utan tydligt tillstånd och utan att följa skolans, arbetsplatsens och lagens regler.
 
@@ -226,12 +230,12 @@ Signaturen har sannolikt löpt ut. Förnya i SideStore. Radera inte Mio först o
 
 ### Ingen avancerad svensk motor
 
-Det första iPhone-testet visade detta och appen gick korrekt över till `DictationTranscriber` med `sv_SE`. Det är den verifierade vägen på den aktuella telefonen.
+Det första iPhone-testet visade detta och appen gick korrekt över till `DictationTranscriber` med `sv_SE`. Det är den historiskt verifierade vägen på telefonen. Fas 2 visar nu `AssetInventory`-status och har en separat installationsknapp, men detta nya flöde är inte verifierat förrän den aktuella IPA:n har testats på telefonen.
 
 ## Säkerhetsregler
 
 - Lägg aldrig Apple-lösenord, API-nycklar, pairing-filer eller certifikat i GitHub.
-- Ladda aldrig upp exporterade Mio-sessioner till kodrepot.
+- Ladda aldrig upp `Mio-fas-1-*.json`, `Mio-lokal-export-*.json` eller andra exporterade Mio-sessioner till kodrepot.
 - Installera iLoader, SideStore och LocalDevVPN endast via SideStores officiella dokumentation och länkade officiella källor.
 - Exportera testdata före ominstallation eller större uppdatering.
 - GitHub-workflowen behöver inga hemligheter för den osignerade byggnaden.

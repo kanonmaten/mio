@@ -58,4 +58,17 @@ final class PhaseOneModelsTests: XCTestCase {
             )
         )
     }
+
+    func testLegacySessionJSONDecodesWithoutPhaseTwoMetadata() throws {
+        let legacyJSON = #"{"id":"00000000-0000-0000-0000-000000000001","startedAt":"2026-08-20T20:29:02Z","endedAt":"2026-08-20T20:31:32Z","transcripts":[{"id":"00000000-0000-0000-0000-000000000002","createdAt":"2026-08-20T20:30:00Z","audioStartedAt":"2026-08-20T20:30:00Z","audioEndedAt":"2026-08-20T20:30:02Z","text":"Hej Mio","containsMio":true,"wasObservedInBackground":false,"audioTimingIsValid":true}],"events":[],"batteryReadings":[],"backgroundIntervals":[]}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let session = try decoder.decode(PhaseOneSession.self, from: Data(legacyJSON.utf8))
+
+        XCTAssertNil(session.title)
+        XCTAssertNil(session.manualNote)
+        XCTAssertEqual(session.transcripts.first?.text, "Hej Mio")
+        XCTAssertNil(session.transcripts.first?.correctedText)
+    }
 }

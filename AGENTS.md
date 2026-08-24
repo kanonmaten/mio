@@ -12,15 +12,21 @@ Before changing code or documentation, read:
 4. `docs/DECISIONS.md`
 5. the relevant test or installation document for the task
 
+For phase 2 work, also read `docs/DATAMODELL_FAS_2.md`, `docs/KRAVMATRIS_FAS_2.md` and `docs/TESTPLAN_FAS_2.md`.
+
 ## Product and current phase
 
 - Mio is a private personal iPhone app for one user; App Store distribution is not planned.
 - The long-term product is a discreet daily companion for local transcription, notes, plans, explicit memories and summaries. It is not intended to be a general ChatGPT-style tutor.
 - The wake word is the standalone word `Mio`.
-- Phase 1 is a feasibility test on an iPhone 13 running iOS 26.
-- Phase 1 intentionally contains no OpenAI calls, account system, calendar integration or saved raw audio.
+- Phase 1 is a feasibility test on an iPhone 13 running iOS 26. Its short smoke test passed, but long background, battery, interruption and quality tests remain; phase 1 is not closed.
+- Phase 2 is implemented in the working copy as a local, manual MVP. This does not waive any remaining phase 1 device test.
+- The phase 2 working copy has not yet been compiled with Xcode, built in GitHub Actions or verified on the iPhone. Keep implementation, build and device status separate in every report.
+- Phase 2 intentionally contains no OpenAI calls, account system, EventKit integration, system alarm integration or saved raw audio.
 - The real device selected `DictationTranscriber` with `sv_SE`. The advanced Swedish `SpeechTranscriber` asset could not be installed in the first test.
-- A short smoke test passed on 2026-08-20. Long background, battery and interruption tests remain. See `docs/TESTRESULTAT_FAS_1.md`.
+- Phase 2 improves advanced-model handling with `AssetInventory` status, explicit Swedish reservation, a separate install action and final installed-state verification. Treat this as unverified until a new device test; keep `DictationTranscriber` as fallback.
+- Phase 2 stores manual content in versioned `MioPhaseTwo/content-v1.json` while preserving `MioPhaseOne/sessions.json`. Session corrections are overlays: original transcript text, audio timing and evidence fields must remain intact.
+- See `docs/TESTRESULTAT_FAS_1.md` for the historical phone result and `docs/TESTRESULTAT_FAS_2.md` for current phase 2 verification status.
 
 ## Non-negotiable privacy rules
 
@@ -44,7 +50,9 @@ Before changing code or documentation, read:
 - `.github/workflows/build-unsigned-ipa.yml` is the authoritative cloud build and uses Xcode 26.
 - GitHub Actions produces an unsigned IPA. SideStore signs and installs it with the user's Apple Account.
 - Run all safe static checks available on Windows. State clearly which checks still require GitHub Actions or the physical iPhone.
-- When behavior or test status changes, update `docs/BYGGSTATUS.md`, `docs/ROADMAP.md`, `docs/KRAVMATRIS_FAS_1.md` and/or `docs/TESTRESULTAT_FAS_1.md` as applicable.
+- Do not describe a new revision as compiled, Actions-built, installed or phone-verified without evidence for that exact revision.
+- When phase 2 behavior or status changes, update `docs/BYGGSTATUS.md`, `docs/ROADMAP.md`, `docs/KRAVMATRIS_FAS_2.md` and `docs/TESTRESULTAT_FAS_2.md` as applicable.
+- Update `docs/KRAVMATRIS_FAS_1.md` or `docs/TESTRESULTAT_FAS_1.md` only when phase 1 behavior changes or a real new phase 1 test result exists. Preserve the 2026-08-20 observations as historical evidence.
 
 ## Working agreement
 

@@ -19,6 +19,12 @@
 		B1000000000000000000000A /* MioWakeWordDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000000B /* MioWakeWordDetectorTests.swift */; };
 		B1000000000000000000000B /* PhaseOneModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000000C /* PhaseOneModelsTests.swift */; };
 		B1000000000000000000000C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = F1000000000000000000000F /* PrivacyInfo.xcprivacy */; };
+		B1000000000000000000000D /* MioContentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000010 /* MioContentModels.swift */; };
+		B1000000000000000000000E /* MioContentRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000011 /* MioContentRepository.swift */; };
+		B1000000000000000000000F /* MioContentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000012 /* MioContentViewModel.swift */; };
+		B10000000000000000000010 /* PhaseTwoViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000013 /* PhaseTwoViews.swift */; };
+		B10000000000000000000011 /* MioContentModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000014 /* MioContentModelsTests.swift */; };
+		B10000000000000000000012 /* MioContentRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000015 /* MioContentRepositoryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -47,6 +53,12 @@
 		F1000000000000000000000D /* MioPhaseOne.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MioPhaseOne.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F1000000000000000000000E /* MioPhaseOneTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MioPhaseOneTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F1000000000000000000000F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		F10000000000000000000010 /* MioContentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioContentModels.swift; sourceTree = "<group>"; };
+		F10000000000000000000011 /* MioContentRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioContentRepository.swift; sourceTree = "<group>"; };
+		F10000000000000000000012 /* MioContentViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioContentViewModel.swift; sourceTree = "<group>"; };
+		F10000000000000000000013 /* PhaseTwoViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseTwoViews.swift; sourceTree = "<group>"; };
+		F10000000000000000000014 /* MioContentModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioContentModelsTests.swift; sourceTree = "<group>"; };
+		F10000000000000000000015 /* MioContentRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioContentRepositoryTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,6 +94,8 @@
 				F10000000000000000000001 /* MioPhaseOneApp.swift */,
 				F10000000000000000000002 /* ContentView.swift */,
 				F10000000000000000000003 /* PhaseOneViewModel.swift */,
+				F10000000000000000000012 /* MioContentViewModel.swift */,
+				F10000000000000000000013 /* PhaseTwoViews.swift */,
 				710000000000000000000003 /* Models */,
 				710000000000000000000004 /* Services */,
 				F1000000000000000000000A /* Info.plist */,
@@ -94,6 +108,7 @@
 			isa = PBXGroup;
 			children = (
 				F10000000000000000000004 /* PhaseOneModels.swift */,
+				F10000000000000000000010 /* MioContentModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -106,6 +121,7 @@
 				F10000000000000000000007 /* BufferConverter.swift */,
 				F10000000000000000000008 /* SpeechCapabilityService.swift */,
 				F10000000000000000000009 /* LiveTranscriptionPipeline.swift */,
+				F10000000000000000000011 /* MioContentRepository.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -115,6 +131,8 @@
 			children = (
 				F1000000000000000000000B /* MioWakeWordDetectorTests.swift */,
 				F1000000000000000000000C /* PhaseOneModelsTests.swift */,
+				F10000000000000000000014 /* MioContentModelsTests.swift */,
+				F10000000000000000000015 /* MioContentRepositoryTests.swift */,
 			);
 			path = MioPhaseOneTests;
 			sourceTree = "<group>";
@@ -242,6 +260,10 @@
 				B10000000000000000000007 /* BufferConverter.swift in Sources */,
 				B10000000000000000000008 /* SpeechCapabilityService.swift in Sources */,
 				B10000000000000000000009 /* LiveTranscriptionPipeline.swift in Sources */,
+				B1000000000000000000000D /* MioContentModels.swift in Sources */,
+				B1000000000000000000000E /* MioContentRepository.swift in Sources */,
+				B1000000000000000000000F /* MioContentViewModel.swift in Sources */,
+				B10000000000000000000010 /* PhaseTwoViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -251,6 +273,8 @@
 			files = (
 				B1000000000000000000000A /* MioWakeWordDetectorTests.swift in Sources */,
 				B1000000000000000000000B /* PhaseOneModelsTests.swift in Sources */,
+				B10000000000000000000011 /* MioContentModelsTests.swift in Sources */,
+				B10000000000000000000012 /* MioContentRepositoryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -383,7 +407,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioPhaseOne;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -407,7 +431,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1;
+				MARKETING_VERSION = 0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioPhaseOne;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

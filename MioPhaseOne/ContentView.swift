@@ -3,7 +3,39 @@ import UIKit
 
 struct ContentView: View {
     @Bindable var model: PhaseOneViewModel
+    @Bindable var contentModel: MioContentViewModel
     @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        TabView {
+            MioTabView(model: model, contentModel: contentModel)
+                .tabItem { Label("Mio", systemImage: "waveform.and.mic") }
+
+            TimelineTabView(contentModel: contentModel, sessionModel: model)
+                .tabItem { Label("Tidslinje", systemImage: "clock") }
+
+            CalendarTabView(contentModel: contentModel, sessionModel: model)
+                .tabItem { Label("Kalender", systemImage: "calendar") }
+
+            NotesTabView(contentModel: contentModel, sessionModel: model)
+                .tabItem { Label("Anteckningar", systemImage: "note.text") }
+
+            MorningTabView(contentModel: contentModel)
+                .tabItem { Label("Morgon", systemImage: "sunrise") }
+        }
+        .task {
+            await model.bootstrap()
+            await contentModel.bootstrap()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            model.handleScenePhase(newPhase)
+        }
+    }
+}
+
+private struct MioTabView: View {
+    @Bindable var model: PhaseOneViewModel
+    @Bindable var contentModel: MioContentViewModel
     @State private var showDeleteConfirmation = false
 
     var body: some View {
@@ -16,6 +48,9 @@ struct ContentView: View {
                     if let errorMessage = model.errorMessage {
                         ErrorCard(message: errorMessage, openSettings: model.openAppSettings)
                     }
+                    if let errorMessage = contentModel.errorMessage {
+                        ErrorCard(message: errorMessage, openSettings: {})
+                    }
 
                     CapabilityCard(model: model)
                     PrivacyCard()
@@ -26,36 +61,35 @@ struct ContentView: View {
                         EvidenceCard(session: session)
                         TranscriptCard(session: session)
                         DiagnosticCard(session: session)
-                        DataCard(
-                            model: model,
-                            showDeleteConfirmation: $showDeleteConfirmation
-                        )
                     } else {
                         FirstRunCard()
                     }
+
+                    DataCard(
+                        model: model,
+                        contentModel: contentModel,
+                        showDeleteConfirmation: $showDeleteConfirmation
+                    )
                 }
                 .padding()
             }
             .background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle("Mio · Fas 1")
+            .navigationTitle("Mio")
             .navigationBarTitleDisplayMode(.inline)
-            .task {
-                await model.bootstrap()
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                model.handleScenePhase(newPhase)
-            }
             .confirmationDialog(
-                "Radera all fas 1-data?",
+                "Radera all lokal Mio-data?",
                 isPresented: $showDeleteConfirmation,
                 titleVisibility: .visible
             ) {
                 Button("Radera permanent", role: .destructive) {
-                    Task { await model.deleteAllData() }
+                    Task {
+                        await model.deleteAllData()
+                        await contentModel.deleteAllData()
+                    }
                 }
                 Button("Avbryt", role: .cancel) {}
             } message: {
-                Text("Tidsstämplad text, batterimätningar och händelseloggar tas bort från telefonen.")
+                Text("Sessioner, tidsstämplad text, manuella poster, batterimätningar och händelseloggar tas bort från telefonen.")
             }
         }
     }
@@ -125,9 +159,11 @@ private struct ControlsCard: View {
             VStack(spacing: 12) {
                 switch model.runState {
                 case .off, .failed, .unavailable:
-                    PrimaryActionButton(title: "Starta fas 1-test", symbol: "mic.fill", color: .green) {
+                    PrimaryActionButton(title: "Starta ny session", symbol: "mic.fill", color: .green) {
                         model.beginListening()
                     }
+                    .disabled(model.isInstallingAdvancedModel)
+                    .opacity(model.isInstallingAdvancedModel ? 0.55 : 1)
 
                 case .preparing:
                     HStack(spacing: 12) {
@@ -152,7 +188,7 @@ private struct ControlsCard: View {
                     .padding()
 
                 case .listening:
-                    PrimaryActionButton(title: "Stoppa Mio", symbol: "stop.fill", color: .red) {
+                    PrimaryActionButton(title: "Stoppa sessionen", symbol: "stop.fill", color: .red) {
                         Task { await model.stopListening() }
                     }
 
@@ -226,7 +262,7 @@ private struct CapabilityCard: View {
                 CheckRow(
                     title: "Avancerad talmotor",
                     detail: advancedSpeechDetail,
-                    result: model.support.swedishLocaleIdentifier != nil
+                    result: advancedSpeechResult
                 )
                 Divider()
                 CheckRow(
@@ -252,6 +288,27 @@ private struct CapabilityCard: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 12)
+
+                if model.support.swedishLocaleIdentifier != nil,
+                   model.support.advancedAssetStatus != .installed {
+                    Button {
+                        Task { await model.installAdvancedModel() }
+                    } label: {
+                        if model.isInstallingAdvancedModel {
+                            HStack {
+                                ProgressView()
+                                Text("Installerar avancerad modell …")
+                            }
+                            .frame(maxWidth: .infinity)
+                        } else {
+                            Label("Försök installera avancerad modell", systemImage: "arrow.down.circle")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.isInstallingAdvancedModel || !canInstallAdvancedModel)
+                    .padding(.top, 12)
+                }
 
                 Button {
                     Task { await model.refreshSupport() }
@@ -287,9 +344,23 @@ private struct CapabilityCard: View {
             return "SpeechTranscriber saknas på enheten"
         }
         if let locale = model.support.swedishLocaleIdentifier {
-            return "Svenska \(locale) · \(model.support.swedishModelInstalled == true ? "installerad" : "hämtas vid start")"
+            let status = model.support.advancedAssetStatus?.title ?? "Okänd status"
+            let reservation = model.support.advancedLocaleReserved == true ? "reserverad" : "inte reserverad"
+            return "Svenska \(locale) · \(status.lowercased()) · \(reservation)"
         }
         return "Finns, men svenska hittades inte"
+    }
+
+    private var advancedSpeechResult: Bool? {
+        switch model.support.advancedAssetStatus {
+        case .installed: true
+        case .unsupported: false
+        case .supported, .downloading, nil: nil
+        }
+    }
+
+    private var canInstallAdvancedModel: Bool {
+        model.runState == .off || model.runState == .failed || model.runState == .unavailable
     }
 
     private var dictationDetail: String {
@@ -302,7 +373,7 @@ private struct CapabilityCard: View {
 
 private struct PrivacyCard: View {
     var body: some View {
-        Card(title: "Integritet i fas 1", symbol: "hand.raised.fill") {
+        Card(title: "Integritet", symbol: "hand.raised.fill") {
             VStack(alignment: .leading, spacing: 10) {
                 PrivacyLine(symbol: "iphone", text: "Tal till text sker med Apples lokala motor på telefonen.")
                 PrivacyLine(symbol: "waveform.slash", text: "Mikrofonljud bearbetas tillfälligt i minnet men sparas aldrig som ljudfil.")
@@ -334,7 +405,7 @@ private struct LiveTranscriptCard: View {
                         .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
                         .accessibilityLabel("Pågående tolkning: \(model.liveTranscript)")
                 } else if let latest = session.transcripts.last {
-                    Text(latest.text)
+                    Text(latest.displayText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
                         .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
@@ -455,8 +526,13 @@ private struct TranscriptCard: View {
                                 }
                                 Spacer()
                             }
-                            Text(segment.text)
+                            Text(segment.displayText)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                            if segment.correctedText != nil {
+                                Label("Manuellt rättad; originalet finns kvar i exporten", systemImage: "pencil")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .padding(.vertical, 10)
                         if segment.id != session.transcripts.suffix(20).first?.id {
@@ -524,31 +600,32 @@ private struct DiagnosticCard: View {
 
 private struct DataCard: View {
     let model: PhaseOneViewModel
+    let contentModel: MioContentViewModel
     @Binding var showDeleteConfirmation: Bool
 
     var body: some View {
-        Card(title: "Testfil och radering", symbol: "externaldrive") {
+        Card(title: "Export och radering", symbol: "externaldrive") {
             VStack(spacing: 12) {
-                Text("Exportfilen innehåller texten och diagnostiken ovan, aldrig råljud. Radera-knappen tar bort appens data och lokala temp-exporter, men kan inte återkalla filer som redan delats eller sparats någon annanstans.")
+                Text("Den versionsmärkta exporten innehåller manuellt innehåll, sessionstext och diagnostik, aldrig råljud. Radering kan inte återkalla kopior som redan delats eller sparats i en annan app.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if let exportURL = model.exportURL {
+                if let exportURL = contentModel.exportURL {
                     ShareLink(item: exportURL) {
-                        Label("Dela testfil", systemImage: "square.and.arrow.up")
+                        Label("Dela lokal export", systemImage: "square.and.arrow.up")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                 } else {
                     Button {
-                        Task { await model.prepareExport() }
+                        Task { await contentModel.prepareExport(sessions: model.allSessions) }
                     } label: {
-                        if model.isPreparingExport {
+                        if contentModel.isPreparingExport {
                             ProgressView()
                                 .frame(maxWidth: .infinity)
                         } else {
-                            Label("Skapa testfil", systemImage: "doc.badge.plus")
+                            Label("Skapa lokal export", systemImage: "doc.badge.plus")
                                 .frame(maxWidth: .infinity)
                         }
                     }
@@ -556,7 +633,7 @@ private struct DataCard: View {
                     .disabled(!canManageData)
                 }
 
-                Button("Radera all fas 1-data", role: .destructive) {
+                Button("Radera all lokal data", role: .destructive) {
                     showDeleteConfirmation = true
                 }
                 .disabled(!canManageData)
@@ -571,13 +648,13 @@ private struct DataCard: View {
 
 private struct FirstRunCard: View {
     var body: some View {
-        Card(title: "Så gör ni första testet", symbol: "1.circle") {
+        Card(title: "Börja med en lokal session", symbol: "1.circle") {
             VStack(alignment: .leading, spacing: 9) {
                 Text("1. Tryck Starta och tillåt mikrofonen.")
                 Text("2. Säg svenska meningar och ordet Mio.")
                 Text("3. Lås telefonen i minst fem minuter och fortsätt prata ibland.")
-                Text("4. Lås upp, kontrollera texten och kör gärna i en timme för batterimätning.")
-                Text("5. Stoppa och dela testfilen med er själva.")
+                Text("4. Lås upp, kontrollera texten och stoppa sessionen.")
+                Text("5. Redigera sessionen i Tidslinje eller skapa manuella poster i de andra flikarna.")
             }
             .font(.subheadline)
             .frame(maxWidth: .infinity, alignment: .leading)

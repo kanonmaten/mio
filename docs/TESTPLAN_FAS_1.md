@@ -23,7 +23,7 @@ Ett kort rökprov genomfördes den 20 augusti 2026. Det verifierade svensk `Dict
    - `SpeechTranscriber (avancerad)`, eller
    - `DictationTranscriber (lokal reservmotor)`.
 
-4. Tryck **Starta fas 1-test**.
+4. Tryck **Starta ny session**.
 5. Tillåt mikrofonen.
 6. Läs följande testtext långsamt:
 
@@ -87,7 +87,7 @@ Godkänt: början och slutet på ljudavbrottet loggas. Om iOS ger `shouldResume`
 1. Starta med minst cirka 50 % batteri och utan laddare.
 2. Låt Mio lyssna i 60 minuter under ungefär normal användning.
 3. Lås skärmen en del av tiden och prata ibland.
-4. Stoppa Mio efter 60 minuter.
+4. Tryck **Stoppa sessionen** efter 60 minuter.
 5. Läs **Batteriskillnad** och antalet batteriprover.
 6. Skapa och spara testfilen.
 
@@ -105,13 +105,13 @@ Fas 1 loggar bytet men bygger inte om hela ljudmotorn automatiskt. Om texten sta
 
 ## Exportera resultatet
 
-1. Stoppa testet.
-2. Scrolla till **Testfil och radering**.
-3. Tryck **Skapa testfil**.
-4. Tryck **Dela testfil**.
+1. Tryck **Stoppa sessionen**.
+2. Scrolla till kortet för lokal data och export.
+3. Tryck **Skapa lokal export**.
+4. Tryck **Dela lokal export**.
 5. Spara JSON-filen i Filer eller skicka den till er själva.
 
-Exporten innehåller tidsstämplad text, batteriprover och diagnostik. Den innehåller aldrig råljud.
+Fas 2:s gemensamma export innehåller tidsstämplad text, batteriprover, diagnostik och eventuellt manuellt lokalt innehåll. Den innehåller aldrig råljud. Den historiska fas 1-exporten kan fortfarande ha det äldre filformatet.
 
 Spara också följande tillsammans med filen:
 

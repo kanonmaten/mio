@@ -39,3 +39,31 @@ OpenAI läggs till först efter att den lokala grunden är bevisad. API-nyckeln 
 ## 2026-08-20 – Testexporter stannar utanför repot
 
 Exporterade Mio-sessioner kan innehålla privat tal och ska aldrig checkas in, inte ens i ett privat repository. Endast avidentifierade slutsatser och mätvärden dokumenteras i `docs/TESTRESULTAT_FAS_1.md`.
+
+## 2026-08-24 – Fas 2 startar parallellt med öppna fas 1-prov
+
+Den lokala, manuella MVP:n i fas 2 får utvecklas innan fas 1:s långa bakgrunds-, batteri-, avbrotts- och kvalitetstest är klara. De manuella funktionerna behöver inte anta att heldagslyssningen fungerar. Fas 1 förblir därför uttryckligen kortverifierad och dess beslutspunkt för heldagslyssning kvarstår.
+
+Implementation, Xcode-kompilering, GitHub Actions-build, installation och telefonresultat ska rapporteras som separata verifieringsnivåer. Det tidigare telefonprovet får inte användas som bevis för en ny fas 2-revision.
+
+## 2026-08-24 – Fas 2-data lagras separat och versionsmärkt
+
+Manuellt innehåll lagras i `MioPhaseTwo/content-v1.json` med `schemaVersion: 1`. De befintliga sessionerna ligger kvar i `MioPhaseOne/sessions.json` och migreras inte automatiskt till manuella poster. En manuell post kan ha en valfri `sessionID`-relation till en session.
+
+De fem gemensamma typerna är tidslinjepost, anteckning, uppgift, plan och uttryckligt minne. En plan är lokal och ett uttryckligt minne skapas manuellt; inget av dem skrivs till en extern tjänst.
+
+En okänd innehållsschemaversion ska ge ett synligt fel och får inte tyst skrivas över. Den gemensamma exporten är också versionsmärkt och innehåller manuellt innehåll och sessioner, men aldrig råljud.
+
+## 2026-08-24 – Sessionsredigering är ett bevarande lager
+
+Fas 2 får lägga till titel och manuell anteckning på en avslutad session samt en rättad visningstext på ett transkriptionssegment. Originaltext, originalets ljudtider, Mio-detektion, bakgrundsbevis och övrig diagnostik ska förbli oförändrade och finnas kvar i exporten. Det gör manuella rättningar möjliga utan att skriva om tekniskt testbevis.
+
+## 2026-08-24 – Den avancerade svenska modellen kräver installerad status
+
+`SpeechTranscriber` får väljas först när `AssetInventory` rapporterar att den svenska asseten är installerad. Appen visar assetstatus, reserverar svenska explicit, erbjuder en separat installationsåtgärd och kontrollerar slutstatus före användning. Om installationen inte är klar används den lokala `DictationTranscriber`-fallbacken.
+
+Detta är ett arkitekturbeslut, inte ett nytt telefonresultat. Både installation och fallback ska verifieras på iPhone 13.
+
+## 2026-08-24 – Inga externa integrationer i fas 2
+
+Fas 2 gör inga OpenAI-anrop, använder inte EventKit och skapar inga systemalarm. Kalenderfliken visar endast lokala planer och Morgon är en lokal vy. OpenAI hör tidigast till fas 5 och kräver ett separat server-, samtyckes- och kostnadsbeslut.

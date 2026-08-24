@@ -12,20 +12,29 @@ enum SpeechCapabilityService {
         if SpeechTranscriber.isAvailable,
            let speechLocale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) {
             snapshot.swedishLocaleIdentifier = speechLocale.identifier
-            let installedLocales = await SpeechTranscriber.installedLocales
-            snapshot.swedishModelInstalled = installedLocales.contains { locale in
+            let module = SpeechTranscriber(
+                locale: speechLocale,
+                preset: .timeIndexedProgressiveTranscription
+            )
+            let state = await assetState(for: [module])
+            snapshot.advancedAssetStatus = state
+            snapshot.swedishModelInstalled = state == .installed
+            let reservedLocales = await AssetInventory.reservedLocales
+            snapshot.advancedLocaleReserved = reservedLocales.contains { locale in
                 locale.identifier(.bcp47) == speechLocale.identifier(.bcp47)
             }
-            snapshot.selectedEngine = .speechTranscriber
+            if state == .installed {
+                snapshot.selectedEngine = .speechTranscriber
+            }
         }
 
         if let dictationLocale = await DictationTranscriber.supportedLocale(equivalentTo: requestedLocale) {
             snapshot.dictationLocaleIdentifier = dictationLocale.identifier
-            let installedLocales = await DictationTranscriber.installedLocales
-            snapshot.dictationModelInstalled = installedLocales.contains { locale in
-                locale.identifier(.bcp47) == dictationLocale.identifier(.bcp47)
-            }
-            if snapshot.selectedEngine == nil {
+            let module = makeResponsiveLongDictation(locale: dictationLocale)
+            let state = await assetState(for: [module])
+            snapshot.dictationAssetStatus = state
+            snapshot.dictationModelInstalled = state == .installed
+            if snapshot.selectedEngine == nil, state != .unsupported {
                 snapshot.selectedEngine = .dictationTranscriber
             }
         }
@@ -35,15 +44,102 @@ enum SpeechCapabilityService {
         case .speechTranscriber:
             snapshot.details = snapshot.swedishModelInstalled == true
                 ? "Svenska stöds av Apples avancerade lokala talmotor och modellen är installerad."
-                : "Svenska stöds av Apples avancerade lokala talmotor. Modellen hämtas vid start."
+                : "Svenska stöds av Apples avancerade lokala talmotor. Status: \(snapshot.advancedAssetStatus?.title ?? "okänd")."
         case .dictationTranscriber:
-            snapshot.details = snapshot.dictationModelInstalled == true
-                ? "Svenska stöds via Apples lokala dikteringsmotor och modellen är installerad."
-                : "Svenska stöds via Apples lokala dikteringsmotor. Modellen hämtas vid start."
+            if snapshot.swedishLocaleIdentifier != nil,
+               snapshot.advancedAssetStatus != .installed {
+                snapshot.details = "Den lokala reservmotorn är vald. Avancerad modell: \(snapshot.advancedAssetStatus?.title.lowercased() ?? "okänd status")."
+            } else {
+                snapshot.details = snapshot.dictationModelInstalled == true
+                    ? "Svenska stöds via Apples lokala dikteringsmotor och modellen är installerad."
+                    : "Svenska stöds via Apples lokala dikteringsmotor. Status: \(snapshot.dictationAssetStatus?.title ?? "okänd")."
+            }
         case nil:
             snapshot.details = "Varken SpeechTranscriber eller DictationTranscriber erbjuder svenska på telefonen."
         }
         return snapshot
+    }
+
+    static func installAdvancedSwedishModel(
+        status: @escaping (String) -> Void
+    ) async throws -> Bool {
+        guard SpeechTranscriber.isAvailable else {
+            throw MioPhaseOneError.speechTranscriberUnavailable
+        }
+        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) else {
+            throw MioPhaseOneError.swedishUnavailable
+        }
+        let module = SpeechTranscriber(
+            locale: locale,
+            preset: .timeIndexedProgressiveTranscription
+        )
+        return try await ensureAssets(
+            for: [module],
+            locale: locale,
+            engineTitle: LocalSpeechEngine.speechTranscriber.title,
+            status: status
+        )
+    }
+
+    static func ensureAssets(
+        for modules: [any SpeechModule],
+        locale: Locale,
+        engineTitle: String,
+        status: @escaping (String) -> Void
+    ) async throws -> Bool {
+        let initialState = await assetState(for: modules)
+        switch initialState {
+        case .installed:
+            return false
+        case .unsupported:
+            throw MioPhaseOneError.speechAssetUnsupported(engineTitle)
+        case .downloading:
+            status("iOS fortsätter hämta modellasseten för \(locale.identifier) …")
+        case .supported:
+            status("Reserverar svenska modellasseten på telefonen …")
+        }
+
+        // Although the installation request normally reserves a locale automatically,
+        // doing it explicitly avoids starting an analyzer with an unallocated locale.
+        _ = try await AssetInventory.reserve(locale: locale)
+        try Task.checkCancellation()
+
+        if let installation = try await AssetInventory.assetInstallationRequest(
+            supporting: modules
+        ) {
+            status("Hämtar och installerar svenska modellasseten. Behåll wifi och appen öppen …")
+            try await installation.downloadAndInstall()
+            try Task.checkCancellation()
+        }
+
+        let finalState = await assetState(for: modules)
+        guard finalState == .installed else {
+            throw MioPhaseOneError.speechAssetNotReady(
+                "iOS-status är \(finalState.title.lowercased()). Systemet kan fortsätta försöka senare; prova igen med wifi."
+            )
+        }
+        return initialState != .installed
+    }
+
+    static func assetState(for modules: [any SpeechModule]) async -> SpeechAssetState {
+        switch await AssetInventory.status(forModules: modules) {
+        case .supported: .supported
+        case .downloading: .downloading
+        case .installed: .installed
+        case .unsupported: .unsupported
+        @unknown default: .unsupported
+        }
+    }
+
+    static func makeResponsiveLongDictation(locale: Locale) -> DictationTranscriber {
+        let preset = DictationTranscriber.Preset.progressiveLongDictation
+        return DictationTranscriber(
+            locale: locale,
+            contentHints: preset.contentHints,
+            transcriptionOptions: preset.transcriptionOptions,
+            reportingOptions: preset.reportingOptions.union([.frequentFinalization]),
+            attributeOptions: preset.attributeOptions
+        )
     }
 
     static var microphonePermission: MicrophonePermission {

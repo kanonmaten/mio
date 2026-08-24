@@ -1,6 +1,6 @@
-# OpenAI läggs till efter fas 1
+# OpenAI läggs tidigast till i fas 5
 
-Det finns medvetet **ingen OpenAI-kod, API-nyckel eller kostnad** i fas 1.
+Det finns medvetet **ingen OpenAI-kod, API-nyckel eller kostnad** i fas 1 eller fas 2. Fas 2 är en helt lokal, manuell MVP utan konto, server eller moln-AI. Fas 3 bygger först det lokala bekräftelseflödet och fas 5 kan därefter införa begränsade OpenAI-svar genom en server.
 
 ## Varför OpenAI inte ska lyssna hela dagen
 
@@ -43,17 +43,16 @@ API-nyckeln får **aldrig** läggas direkt i Swift-koden eller i appens `Info.pl
 6. Lägg till en knapp som raderar lokala väntande frågor och OpenAI-relaterad historik.
 7. Logga kostnad/tokenmängd per godkänd fråga så att den aldrig blir en överraskning.
 
-OpenAI uppger att API-data inte används för modellträning om kunden inte aktivt väljer det. Standardloggar för missbruksövervakning kan ändå behållas i upp till 30 dagar; läs [Data controls](https://developers.openai.com/api/docs/guides/your-data#default-usage-policies-by-endpoint) innan fas 2 går skarpt.
+OpenAI uppger att API-data inte används för modellträning om kunden inte aktivt väljer det. Standardloggar för missbruksövervakning kan ändå behållas i upp till 30 dagar; kontrollera aktuella [Data controls](https://developers.openai.com/api/docs/guides/your-data#default-usage-policies-by-endpoint) igen innan ett fas 5-pilottest.
 
-## Vad vi gör när fas 1 är testad
+## Stegordning före OpenAI
 
-1. Läs vilken lokal Apple-motor telefonen valde och hur stabil bakgrundslyssningen var.
-2. Bygg lokal frågedetektion efter ordet Mio.
-3. Bygg rutan **Ja / Nej / Inte nu**.
-4. Skapa en mycket liten server med hemlig API-nyckel och användarautentisering.
-5. Börja med en lätt OpenAI-modell och korta svar.
-6. Lägg in hårda kostnadsgränser på servern.
-7. Testa med konstgjorda frågor innan någon verklig privat dagskontext skickas.
+1. Slutför fas 1:s bakgrunds-, batteri-, avbrotts- och kvalitetstest på telefonen.
+2. Bygg och verifiera fas 2:s lokala manuella datamodell, redigering, sökning, radering och export.
+3. Bygg i fas 3 lokal frågedetektion efter ordet Mio samt rutan **Ja / Nej / Inte nu** utan att göra nätverksanrop.
+4. Visa exakt vilken fråga och minsta kontext som skulle skickas och testa flödet med konstgjorda data.
+5. Ta ett nytt beslut om server, autentisering, dataskydd, aktuell OpenAI-policy och kostnadsgränser.
+6. Skapa först därefter en liten server som ensam äger API-nyckeln.
+7. Börja med en lätt modell och korta svar i en kontrollerad fas 5-pilot.
 
-Ni behöver alltså inte skapa OpenAI-konto, köpa API-krediter eller lämna ut en nyckel nu. Vi gör det sist, när den lokala grunden är bevisad.
-
+Ni behöver alltså inte skapa OpenAI-konto, köpa API-krediter eller lämna ut en nyckel under fas 2. OpenAI görs sist, när den lokala grunden och samtyckesflödet är verifierade.

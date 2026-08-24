@@ -4,10 +4,11 @@ import SwiftUI
 @MainActor
 struct MioPhaseOneApp: App {
     @State private var model = PhaseOneViewModel()
+    @State private var contentModel = MioContentViewModel()
 
     var body: some Scene {
         WindowGroup {
-            ContentView(model: model)
+            ContentView(model: model, contentModel: contentModel)
         }
     }
 }

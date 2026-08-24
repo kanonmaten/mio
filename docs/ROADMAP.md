@@ -4,7 +4,7 @@ Roadmapen är en prioriteringsordning, inte ett löfte om datum.
 
 ## Fas 1 – teknisk genomförbarhet
 
-Status: **kort rökprov godkänt, långt test återstår**.
+Status: **kort rökprov godkänt på revisionen från 20 augusti 2026; långt test återstår**.
 
 Klart:
 
@@ -24,16 +24,36 @@ Klart:
 - appomstart/persistens, radering och haptisk signal;
 - transkriptionskvalitet med känt facit i tyst och kontrollerat bullrig miljö.
 
-Beslutspunkt: fortsätt endast om bakgrundsstabilitet och batteriförbrukning är rimliga på den riktiga telefonen.
+Beslutspunkt för heldagslyssningen: fortsätt endast om bakgrundsstabilitet och batteriförbrukning är rimliga på den riktiga telefonen.
+
+Fas 2:s lokala, manuella delar får utvecklas parallellt eftersom de kan provas utan att anta att heldagslyssningen är godkänd. Det beslutet stänger inte fas 1 och gör inte det korta rökprovet till ett långtest.
 
 ## Fas 2 – lokal, manuell MVP
 
-- Gemensam datamodell för tidslinje, anteckning, uppgift, plan och uttryckligt minne.
-- Manuell tidslinje och manuella anteckningar.
-- Lokal sessionsindelning med tydlig start, stopp och redigering.
-- Sökning, radering och export.
-- Grundläggande femflikars navigering.
-- Ingen OpenAI-integration ännu.
+Status: **implementerad i lokal arbetskopia; ännu inte Xcode-kompilerad, Actions-byggd eller iPhone-verifierad**.
+
+Implementerat i källkod:
+
+- fem flikar: Mio, Tidslinje, Kalender, Anteckningar och Morgon;
+- gemensam lokal datamodell för tidslinjepost, anteckning, uppgift, plan och uttryckligt minne;
+- skapa, redigera, söka, slutföra uppgift och radera manuellt innehåll;
+- lokal sessionsindelning med tydlig start och stopp samt redigerbar titel och anteckning efter stopp;
+- korrigerad visningstext som bevarar originaltranskription och ljudtider;
+- valfri `sessionID`-koppling från en manuell post till en session;
+- separat versionsmärkt `MioPhaseTwo/content-v1.json` och bevarad `MioPhaseOne/sessions.json`;
+- gemensam versionsmärkt JSON-export;
+- förbättrat lokalt flöde för status och installation av Apples avancerade svenska modell, med bevarad `DictationTranscriber`-fallback;
+- ingen OpenAI-, EventKit- eller alarmintegration.
+
+Den säkra statiska Windows-kontrollen är genomförd. Workflowen är även uppdaterad för att kompilera och faktiskt köra XCTest på en tillgänglig iOS 26-simulator innan IPA:n publiceras, men den aktuella revisionen har ännu inte körts i Actions.
+
+Återstår innan fas 2 kan markeras verifierad:
+
+- Xcode-kompilering och faktisk XCTest-körning;
+- grön Release-build och validerad IPA i GitHub Actions;
+- installation över befintlig app och migreringskontroll på iPhone 13;
+- alla testfall i `TESTPLAN_FAS_2.md`;
+- regressionsprov av fas 1:s mikrofon-, paus- och transkriptionsflöde på den nya IPA:n.
 
 ## Fas 3 – diskret Mio-flöde
 

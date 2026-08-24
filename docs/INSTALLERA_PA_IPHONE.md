@@ -2,7 +2,7 @@
 
 > **Macen kör Monterey?** Följ inte Xcode-stegen nedan. Den genomförda huvudvägen använder [GitHub Actions och SideStore](../START_HAR_MONTEREY.md) och kräver ingen modern utvecklings-Mac lokalt.
 
-Det här dokumentet gäller endast alternativet där en kompatibel Mac kör Xcode 26 direkt. Guiden förutsätter att ni är nybörjare. Ni behöver inte skapa en app i App Store och ni ska inte skriva in någon OpenAI-nyckel.
+Det här dokumentet gäller endast alternativet där en kompatibel Mac kör Xcode 26 direkt. Guiden förutsätter att ni är nybörjare. Ni behöver inte skapa en app i App Store och ni ska inte skriva in någon OpenAI-nyckel. Den aktuella fas 2-arbetskopian är ännu inte Xcode-kompilerad eller verifierad på iPhone.
 
 ## Det ni behöver
 
@@ -62,7 +62,7 @@ Xcode ska öppna ett projekt med en blå projektikon och mapparna `MioPhaseOne` 
 5. Godkänn Apple Developer Agreement om Apple frågar.
 6. Kontrollera att kontot visas med texten **Personal Team**.
 
-Ni behöver inte betala 99 USD per år för fas 1.
+Ni behöver inte betala för Apple Developer Program under den privata prototypfasen.
 
 ## Del 5 — ställ in signering
 
@@ -73,6 +73,7 @@ Ni behöver inte betala 99 USD per år för fas 1.
 5. Markera **Automatically manage signing**.
 6. Vid **Team**, välj ert namn med texten **Personal Team**.
 7. Vid **Bundle Identifier** står från början `se.eyvin.MioPhaseOne`.
+   Vid en uppdatering ska ni behålla samma identifierare som den installerade Mio-appen så att iOS behandlar den som samma app och lokal data kan finnas kvar.
 8. Om Xcode visar ett rött fel om att identifieraren inte är tillgänglig, ändra den till något unikt, exempelvis:
 
    > `se.ertfornamn.mio.phase1`
@@ -120,7 +121,7 @@ Om Utvecklarläge inte syns: anslut kabeln igen, lås upp telefonen och välj de
 4. Kontrollera att schemat till vänster om telefonen heter **MioPhaseOne**.
 5. Klicka på ▶ uppe till vänster, eller välj **Product > Run**, eller tryck `⌘R`.
 6. Första bygget kan ta några minuter.
-7. Xcode ska därefter installera appen **Mio Fas 1** på hemskärmen och öppna den.
+7. Xcode ska därefter installera appen **Mio** på hemskärmen och öppna den.
 
 ### Om telefonen inte litar på utvecklaren
 
@@ -134,12 +135,14 @@ Formuleringen varierar mellan iOS-versioner:
 
 ## Del 9 — första starten i Mio
 
-1. I appen, vänta tills kortet **Telefonens stöd** är färdigt.
-2. Tryck **Starta fas 1-test**.
-3. iPhone frågar om **Mikrofon**. Tryck **Tillåt**.
-4. Appen ska inte be om separat taligenkänningsbehörighet; SpeechAnalyzer arbetar lokalt och behöver bara mikrofonbehörigheten.
-5. Om den svenska modellen inte redan finns kan iOS hämta den. Ha wifi, låt appen vara öppen och vänta.
-6. När rubriken blir **Mio lyssnar**, säg några svenska meningar och ordet Mio.
+1. Gå igenom flikarna **Mio**, **Tidslinje**, **Kalender**, **Anteckningar** och **Morgon**.
+2. Vänta tills kortet **Telefonens stöd** är färdigt.
+3. Om den avancerade svenska modellen stöds men inte är installerad kan ni trycka **Försök installera avancerad modell**. Ha wifi, håll appen öppen och starta ingen session medan installationen pågår.
+4. Tryck **Kontrollera igen**. `SpeechTranscriber` ska väljas först när statusen är installerad; annars används den lokala `DictationTranscriber`-fallbacken.
+5. Tryck **Starta ny session**.
+6. iPhone frågar om **Mikrofon**. Tryck **Tillåt**.
+7. Appen ska inte be om separat taligenkänningsbehörighet; SpeechAnalyzer arbetar lokalt och behöver bara mikrofonbehörigheten.
+8. När rubriken blir **Mio lyssnar**, säg några svenska meningar och ordet Mio.
 
 Den orange mikrofonindikatorn i iOS visar när mikrofonen används.
 
@@ -149,8 +152,10 @@ De automatiska testerna kräver ingen riktig mikrofon.
 
 1. Välj en iPhone-simulator i körmålsmenyn.
 2. Välj **Product > Test**, eller tryck `⌘U`.
-3. Xcodes testpanel ska visa gröna markeringar för `MioWakeWordDetectorTests` och `PhaseOneModelsTests`.
+3. Xcodes testpanel ska visa gröna markeringar för minst `MioWakeWordDetectorTests`, `PhaseOneModelsTests`, `MioContentModelsTests` och `MioContentRepositoryTests`.
 4. Välj därefter hennes riktiga telefon igen för det verkliga ljudtestet.
+
+Före en verklig fas 2-bedömning ska ni dessutom följa [TESTPLAN_FAS_2.md](TESTPLAN_FAS_2.md). Gröna enhetstester ersätter inte telefonprovet.
 
 ## Vanliga fel
 
@@ -176,11 +181,11 @@ Gör Del 7 och starta om telefonen.
 
 ### Mikrofonen nekades av misstag
 
-På telefonen: öppna **Inställningar**, scrolla till **Mio Fas 1** och slå på **Mikrofon**. Det går också via **Integritet och säkerhet > Mikrofon**.
+På telefonen: öppna **Inställningar**, scrolla till **Mio** och slå på **Mikrofon**. Det går också via **Integritet och säkerhet > Mikrofon**.
 
 ### Ingen svensk motor hittas
 
-Detta är ett giltigt fas 1-resultat, inte ett handhavandefel. Ta en skärmbild av kortet **Telefonens stöd**. Appen testar både SpeechTranscriber och DictationTranscriber. Vi använder resultatet för nästa tekniska beslut.
+Det kan vara ett giltigt enhetsresultat, inte ett handhavandefel. Dokumentera exakt status i kortet **Telefonens stöd**. Fas 2 kan reservera och försöka installera den avancerade svenska asseten separat, men får inte välja den före installerad status. `DictationTranscriber` med `sv_SE` ska finnas kvar som fallback.
 
 ### Texten stannar efter AirPods eller kabelbyte
 
@@ -203,4 +208,4 @@ När appen slutar öppnas efter en vecka:
 
 Det bygger och installerar en ny sjudagarsversion. Läs Apples [kontoöversikt](https://developer.apple.com/help/account/basics/about-your-developer-account) och [medlemsjämförelse](https://developer.apple.com/support/compare-memberships/).
 
-Ett betalt Apple Developer Program blir relevant först för exempelvis TestFlight och enklare långvarig distribution. Det behövs inte för fas 1.
+Ett betalt Apple Developer Program blir relevant först för exempelvis TestFlight och enklare långvarig distribution. Det behövs inte för den nuvarande privata prototypen.

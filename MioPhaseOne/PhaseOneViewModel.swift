@@ -12,12 +12,13 @@ final class PhaseOneViewModel {
     var currentSession: PhaseOneSession?
     var previousSessions: [PhaseOneSession] = []
     var liveTranscript = ""
-    var statusMessage = "Tryck på kontrollen för att börja fas 1-testet."
+    var statusMessage = "Tryck på kontrollen för att starta en lokal session."
     var errorMessage: String?
     var pauseUntil: Date?
     var now = Date.now
     var exportURL: URL?
     var isRefreshingSupport = false
+    var isInstallingAdvancedModel = false
     var isPreparingExport = false
 
     @ObservationIgnored private let repository: SessionRepository
@@ -89,7 +90,36 @@ final class PhaseOneViewModel {
         isRefreshingSupport = false
     }
 
+    func installAdvancedModel() async {
+        guard runState == .off || runState == .failed || runState == .unavailable else {
+            errorMessage = "Stoppa den aktiva sessionen innan modellinstallationen startas."
+            return
+        }
+        guard !isInstallingAdvancedModel else { return }
+        isInstallingAdvancedModel = true
+        errorMessage = nil
+        do {
+            let downloaded = try await SpeechCapabilityService.installAdvancedSwedishModel {
+                [weak self] message in
+                Task { @MainActor [weak self] in
+                    self?.statusMessage = message
+                }
+            }
+            await refreshSupport()
+            statusMessage = downloaded
+                ? "Den avancerade svenska modellen är installerad och provas först i nästa session."
+                : "Den avancerade svenska modellen var redan installerad och provas först i nästa session."
+        } catch {
+            await refreshSupport()
+            let details = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            errorMessage = "Den avancerade modellen kunde inte göras klar. \(details) Fallbacken finns kvar."
+            statusMessage = "Den lokala reservmotorn används tills iOS har installerat den avancerade modellen."
+        }
+        isInstallingAdvancedModel = false
+    }
+
     func beginListening() {
+        guard !isInstallingAdvancedModel else { return }
         guard runState == .off
                 || runState == .paused
                 || runState == .failed
@@ -135,7 +165,7 @@ final class PhaseOneViewModel {
             lastPersistedAt = nil
             appendEvent(
                 kind: .info,
-                message: "Fas 1-test startades. Råljud sparas inte; bara lokal tidsstämplad text och diagnostik sparas."
+                message: "En lokal session startades. Råljud sparas inte; bara lokal tidsstämplad text och diagnostik sparas."
             )
             sampleBattery(reason: "Startvärde för batteriet")
         } else {
@@ -206,7 +236,7 @@ final class PhaseOneViewModel {
         activePipelineID = nil
 
         sampleBattery(reason: "Slutvärde för batteriet")
-        finishCurrentSession(message: "Fas 1-testet stoppades av användaren.")
+        finishCurrentSession(message: "Sessionen stoppades av användaren.")
         runState = .off
         liveTranscript = ""
         statusMessage = "Mio är av. Mikrofonen används inte."
@@ -292,6 +322,74 @@ final class PhaseOneViewModel {
         isPreparingExport = false
     }
 
+    func editSession(id: UUID, title: String, note: String) async -> Bool {
+        guard var session = session(id: id), session.endedAt != nil else {
+            errorMessage = "Stoppa sessionen innan du redigerar den."
+            return false
+        }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        session.title = cleanTitle.isEmpty ? nil : cleanTitle
+        session.manualNote = cleanNote.isEmpty ? nil : cleanNote
+        do {
+            try await repository.upsert(session)
+            replaceSessionInMemory(session)
+            exportURL = nil
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = "Kunde inte spara sessionsändringarna: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func correctTranscript(sessionID: UUID, segmentID: UUID, text: String) async -> Bool {
+        guard var session = session(id: sessionID), session.endedAt != nil,
+              let index = session.transcripts.firstIndex(where: { $0.id == segmentID })
+        else {
+            errorMessage = "Texten kan redigeras när sessionen har stoppats."
+            return false
+        }
+        let correction = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !correction.isEmpty else {
+            errorMessage = "En textdel kan inte vara tom. Radera hela sessionen om den inte ska sparas."
+            return false
+        }
+        session.transcripts[index].correctedText = correction == session.transcripts[index].text
+            ? nil
+            : correction
+        do {
+            try await repository.upsert(session)
+            replaceSessionInMemory(session)
+            exportURL = nil
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = "Kunde inte spara textändringen: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func deleteSession(id: UUID) async -> Bool {
+        if currentSession?.id == id, currentSession?.endedAt == nil {
+            errorMessage = "Stoppa den aktiva sessionen innan du raderar den."
+            return false
+        }
+        do {
+            try await repository.delete(id: id)
+            previousSessions.removeAll { $0.id == id }
+            if currentSession?.id == id {
+                currentSession = previousSessions.first
+            }
+            exportURL = nil
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = "Kunde inte radera sessionen: \(error.localizedDescription)"
+            return false
+        }
+    }
+
     func deleteAllData() async {
         guard runState == .off || runState == .failed || runState == .unavailable else { return }
         do {
@@ -301,7 +399,7 @@ final class PhaseOneViewModel {
             exportURL = nil
             errorMessage = nil
             lastPersistedAt = nil
-            statusMessage = "All sparad fas 1-data är raderad."
+            statusMessage = "All sparad sessionsdata är raderad."
         } catch {
             errorMessage = "Kunde inte radera testdata: \(error.localizedDescription)"
         }
@@ -314,6 +412,22 @@ final class PhaseOneViewModel {
 
     var duration: TimeInterval {
         currentSession?.duration(at: now) ?? 0
+    }
+
+    var allSessions: [PhaseOneSession] {
+        var sessions = previousSessions
+        if let currentSession,
+           !sessions.contains(where: { $0.id == currentSession.id }) {
+            sessions.append(currentSession)
+        }
+        return sessions.sorted { $0.startedAt > $1.startedAt }
+    }
+
+    func session(id: UUID) -> PhaseOneSession? {
+        if currentSession?.id == id {
+            return currentSession
+        }
+        return previousSessions.first { $0.id == id }
     }
 
     var pauseRemainingText: String? {
@@ -527,6 +641,18 @@ final class PhaseOneViewModel {
             previousSessions.insert(currentSession, at: 0)
         }
         persistSoon()
+    }
+
+    private func replaceSessionInMemory(_ session: PhaseOneSession) {
+        if currentSession?.id == session.id {
+            currentSession = session
+        }
+        if let index = previousSessions.firstIndex(where: { $0.id == session.id }) {
+            previousSessions[index] = session
+        } else if session.endedAt != nil {
+            previousSessions.append(session)
+        }
+        previousSessions.sort { $0.startedAt > $1.startedAt }
     }
 
     private func appendEvent(kind: DiagnosticEventKind, message: String) {

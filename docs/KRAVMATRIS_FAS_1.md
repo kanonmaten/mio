@@ -7,7 +7,7 @@ Telefonresultaten bygger på rökprovet den 20 augusti 2026. **Kort godkänt** b
 | Mikrofon på/av | Ja | Start, paus och användarstopp loggades | Kontrollera indikatorn manuellt vid alla lägen |
 | Tydlig status | Ja | Appen kunde startas och pausas | Visuell check enligt testplan |
 | Låst skärm/bakgrund | Ja, konfigurerat | Kort godkänt: 1 giltigt segment under 11 s total bakgrund | Minst 10 min med uttryckligen låst skärm |
-| Apples avancerade motor | Ja, kontroll och försök | `transcription.sv` blev `Not Installing` | Nytt test endast efter relevant iOS-/modelländring |
+| Apples avancerade motor | Ja, nytt status-/reservations-/installationsflöde i arbetskopian | `transcription.sv` blev `Not Installing` i det historiska provet | Testa fas 2-flödet på telefonen; markera inte installerad utan nytt bevis |
 | Svensk lokal reservmotor | Ja | Godkänt: `DictationTranscriber`, `sv_SE` | Längre kvalitets- och stabilitetstest |
 | Tidsstämplad text | Ja | Godkänt: 5 segment med giltig ljudtid | Långt test och kontroll efter avbrott |
 | Paus 30 minuter | Ja | Inte testad | Testa tidsstyrd fortsättning |
@@ -26,6 +26,6 @@ Telefonresultaten bygger på rökprovet den 20 augusti 2026. **Kort godkänt** b
 
 ## Medvetna fasgränser
 
-Följande hör till senare faser: femflikars huvudapp, kalenderkoppling, alarm, lektionssegmentering, automatisk planigenkänning, långsiktiga uttryckliga minnen, kvällssammanfattning och OpenAI-frågor efter **Ja / Nej / Inte nu**.
+Fas 2:s femflikars huvudapp och manuella lokala modell utvecklas nu parallellt med de öppna fas 1-proven. Detta ändrar inte telefonresultaten i tabellen och den nya revisionen behöver ett regressionsprov.
 
-De byggs inte innan telefonprovet visar rimlig bakgrundsstabilitet och batteriförbrukning. Se [ROADMAP.md](ROADMAP.md) och [TESTRESULTAT_FAS_1.md](TESTRESULTAT_FAS_1.md).
+EventKit-kalenderkoppling, systemalarm, automatisk lektionssegmentering, automatisk planigenkänning, kvällssammanfattning och OpenAI-frågor efter **Ja / Nej / Inte nu** hör fortfarande till senare faser. Se [ROADMAP.md](ROADMAP.md), [KRAVMATRIS_FAS_2.md](KRAVMATRIS_FAS_2.md) och [TESTRESULTAT_FAS_1.md](TESTRESULTAT_FAS_1.md).

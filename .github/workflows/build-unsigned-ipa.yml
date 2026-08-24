@@ -9,14 +9,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: mio-phase-one-${{ github.ref }}
+  group: mio-phase-two-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
     name: Kompilera med Xcode 26
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
@@ -39,6 +39,9 @@ jobs:
           test -f MioPhaseOne.xcodeproj/project.pbxproj
           test -f MioPhaseOne/Info.plist
           test -f MioPhaseOne/PrivacyInfo.xcprivacy
+          test -f MioPhaseOne/Models/MioContentModels.swift
+          test -f MioPhaseOne/Services/MioContentRepository.swift
+          test -f MioPhaseOne/PhaseTwoViews.swift
           plutil -lint MioPhaseOne/Info.plist
           plutil -lint MioPhaseOne/PrivacyInfo.xcprivacy
 
@@ -58,6 +61,53 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             ONLY_ACTIVE_ARCH=NO \
             build
+
+      - name: Kompilera enhetstester
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project MioPhaseOne.xcodeproj \
+            -scheme MioPhaseOne \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/TestDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            build-for-testing
+
+      - name: Kör enhetstester
+        run: |
+          set -euo pipefail
+          command -v jq
+          SIMULATOR_UDID="$(
+            xcrun simctl list devices available --json |
+              jq -r '[
+                .devices
+                | to_entries[]
+                | select(.key | contains(".iOS-26-"))
+                | .value[]
+                | select(.isAvailable == true and (.name | startswith("iPhone")))
+              ][0].udid // empty'
+          )"
+          test -n "$SIMULATOR_UDID"
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          trap 'xcrun simctl shutdown "$SIMULATOR_UDID" || true' EXIT
+          xcodebuild \
+            -project MioPhaseOne.xcodeproj \
+            -scheme MioPhaseOne \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/TestDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            test-without-building
 
       - name: Skapa IPA-filen
         run: |
@@ -80,7 +130,7 @@ jobs:
           /usr/bin/lipo -archs "$APP_PATH/MioPhaseOne" | /usr/bin/grep -qw arm64
 
           {
-            echo "Mio Fas 1 – osignerad molnbyggnad"
+            echo "Mio fas 2 – osignerad molnbyggnad"
             echo "GitHub run: $GITHUB_RUN_ID"
             echo "Commit: $GITHUB_SHA"
             sw_vers -productVersion | sed 's/^/macOS: /'

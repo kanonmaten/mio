@@ -46,14 +46,33 @@ struct SpeechSupportSnapshot: Sendable {
     var speechTranscriberAvailable: Bool?
     var swedishLocaleIdentifier: String?
     var swedishModelInstalled: Bool?
+    var advancedAssetStatus: SpeechAssetState?
+    var advancedLocaleReserved: Bool?
     var dictationLocaleIdentifier: String?
     var dictationModelInstalled: Bool?
+    var dictationAssetStatus: SpeechAssetState?
     var selectedEngine: LocalSpeechEngine?
     var details = "Kontrollerar telefonens stöd …"
 
     var swedishSupported: Bool? {
         guard checkedAt != nil else { return nil }
         return swedishLocaleIdentifier != nil || dictationLocaleIdentifier != nil
+    }
+}
+
+enum SpeechAssetState: String, Codable, Equatable, Sendable {
+    case supported
+    case downloading
+    case installed
+    case unsupported
+
+    var title: String {
+        switch self {
+        case .supported: "Kan hämtas"
+        case .downloading: "Hämtas av iOS"
+        case .installed: "Installerad"
+        case .unsupported: "Stöds inte"
+        }
     }
 }
 
@@ -76,6 +95,8 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     let audioStartedAt: Date
     let audioEndedAt: Date
     let text: String
+    /// Optional user correction. The original transcript and its evidence fields stay intact.
+    var correctedText: String?
     let containsMio: Bool
     /// True only when usable source audio overlapped an app-background interval.
     /// The time at which the recognition callback arrived is irrelevant.
@@ -90,6 +111,7 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         audioStartedAt: Date? = nil,
         audioEndedAt: Date? = nil,
         text: String,
+        correctedText: String? = nil,
         containsMio: Bool,
         wasObservedInBackground: Bool = false,
         audioTimingIsValid: Bool = true
@@ -99,9 +121,18 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
         self.audioStartedAt = audioStartedAt ?? createdAt
         self.audioEndedAt = audioEndedAt ?? audioStartedAt ?? createdAt
         self.text = text
+        self.correctedText = correctedText
         self.containsMio = containsMio
         self.wasObservedInBackground = wasObservedInBackground
         self.audioTimingIsValid = audioTimingIsValid
+    }
+
+    var displayText: String {
+        let correction = correctedText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let correction, !correction.isEmpty {
+            return correction
+        }
+        return text
     }
 }
 
@@ -191,6 +222,9 @@ struct PhaseOneSession: Identifiable, Codable, Hashable, Sendable {
     var events: [DiagnosticEvent]
     var batteryReadings: [BatteryReading]
     var backgroundIntervals: [BackgroundInterval]
+    /// Optional phase 2 metadata. Missing keys decode as nil for existing phase 1 files.
+    var title: String?
+    var manualNote: String?
 
     init(
         id: UUID = UUID(),
@@ -199,7 +233,9 @@ struct PhaseOneSession: Identifiable, Codable, Hashable, Sendable {
         transcripts: [TranscriptSegment] = [],
         events: [DiagnosticEvent] = [],
         batteryReadings: [BatteryReading] = [],
-        backgroundIntervals: [BackgroundInterval] = []
+        backgroundIntervals: [BackgroundInterval] = [],
+        title: String? = nil,
+        manualNote: String? = nil
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -208,6 +244,8 @@ struct PhaseOneSession: Identifiable, Codable, Hashable, Sendable {
         self.events = events
         self.batteryReadings = batteryReadings
         self.backgroundIntervals = backgroundIntervals
+        self.title = title
+        self.manualNote = manualNote
     }
 
     var mioDetectionCount: Int {
@@ -233,6 +271,26 @@ struct PhaseOneSession: Identifiable, Codable, Hashable, Sendable {
 
     func duration(at now: Date = .now) -> TimeInterval {
         max(0, (endedAt ?? now).timeIntervalSince(startedAt))
+    }
+
+    func matches(searchText: String) -> Bool {
+        let query = Self.normalized(searchText)
+        guard !query.isEmpty else { return true }
+        let transcriptText = transcripts.map(\.displayText).joined(separator: " ")
+        let searchableText = Self.normalized(
+            "\(title ?? "") \(manualNote ?? "") \(transcriptText)"
+        )
+        return searchableText.contains(query)
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(
+                options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+                locale: Locale(identifier: "sv-SE")
+            )
+            .lowercased(with: Locale(identifier: "sv-SE"))
     }
 }
 
@@ -273,6 +331,8 @@ enum MioPhaseOneError: LocalizedError {
     case swedishUnavailable
     case missingAudioFormat
     case invalidAudioStream
+    case speechAssetUnsupported(String)
+    case speechAssetNotReady(String)
 
     var errorDescription: String? {
         switch self {
@@ -286,6 +346,10 @@ enum MioPhaseOneError: LocalizedError {
             "iOS kunde inte hitta ett ljudformat som den svenska talmodellen kan använda."
         case .invalidAudioStream:
             "Ljudströmmen kunde inte kopplas till talmotorn."
+        case let .speechAssetUnsupported(engine):
+            "iOS rapporterar att modellasseten för \(engine) inte stöds på den här telefonen."
+        case let .speechAssetNotReady(details):
+            "Modellasseten blev inte klar: \(details)"
         }
     }
 }

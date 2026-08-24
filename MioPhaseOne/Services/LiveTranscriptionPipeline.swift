@@ -63,19 +63,6 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
             }
         }
 
-        func isModelInstalled() async -> Bool {
-            let installedLocales: [Locale]
-            switch self {
-            case .advanced:
-                installedLocales = await SpeechTranscriber.installedLocales
-            case .dictation:
-                installedLocales = await DictationTranscriber.installedLocales
-            }
-            return installedLocales.contains {
-                $0.identifier(.bcp47) == locale.identifier(.bcp47)
-            }
-        }
-
         func makeResultTask(handlers: Handlers, timelineOrigin: Date) -> Task<Void, Never> {
             switch self {
             case let .advanced(module, _):
@@ -251,7 +238,7 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                     await discardPreparedBackend()
                     details = try await prepare(
                         .dictation(
-                            Self.makeResponsiveLongDictation(locale: dictationLocale),
+                            SpeechCapabilityService.makeResponsiveLongDictation(locale: dictationLocale),
                             locale: dictationLocale
                         )
                     )
@@ -259,7 +246,7 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
             } else if let dictationLocale {
                 details = try await prepare(
                     .dictation(
-                        Self.makeResponsiveLongDictation(locale: dictationLocale),
+                        SpeechCapabilityService.makeResponsiveLongDictation(locale: dictationLocale),
                         locale: dictationLocale
                     )
                 )
@@ -358,31 +345,15 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
     }
 
-    private static func makeResponsiveLongDictation(locale: Locale) -> DictationTranscriber {
-        let preset = DictationTranscriber.Preset.progressiveLongDictation
-        return DictationTranscriber(
-            locale: locale,
-            contentHints: preset.contentHints,
-            transcriptionOptions: preset.transcriptionOptions,
-            reportingOptions: preset.reportingOptions.union([.frequentFinalization]),
-            attributeOptions: preset.attributeOptions
-        )
-    }
-
     private func prepare(_ backend: TranscriptionBackend) async throws -> StartDetails {
         self.backend = backend
         let modules: [any SpeechModule] = [backend.module]
-        let installedBeforeStart = await backend.isModelInstalled()
-        var downloadedModel = false
-        if !installedBeforeStart,
-           let installation = try await AssetInventory.assetInstallationRequest(
-               supporting: modules
-           ) {
-            handlers.status("Hämtar svensk språkmodell. Låt appen vara öppen …")
-            try await installation.downloadAndInstall()
-            try Task.checkCancellation()
-            downloadedModel = true
-        }
+        let downloadedModel = try await SpeechCapabilityService.ensureAssets(
+            for: modules,
+            locale: backend.locale,
+            engineTitle: backend.engine.title,
+            status: handlers.status
+        )
 
         guard let analyzerFormat = await SpeechAnalyzer.bestAvailableAudioFormat(
             compatibleWith: modules

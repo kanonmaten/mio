@@ -1,38 +1,27 @@
 # Bygg- och teststatus
 
-Senast uppdaterad: 20 augusti 2026.
+Senast uppdaterad: 24 augusti 2026.
 
-## Sammanfattning
+## Sammanfattning per revision
 
-| Kontroll | Status |
-|---|---|
-| Statisk projektgranskning | Godkänd |
-| GitHub Actions Release-build | Godkänd |
-| arm64-IPA skapad och validerad | Godkänd |
-| Signering och installation via SideStore | Godkänd |
-| Kort telefonrökprov | Godkänt |
-| XCTest-körning | Inte körd i nuvarande workflow |
-| Långt bakgrunds-/batteritest | Återstår |
+| Kontroll | Fas 1-revisionen från 20 augusti | Aktuell fas 2-arbetskopia |
+|---|---|---|
+| Källkodsimplementation | Fas 1-funktioner fanns | Fas 2-funktioner finns i arbetskopian |
+| Statisk projektgranskning på Windows | Godkänd för dåvarande revision | Godkänd inom Windows-miljöns gränser |
+| Xcode 26-kompilering | Godkänd i GitHub Actions | Inte körd |
+| XCTest | Inte körd | Testkod finns, inte körd |
+| arm64-IPA | Skapad och validerad | Inte skapad |
+| SideStore-installation | Godkänd | Inte genomförd |
+| iPhone 13-rökprov | Kort godkänt | Inte genomfört |
+| Långt bakgrunds-/batteritest | Återstår | Återstår även som regression |
 
-Den definitiva kompileringskontrollen är genomförd i GitHub Actions med Xcode 26.6. Den producerade IPA-filen installerades på iPhone 13 via SideStore och appen exporterade därefter ett giltigt fas 1-test.
+Den gröna bygg- och telefonstatusen från 20 augusti gäller endast den dåvarande fas 1-revisionen. Den får inte återanvändas som bevis för den nya arbetskopian.
 
-## Verifierat i projektet
+## Historiskt verifierat på iPhone 13
 
-- `Info.plist`, workspace, shared scheme och `PrivacyInfo.xcprivacy` är XML-validerade.
-- App-targeten innehåller 9 Swift-filer och test-targeten 2 Swift-filer.
-- `UIBackgroundModes = audio` och mikrofonens användningstext finns.
-- Integritetsmanifestet deklarerar systemets starttid med anledning `8FFB.1` för absoluta AVFAudio-tidsstämplar.
-- Ingen `URLSession`, OpenAI-nyckel eller OpenAI-kod finns i fas 1.
-- Ingen `AVAudioFile` används och inget råljud skrivs till fil.
-- Varje `AnalyzerInput` får explicit starttid från mikrofonens monotona värdklocka.
-- Endast resultat med giltig ljudtid som överlappar ett appbakgrundsintervall räknas som bakgrundsbevis.
-- GitHub-workflowen bygger en osignerad arm64-IPA på `macos-26` och behåller artifacten i 14 dagar.
+Det 2 minuter 30 sekunder långa provet den 20 augusti 2026 visade:
 
-## Verifierat på iPhone 13
-
-Det korta provet den 20 augusti 2026 visade:
-
-- `SpeechTranscriber` kunde inte installera den avancerade svenska resursen.
+- `SpeechTranscriber` kunde inte installera den avancerade svenska resursen i det testet.
 - Fallback till `DictationTranscriber` med `sv_SE` startade korrekt.
 - Fem finala textsegment skapades med giltig ljudtid.
 - Mio upptäcktes två gånger, varav en gång i ett verkligt bakgrundsintervall.
@@ -40,15 +29,46 @@ Det korta provet den 20 augusti 2026 visade:
 - Paus tills manuell start stängde flödet; ingen text skapades efter pausen.
 - Fem batteriprover låg kvar på 65 % utan laddare.
 
-Detta var ett 2 minuter 30 sekunder långt rökprov. Se [TESTRESULTAT_FAS_1.md](TESTRESULTAT_FAS_1.md) för korrekt tolkning.
+Se [TESTRESULTAT_FAS_1.md](TESTRESULTAT_FAS_1.md) för korrekt tolkning. Det korta provet stänger inte fas 1.
 
-## Inte verifierat ännu
+## Implementerat i fas 2-arbetskopian
 
-- Minst 10 minuter med telefonen uttryckligen låst.
-- 60 minuters batteriförbrukning och ett senare 3–4-timmarstest.
-- Avbrott och återstart efter alarm eller telefonsamtal.
-- Tidsstyrd paus, appomstart, radering och haptisk feedback.
-- Objektiv svensk transkriptionskvalitet mot ett känt facit i tyst och kontrollerat bullrig miljö.
-- De två skrivna XCTest-filerna; nuvarande Actions-workflow gör Release-build men kör inget simulator-testjobb.
+Följande finns i källkoden men är ännu inte kompilerings- eller körverifierat:
 
-Nästa definitiva steg är alltså funktionstesterna på den fysiska telefonen enligt [TESTPLAN_FAS_1.md](TESTPLAN_FAS_1.md), inte ytterligare statisk bygggranskning.
+- femflikars navigering med Mio, Tidslinje, Kalender, Anteckningar och Morgon;
+- gemensam modell och manuella flöden för fem lokala innehållstyper;
+- svensk sökning, tidsordning, uppgiftsstatus, redigering och radering;
+- separat versionsmärkt `MioPhaseTwo/content-v1.json` och bevarad `MioPhaseOne/sessions.json`;
+- valfri sessionskoppling;
+- sessionstitel, manuell anteckning och rättad visningstext som bevarar original och ljudtider;
+- gemensam versionsmärkt lokal JSON-export;
+- förbättrad status, reservation och installationsåtgärd för svensk `SpeechTranscriber`-asset;
+- bevarad `DictationTranscriber`-fallback;
+- ingen avsiktlig OpenAI-, EventKit- eller alarmintegration.
+
+Testfiler finns för centrala modeller, lagring, export, äldre sessionsdata och Mio-detektion, men ingen aktuell XCTest-körning finns. Se [TESTRESULTAT_FAS_2.md](TESTRESULTAT_FAS_2.md).
+
+## Genomförd statisk kontroll för fas 2
+
+Följande kontroller är godkända i den aktuella arbetskopian:
+
+- alla nya app- och testfiler finns i rätt Xcode-grupp och Sources-target;
+- projekt-, plist-, scheme- och workspace-XML kan läsas;
+- Swift-filernas avgränsare är balanserade och inga tabbar eller uppenbara async-anrop i XCTest-autoclosures hittades;
+- relativa Markdown-länkar pekar på befintliga filer och `git diff --check` har inga whitespacefel;
+- integritetsdeklarationen har ingen tracking eller insamlad datatyp;
+- källkodssökning hittade ingen råljudsfilskrivning, OpenAI-klient, API-nyckel, EventKit-, notifierings- eller nätverksintegration;
+- inga känsliga export-, inspelnings-, certifikat- eller provisioneringsfiler har lagts till.
+
+Kontrollen är inte en Swift-kompilering och bevisar inte runtimebeteende. Windows-miljön saknar Swift/Xcode, så Xcode 26 och telefonen är fortfarande facit.
+
+## Måste verifieras för fas 2-revisionen
+
+1. Xcode 26-kompilering och faktisk XCTest-körning.
+2. GitHub Actions Release-build, arm64-kontroll och IPA-validering.
+3. Installation över befintlig Mio via SideStore utan att äldre sessionsdata försvinner.
+4. Funktionerna i [TESTPLAN_FAS_2.md](TESTPLAN_FAS_2.md) på iPhone 13.
+5. Mikrofon-, paus-, lokal transkriptions- och exportregression på den nya IPA:n.
+6. De kvarvarande långa proven i [TESTPLAN_FAS_1.md](TESTPLAN_FAS_1.md).
+
+Tills dessa steg har verklig evidens är korrekt status **implementerad i arbetskopian, inte bygg- eller enhetsverifierad**.

@@ -1,58 +1,63 @@
-# Mio · fas 1
+# Mio · fas 2
 
-Mio är en privat iPhone-prototyp som undersöker om en iPhone 13 kan skapa svensk text lokalt under en längre, användarstartad session och fortsätta när appen ligger i bakgrunden eller skärmen är låst — utan orimlig batteriförbrukning.
+Mio är en privat iPhone-app för en användare. Fas 2 bygger vidare på den lokala svenska transkriptionen med en manuell MVP för tidslinje, anteckningar, uppgifter, lokala planer och uttryckliga minnen. Allt innehåll stannar lokalt om användaren inte själv delar en export.
 
 ## Aktuell status
 
 | Del | Status |
 |---|---|
-| Molnbygge med Xcode 26 | Godkänt i GitHub Actions |
-| Installation på iPhone 13 | Godkänd via SideStore |
-| Svensk lokal motor | `DictationTranscriber` med `sv_SE` fungerar |
-| Avancerad svensk motor | Modelltillgången misslyckades; fallback används |
-| Kort bakgrundstest | Godkänt med giltig ljudtid |
-| Långt bakgrunds- och batteritest | Återstår |
-| OpenAI | Inte inkluderat i fas 1 |
+| Fas 1, kort telefonrökprov | Godkänt den 20 augusti 2026 på den då byggda revisionen |
+| Fas 1, långt bakgrunds-, batteri- och avbrottstest | Återstår |
+| Fas 2, implementation i källkod | Finns i lokal arbetskopia |
+| Fas 2, statisk Windows-granskning | Godkänd inom miljöns gränser |
+| Fas 2, Xcode-kompilering och XCTest | Inte körda ännu |
+| Fas 2, GitHub Actions och ny IPA | Inte körda ännu |
+| Fas 2, installation och iPhone-test | Inte genomförda ännu |
+| OpenAI, EventKit och systemalarm | Inte inkluderade i fas 2 |
 
-Det första telefonprovet var 2 minuter 30 sekunder. Det bevisar att kärnvägen fungerar, men är för kort för att godkänna heldagsidén. Se [testresultatet](docs/TESTRESULTAT_FAS_1.md) och [testplanen](docs/TESTPLAN_FAS_1.md).
+Det första telefonprovet var 2 minuter 30 sekunder. Det bevisar den korta fas 1-kärnvägen men är för kort för att godkänna heldagsidén. Fas 2 utvecklas parallellt utan att fas 1 markeras som slutgodkänd. Se [fas 1-resultatet](docs/TESTRESULTAT_FAS_1.md), [fas 2-statusen](docs/TESTRESULTAT_FAS_2.md) och [roadmapen](docs/ROADMAP.md).
 
-## Det som är byggt
+## Fas 2 i arbetskopian
 
-- Tydlig **Starta**, **Stoppa** och **Pausa**.
-- Apples lokala `SpeechTranscriber` när den är tillgänglig.
-- Automatisk svensk reservmotor med `DictationTranscriber`.
-- Fortsatt användarstartad ljudsession via `UIBackgroundModes = audio`.
-- Tidsstämplad text som sparas lokalt mellan appstarter.
-- Lokal detektion av det fristående ordet **Mio**.
-- Batteriprover, bakgrundshändelser, ljudavbrott, ljudvägsändringar och tappade buffertar i diagnostiken.
-- Export av testet som JSON och permanent radering av appens lokala fas 1-data.
-- Integritetsmanifest och filskydd för den lokala testdatan.
-- Enhetstester för Mio-detektion och sessionsstatistik.
+- Fem flikar: **Mio**, **Tidslinje**, **Kalender**, **Anteckningar** och **Morgon**.
+- En gemensam lokal modell för tidslinjepost, anteckning, uppgift, plan och uttryckligt minne.
+- Manuell skapa, redigera, söka, slutföra uppgift och radera.
+- Lokal, stabil tidsordning och valfri koppling mellan en manuell post och en transkriptionssession.
+- Sessionstitel, manuell sessionsanteckning och korrigerad visningstext utan att originaltext eller ljudtider skrivs över.
+- Versionsmärkt lagring i `MioPhaseTwo/content-v1.json`; befintliga `MioPhaseOne/sessions.json` behålls separat.
+- Gemensam versionsmärkt JSON-export med manuellt innehåll och sessioner.
+- Tydligare status för Apples avancerade svenska modell, explicit reservation, separat installationsknapp och verifiering före användning.
+- `DictationTranscriber` med `sv_SE` finns kvar som den verifierade reservvägen från fas 1.
 
-## Det som avsiktligt inte finns i fas 1
+Detta är en beskrivning av källkoden, inte ett påstående om att den nya revisionen kompilerar eller fungerar på iPhone. Följ [kravmatrisen](docs/KRAVMATRIS_FAS_2.md) och [testplanen](docs/TESTPLAN_FAS_2.md) för verifiering.
 
-- Ingen OpenAI-nyckel, server eller nätverksbaserad AI.
-- Ingen användarinloggning.
-- Inget sparat råljud; mikrofonbuffertar bearbetas tillfälligt i minnet.
-- Ingen fullständig kalender, lektionsindelning, dagssammanfattning eller frågesvarsfunktion.
+## Avsiktligt utanför fas 2
+
+- Ingen OpenAI-nyckel, server, inloggning eller nätverksbaserad AI.
+- Ingen EventKit-koppling eller skrivning till systemkalendern.
+- Inga systemalarm, automatiska morgonöversikter eller kvällssammanfattningar.
+- Ingen automatisk tolkning som skapar planer, uppgifter eller minnen utan bekräftelse.
+- Inget sparat råljud; mikrofonbuffertar bearbetas endast tillfälligt i minnet.
 - Ingen App Store- eller TestFlight-distribution.
 
 ## Börja här
 
 - Ny Codex-task eller ny utvecklare: läs [AGENTS.md](AGENTS.md) och [arbetsflödet](docs/WORKFLOW.md).
 - Förstå slutmålet: läs [produktvisionen](docs/PRODUKTVISION.md).
-- Se prioriteringarna: läs [roadmapen](docs/ROADMAP.md) och [beslutsloggen](docs/DECISIONS.md).
+- Se prioriteringarna och besluten: läs [ROADMAP.md](docs/ROADMAP.md) och [DECISIONS.md](docs/DECISIONS.md).
+- Förstå lagring och export: läs [DATAMODELL_FAS_2.md](docs/DATAMODELL_FAS_2.md).
+- Se verifieringsläget: läs [BYGGSTATUS.md](docs/BYGGSTATUS.md), [KRAVMATRIS_FAS_2.md](docs/KRAVMATRIS_FAS_2.md) och [TESTRESULTAT_FAS_2.md](docs/TESTRESULTAT_FAS_2.md).
 - Bygga på Monterey/Windows och installera via SideStore: följ [START_HAR_MONTEREY.md](START_HAR_MONTEREY.md).
-- Installera direkt från Xcode på en modern Mac: använd [Xcode-alternativet](docs/INSTALLERA_PA_IPHONE.md).
-- Testa telefonen: följ [TESTPLAN_FAS_1.md](docs/TESTPLAN_FAS_1.md).
-- Se teknisk status: läs [BYGGSTATUS.md](docs/BYGGSTATUS.md).
-- Förstå en framtida OpenAI-integration: läs [OPENAI_SENARE.md](docs/OPENAI_SENARE.md).
+- Installera direkt från Xcode på en modern Mac: använd [INSTALLERA_PA_IPHONE.md](docs/INSTALLERA_PA_IPHONE.md).
+- Testa fas 2: följ [TESTPLAN_FAS_2.md](docs/TESTPLAN_FAS_2.md).
+- Slutföra fas 1-proven: följ [TESTPLAN_FAS_1.md](docs/TESTPLAN_FAS_1.md).
+- Förstå en senare OpenAI-integration: läs [OPENAI_SENARE.md](docs/OPENAI_SENARE.md).
 
 ## Bygg- och installationsvägar
 
-### Använd väg: GitHub Actions + SideStore
+### Huvudväg: GitHub Actions + SideStore
 
-Den lokala Macen kör Monterey och kan inte köra Xcode 26. Koden pushas därför till det privata GitHub-repot, GitHub Actions kompilerar med Xcode 26.6 och SideStore signerar den osignerade IPA-filen med ett personligt Apple-konto på telefonen.
+Den lokala Macen kör Monterey och kan inte köra Xcode 26. Koden pushas därför till det privata GitHub-repot, GitHub Actions kompilerar med Xcode 26.6, kör XCTest i en iOS 26-simulator och bygger IPA:n. SideStore signerar sedan den osignerade IPA-filen med ett personligt Apple-konto på telefonen.
 
 En modern Mac behövs inte lokalt för denna väg. Windows kör inte Xcode men används för GitHub Desktop och SideStores första iLoader-installation.
 
@@ -64,30 +69,34 @@ En Mac som stöder en Xcode 26-version kan bygga, signera och installera projekt
 
 ```text
 .github/workflows/           Molnbygget
-MioPhaseOne.xcodeproj/       Xcode-projektet
-MioPhaseOne/                 Appkod och integritetsfiler
+MioPhaseOne.xcodeproj/       Xcode-projektets befintliga tekniska namn
+MioPhaseOne/                 Appkod, lokala modeller och integritetsfiler
   Models/
   Services/
-MioPhaseOneTests/            Enhetstester
-docs/                        Vision, beslut, workflow, status och tester
+MioPhaseOneTests/            Automatiska tester
+docs/                        Vision, beslut, datamodell, status och testplaner
 AGENTS.md                    Varaktig kontext för Codex
 START_HAR_MONTEREY.md        GitHub Actions + SideStore
 ```
 
-Exporterade `Mio-fas-1-*.json`, IPA-filer, pairing-filer, certifikat och hemligheter hör aldrig hemma i repot. `.gitignore` blockerar de vanligaste filtyperna.
+Projekt- och targetnamnet `MioPhaseOne` behålls tills ett separat migreringsbeslut tas. Appens användarnamn är **Mio**. Ett namnbyte får inte av misstag ändra bundle identifier och därmed bryta uppgraderingsvägen eller lokal data.
+
+Exporterade `Mio-fas-1-*.json`, `Mio-lokal-export-*.json`, IPA-filer, pairing-filer, certifikat och hemligheter hör aldrig hemma i repot.
 
 ## Viktiga begränsningar
 
-- Apple publicerar ingen fast utvecklar-API-lista som kan ersätta kontrollen på telefonen. Den verkliga enheten är facit.
+- Den verkliga iPhone 13 är facit för Apple-API:er, modellassetar, bakgrundsbeteende och prestanda.
 - Bakgrundsljud kan hålla en användarstartad session aktiv. iOS återstartar inte mikrofonen efter tvångsavslutning, omstart eller systemterminering.
 - En tidsstyrd paus stänger mikrofonen. iOS kan då vila appen, så fortsatt lyssning kan kräva att appen öppnas igen.
-- Ett ljudvägsbyte kan ändra mikrofonformatet. Fas 1 loggar bytet; stoppa och starta om testet om texten upphör.
+- Ett ljudvägsbyte kan ändra mikrofonformatet. Stoppa och starta om sessionen om texten upphör.
+- Den avancerade svenska modellen får inte väljas förrän `AssetInventory` rapporterar att den är installerad. Annars används reservmotorn.
 - Ingen ska spelas in utan tydligt tillstånd och utan att skolans, arbetsplatsens och lagens regler följs.
 
 ## Apple-källor för kärnarkitekturen
 
 - [SpeechTranscriber](https://developer.apple.com/documentation/speech/speechtranscriber)
 - [DictationTranscriber](https://developer.apple.com/documentation/speech/dictationtranscriber)
+- [AssetInventory](https://developer.apple.com/documentation/speech/assetinventory)
 - [Apples SpeechAnalyzer-exempel](https://developer.apple.com/documentation/speech/bringing-advanced-speech-to-text-capabilities-to-your-app)
 - [AnalyzerInput med explicit starttid](https://developer.apple.com/documentation/speech/analyzerinput/init%28buffer%3Abufferstarttime%3A%29)
 - [Bakgrundslägen i Xcode](https://developer.apple.com/documentation/xcode/configuring-background-execution-modes)

@@ -50,6 +50,12 @@ actor SessionRepository {
         try write(sessions)
     }
 
+    func delete(id: UUID) throws {
+        var sessions = try loadSessions()
+        sessions.removeAll { $0.id == id }
+        try write(sessions)
+    }
+
     func deleteAll() throws {
         // This removes app-owned storage and temporary exports. Copies already shared to
         // Files, mail or another app are outside this sandbox and cannot be recalled here.
