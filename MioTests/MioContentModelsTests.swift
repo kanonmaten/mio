@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import MioPhaseTwo
+@testable import Mio
 
 final class MioContentModelsTests: XCTestCase {
     func testAllFiveKindsRoundTripThroughCodable() throws {

@@ -23,6 +23,7 @@ actor SessionRepository {
                 for: .applicationSupportDirectory,
                 in: .userDomainMask
             ).first ?? fileManager.temporaryDirectory
+            // Keep the existing storage directory across app/project renames.
             self.storageURL = applicationSupport
                 .appendingPathComponent("MioPhaseTwo", isDirectory: true)
                 .appendingPathComponent("sessions.json", isDirectory: false)
@@ -83,7 +84,8 @@ actor SessionRepository {
             at: fileManager.temporaryDirectory,
             includingPropertiesForKeys: nil
         ).filter {
-            ($0.lastPathComponent.hasPrefix("Mio-fas-2-session-")
+            ($0.lastPathComponent.hasPrefix("Mio-session-")
+                || $0.lastPathComponent.hasPrefix("Mio-fas-2-session-")
                 || $0.lastPathComponent.hasPrefix("Mio-fas-1-"))
                 && $0.pathExtension == "json"
         }
@@ -99,7 +101,7 @@ actor SessionRepository {
         formatter.dateFormat = "yyyy-MM-dd-HHmm"
 
         let exportURL = fileManager.temporaryDirectory
-            .appendingPathComponent("Mio-fas-2-session-\(formatter.string(from: session.startedAt)).json")
+            .appendingPathComponent("Mio-session-\(formatter.string(from: session.startedAt)).json")
         let data = try Self.exportEncoder.encode(session)
         try data.write(to: exportURL, options: .atomic)
         // This protection remains writable after the first device unlock, which is required
@@ -111,8 +113,8 @@ actor SessionRepository {
         return exportURL
     }
 
-    /// Moves the phase 1 file only after it has decoded and been written successfully
-    /// at the phase 2 path. The bundle identifier remains unchanged, so both paths are
+    /// Moves the legacy file only after it has decoded and been written successfully
+    /// at the current path. The bundle identifier remains unchanged, so both paths are
     /// inside the same app container during an in-place upgrade.
     private func migrateLegacySessionsIfNeeded() throws -> [MioSession]? {
         guard !fileManager.fileExists(atPath: storageURL.path),

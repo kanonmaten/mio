@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: mio-phase-two-${{ github.ref }}
+  group: mio-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -47,21 +47,21 @@ jobs:
       - name: Kontrollera projektfiler
         run: |
           set -euo pipefail
-          test -f MioPhaseTwo.xcodeproj/project.pbxproj
-          test -f MioPhaseTwo/Info.plist
-          test -f MioPhaseTwo/PrivacyInfo.xcprivacy
-          test -f MioPhaseTwo/Models/MioContentModels.swift
-          test -f MioPhaseTwo/Services/MioContentRepository.swift
-          test -f MioPhaseTwo/PhaseTwoViews.swift
-          plutil -lint MioPhaseTwo/Info.plist
-          plutil -lint MioPhaseTwo/PrivacyInfo.xcprivacy
+          test -f Mio.xcodeproj/project.pbxproj
+          test -f Mio/Info.plist
+          test -f Mio/PrivacyInfo.xcprivacy
+          test -f Mio/Models/MioContentModels.swift
+          test -f Mio/Services/MioContentRepository.swift
+          test -f Mio/ContentViews.swift
+          plutil -lint Mio/Info.plist
+          plutil -lint Mio/PrivacyInfo.xcprivacy
 
       - name: Bygg osignerad iPhone-app
         run: |
           set -euo pipefail
           xcodebuild \
-            -project MioPhaseTwo.xcodeproj \
-            -scheme MioPhaseTwo \
+            -project Mio.xcodeproj \
+            -scheme Mio \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
@@ -77,8 +77,8 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild \
-            -project MioPhaseTwo.xcodeproj \
-            -scheme MioPhaseTwo \
+            -project Mio.xcodeproj \
+            -scheme Mio \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
@@ -127,8 +127,8 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
           trap 'xcrun simctl shutdown "$SIMULATOR_UDID" || true' EXIT
           xcodebuild \
-            -project MioPhaseTwo.xcodeproj \
-            -scheme MioPhaseTwo \
+            -project Mio.xcodeproj \
+            -scheme Mio \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
@@ -142,41 +142,43 @@ jobs:
       - name: Skapa IPA-filen
         run: |
           set -euo pipefail
-          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/MioPhaseTwo.app"
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/Mio.app"
           test -d "$APP_PATH"
-          test -x "$APP_PATH/MioPhaseTwo"
+          test -x "$APP_PATH/Mio"
           test -f "$APP_PATH/PrivacyInfo.xcprivacy"
 
           rm -rf "$RUNNER_TEMP/Payload"
           mkdir -p "$RUNNER_TEMP/Payload"
-          ditto "$APP_PATH" "$RUNNER_TEMP/Payload/MioPhaseTwo.app"
+          ditto "$APP_PATH" "$RUNNER_TEMP/Payload/Mio.app"
 
           (
             cd "$RUNNER_TEMP"
-            /usr/bin/zip -qry "$GITHUB_WORKSPACE/MioPhaseTwo-unsigned.ipa" Payload
+            /usr/bin/zip -qry "$GITHUB_WORKSPACE/Mio-unsigned.ipa" Payload
           )
 
-          /usr/bin/unzip -t "$GITHUB_WORKSPACE/MioPhaseTwo-unsigned.ipa"
-          /usr/bin/lipo -archs "$APP_PATH/MioPhaseTwo" | /usr/bin/grep -qw arm64
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/Mio-unsigned.ipa"
+          /usr/bin/lipo -archs "$APP_PATH/Mio" | /usr/bin/grep -qw arm64
 
           {
-            echo "Mio fas 2 – osignerad molnbyggnad"
+            echo "Mio – osignerad molnbyggnad"
+            /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist" | sed 's/^/Version: /'
+            /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist" | sed 's/^/Build: /'
             echo "GitHub run: $GITHUB_RUN_ID"
             echo "Commit: $GITHUB_SHA"
             sw_vers -productVersion | sed 's/^/macOS: /'
             xcodebuild -version | tr '\n' ' '
             echo
             xcrun --sdk iphoneos --show-sdk-version | sed 's/^/iPhoneOS SDK: /'
-            /usr/bin/shasum -a 256 "$GITHUB_WORKSPACE/MioPhaseTwo-unsigned.ipa"
-          } > "$GITHUB_WORKSPACE/MioPhaseTwo-buildinfo.txt"
+            /usr/bin/shasum -a 256 "$GITHUB_WORKSPACE/Mio-unsigned.ipa"
+          } > "$GITHUB_WORKSPACE/Mio-buildinfo.txt"
 
       - name: Ladda upp färdig IPA
         uses: actions/upload-artifact@v7
         with:
-          name: MioPhaseTwo-IPA
+          name: Mio-IPA
           path: |
-            MioPhaseTwo-unsigned.ipa
-            MioPhaseTwo-buildinfo.txt
+            Mio-unsigned.ipa
+            Mio-buildinfo.txt
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
@@ -211,21 +213,21 @@ jobs:
       - name: Kontrollera projektfiler
         run: |
           set -euo pipefail
-          test -f MioPhaseTwo.xcodeproj/project.pbxproj
-          test -f MioPhaseTwo/Info.plist
-          test -f MioPhaseTwo/PrivacyInfo.xcprivacy
-          test -f MioPhaseTwo/Models/MioContentModels.swift
-          test -f MioPhaseTwo/Services/MioContentRepository.swift
-          test -f MioPhaseTwo/PhaseTwoViews.swift
-          plutil -lint MioPhaseTwo/Info.plist
-          plutil -lint MioPhaseTwo/PrivacyInfo.xcprivacy
+          test -f Mio.xcodeproj/project.pbxproj
+          test -f Mio/Info.plist
+          test -f Mio/PrivacyInfo.xcprivacy
+          test -f Mio/Models/MioContentModels.swift
+          test -f Mio/Services/MioContentRepository.swift
+          test -f Mio/ContentViews.swift
+          plutil -lint Mio/Info.plist
+          plutil -lint Mio/PrivacyInfo.xcprivacy
 
       - name: Kompilera Release med Xcode 27
         run: |
           set -euo pipefail
           xcodebuild \
-            -project MioPhaseTwo.xcodeproj \
-            -scheme MioPhaseTwo \
+            -project Mio.xcodeproj \
+            -scheme Mio \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
@@ -241,8 +243,8 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild \
-            -project MioPhaseTwo.xcodeproj \
-            -scheme MioPhaseTwo \
+            -project Mio.xcodeproj \
+            -scheme Mio \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
@@ -291,8 +293,8 @@ jobs:
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
           trap 'xcrun simctl shutdown "$SIMULATOR_UDID" || true' EXIT
           xcodebuild \
-            -project MioPhaseTwo.xcodeproj \
-            -scheme MioPhaseTwo \
+            -project Mio.xcodeproj \
+            -scheme Mio \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \

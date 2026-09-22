@@ -222,7 +222,7 @@ struct MioSession: Identifiable, Codable, Hashable, Sendable {
     var events: [DiagnosticEvent]
     var batteryReadings: [BatteryReading]
     var backgroundIntervals: [BackgroundInterval]
-    /// Optional phase 2 metadata. Missing keys decode as nil for existing phase 1 files.
+    /// Optional session metadata. Missing keys decode as nil for legacy files.
     var title: String?
     var manualNote: String?
 
@@ -339,7 +339,7 @@ enum MioError: LocalizedError {
         case .microphoneDenied:
             "Mikrofonen är inte tillåten. Öppna Inställningar > Integritet och säkerhet > Mikrofon och slå på Mio."
         case .speechTranscriberUnavailable:
-            "Apples SpeechTranscriber finns inte på den här telefonen. Det är ett viktigt resultat från fas 1."
+            "Apples SpeechTranscriber finns inte på den här telefonen. Kontrollera telefonens stöd för svensk transkription."
         case .swedishUnavailable:
             "Varken SpeechTranscriber eller DictationTranscriber erbjuder svenska på den här telefonen."
         case .missingAudioFormat:

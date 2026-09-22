@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A10000000000000000000001"
-               BuildableName = "MioPhaseTwo.app"
-               BlueprintName = "MioPhaseTwo"
-               ReferencedContainer = "container:MioPhaseTwo.xcodeproj">
+               BuildableName = "Mio.app"
+               BlueprintName = "Mio"
+               ReferencedContainer = "container:Mio.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -35,9 +35,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A10000000000000000000002"
-               BuildableName = "MioPhaseTwoTests.xctest"
-               BlueprintName = "MioPhaseTwoTests"
-               ReferencedContainer = "container:MioPhaseTwo.xcodeproj">
+               BuildableName = "MioTests.xctest"
+               BlueprintName = "MioTests"
+               ReferencedContainer = "container:Mio.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -56,9 +56,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A10000000000000000000001"
-            BuildableName = "MioPhaseTwo.app"
-            BlueprintName = "MioPhaseTwo"
-            ReferencedContainer = "container:MioPhaseTwo.xcodeproj">
+            BuildableName = "Mio.app"
+            BlueprintName = "Mio"
+            ReferencedContainer = "container:Mio.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A10000000000000000000001"
-            BuildableName = "MioPhaseTwo.app"
-            BlueprintName = "MioPhaseTwo"
-            ReferencedContainer = "container:MioPhaseTwo.xcodeproj">
+            BuildableName = "Mio.app"
+            BlueprintName = "Mio"
+            ReferencedContainer = "container:Mio.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

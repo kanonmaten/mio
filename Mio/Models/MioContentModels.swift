@@ -41,7 +41,7 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
     var scheduledAt: Date
     var completedAt: Date?
     /// Optional relationship to a local transcription session. The transcript remains
-    /// in the phase 1 store and is never duplicated into this item.
+    /// in the session store and is never duplicated into this item.
     var sessionID: UUID?
 
     init(

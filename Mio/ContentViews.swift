@@ -155,7 +155,7 @@ struct CalendarTabView: View {
                         systemImage: searchText.isEmpty ? "calendar.badge.plus" : "magnifyingglass",
                         description: Text(
                             searchText.isEmpty
-                                ? "Fas 2 sparar planer lokalt i Mio. Ingen systemkalender används ännu."
+                                ? "Planer sparas lokalt i Mio. Ingen systemkalender används ännu."
                                 : "Prova ett annat sökord."
                         )
                     )
@@ -446,9 +446,9 @@ struct MorningTabView: View {
         NavigationStack {
             List {
                 Section {
-                    Label("Alarm och morgonöversikt kommer i fas 4", systemImage: "sunrise")
+                    Label("Alarm och morgonöversikt är planerade", systemImage: "sunrise")
                         .font(.headline)
-                    Text("Fas 2 skapar inga alarm eller notiser. Här visas bara en lokal överblick över sådant du själv har sparat.")
+                    Text("Här visas en lokal överblick över sådant du själv har sparat. Alarm och notiser stöds inte ännu.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }

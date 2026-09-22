@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import MioPhaseTwo
+@testable import Mio
 
 final class MioSessionModelsTests: XCTestCase {
     func testBatteryDropUsesFirstAndLastKnownReading() {
@@ -74,7 +74,7 @@ final class MioSessionModelsTests: XCTestCase {
         )
     }
 
-    func testLegacySessionJSONDecodesWithoutPhaseTwoMetadata() throws {
+    func testLegacySessionJSONDecodesWithoutOptionalMetadata() throws {
         let legacyJSON = #"{"id":"00000000-0000-0000-0000-000000000001","startedAt":"2026-08-20T20:29:02Z","endedAt":"2026-08-20T20:31:32Z","transcripts":[{"id":"00000000-0000-0000-0000-000000000002","createdAt":"2026-08-20T20:30:00Z","audioStartedAt":"2026-08-20T20:30:00Z","audioEndedAt":"2026-08-20T20:30:02Z","text":"Hej Mio","containsMio":true,"wasObservedInBackground":false,"audioTimingIsValid":true}],"events":[],"batteryReadings":[],"backgroundIntervals":[]}"#
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601

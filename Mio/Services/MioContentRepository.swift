@@ -11,8 +11,7 @@ enum MioContentRepositoryError: LocalizedError {
     }
 }
 
-/// Stores manually created phase 2 content separately from the verified phase 1
-/// session file. Raw audio is never accepted or stored by this repository.
+/// Stores manually created content separately from transcription sessions. Raw audio is never accepted or stored by this repository.
 actor MioContentRepository {
     private let fileManager: FileManager
     private let storageURL: URL
@@ -29,6 +28,7 @@ actor MioContentRepository {
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first ?? fileManager.temporaryDirectory
+        // This persisted path is independent of the app version and project name.
         self.storageURL = storageURL ?? applicationSupport
             .appendingPathComponent("MioPhaseTwo", isDirectory: true)
             .appendingPathComponent("content-v1.json", isDirectory: false)

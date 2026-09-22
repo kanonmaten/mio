@@ -1,4 +1,4 @@
-# Testplan för Mio fas 2
+# Testplan för Mio v0.2.0
 
 Målet är att verifiera den lokala, manuella MVP:n på den faktiska iPhone 13 utan att blanda ihop källkod, molnbygge och telefonresultat. Använd endast konstgjort testinnehåll. Exporter kan innehålla privat text och får aldrig läggas i Git-repot.
 
@@ -17,7 +17,7 @@ Använd endast följande resultat per test:
 
 1. Notera Git-commit, GitHub Actions-körning, IPA-filens kontrollsumma, exakt iOS-version och iPhone-modell.
 2. Kräv en grön Release-build för denna revision. Kör även XCTest i Xcode eller ett Actions-testjobb och dokumentera om testkörning saknas.
-3. Exportera viktig befintlig fas 1-data innan uppdateringen.
+3. Exportera viktig befintlig v0.1.0-data innan uppdateringen.
 4. Installera över den befintliga appen med samma Apple-konto och bundle identifier. Radera inte appen inför migreringstestet.
 5. Använd endast syntetiska poster och röster från personer som uttryckligen samtycker.
 6. Ha wifi för den separata installationen av `SpeechTranscriber`-modellen. Övriga manuella tester ska även köras offline.
@@ -25,12 +25,12 @@ Använd endast följande resultat per test:
 ## Test A — uppgradering och första start
 
 1. Öppna den tidigare versionen och notera minst en sparad session om sådan testdata finns.
-2. Installera fas 2-builden över appen.
+2. Installera v0.2.0-builden över appen.
 3. Starta Mio.
 4. Kontrollera att appen inte kraschar och att befintliga sessioner fortfarande går att läsa.
-5. Kontrollera att äldre sessioner utan fas 2-metadata visas utan påhittad titel, anteckning eller rättning.
-6. Kontrollera att det nya manuella innehållslagret börjar tomt om inga fas 2-poster skapats tidigare.
-7. Stäng appen helt, öppna den igen och kontrollera att de migrerade sessionerna fortfarande visas från fas 2-lagringen.
+5. Kontrollera att äldre sessioner utan v0.2.0-metadata visas utan påhittad titel, anteckning eller rättning.
+6. Kontrollera att det nya manuella innehållslagret börjar tomt om inga v0.2.0-poster skapats tidigare.
+7. Stäng appen helt, öppna den igen och kontrollera att de migrerade sessionerna fortfarande visas från v0.2.0-lagringen.
 
 Godkänt: gammal sessionsdata har flyttats från den äldre interna sökvägen utan ändrade sessioner, finns kvar efter omstart och den nya datamodellen startar utan fel.
 
@@ -148,10 +148,10 @@ Godkänt: de manuella funktionerna fungerar lokalt och inga externa integratione
 
 Godkänt: appen använder `SpeechAnalyzer` med `SpeechTranscriber` först efter bekräftad installerad assetstatus, visar ett begripligt installationsresultat och behåller en fungerande `DictationTranscriber`-fallback. Att iOS vägrar installera asseten ska dokumenteras som enhetsresultat, inte döljas.
 
-## Test L — mikrofon och fas 1-regression
+## Test L — mikrofon och v0.1.0-regression
 
 1. När Mio är av, kontrollera att iOS orange mikrofonindikator inte visas.
-2. Tryck **Starta ny session**, tillåt mikrofonen och säg testtexten från fas 1.
+2. Tryck **Starta ny session**, tillåt mikrofonen och säg testtexten från v0.1.0.
 3. Kontrollera lokal svensk text och Mio-detektion.
 4. Pausa **Tills jag startar igen** och kontrollera att indikatorn försvinner och att ingen ny text skapas.
 5. Fortsätt, skapa ny text och tryck **Stoppa sessionen**.
@@ -159,7 +159,7 @@ Godkänt: appen använder `SpeechAnalyzer` med `SpeechTranscriber` först efter 
 
 Godkänt: den nya navigeringen har inte brutit den korta kärnvägen och mikrofonstatusen följer användarens val.
 
-Detta ersätter inte de längre bakgrunds-, batteri-, avbrotts- och kvalitetsproven i [TESTPLAN_FAS_1.md](TESTPLAN_FAS_1.md).
+Detta ersätter inte de längre bakgrunds-, batteri-, avbrotts- och kvalitetsproven i [TESTPLAN_V0_1.md](TESTPLAN_V0_1.md).
 
 ## Test M — tillgänglighet och små skärmar
 
@@ -170,12 +170,12 @@ Detta ersätter inte de längre bakgrunds-, batteri-, avbrotts- och kvalitetspro
 
 Godkänt: huvudflödena går att förstå och använda på iPhone 13 utan avklippta avgörande kontroller.
 
-## Fas 2 är verifierad när
+## v0.2.0 är verifierad när
 
 - Release-builden för den dokumenterade revisionen är grön i GitHub Actions;
 - relevanta XCTest faktiskt har körts och resultaten är dokumenterade;
 - samma IPA är installerad och test A–M är genomförda eller har en uttryckligen accepterad avvikelse;
 - inga exporter eller andra privata testdata har lagts i repot;
-- resultatet finns i [TESTRESULTAT_FAS_2.md](TESTRESULTAT_FAS_2.md).
+- resultatet finns i [STATUS.md](STATUS.md).
 
-Fas 2-verifiering innebär inte automatiskt att fas 1:s heldagsidé är godkänd.
+v0.2.0-verifiering innebär inte automatiskt att v0.1.0:s heldagsidé är godkänd.

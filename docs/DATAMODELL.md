@@ -1,17 +1,17 @@
-# Datamodell för fas 2
+# Datamodell för v0.2.0
 
-Status: implementerad i den lokala arbetskopian den 24 augusti 2026, men ännu inte kompilerad med Xcode, byggd i GitHub Actions eller verifierad på iPhone.
+Införd i v0.2.0. Se [status](STATUS.md) för verifiering. Lagringsnamnen nedan behålls över appversioner; namnbytet till Mio ändrar inte dataformatet.
 
 ## Syfte
 
-Fas 2 lägger till ett gemensamt, helt lokalt innehållslager för manuella poster utan att skriva om den sessionsdata som samlades in i fas 1. Modellen ska göra det möjligt att skapa och ordna vardagsinnehåll nu, samtidigt som originaltranskriptioner och deras tekniska bevis förblir intakta.
+v0.2.0 lägger till ett gemensamt, helt lokalt innehållslager för manuella poster utan att skriva om den sessionsdata som samlades in i v0.1.0. Modellen ska göra det möjligt att skapa och ordna vardagsinnehåll nu, samtidigt som originaltranskriptioner och deras tekniska bevis förblir intakta.
 
 ## Två separata lokala lager
 
 | Sökväg i appens Application Support | Innehåll | Versionsregel |
 |---|---|---|
 | `MioPhaseTwo/sessions.json` | Sessioner, originaltranskriptioner, ljudtider, diagnostik och batteriprover | Befintligt format behålls. Nya valfria metadatafält kan saknas i äldre filer. |
-| `MioPhaseTwo/content-v1.json` | Manuellt innehåll från fas 2 | Dokumentet innehåller `schemaVersion: 1`. Okända versioner ska rapporteras och får inte skrivas över. |
+| `MioPhaseTwo/content-v1.json` | Manuellt innehåll från v0.2.0 | Dokumentet innehåller `schemaVersion: 1`. Okända versioner ska rapporteras och får inte skrivas över. |
 
 Vid en uppgradering med samma bundle identifier letar appen efter äldre `MioPhaseOne/sessions.json` om den nya sessionsfilen saknas. Filen avkodas först, skrivs atomiskt till `MioPhaseTwo/sessions.json` och tas därefter bort från den äldre platsen. Sessionsschema, fältvärden och identiteter bevaras semantiskt även om JSON-formateringen kan ändras vid återkodning. Migreringen gör inte om sessioner till manuella poster; en manuell post kan i stället ha en valfri koppling genom `sessionID`.
 
@@ -29,7 +29,7 @@ Alla fem manuella typer använder samma grundmodell:
 | `updatedAt` | tidpunkt | Uppdateras när posten ändras. |
 | `scheduledAt` | tidpunkt | Den lokala tid som visas i tidslinje eller planering. Det är inte en systemkalenderpost. |
 | `completedAt` | tidpunkt eller null | Används endast för uppgifter. Övriga typer ska lagra null. |
-| `sessionID` | UUID eller null | Valfri relation till en session i aktiva `MioPhaseTwo/sessions.json`, inklusive en migrerad fas 1-session. |
+| `sessionID` | UUID eller null | Valfri relation till en session i aktiva `MioPhaseTwo/sessions.json`, inklusive en migrerad v0.1.0-session. |
 
 Typerna visas på svenska som **Tidslinjepost**, **Anteckning**, **Uppgift**, **Plan** och **Uttryckligt minne**. Ett uttryckligt minne skapas manuellt av användaren; appen bygger ingen dold profil från vanlig text.
 
@@ -84,11 +84,11 @@ Den lokala exporten heter `Mio-lokal-export-ÅÅÅÅ-MM-DD-HHmm.json` och inneh�
 
 `content` innehåller de fem manuella typerna. `sessions` innehåller sessionernas originaldata plus eventuella titlar, anteckningar och rättningar. Exporten innehåller aldrig råljud, API-nycklar, certifikat eller pairing-information.
 
-Exportformatet är versionsmärkt men fas 2 innehåller ingen importfunktion. En framtida schemaändring måste få en uttrycklig migrering eller ett nytt filnamn; okända schemaversioner får inte tyst skrivas över.
+Exportformatet är versionsmärkt men v0.2.0 innehåller ingen importfunktion. En framtida schemaändring måste få en uttrycklig migrering eller ett nytt filnamn; okända schemaversioner får inte tyst skrivas över.
 
 ## Avsiktliga gränser
 
 - En plan är endast lokal och skrivs inte till EventKit eller systemkalendern.
-- Morgonfliken skapar inga systemalarm eller lokala notiser i fas 2.
+- Morgonfliken skapar inga systemalarm eller lokala notiser i v0.2.0.
 - Ingen post skickas till OpenAI eller någon annan extern AI-tjänst.
-- Automatisk plan-, uppgifts- eller minnesdetektion hör till senare faser och kräver då uttrycklig bekräftelse.
+- Automatisk plan-, uppgifts- eller minnesdetektion hör till senare versioner och kräver då uttrycklig bekräftelse.

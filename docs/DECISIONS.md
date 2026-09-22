@@ -1,81 +1,35 @@
-# Beslutslogg
+# Beslut och tekniska kontrakt
 
-Den här filen fångar beslut som nya Codex-tasks annars lätt skulle behöva gissa på.
+Gällande beslut samlade på ett ställe. [Ändringsloggen](../CHANGELOG.md) beskriver levererade ändringar; [status](STATUS.md) beskriver evidens.
 
-## 2026-08-20 – Privat app
+| Beslut | Regel | Ursprung |
+|---|---|---|
+| Privat native-app | SwiftUI, iOS 26+, iPhone 13; ingen App Store-distribution | 2026-08-20 |
+| Lokalt ljudflöde | `SpeechAnalyzer` tar emot tidsatta buffertar och kör en transkriptionsmodul åt gången | 2026-08-20 |
+| Ingen råljudslagring | Ljud bara tillfälligt i minnet; text, tider och diagnostik lokalt | 2026-08-20 |
+| Explicit molnsamtycke | Framtida OpenAI-fråga kräver Ja, minsta kontext och API-nyckel på server | 2026-08-20 |
+| Privat installation | Actions bygger osignerad IPA; SideStore signerar. Lokal Mac/Xcode är ett alternativ | 2026-08-20 |
+| Enkel Git-rutin | Lokala ändringar granskas före commit/push; privata exporter lämnar aldrig sin privata lagringsplats för repot | 2026-08-20 |
+| Manuella funktioner kan utvecklas parallellt | v0.2.0 kräver inte att heldagslyssning är godkänd; öppna långtest kvarstår | 2026-08-24 |
+| Separata datalager | Manuella poster och sessioner lagras separat; schema, export och migrering beskrivs i datamodellen | 2026-08-24 |
+| Bevarade original | Sessionstitel, anteckning och texträttningar läggs ovanpå originaltext, tider och bevis | 2026-08-24 |
+| Resurs före modulstart | `SpeechTranscriber` endast efter installerad svensk assetstatus; separat installationsknapp | 2026-08-24 |
+| Omedelbar fallback | Ingen modellhämtning vid sessionsstart; saknad resurs ger `DictationTranscriber`. Förberedelsefel ger ny analyzer | 2026-08-24 |
+| Inga externa integrationer i v0.2.0 | Ingen OpenAI, EventKit, systemalarm eller konto; Kalender och Morgon är lokala vyer | 2026-08-24 |
+| Stabilt bygge och separat preview | Konfigurerad Xcode 26.6-väg producerar IPA; Xcode 27-preview är icke blockerande och producerar ingen IPA | 2026-08-24 |
+| Beständiga namn och versioner | Projektet heter Mio; produktmilstolpar använder v0.x.y enligt roadmapen | 2026-09-22 |
 
-Mio byggs för en enda användare och ska inte publiceras i App Store i nuläget. En gratis personlig signering är tillräcklig under prototypfasen.
+## Kompatibilitet vid namnbytet
 
-## 2026-08-20 – Native SwiftUI och iOS 26
+Den 24 augusti infördes tekniska namn under `MioPhaseTwo`. Den 22 september ersätts projekt-, target-, modul- och artifactnamnen med `Mio`. Följande värden ändras **inte**:
 
-Appen byggs i SwiftUI och använder Apples iOS 26-API:er. iPhone 13 med iOS 26 är den verkliga måltelefonen och facit för tillgänglighet och prestanda.
+- `se.eyvin.MioPhaseOne`: samma appidentitet för installation över befintlig app.
+- `MioPhaseTwo/content-v1.json` och `MioPhaseTwo/sessions.json`: befintliga lagringsvägar.
+- `MioPhaseOne/sessions.json`: migreringskälla när aktuell sessionsfil saknas.
+- `schemaVersion: 1`: dataversion, fristående från appversionen.
 
-## 2026-08-20 – Lokal taligenkänning först
+Nya sessionsexporter använder `Mio-session-`; radering och Git-ignore omfattar även `Mio-fas-1-` och `Mio-fas-2-session-`. Gemensam export fortsätter heta `Mio-lokal-export-`.
 
-Heldagsljud ska inte skickas till OpenAI. `SpeechAnalyzer` är den gemensamma analysmotorn som tar emot tidsatta ljudbuffertar. Mio konfigurerar den med en `SpeechModule` åt gången: den nyare `SpeechTranscriber` provas först och `DictationTranscriber` är kompatibilitetsfallback för svenska när det behövs. `AssetInventory` hanterar modulernas modellassetar; `SpeechAnalyzer` är inte en tredje språkmodell.
+## Enheten är facit
 
-Första enhetstestet visade att den svenska `SpeechTranscriber`-asseten inte kunde installeras (`transcription.sv`, status `Not Installing`). `DictationTranscriber` med `sv_SE` startade och fungerade. Arkitekturen ska därför behandla den modulen som den verifierade fallbackvägen på den här telefonen tills ett senare test visar något annat.
-
-## 2026-08-20 – Inget sparat råljud
-
-Rått mikrofonljud får bearbetas tillfälligt i minnet men sparas inte som ljudfil. Fas 1 sparar enbart text, tidsdata, batteriprover och diagnostik.
-
-## 2026-08-20 – Molnbygge på grund av Monterey
-
-Utvecklings-Macen kan inte köra Xcode 26. GitHub Actions på `macos-26` är därför den auktoritativa byggmiljön och producerar en osignerad IPA.
-
-## 2026-08-20 – SideStore för privat installation
-
-SideStore med iLoader och LocalDevVPN används för personlig signering, installation och sjudagarsförnyelse. AltStore-flödet övergavs efter återkommande iCloud-komponentfel på Windows.
-
-## 2026-08-20 – OpenAI endast efter uttryckligt Ja
-
-OpenAI läggs till först efter att den lokala grunden är bevisad. API-nyckeln ska ligga på en server, aldrig i appen. En fråga skickas endast efter att användaren sett flödet och aktivt valt **Ja**.
-
-## 2026-08-20 – En enkel Git-rutin
-
-`main` används direkt så länge projektet har en aktiv utvecklare och förändringarna är små. Codex ändrar lokala filer; GitHub Desktop används för granskning, commit och push. Brancher införs först när parallella eller riskfyllda ändringar gör dem motiverade.
-
-## 2026-08-20 – Testexporter stannar utanför repot
-
-Exporterade Mio-sessioner kan innehålla privat tal och ska aldrig checkas in, inte ens i ett privat repository. Endast avidentifierade slutsatser och mätvärden dokumenteras i `docs/TESTRESULTAT_FAS_1.md`.
-
-## 2026-08-24 – Fas 2 startar parallellt med öppna fas 1-prov
-
-Den lokala, manuella MVP:n i fas 2 får utvecklas innan fas 1:s långa bakgrunds-, batteri-, avbrotts- och kvalitetstest är klara. De manuella funktionerna behöver inte anta att heldagslyssningen fungerar. Fas 1 förblir därför uttryckligen kortverifierad och dess beslutspunkt för heldagslyssning kvarstår.
-
-Implementation, Xcode-kompilering, GitHub Actions-build, installation och telefonresultat ska rapporteras som separata verifieringsnivåer. Det tidigare telefonprovet får inte användas som bevis för en ny fas 2-revision.
-
-## 2026-08-24 – Fas 2-data lagras separat och versionsmärkt
-
-Manuellt innehåll lagras i `MioPhaseTwo/content-v1.json` med `schemaVersion: 1`. Sessioner lagras i `MioPhaseTwo/sessions.json`. Om den nya sessionsfilen saknas flyttas en äldre `MioPhaseOne/sessions.json` dit först efter lyckad avkodning och atomisk skrivning. Sessionerna migreras inte till manuella poster. En manuell post kan ha en valfri `sessionID`-relation till en session.
-
-De fem gemensamma typerna är tidslinjepost, anteckning, uppgift, plan och uttryckligt minne. En plan är lokal och ett uttryckligt minne skapas manuellt; inget av dem skrivs till en extern tjänst.
-
-En okänd innehållsschemaversion ska ge ett synligt fel och får inte tyst skrivas över. Den gemensamma exporten är också versionsmärkt och innehåller manuellt innehåll och sessioner, men aldrig råljud.
-
-## 2026-08-24 – Aktiva tekniska namn följer fas 2
-
-Xcode-projektet, app- och testmapparna, targets, scheme, produkt, Swift-modul och byggartifacts heter `MioPhaseTwo`. Aktiva Swift-typer använder neutrala namn som `MioSession`, `MioViewModel` och `MioError` i stället för fas 1-namn.
-
-Huvudappens bundle identifier förblir `se.eyvin.MioPhaseOne`. Det är en kompatibilitetsidentitet, inte ett synligt produktnamn; ett byte skulle få iOS att behandla fas 2 som en annan app och tappa åtkomsten till den befintliga lokala containern. Fas 1:s historiska testdokument behåller sina ursprungliga namn och resultat.
-
-## 2026-08-24 – Sessionsredigering är ett bevarande lager
-
-Fas 2 får lägga till titel och manuell anteckning på en avslutad session samt en rättad visningstext på ett transkriptionssegment. Originaltext, originalets ljudtider, Mio-detektion, bakgrundsbevis och övrig diagnostik ska förbli oförändrade och finnas kvar i exporten. Det gör manuella rättningar möjliga utan att skriva om tekniskt testbevis.
-
-## 2026-08-24 – SpeechTranscriber-asseten kräver installerad status
-
-`SpeechTranscriber` får läggas i den aktiva `SpeechAnalyzer` först när `AssetInventory` rapporterar att modulens svenska asset är installerad. Appen visar assetstatus, reserverar svenska explicit och erbjuder en separat förinstallation som kontrollerar slutstatus. Sessionsstarten ska inte blockera på hämtning av den nyare modellen: om asseten inte redan är installerad startas `DictationTranscriber` direkt. Om en installerad `SpeechTranscriber` ändå inte kan förberedas stängs den analysen och en ny `SpeechAnalyzer` förbereds med `DictationTranscriber`.
-
-Detta är ett arkitekturbeslut, inte ett nytt telefonresultat. Både installation och fallback ska verifieras på iPhone 13.
-
-## 2026-08-24 – Inga externa integrationer i fas 2
-
-Fas 2 gör inga OpenAI-anrop, använder inte EventKit och skapar inga systemalarm. Kalenderfliken visar endast lokala planer och Morgon är en lokal vy. OpenAI hör tidigast till fas 5 och kräver ett separat server-, samtyckes- och kostnadsbeslut.
-
-## 2026-08-24 – Stabil Xcode 26 bygger IPA, Xcode 27 är previewkontroll
-
-GitHub Actions behåller `macos-26` och den pinnade Xcode 26.6 som obligatorisk bygg-, test- och IPA-miljö. Det ger en reproducerbar stabil byggnad med deployment target iOS 26.0. Simulatorvalet ska välja den numeriskt senaste tillgängliga iOS 26-runtimen i stället för att ta den första listposten.
-
-`xcode-27` används endast i ett separat, icke blockerande kompatibilitetsjobb som följer den senaste previewmiljö GitHub tillhandahåller, kompilerar Release och kör XCTest på iOS 27. Previewjobbet skapar ingen distribuerad IPA och får inte ersätta den stabila miljön förrän Xcode 27-runnern är allmänt tillgänglig. En lyckad simulatorkörning ersätter inte ett verkligt iOS 27-enhetstest.
+Det historiska provet använde `DictationTranscriber` med `sv_SE`; den svenska `SpeechTranscriber`-resursen kunde inte installeras då. Ny resurslogik är inte verifierad av det provet. Bakgrund, batteri och ljudavbrott måste provas på telefonen; en simulator ersätter inte det.

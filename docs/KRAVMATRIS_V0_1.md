@@ -1,4 +1,4 @@
-# Kravmatris för fas 1
+# Kravmatris för v0.1.0
 
 Telefonresultaten bygger på rökprovet den 20 augusti 2026. **Kort godkänt** betyder att funktionen observerades men ännu inte klarade testplanens fulla varaktighet.
 
@@ -7,7 +7,7 @@ Telefonresultaten bygger på rökprovet den 20 augusti 2026. **Kort godkänt** b
 | Mikrofon på/av | Ja | Start, paus och användarstopp loggades | Kontrollera indikatorn manuellt vid alla lägen |
 | Tydlig status | Ja | Appen kunde startas och pausas | Visuell check enligt testplan |
 | Låst skärm/bakgrund | Ja, konfigurerat | Kort godkänt: 1 giltigt segment under 11 s total bakgrund | Minst 10 min med uttryckligen låst skärm |
-| `SpeechAnalyzer` med nyare `SpeechTranscriber`-modul | Ja, nytt status-/reservations-/installationsflöde i arbetskopian | `transcription.sv` blev `Not Installing` i det historiska provet | Testa fas 2-flödet på telefonen; markera inte installerad utan nytt bevis |
+| `SpeechAnalyzer` med nyare `SpeechTranscriber`-modul | Ja, nytt status-/reservations-/installationsflöde i arbetskopian | `transcription.sv` blev `Not Installing` i det historiska provet | Testa v0.2.0-flödet på telefonen; markera inte installerad utan nytt bevis |
 | `SpeechAnalyzer` med svensk `DictationTranscriber`-fallback | Ja | Godkänt: `DictationTranscriber`, `sv_SE` | Längre kvalitets- och stabilitetstest |
 | Tidsstämplad text | Ja | Godkänt: 5 segment med giltig ljudtid | Långt test och kontroll efter avbrott |
 | Paus 30 minuter | Ja | Inte testad | Testa tidsstyrd fortsättning |
@@ -22,10 +22,10 @@ Telefonresultaten bygger på rökprovet den 20 augusti 2026. **Kort godkänt** b
 | Export | Ja | Godkänt: giltig JSON skapades | Fortsatt privat hantering |
 | Radera all data | Ja | Inte testat | Exportera kopia och verifiera radering |
 | Råljud sparas inte | Ja | Exporten innehöll ingen ljudfil | Behåll som arkitekturregel |
-| OpenAI används inte | Ja | Inga OpenAI-händelser eller nycklar | Ingen OpenAI-konfiguration i fas 1 |
+| OpenAI används inte | Ja | Inga OpenAI-händelser eller nycklar | Ingen OpenAI-konfiguration i v0.1.0 |
 
-## Medvetna fasgränser
+## Omfattning och kvarvarande prov
 
-Fas 2:s femflikars huvudapp och manuella lokala modell utvecklas nu parallellt med de öppna fas 1-proven. Detta ändrar inte telefonresultaten i tabellen och den nya revisionen behöver ett regressionsprov.
+v0.2.0:s femflikars huvudapp och manuella lokala modell utvecklas nu parallellt med de öppna v0.1.0-proven. Detta ändrar inte telefonresultaten i tabellen och den nya revisionen behöver ett regressionsprov.
 
-EventKit-kalenderkoppling, systemalarm, automatisk lektionssegmentering, automatisk planigenkänning, kvällssammanfattning och OpenAI-frågor efter **Ja / Nej / Inte nu** hör fortfarande till senare faser. Se [ROADMAP.md](ROADMAP.md), [KRAVMATRIS_FAS_2.md](KRAVMATRIS_FAS_2.md) och [TESTRESULTAT_FAS_1.md](TESTRESULTAT_FAS_1.md).
+EventKit-kalenderkoppling, systemalarm, automatisk lektionssegmentering, automatisk planigenkänning, kvällssammanfattning och OpenAI-frågor efter **Ja / Nej / Inte nu** hör fortfarande till senare versioner. Se [ROADMAP.md](ROADMAP.md), [STATUS.md](STATUS.md) och [TESTRESULTAT_V0_1.md](TESTRESULTAT_V0_1.md).

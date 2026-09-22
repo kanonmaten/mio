@@ -1,8 +1,8 @@
-# Testplan för Mio fas 1
+# Testplan för Mio v0.1.0
 
-Målet är inte att visa en snygg demo. Målet är att samla pålitliga bevis från just hennes iPhone 13.
+Verifiera transkriptionsgrunden på iPhone 13. Testerna började med v0.1.0 och används även som regression på senare versioner; notera alltid aktuell commit och enhet.
 
-Ett kort rökprov genomfördes den 20 augusti 2026. Det verifierade svensk `DictationTranscriber`, Mio-detektion och ett kort bakgrundssegment, men ersätter inte testerna nedan. Se [TESTRESULTAT_FAS_1.md](TESTRESULTAT_FAS_1.md).
+Ett kort rökprov genomfördes den 20 augusti 2026. Det verifierade svensk `DictationTranscriber`, Mio-detektion och ett kort bakgrundssegment, men ersätter inte testerna nedan. Se [TESTRESULTAT_V0_1.md](TESTRESULTAT_V0_1.md).
 
 ## Före testet
 
@@ -102,7 +102,7 @@ Gör senare ett längre 3–4-timmarstest om timtestet ser rimligt ut. Vi sätte
 4. Koppla bort AirPods och säg en ny mening.
 5. Kontrollera loggen.
 
-Fas 1 loggar bytet men bygger inte om hela transkriptionspipelinen automatiskt. Om texten stannar ska ni stoppa och starta testet. Resultatet visar vad fas 2 behöver hantera.
+v0.1.0 loggar bytet men bygger inte om hela transkriptionspipelinen automatiskt. Om texten stannar ska ni stoppa och starta testet. Dokumentera resultatet för den testade revisionen.
 
 ## Exportera resultatet
 
@@ -112,7 +112,7 @@ Fas 1 loggar bytet men bygger inte om hela transkriptionspipelinen automatiskt. 
 4. Tryck **Dela lokal export**.
 5. Spara JSON-filen i Filer eller skicka den till er själva.
 
-Fas 2:s gemensamma export innehåller tidsstämplad text, batteriprover, diagnostik och eventuellt manuellt lokalt innehåll. Den innehåller aldrig råljud. Den historiska fas 1-exporten kan fortfarande ha det äldre filformatet.
+v0.2.0:s gemensamma export innehåller tidsstämplad text, batteriprover, diagnostik och eventuellt manuellt lokalt innehåll. Den innehåller aldrig råljud. Den historiska v0.1.0-exporten kan fortfarande ha det äldre filformatet.
 
 Spara också följande tillsammans med filen:
 
@@ -123,7 +123,7 @@ Spara också följande tillsammans med filen:
 - ungefär hur länge skärmen var låst.
 - om AirPods användes.
 
-## Fas 1 är klar när
+## Transkriptionsgrunden är verifierad när
 
 - en svensk lokal Apple-transkriptionsmodul är identifierad, eller frånvaron är dokumenterad;
 - svensk textkvalitet har bedömts i ett normalt och ett kontrollerat bullrigare rum, utan att spela in ovetande personer;

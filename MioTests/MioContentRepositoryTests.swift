@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import MioPhaseTwo
+@testable import Mio
 
 final class MioContentRepositoryTests: XCTestCase {
     func testUpsertReloadDeleteAndSessionIsolation() async throws {
@@ -43,13 +43,13 @@ final class MioContentRepositoryTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: sessionURL), sessionSentinel)
     }
 
-    func testSessionRepositoryMigratesLegacyPhaseOneFile() async throws {
+    func testSessionRepositoryMigratesLegacySessionFile() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         let legacyURL = fixture.root
             .appendingPathComponent("MioPhaseOne", isDirectory: true)
             .appendingPathComponent("sessions.json")
-        let phaseTwoURL = fixture.root
+        let currentURL = fixture.root
             .appendingPathComponent("MioPhaseTwo", isDirectory: true)
             .appendingPathComponent("sessions.json")
         try FileManager.default.createDirectory(
@@ -66,16 +66,16 @@ final class MioContentRepositoryTests: XCTestCase {
         try Self.encoder.encode(expected).write(to: legacyURL, options: .atomic)
 
         let repository = SessionRepository(
-            storageURL: phaseTwoURL,
+            storageURL: currentURL,
             legacyStorageURL: legacyURL
         )
         let loaded = try await repository.loadSessions()
 
         XCTAssertEqual(loaded, expected)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: phaseTwoURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: currentURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
 
-        let reloadedRepository = SessionRepository(storageURL: phaseTwoURL)
+        let reloadedRepository = SessionRepository(storageURL: currentURL)
         let reloaded = try await reloadedRepository.loadSessions()
         XCTAssertEqual(reloaded, expected)
     }

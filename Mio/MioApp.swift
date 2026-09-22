@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 @MainActor
-struct MioPhaseTwoApp: App {
+struct MioApp: App {
     @State private var model = MioViewModel()
     @State private var contentModel = MioContentViewModel()
 

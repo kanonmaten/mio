@@ -1,4 +1,4 @@
-# Testresultat för fas 1
+# Testresultat för v0.1.0
 
 Den exporterade råfilen innehåller transkriberad text och förvaras privat utanför Git-repot. Här sparas endast de mätvärden och slutsatser som behövs för fortsatt utveckling.
 
@@ -21,7 +21,7 @@ Den exporterade råfilen innehåller transkriberad text och förvaras privat uta
 | Batteri | 5 prover, samtliga 65 %, utan laddare | Mätningen fungerar; testet är för kort för förbrukningsslutsats |
 | Fel | 0 fel, 1 varning om avancerad modell | Ingen krasch eller oväntad avslutning |
 | Tappade buffertar | 0 rapporterade | Bra i korttest; långt stresstest återstår |
-| Råljud/OpenAI | Inget råljud i exporten och inga OpenAI-händelser | Fas 1-kontraktet hölls |
+| Råljud/OpenAI | Inget råljud i exporten och inga OpenAI-händelser | v0.1.0-kontraktet hölls |
 
 ### Transkriptionskvalitet
 
@@ -40,4 +40,4 @@ JSON-filen bevisar att appen var i bakgrunden när källjudet skapades. Den kan 
 5. Test E utan laddare i minst 60 minuter.
 6. Först därefter ett 3–4-timmarsprov.
 
-Fas 1 ska inte markeras som slutgodkänd förrän punkterna i `TESTPLAN_FAS_1.md` och `KRAVMATRIS_FAS_1.md` är verifierade.
+v0.1.0 ska inte markeras som slutgodkänd förrän punkterna i `TESTPLAN_V0_1.md` och `KRAVMATRIS_V0_1.md` är verifierade.

@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		B10000000000000000000001 /* MioPhaseTwoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000001 /* MioPhaseTwoApp.swift */; };
+		B10000000000000000000001 /* MioApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000001 /* MioApp.swift */; };
 		B10000000000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000002 /* ContentView.swift */; };
 		B10000000000000000000003 /* MioViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000003 /* MioViewModel.swift */; };
 		B10000000000000000000004 /* MioSessionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000004 /* MioSessionModels.swift */; };
@@ -22,7 +22,7 @@
 		B1000000000000000000000D /* MioContentModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000010 /* MioContentModels.swift */; };
 		B1000000000000000000000E /* MioContentRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000011 /* MioContentRepository.swift */; };
 		B1000000000000000000000F /* MioContentViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000012 /* MioContentViewModel.swift */; };
-		B10000000000000000000010 /* PhaseTwoViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000013 /* PhaseTwoViews.swift */; };
+		B10000000000000000000010 /* ContentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000013 /* ContentViews.swift */; };
 		B10000000000000000000011 /* MioContentModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000014 /* MioContentModelsTests.swift */; };
 		B10000000000000000000012 /* MioContentRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000015 /* MioContentRepositoryTests.swift */; };
 /* End PBXBuildFile section */
@@ -33,12 +33,12 @@
 			containerPortal = 010000000000000000000001 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = A10000000000000000000001;
-			remoteInfo = MioPhaseTwo;
+			remoteInfo = Mio;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		F10000000000000000000001 /* MioPhaseTwoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioPhaseTwoApp.swift; sourceTree = "<group>"; };
+		F10000000000000000000001 /* MioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioApp.swift; sourceTree = "<group>"; };
 		F10000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		F10000000000000000000003 /* MioViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioViewModel.swift; sourceTree = "<group>"; };
 		F10000000000000000000004 /* MioSessionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSessionModels.swift; sourceTree = "<group>"; };
@@ -50,13 +50,13 @@
 		F1000000000000000000000A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		F1000000000000000000000B /* MioWakeWordDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWakeWordDetectorTests.swift; sourceTree = "<group>"; };
 		F1000000000000000000000C /* MioSessionModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSessionModelsTests.swift; sourceTree = "<group>"; };
-		F1000000000000000000000D /* MioPhaseTwo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MioPhaseTwo.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		F1000000000000000000000E /* MioPhaseTwoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MioPhaseTwoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F1000000000000000000000D /* Mio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mio.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F1000000000000000000000E /* MioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F1000000000000000000000F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		F10000000000000000000010 /* MioContentModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioContentModels.swift; sourceTree = "<group>"; };
 		F10000000000000000000011 /* MioContentRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioContentRepository.swift; sourceTree = "<group>"; };
 		F10000000000000000000012 /* MioContentViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioContentViewModel.swift; sourceTree = "<group>"; };
-		F10000000000000000000013 /* PhaseTwoViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseTwoViews.swift; sourceTree = "<group>"; };
+		F10000000000000000000013 /* ContentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViews.swift; sourceTree = "<group>"; };
 		F10000000000000000000014 /* MioContentModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioContentModelsTests.swift; sourceTree = "<group>"; };
 		F10000000000000000000015 /* MioContentRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioContentRepositoryTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -82,26 +82,26 @@
 		710000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				710000000000000000000002 /* MioPhaseTwo */,
-				710000000000000000000005 /* MioPhaseTwoTests */,
+				710000000000000000000002 /* Mio */,
+				710000000000000000000005 /* MioTests */,
 				710000000000000000000006 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		710000000000000000000002 /* MioPhaseTwo */ = {
+		710000000000000000000002 /* Mio */ = {
 			isa = PBXGroup;
 			children = (
-				F10000000000000000000001 /* MioPhaseTwoApp.swift */,
+				F10000000000000000000001 /* MioApp.swift */,
 				F10000000000000000000002 /* ContentView.swift */,
 				F10000000000000000000003 /* MioViewModel.swift */,
 				F10000000000000000000012 /* MioContentViewModel.swift */,
-				F10000000000000000000013 /* PhaseTwoViews.swift */,
+				F10000000000000000000013 /* ContentViews.swift */,
 				710000000000000000000003 /* Models */,
 				710000000000000000000004 /* Services */,
 				F1000000000000000000000A /* Info.plist */,
 				F1000000000000000000000F /* PrivacyInfo.xcprivacy */,
 			);
-			path = MioPhaseTwo;
+			path = Mio;
 			sourceTree = "<group>";
 		};
 		710000000000000000000003 /* Models */ = {
@@ -126,7 +126,7 @@
 			path = Services;
 			sourceTree = "<group>";
 		};
-		710000000000000000000005 /* MioPhaseTwoTests */ = {
+		710000000000000000000005 /* MioTests */ = {
 			isa = PBXGroup;
 			children = (
 				F1000000000000000000000B /* MioWakeWordDetectorTests.swift */,
@@ -134,14 +134,14 @@
 				F10000000000000000000014 /* MioContentModelsTests.swift */,
 				F10000000000000000000015 /* MioContentRepositoryTests.swift */,
 			);
-			path = MioPhaseTwoTests;
+			path = MioTests;
 			sourceTree = "<group>";
 		};
 		710000000000000000000006 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				F1000000000000000000000D /* MioPhaseTwo.app */,
-				F1000000000000000000000E /* MioPhaseTwoTests.xctest */,
+				F1000000000000000000000D /* Mio.app */,
+				F1000000000000000000000E /* MioTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -149,9 +149,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A10000000000000000000001 /* MioPhaseTwo */ = {
+		A10000000000000000000001 /* Mio */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E10000000000000000000005 /* Build configuration list for PBXNativeTarget "MioPhaseTwo" */;
+			buildConfigurationList = E10000000000000000000005 /* Build configuration list for PBXNativeTarget "Mio" */;
 			buildPhases = (
 				910000000000000000000001 /* Sources */,
 				F20000000000000000000001 /* Frameworks */,
@@ -161,14 +161,14 @@
 			);
 			dependencies = (
 			);
-			name = MioPhaseTwo;
-			productName = MioPhaseTwo;
-			productReference = F1000000000000000000000D /* MioPhaseTwo.app */;
+			name = Mio;
+			productName = Mio;
+			productReference = F1000000000000000000000D /* Mio.app */;
 			productType = "com.apple.product-type.application";
 		};
-		A10000000000000000000002 /* MioPhaseTwoTests */ = {
+		A10000000000000000000002 /* MioTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E10000000000000000000008 /* Build configuration list for PBXNativeTarget "MioPhaseTwoTests" */;
+			buildConfigurationList = E10000000000000000000008 /* Build configuration list for PBXNativeTarget "MioTests" */;
 			buildPhases = (
 				910000000000000000000002 /* Sources */,
 				F20000000000000000000002 /* Frameworks */,
@@ -179,9 +179,9 @@
 			dependencies = (
 				D10000000000000000000001 /* PBXTargetDependency */,
 			);
-			name = MioPhaseTwoTests;
-			productName = MioPhaseTwoTests;
-			productReference = F1000000000000000000000E /* MioPhaseTwoTests.xctest */;
+			name = MioTests;
+			productName = MioTests;
+			productReference = F1000000000000000000000E /* MioTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -208,7 +208,7 @@
 					};
 				};
 			};
-			buildConfigurationList = E10000000000000000000000 /* Build configuration list for PBXProject "MioPhaseTwo" */;
+			buildConfigurationList = E10000000000000000000000 /* Build configuration list for PBXProject "Mio" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -222,8 +222,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A10000000000000000000001 /* MioPhaseTwo */,
-				A10000000000000000000002 /* MioPhaseTwoTests */,
+				A10000000000000000000001 /* Mio */,
+				A10000000000000000000002 /* MioTests */,
 			);
 		};
 /* End PBXProject section */
@@ -251,7 +251,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B10000000000000000000001 /* MioPhaseTwoApp.swift in Sources */,
+				B10000000000000000000001 /* MioApp.swift in Sources */,
 				B10000000000000000000002 /* ContentView.swift in Sources */,
 				B10000000000000000000003 /* MioViewModel.swift in Sources */,
 				B10000000000000000000004 /* MioSessionModels.swift in Sources */,
@@ -263,7 +263,7 @@
 				B1000000000000000000000D /* MioContentModels.swift in Sources */,
 				B1000000000000000000000E /* MioContentRepository.swift in Sources */,
 				B1000000000000000000000F /* MioContentViewModel.swift in Sources */,
-				B10000000000000000000010 /* PhaseTwoViews.swift in Sources */,
+				B10000000000000000000010 /* ContentViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -283,7 +283,7 @@
 /* Begin PBXTargetDependency section */
 		D10000000000000000000001 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = A10000000000000000000001 /* MioPhaseTwo */;
+			target = A10000000000000000000001 /* Mio */;
 			targetProxy = C10000000000000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -402,12 +402,12 @@
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = MioPhaseTwo/Info.plist;
+				INFOPLIST_FILE = Mio/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.2;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioPhaseOne;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -426,12 +426,12 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = MioPhaseTwo/Info.plist;
+				INFOPLIST_FILE = Mio/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.2;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioPhaseOne;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -455,13 +455,13 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioPhaseTwoTests;
+				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MioPhaseTwo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MioPhaseTwo";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Mio.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Mio";
 			};
 			name = Debug;
 		};
@@ -477,20 +477,20 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioPhaseTwoTests;
+				PRODUCT_BUNDLE_IDENTIFIER = se.eyvin.MioTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MioPhaseTwo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/MioPhaseTwo";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Mio.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Mio";
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		E10000000000000000000000 /* Build configuration list for PBXProject "MioPhaseTwo" */ = {
+		E10000000000000000000000 /* Build configuration list for PBXProject "Mio" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E10000000000000000000001 /* Debug */,
@@ -499,7 +499,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E10000000000000000000005 /* Build configuration list for PBXNativeTarget "MioPhaseTwo" */ = {
+		E10000000000000000000005 /* Build configuration list for PBXNativeTarget "Mio" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E10000000000000000000003 /* Debug */,
@@ -508,7 +508,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E10000000000000000000008 /* Build configuration list for PBXNativeTarget "MioPhaseTwoTests" */ = {
+		E10000000000000000000008 /* Build configuration list for PBXNativeTarget "MioTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E10000000000000000000006 /* Debug */,

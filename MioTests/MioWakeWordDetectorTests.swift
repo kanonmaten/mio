@@ -1,5 +1,5 @@
 import XCTest
-@testable import MioPhaseTwo
+@testable import Mio
 
 final class MioWakeWordDetectorTests: XCTestCase {
     func testDetectsMioAsAWord() {

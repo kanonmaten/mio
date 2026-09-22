@@ -1,74 +1,24 @@
-# Produktvision för Mio
+# Produktvision
 
-## Kort version
+Mio ska hjälpa en användare att fånga och ordna sin dag: lektioner, anteckningar, uppgifter, planer, uttryckliga minnen och senare sammanfattningar. En diskret vardagsassistent, inte en allmän studiechatbot.
 
-Mio ska vara en lugn och diskret personlig iPhone-assistent som hjälper en användare att fånga sin dag: lektioner, planer, saker att minnas, frågor och kvällens sammanfattning. Användaren ska alltid kunna se när Mio lyssnar, pausa eller stänga av funktionen och bestämma vad som får sparas eller skickas vidare.
+## Produktregler
 
-Mio ska inte kännas som en allmän chatbot. Den ska främst organisera det användaren själv har sagt eller hört under en aktiv, användarstartad session.
+- **Användaren styr:** tydlig lyssningsstatus, På/Av, paus och radering. När Mio är av används inte mikrofonen; manuellt innehåll fungerar fortfarande.
+- **Lokalt först:** transkription och Mio-detektion på telefonen. Inget sparat råljud och ingen ström av heldagsljud till molnet.
+- **Bekräfta före åtgärd:** framtida automatiska planer, uppgifter och minnen är förslag tills användaren godkänner dem. Kalenderposter skapas aldrig tyst.
+- **Diskret återkoppling:** vibration och kort fråga; inget oombett tal. Ja godkänner, Nej glömmer och Inte nu sparar en väntande fråga lokalt.
+- **Synliga minnen:** användaren kan granska, ändra och glömma. Ingen dold profilering eller påstådd kunskap om hur användaren känner.
+- **Begriplig integritet:** visa vad som sparas, exporteras och eventuellt skickas. Inspelning av andra kräver samtycke och att lokala regler följs.
 
-## Produktprinciper
+## Delar i appen
 
-1. **Kontroll först.** En tydlig På/Av-knapp och pauser på 30 minuter, 1 timme eller tills användaren startar igen.
-2. **Lokalt först.** Taligenkänning och enkel Mio-detektion sker på telefonen när det är möjligt.
-3. **Diskret.** Mio pratar inte oombedd. När uppmärksamhet behövs används i första hand vibration och en kort fråga.
-4. **Samtycke före moln-AI.** En fråga skickas till OpenAI först när användaren uttryckligen väljer **Ja**.
-5. **Minns bara med tydliga regler.** Användaren ska kunna se, ändra och glömma sparade minnen.
-6. **Inget låtsasvetande.** Mio får hjälpa användaren att se mönster men ska inte påstå sig veta exakt hur hon känner.
-7. **Integritet är en funktion.** Lyssningsstatus, radering, export och vad som lämnar telefonen ska vara begripliga.
+| Del | Nu i v0.2.0 | Senare |
+|---|---|---|
+| Mio | Lokal session, text, stödstatus, paus och stopp | Väntande frågor och bekräftade förslag |
+| Tidslinje | Manuella poster och sessioner | Redigerbar lektionsindelning |
+| Kalender | Lokala planer | Bekräftad systemkalenderintegration |
+| Anteckningar | Anteckningar, uppgifter och uttryckliga minnen | Förslag från godkänd lokal kontext |
+| Morgon | Lokal överblick | Alarm, morgonöversikt och kvällssammanfattning |
 
-## Önskad upplevelse
-
-Den långsiktiga appen har fem huvuddelar som nås från en enkel nederkant:
-
-- **Mio:** status, frågor, förslag och väntande bekräftelser.
-- **Tidslinje:** dagens lektioner, händelser och sammanhang i tidsordning.
-- **Kalender:** manuella poster och planer som Mio föreslår men aldrig sparar utan godkännande.
-- **Anteckningar:** skola, lektioner, idéer, viktigt, att göra, frågor och egna anteckningar.
-- **Alarm/morgon:** alarm och en kort morgonöversikt baserad på kalender och uttryckliga minnen.
-
-## Centrala funktioner
-
-### Dagens anteckningar
-
-- En aktiv Mio-session kan skapa lokal text och ordna den i tidsblock.
-- Lektioner ska senare kunna delas upp efter ämne och start/slut.
-- Viktiga uppgifter, läxor, prov och exempel ska kunna lyftas fram.
-- Allt ska även gå att skapa och redigera manuellt.
-
-### Planer och kalender
-
-- Direkta kommandon som “Mio, lägg in tandläkaren på tisdag klockan tre” ska skapa ett förslag.
-- Planer som råkar nämnas i ett vanligt sammanhang får högst bli ett förslag med **Ja/Nej**.
-- Ingen kalenderpost ska skapas tyst.
-
-### “Hej Mio” och frågor
-
-- Det fristående ordet **Mio** upptäcks lokalt.
-- Vid en fråga vibrerar telefonen och visar **Vill du ha svar nu?**
-- **Ja:** skicka just den godkända frågan och minsta nödvändiga sammanhang.
-- **Inte nu:** spara frågan lokalt till senare.
-- **Nej:** glöm den väntande frågan.
-
-### Uttryckliga minnen
-
-- Formuleringar som “Mio, kom ihåg att …” kan sparas som synliga minnen.
-- Minnen ska kunna listas, ändras och raderas.
-- Mio ska inte bygga en dold profil från allt som sägs.
-
-### Kväll och mående
-
-- Mio kan ställa frivilliga, enkla frågor om hur dagen kändes.
-- Kvällssammanfattningen kan samla lektioner, planer, viktiga saker och användarens egna måendeord.
-- Förslag inför nästa dag ska märkas som förslag, inte fakta.
-
-## När Mio är av
-
-När Mio är av får appen inte använda mikrofonen, skapa automatiska anteckningar, upptäcka planer eller ge automatiska förslag. Manuella anteckningar, kalender och alarm ska fortfarande fungera.
-
-## Avgränsningar
-
-- Mio är inte en ersättning för lärare, vårdpersonal eller professionell rådgivning.
-- Mio ska inte vara en allmän matte- eller studiechatbot.
-- Heldagsljud ska inte strömmas till OpenAI.
-- Appen ska inte försöka kringgå iOS begränsningar efter tvångsavslutning eller omstart.
-- Inspelning av andra personer kräver tydligt samtycke och att skolans, arbetsplatsens och lagens regler följs.
+Måendecheckar ska vara frivilliga och förslag tydligt märkta. Mio ersätter inte lärare, vård eller professionell rådgivning. Funktionerna planeras i [roadmapen](ROADMAP.md); faktisk verifiering finns i [status](STATUS.md).

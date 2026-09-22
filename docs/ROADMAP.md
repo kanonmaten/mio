@@ -1,90 +1,33 @@
-# Roadmap
+# Versioner och roadmap
 
-Roadmapen är en prioriteringsordning, inte ett löfte om datum.
+Versioner beskriver produktens omfattning. Ett versionsnummer är inte ett testresultat eller ett löfte om datum.
 
-## Fas 1 – teknisk genomförbarhet
+| Version | Innehåll | Läge |
+|---|---|---|
+| v0.1.0 | Lokal transkription, Mio-detektion, sessioner, paus och diagnostik | Historisk prototyp; kort telefonprov godkänt, långtest öppna |
+| **v0.2.0** | Lokal manuell MVP: fem flikar, poster, sökning, rättningar och export | **Aktuell utvecklingsversion, ej släppt** |
+| v0.3.0 | Lokala frågor och förslag med **Ja / Nej / Inte nu**, vibration och förhandsgranskning | Planerad |
+| v0.4.0 | Kalenderintegration, alarm/notiser, morgonöversikt och kvällssammanfattning | Planerad; inom iOS begränsningar |
+| v0.5.0 | Begränsade OpenAI-svar via server efter uttryckligt godkännande | Planerad; kräver separat integrationsbeslut |
+| v1.0.0 | Tillförlitlig privat vardagsapp med accepterad omfattning | Inget datum; kräver dokumenterad stabilitet, batteritid och datakontroll |
 
-Status: **kort rökprov godkänt på revisionen från 20 augusti 2026; långt test återstår**.
+Tidigare fas 1–5 motsvarar nu v0.1.0–v0.5.0. Det är en namnkonvention för historik och planering, inte retroaktiva releaser.
 
-Klart:
+## Versionsregler
 
-- GitHub Actions kompilerar en osignerad arm64-IPA med Xcode 26.
-- SideStore installerar appen på iPhone 13.
-- `DictationTranscriber` fungerar lokalt med `sv_SE`.
-- Lokal Mio-detektion fungerar i förgrunden och i ett kort bakgrundsintervall.
-- Paus tills manuell start stängde mikrofonflödet i korttestet.
-- JSON-export med tidsstämplar, diagnostik och batteriprover fungerar.
+- `0.MINOR.0`: ny sammanhängande funktionalitet under utveckling. `0.MINOR.PATCH`: rättningar inom samma omfattning.
+- `1.0.0`: den överenskomna vardagsprodukten är verifierad. Därefter höjs major vid avsiktligt inkompatibla ändringar, minor för funktioner och patch för rättningar.
+- Skriv `v0.2.0` i dokument och taggar, `0.2.0` i Xcodes `MARKETING_VERSION`.
+- `CURRENT_PROJECT_VERSION` är ett separat byggnummer; höj inför en ny distribuerad build. Lagringens `schemaVersion` ändras bara när dataformatet kräver det.
+- Projektet heter alltid `Mio`. Byt inte bundle identifier eller lagringskatalog vid versionshöjning.
+- För ändringar i [CHANGELOG](../CHANGELOG.md) under **ej släppt**. Sätt släppdatum och skapa tagg först efter verifiering och uttrycklig begäran om publicering.
 
-Återstår innan fas 1 kan stängas:
+## Nästa steg: verifiera v0.2.0
 
-- minst 10 minuter med låst skärm och de två planerade testfraserna;
-- minst 60 minuters batteritest utan laddare, därefter 3–4 timmar om utfallet ser rimligt ut;
-- avbrottstest med alarm eller samtal;
-- verifiering av manuell fortsättning samt tidsstyrd paus;
-- appomstart/persistens, radering och haptisk signal;
-- transkriptionskvalitet med känt facit i tyst och kontrollerat bullrig miljö.
+1. Kör stabilt GitHub Actions-jobb: Release, XCTest och validerad IPA. Granska previewjobbet separat.
+2. Exportera befintlig data privat; installera över Mio med samma appidentitet och signeringskonto.
+3. Kör [test A–M](TESTPLAN_V0_2.md): uppgradering, manuellt innehåll, persistens, export, radering, talflöde och tillgänglighet.
+4. Kör kvarvarande [transkriptionsprov](TESTPLAN_V0_1.md): låst skärm ≥10 min, batteri ≥60 min, avbrott, pauser och kvalitet. Prova 3–4 timmar först efter ett rimligt timtest.
+5. Dokumentera resultat för exakt commit och enhet i [status](STATUS.md).
 
-Beslutspunkt för heldagslyssningen: fortsätt endast om bakgrundsstabilitet och batteriförbrukning är rimliga på den riktiga telefonen.
-
-Fas 2:s lokala, manuella delar får utvecklas parallellt eftersom de kan provas utan att anta att heldagslyssningen är godkänd. Det beslutet stänger inte fas 1 och gör inte det korta rökprovet till ett långtest.
-
-## Fas 2 – lokal, manuell MVP
-
-Status: **implementerad i lokal arbetskopia; ännu inte Xcode-kompilerad, Actions-byggd eller iPhone-verifierad**.
-
-Implementerat i källkod:
-
-- fem flikar: Mio, Tidslinje, Kalender, Anteckningar och Morgon;
-- gemensam lokal datamodell för tidslinjepost, anteckning, uppgift, plan och uttryckligt minne;
-- skapa, redigera, söka, slutföra uppgift och radera manuellt innehåll;
-- lokal sessionsindelning med tydlig start och stopp samt redigerbar titel och anteckning efter stopp;
-- korrigerad visningstext som bevarar originaltranskription och ljudtider;
-- valfri `sessionID`-koppling från en manuell post till en session;
-- tekniska projekt-, mapp-, target-, scheme-, produkt- och artifactnamn under `MioPhaseTwo`;
-- separat versionsmärkt `MioPhaseTwo/content-v1.json` och `MioPhaseTwo/sessions.json`, med migrering från den äldre sessionssökvägen;
-- gemensam versionsmärkt JSON-export;
-- en gemensam lokal `SpeechAnalyzer` som kör `SpeechTranscriber` när dess svenska asset är installerad och annars förbereder `DictationTranscriber` direkt, utan att sessionsstarten väntar på hämtning;
-- ingen OpenAI-, EventKit- eller alarmintegration.
-
-Den säkra statiska Windows-kontrollen är genomförd. Workflowen är uppdaterad så att det stabila Xcode 26.6-jobbet kompilerar, kör XCTest på den senaste tillgängliga iOS 26-simulatorn och ensamt producerar IPA:n. En separat, icke blockerande `xcode-27`-previewkontroll kompilerar Release och kör XCTest på iOS 27. Inget av jobben har ännu körts för den aktuella revisionen.
-
-Bundle identifier förblir avsiktligt `se.eyvin.MioPhaseOne` så att fas 2 kan installeras över den befintliga appen och migrera dess lokala data.
-
-Återstår innan fas 2 kan markeras verifierad:
-
-- Xcode-kompilering och faktisk XCTest-körning;
-- grön Release-build och validerad IPA i GitHub Actions;
-- installation över befintlig app och migreringskontroll på iPhone 13;
-- alla testfall i `TESTPLAN_FAS_2.md`;
-- regressionsprov av fas 1:s mikrofon-, paus- och transkriptionsflöde på den nya IPA:n.
-
-Den icke blockerande Xcode 27-previewkontrollen bör köras när GitHubs previewrunner är tillgänglig, men är ett framåtblickande kompatibilitetsbesked och inte en spärr för den stabila iOS 26-IPA:n.
-
-## Fas 3 – diskret Mio-flöde
-
-- Förbättrad lokal Mio-detektion och väntande fråga.
-- Vibration samt **Ja / Nej / Inte nu**.
-- Lokala förslag till plan, uppgift eller minne med obligatorisk bekräftelse.
-- Tydlig granskningsvy över vad som ska sparas eller skickas.
-
-## Fas 4 – kalender, alarm och sammanfattningar
-
-- EventKit-baserad kalenderintegration med systembehörighet.
-- Lokala notiser/alarm inom de gränser iOS tillåter.
-- Morgonöversikt och kvällssammanfattning.
-- Försiktig lektionsindelning och kategorisering med redigerbara resultat.
-
-## Fas 5 – begränsade OpenAI-svar
-
-- En liten server som äger API-nyckeln.
-- Endast uttryckligen godkända frågor.
-- Minsta nödvändiga kontext och `store: false` där det stöds.
-- Kostnadsgränser, loggning och tydlig radering.
-- Pilot med konstgjorda data före verklig privat dagskontext.
-
-## Senare eller endast efter nytt beslut
-
-- Mer avancerad automatisk lektionssegmentering.
-- Långsiktig mönsteranalys.
-- Betald Apple Developer-distribution/TestFlight.
-- Lagring eller molnsynkronisering av råljud; detta är inte planerat.
+Manuella funktioner kan verifieras även om heldagslyssningen ännu inte är godkänd. v1.0.0 får däremot inte lova heldagslyssning utan verklig evidens. Råljudslagring och molnsynk av ljud ingår inte i planen.

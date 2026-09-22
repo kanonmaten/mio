@@ -17,3 +17,4 @@ Mio-lokal-export-*.json
 *.key
 .env
 .env.*
+Mio-session-*.json
