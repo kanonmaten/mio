@@ -8,12 +8,12 @@ Huvudvägen är **GitHub Actions → osignerad IPA → SideStore**. Koden kan re
 
 1. Granska och pusha den avsedda commiten enligt [arbetsflödet](WORKFLOW.md).
 2. Öppna repots **Actions → Bygg Mio IPA → Run workflow** och välj branch.
-3. Workflowen är konfigurerad för stabil Xcode 26.6 på `macos-26`. Det jobbet måste klara Release, XCTest och IPA-validering. Xcode 27-preview är separat och icke blockerande; det kan avmarkeras om runnern är otillgänglig.
+3. Workflowen kör ett jobb på GitHubs `xcode-27`-runner: Release med iOS 27 SDK, XCTest på iOS 27-simulator och IPA-validering. Runnern är en offentlig förhandsversion; kontrollera att jobbet faktiskt startar och slutförs. Bygget kontrollerar att appens lägsta iOS-version är 26.0.
 4. Hämta artifacten **Mio-IPA**. Packa upp artifact-ZIP en gång; behåll själva IPA:n orörd. Innehåll: `Mio-unsigned.ipa` och `Mio-buildinfo.txt`. Artifacts sparas enligt workflowen i 14 dagar.
 5. Behåll bygginformationen med commit, körnings-ID och SHA-256. Flytta IPA:n till Filer på iPhone via en betrodd privat filväg.
 6. **Exportera viktig befintlig Mio-data privat före uppdatering. Radera inte appen.** Använd samma signeringskonto och bundle identifier `se.eyvin.MioPhaseOne` för uppgradering på plats.
 7. Anslut iPhone till Wi-Fi och LocalDevVPN. Öppna **SideStore → My Apps → +** och välj IPA:n.
-8. Öppna Mio och kör [test A–M](TESTPLAN_V0_2.md), med uppgradering och bevarade sessioner först. Kör därefter öppna [transkriptions- och långtest](TESTPLAN_V0_1.md).
+8. Öppna Mio och kör [test A–M](TESTPLAN_V0_2.md), med uppgradering och bevarade sessioner först. Prova IPA:n på den iOS-version som ska användas; iOS 27-bygge och simulatorresultat bevisar inte funktion på iOS 26 eller 27 i fysisk telefon. Kör därefter öppna [transkriptions- och långtest](TESTPLAN_V0_1.md).
 
 Byggsystemet behöver inga Apple-uppgifter eller API-nycklar. `unsigned` betyder att SideStore sköter personlig signering. Ett grönt simulatorjobb verifierar inte mikrofon, bakgrund eller fysisk iPhone.
 

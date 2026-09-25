@@ -21,6 +21,7 @@ Använd endast följande resultat per test:
 4. Installera över den befintliga appen med samma Apple-konto och bundle identifier. Radera inte appen inför migreringstestet.
 5. Använd endast syntetiska poster och röster från personer som uttryckligen samtycker.
 6. Ha wifi för den separata installationen av `SpeechTranscriber`-modellen. Övriga manuella tester ska även köras offline.
+7. Om samma IPA ska användas på både iOS 26 och 27, dokumentera installation och korta kärnflöden på båda versionerna separat. Ett grönt iOS 27-simulatorjobb ersätter inte telefonprov på någon av versionerna.
 
 ## Test A — uppgradering och första start
 

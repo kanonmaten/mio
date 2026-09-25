@@ -24,7 +24,7 @@ Tidigare fas 1–5 motsvarar nu v0.1.0–v0.5.0. Det är en namnkonvention för 
 
 ## Nästa steg: verifiera v0.2.0
 
-1. Kör stabilt GitHub Actions-jobb: Release, XCTest och validerad IPA. Granska previewjobbet separat.
+1. Kör GitHub Actions-jobbet på `xcode-27`: Release, XCTest på iOS 27-simulator och validerad IPA. Kontrollera runnerns tillgänglighet och dokumentera utfallet för exakt commit.
 2. Exportera befintlig data privat; installera över Mio med samma appidentitet och signeringskonto.
 3. Kör [test A–M](TESTPLAN_V0_2.md): uppgradering, manuellt innehåll, persistens, export, radering, talflöde och tillgänglighet.
 4. Kör kvarvarande [transkriptionsprov](TESTPLAN_V0_1.md): låst skärm ≥10 min, batteri ≥60 min, avbrott, pauser och kvalitet. Prova 3–4 timmar först efter ett rimligt timtest.

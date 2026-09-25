@@ -16,7 +16,7 @@ GitHub Desktop kan användas för samma Git-steg. Ingen Windows-specifik mappsö
 
 Följ [installationsguiden](INSTALLATION.md): pushad commit → manuellt Actions-bygge → validerad IPA → SideStore → fysiskt telefonprov. Linux kan redigera koden men inte köra Xcode.
 
-Rapportera alltid **källkod → statiska kontroller → Xcode/XCTest → IPA → installation → telefonprov** separat. Ange commit och enhet när ett testresultat registreras. En version eller ett grönt previewjobb räcker inte som bevis för fungerande app.
+Rapportera alltid **källkod → statiska kontroller → Xcode/XCTest → IPA → installation → telefonprov** separat. Ange commit och enhet när ett testresultat registreras. En version eller ett grönt simulatorjobb räcker inte som bevis för fungerande app.
 
 ## Avsluta
 

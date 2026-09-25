@@ -28,7 +28,7 @@ Privat iPhone-app för svensk lokal transkription, anteckningar och planering. B
 
 Öppna `Mio.xcodeproj`, välj schemat **Mio**. Appkod ligger i `Mio/`, XCTest i `MioTests/` och molnbygget i `.github/workflows/build-unsigned-ipa.yml`.
 
-Linux, Windows och den äldre Monterey-Macen används för redigering och Git. iOS-kompilering och XCTest kräver en kompatibel Mac med Xcode eller GitHub Actions. Workflowen konfigurerar Xcode 26.6 för IPA och ett separat, icke blockerande Xcode 27-previewjobb; runnernas tillgänglighet måste kontrolleras vid körning.
+Linux, Windows och den äldre Monterey-Macen används för redigering och Git. iOS-kompilering och XCTest kräver en kompatibel Mac med Xcode eller GitHub Actions. Workflowen använder GitHubs `xcode-27`-runner för Release, XCTest och osignerad IPA i samma jobb. Runnern är en offentlig förhandsversion; kontrollera dess tillgänglighet och faktiska resultat vid körning. Appens lägsta iOS-version är fortfarande 26.0.
 
 ## Integritet och kompatibilitet
 

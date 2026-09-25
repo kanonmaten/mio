@@ -11,7 +11,12 @@ Användarsynliga ändringar och kompatibilitet per version. Versioner följer `v
 - Koppla en post till en session. Lägg titel, anteckning och texträttningar på avslutade sessioner utan att ändra originalbevis.
 - Separat versionsmärkt innehållslagring och gemensam JSON-export.
 - Synlig status och separat installation av svensk `SpeechTranscriber`-resurs; direkt `DictationTranscriber`-fallback när resursen saknas.
-- XCTest för modeller, lagring, migrering, export och Mio-detektion samt separat Xcode 27-previewkontroll.
+- XCTest för modeller, lagring, migrering, export och Mio-detektion.
+
+### Byggflöde 2026-09-25
+
+- Ersatt separata Xcode 26.6- och Xcode 27-jobb med ett Xcode 27-jobb som bygger Release, kör XCTest på iOS 27-simulator och skapar osignerad IPA.
+- Bygget kontrollerar iOS 27 SDK, appens lägsta iOS-version 26.0 och oförändrad bundle identifier i den byggda appen. iOS 26 och 27 behöver fortfarande provas på fysisk telefon.
 
 ### Städning 2026-09-22
 

@@ -18,3 +18,6 @@ Mio-lokal-export-*.json
 .env
 .env.*
 Mio-session-*.json
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

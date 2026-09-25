@@ -1,6 +1,6 @@
 # Bygg- och teststatus
 
-Senast uppdaterad: 2026-09-22. Aktuell utvecklingsversion: **v0.2.0, ej släppt**.
+Senast uppdaterad: 2026-09-25. Aktuell utvecklingsversion: **v0.2.0, ej släppt**.
 
 Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskriver innehållet, [roadmapen](ROADMAP.md) beskriver planerna och testplanerna beskriver hur beteendet verifieras.
 
@@ -8,9 +8,8 @@ Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskr
 |---|---|---|
 | Källkod | Transkriptionsprototyp | Lokal manuell MVP och namn-/dokumentstädning |
 | Statisk kontroll | Historiskt godkänd | Se lokal kontroll nedan |
-| Xcode / Release / IPA | Historiskt byggd i Actions | Ingen verifierad körning för denna revision |
-| XCTest | Ingen dokumenterad körning | Testkod finns; ej körd här |
-| Xcode 27-preview | Ej körd | Konfigurerad, ej verifierad här |
+| Xcode / Release / IPA | Historiskt byggd i Actions | Ett `xcode-27`-jobb är konfigurerat; ingen verifierad körning för denna revision |
+| XCTest | Ingen dokumenterad körning | iOS 27-simulator är konfigurerad; testkod finns men är ej körd för denna revision |
 | Installation | SideStore på iPhone 13 | Ej verifierad för denna revision |
 | Telefonprov | 2 min 30 s; begränsad evidens | Test A–M återstår |
 | Långtest | Återstår | Återstår även som regression |
@@ -20,6 +19,12 @@ Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskr
 Godkänt på Linux 2026-09-22: lokala dokumentlänkar; Xcode-projektets filreferenser och Swift-källfiler i targets; scheme och produktnamn; plist/XML; workflow-YAML och inbäddad Bash-syntax; versionsfält och oförändrad appidentitet; bevarade lagringsvägar; nya och äldre exportprefix i radering och Git-ignore; oförändrade historiska telefonmätvärden; whitespace i diff och nya filer.
 
 Detta är statisk kontroll, inte Swift-kompilering eller XCTest. Inga iPhone-resultat har tillkommit.
+
+## Lokal kontroll av Xcode 27-flödet
+
+Godkänt på Linux 2026-09-25: workflow-YAML kan parsas och innehåller exakt ett `xcode-27`-jobb; alla inbäddade Bash-steg klarar syntaxkontroll; simulatorfiltret väljer iOS 27 framför iOS 26 i ett kontrollerat JSON-exempel; Xcode-projektet behåller lägsta iOS-version 26.0 och bundle identifier `se.eyvin.MioPhaseOne`; `git diff --check` är utan anmärkning.
+
+Workflowen kontrollerar den byggda appens iOS-minimum och bundle identifier innan IPA:n laddas upp. Detta är ännu inte provat i GitHub Actions. Varken IPA eller funktion på iOS 26/27 är verifierad av den lokala kontrollen.
 
 ## v0.2.0: tester som återstår
 

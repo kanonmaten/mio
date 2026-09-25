@@ -16,7 +16,7 @@ Gällande beslut samlade på ett ställe. [Ändringsloggen](../CHANGELOG.md) bes
 | Resurs före modulstart | `SpeechTranscriber` endast efter installerad svensk assetstatus; separat installationsknapp | 2026-08-24 |
 | Omedelbar fallback | Ingen modellhämtning vid sessionsstart; saknad resurs ger `DictationTranscriber`. Förberedelsefel ger ny analyzer | 2026-08-24 |
 | Inga externa integrationer i v0.2.0 | Ingen OpenAI, EventKit, systemalarm eller konto; Kalender och Morgon är lokala vyer | 2026-08-24 |
-| Stabilt bygge och separat preview | Konfigurerad Xcode 26.6-väg producerar IPA; Xcode 27-preview är icke blockerande och producerar ingen IPA | 2026-08-24 |
+| Gemensamt Xcode 27-bygge | Ett jobb på `xcode-27` är konfigurerat för Release, XCTest och osignerad IPA med iOS 27 SDK och lägsta iOS-version 26.0 | 2026-09-25 |
 | Beständiga namn och versioner | Projektet heter Mio; produktmilstolpar använder v0.x.y enligt roadmapen | 2026-09-22 |
 
 ## Kompatibilitet vid namnbytet

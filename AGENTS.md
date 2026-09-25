@@ -30,6 +30,6 @@ Läs [README](README.md), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMA
 
 ## Verifiering och överlämning
 
-Linux/Windows kan inte bygga iOS-appen. Workflowen konfigurerar Xcode 26.6 som stabil bygg-/test-/IPA-miljö och Xcode 27 som separat icke blockerande preview utan IPA. Kontrollera faktisk runnerstatus när ett bygge ska köras. SideStore signerar IPA:n lokalt.
+Linux/Windows kan inte bygga iOS-appen. Workflowen använder GitHubs `xcode-27`-runner för Release, XCTest och osignerad IPA i ett jobb. Runnern är en offentlig förhandsversion; kontrollera faktisk runnerstatus och byggresultat när ett bygge körs. SideStore signerar IPA:n lokalt.
 
 Kör relevanta säkra statiska kontroller. Rapportera vad som ändrats, vad som faktiskt testats och nästa enhetsprov. Påstå aldrig att en revision är kompilerad, installerad eller telefonverifierad utan evidens för just den revisionen.

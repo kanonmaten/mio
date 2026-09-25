@@ -4,12 +4,6 @@ run-name: "Bygg Mio IPA #${{ github.run_number }}"
 
 on:
   workflow_dispatch:
-    inputs:
-      check_ios_27:
-        description: Kör även den icke blockerande Xcode 27-previewkontrollen
-        required: true
-        default: true
-        type: boolean
 
 permissions:
   contents: read
@@ -20,12 +14,12 @@ concurrency:
 
 jobs:
   build:
-    name: Xcode 26.6 stabil – bygg, test och IPA
-    runs-on: macos-26
+    name: Xcode 27 – bygg, test och IPA
+    runs-on: xcode-27
     timeout-minutes: 30
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
-      EXPECTED_IOS_MAJOR: "26"
+      EXPECTED_IOS_MAJOR: "27"
+      MINIMUM_IOS_VERSION: "26.0"
 
     steps:
       - name: Hämta projektet
@@ -37,11 +31,12 @@ jobs:
         run: |
           set -euo pipefail
           sw_vers
+          xcode-select -p
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
           XCODE_VERSION="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
           IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
-          test "$XCODE_VERSION" = "26.6"
+          test "${XCODE_VERSION%%.*}" = "27"
           test "${IOS_SDK_VERSION%%.*}" = "$EXPECTED_IOS_MAJOR"
 
       - name: Kontrollera projektfiler
@@ -146,6 +141,8 @@ jobs:
           test -d "$APP_PATH"
           test -x "$APP_PATH/Mio"
           test -f "$APP_PATH/PrivacyInfo.xcprivacy"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PATH/Info.plist")" = "$MINIMUM_IOS_VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")" = "se.eyvin.MioPhaseOne"
 
           rm -rf "$RUNNER_TEMP/Payload"
           mkdir -p "$RUNNER_TEMP/Payload"
@@ -163,6 +160,7 @@ jobs:
             echo "Mio – osignerad molnbyggnad"
             /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist" | sed 's/^/Version: /'
             /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist" | sed 's/^/Build: /'
+            /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PATH/Info.plist" | sed 's/^/Minimum iOS: /'
             echo "GitHub run: $GITHUB_RUN_ID"
             echo "Commit: $GITHUB_SHA"
             sw_vers -productVersion | sed 's/^/macOS: /'
@@ -182,125 +180,3 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
-
-  ios-27-preview:
-    name: Xcode 27 preview – kompatibilitetskontroll
-    if: ${{ inputs.check_ios_27 }}
-    runs-on: xcode-27
-    continue-on-error: true
-    timeout-minutes: 30
-    env:
-      EXPECTED_IOS_MAJOR: "27"
-
-    steps:
-      - name: Hämta projektet
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Visa och kontrollera previewmiljön
-        run: |
-          set -euo pipefail
-          sw_vers
-          xcode-select -p
-          xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
-          XCODE_VERSION="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
-          IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
-          test "${XCODE_VERSION%%.*}" = "27"
-          test "${IOS_SDK_VERSION%%.*}" = "$EXPECTED_IOS_MAJOR"
-
-      - name: Kontrollera projektfiler
-        run: |
-          set -euo pipefail
-          test -f Mio.xcodeproj/project.pbxproj
-          test -f Mio/Info.plist
-          test -f Mio/PrivacyInfo.xcprivacy
-          test -f Mio/Models/MioContentModels.swift
-          test -f Mio/Services/MioContentRepository.swift
-          test -f Mio/ContentViews.swift
-          plutil -lint Mio/Info.plist
-          plutil -lint Mio/PrivacyInfo.xcprivacy
-
-      - name: Kompilera Release med Xcode 27
-        run: |
-          set -euo pipefail
-          xcodebuild \
-            -project Mio.xcodeproj \
-            -scheme Mio \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "$RUNNER_TEMP/PreviewDerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY='' \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            ONLY_ACTIVE_ARCH=NO \
-            build
-
-      - name: Kompilera enhetstester med Xcode 27
-        run: |
-          set -euo pipefail
-          xcodebuild \
-            -project Mio.xcodeproj \
-            -scheme Mio \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$RUNNER_TEMP/PreviewTestDerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            ONLY_ACTIVE_ARCH=NO \
-            build-for-testing
-
-      - name: Kör enhetstester på iOS 27-preview
-        run: |
-          set -euo pipefail
-          command -v jq
-          SIMULATOR_UDID="$(
-            xcrun simctl list devices available --json |
-              jq -r --argjson major "$EXPECTED_IOS_MAJOR" '[
-                .devices
-                | to_entries[]
-                | .key as $runtime
-                | select($runtime | test("\\.SimRuntime\\.iOS-[0-9-]+$"))
-                | .value[]
-                | select(.isAvailable == true and (.name | startswith("iPhone")))
-                | {
-                    version: (
-                      $runtime
-                      | capture("iOS-(?<version>[0-9-]+)$").version
-                      | split("-")
-                      | map(tonumber)
-                    ),
-                    udid: .udid
-                  }
-                | select(.version[0] == $major)
-              ]
-              | sort_by(.version)
-              | reverse
-              | .[0].udid // empty'
-          )"
-          if [[ -z "$SIMULATOR_UDID" ]]; then
-            echo "::error::Ingen tillgänglig iPhone-simulator för iOS ${EXPECTED_IOS_MAJOR}.x hittades."
-            xcrun simctl list devices available
-            exit 1
-          fi
-          echo "Vald simulator: $SIMULATOR_UDID"
-          xcrun simctl boot "$SIMULATOR_UDID" || true
-          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
-          trap 'xcrun simctl shutdown "$SIMULATOR_UDID" || true' EXIT
-          xcodebuild \
-            -project Mio.xcodeproj \
-            -scheme Mio \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-            -derivedDataPath "$RUNNER_TEMP/PreviewTestDerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            ONLY_ACTIVE_ARCH=NO \
-            test-without-building
