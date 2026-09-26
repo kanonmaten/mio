@@ -14,6 +14,7 @@ Efter användarbeslut 2026-09-25 byggs hela produkten tillsammans. Detta är en 
 - Nytt separat assistantlager; export schema 2 med bakåtkompatibel avkodning. Total radering omfattar nya lager, systemåtgärder och AI-konfiguration med gemensam skrivspärr.
 - Nya XCTest-fall, serverns mocktester, portabel projektkontroll samt användar- och helhetstestguide.
 - Ny appikon med standard-, mörk och tonad variant samt redigerbara SVG-original i `design/`.
+- Kalendereditorns delegate för över resultatet till huvudaktorn innan SwiftUI-tillstånd ändras.
 
 Efter uppdaterat användarbeslut 2026-09-26 används appidentiteten `app.mio.assistant` och lagring under `Mio`; gammal fasmigrering har tagits bort. Första telefonprov sker på iPhone 16 Pro, senare iPhone 13. Native Liquid Glass tillagt i sessionskontrollerna med systemnavigation, semantiska läsytor och stöd för minskad rörelse. Användaren har godkänt commit, push och IPA-bygge; ingen servertjänst driftsätts och ingen release taggas. Faktiskt verifieringsläge dokumenteras i [status](docs/STATUS.md).
 

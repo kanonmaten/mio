@@ -36,9 +36,14 @@ struct CalendarEventComposer: UIViewControllerRepresentable {
 
         init(parent: CalendarEventComposer) { self.parent = parent }
 
-        func eventEditViewController(_ controller: EKEventEditViewController, didCompleteWith action: EKEventEditViewAction) {
-            parent.onCompletion(action == .saved)
-            parent.dismiss()
+        nonisolated func eventEditViewController(_ controller: EKEventEditViewController, didCompleteWith action: EKEventEditViewAction) {
+            let didSave = action == .saved
+            // The delegate requirement is nonisolated; only the outcome crosses to UI state.
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.parent.onCompletion(didSave)
+                self.parent.dismiss()
+            }
         }
     }
 }
