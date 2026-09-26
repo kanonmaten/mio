@@ -5,6 +5,8 @@ struct ContentView: View {
     @Bindable var model: MioViewModel
     @Bindable var contentModel: MioContentViewModel
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(MioAssistantViewModel.self) private var assistant
+    @State private var maintenance = MioMaintenanceState.shared
 
     var body: some View {
         TabView {
@@ -20,16 +22,38 @@ struct ContentView: View {
             NotesTabView(contentModel: contentModel, sessionModel: model)
                 .tabItem { Label("Anteckningar", systemImage: "note.text") }
 
-            MorningTabView(contentModel: contentModel)
+            MorningTabView(contentModel: contentModel, sessionModel: model)
                 .tabItem { Label("Morgon", systemImage: "sunrise") }
         }
+        .tint(.indigo)
+        .environment(maintenance)
+        .disabled(maintenance.isDeleting)
+        .overlay {
+            if maintenance.isDeleting {
+                ProgressView("Raderar lokal data…")
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            }
+        }
         .task {
-            await model.bootstrap()
             await contentModel.bootstrap()
+            await assistant.bootstrap()
+            let assistantModel = assistant
+            let maintenanceState = maintenance
+            model.onFinalizedTranscript = { [weak assistantModel, weak maintenanceState] session in
+                Task { @MainActor in
+                    guard maintenanceState?.isDeleting == false else { return }
+                    _ = await assistantModel?.detectSuggestions(in: session)
+                }
+            }
+            await model.bootstrap()
         }
         .onChange(of: scenePhase) { _, newPhase in
             model.handleScenePhase(newPhase)
         }
+        .onChange(of: assistant.suggestions) { _, _ in contentModel.exportURL = nil }
+        .onChange(of: assistant.lessons) { _, _ in contentModel.exportURL = nil }
+        .onChange(of: model.allSessions) { _, _ in contentModel.exportURL = nil }
     }
 }
 
@@ -37,6 +61,8 @@ private struct MioTabView: View {
     @Bindable var model: MioViewModel
     @Bindable var contentModel: MioContentViewModel
     @State private var showDeleteConfirmation = false
+    @Environment(MioAssistantViewModel.self) private var assistant
+    @Environment(MioMaintenanceState.self) private var maintenance
 
     var body: some View {
         NavigationStack {
@@ -44,6 +70,7 @@ private struct MioTabView: View {
                 LazyVStack(spacing: 16) {
                     StatusHeader(model: model)
                     ControlsCard(model: model)
+                    AssistantHubView(contentModel: contentModel, sessionModel: model)
 
                     if let errorMessage = model.errorMessage {
                         ErrorCard(message: errorMessage, openSettings: model.openAppSettings)
@@ -51,16 +78,23 @@ private struct MioTabView: View {
                     if let errorMessage = contentModel.errorMessage {
                         ErrorCard(message: errorMessage, openSettings: {})
                     }
+                    if let errorMessage = assistant.errorMessage {
+                        ErrorCard(message: errorMessage, openSettings: {})
+                    }
 
-                    CapabilityCard(model: model)
-                    PrivacyCard()
+                    DisclosureGroup("Telefonens stöd och integritet") {
+                        CapabilityCard(model: model)
+                        PrivacyCard()
+                    }
 
                     if let session = model.currentSession {
                         LiveTranscriptCard(model: model, session: session)
-                        SessionStatisticsCard(model: model, session: session)
-                        EvidenceCard(session: session)
                         TranscriptCard(session: session)
-                        DiagnosticCard(session: session)
+                        DisclosureGroup("Sessionsdetaljer och diagnostik") {
+                            SessionStatisticsCard(model: model, session: session)
+                            EvidenceCard(session: session)
+                            DiagnosticCard(session: session)
+                        }
                     } else {
                         FirstRunCard()
                     }
@@ -71,11 +105,12 @@ private struct MioTabView: View {
                         showDeleteConfirmation: $showDeleteConfirmation
                     )
                 }
+                .frame(maxWidth: 680)
                 .padding()
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("Mio")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .confirmationDialog(
                 "Radera all lokal Mio-data?",
                 isPresented: $showDeleteConfirmation,
@@ -83,20 +118,43 @@ private struct MioTabView: View {
             ) {
                 Button("Radera permanent", role: .destructive) {
                     Task {
-                        await model.deleteAllData()
-                        await contentModel.deleteAllData()
+                        await deleteEverything()
                     }
                 }
                 Button("Avbryt", role: .cancel) {}
             } message: {
-                Text("Sessioner, tidsstämplad text, manuella poster, batterimätningar och händelseloggar tas bort från telefonen.")
+                Text("Sessioner, poster, förslag, lektioner och AI-inställningar raderas. Mios alarm och notiser avbryts. Redan delade filer och kopior i Apple Kalender finns kvar där.")
             }
         }
+    }
+
+    private func deleteEverything() async {
+        guard !maintenance.isDeleting else { return }
+        guard maintenance.activeWrites == 0 else {
+            contentModel.errorMessage = "Vänta tills den pågående ändringen är sparad och försök radera igen."
+            return
+        }
+        maintenance.isDeleting = true
+        defer { maintenance.isDeleting = false }
+        guard await MioSystemServices.shared.removeAll() else {
+            contentModel.errorMessage = MioSystemServices.shared.errorMessage ?? "Kunde inte avbryta Mios alarm. Försök igen."
+            return
+        }
+        do { try MioCloudSettings.reset() } catch {
+            contentModel.errorMessage = "Kunde inte radera AI-inställningarna: \(error.localizedDescription)"
+            return
+        }
+        await model.deleteAllData()
+        guard model.errorMessage == nil else { return }
+        await contentModel.deleteAllData()
+        guard contentModel.errorMessage == nil else { return }
+        _ = await assistant.deleteAllData()
     }
 }
 
 private struct StatusHeader: View {
     let model: MioViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 12) {
@@ -107,11 +165,12 @@ private struct StatusHeader: View {
                 Image(systemName: statusSymbol)
                     .font(.system(size: 38, weight: .semibold))
                     .foregroundStyle(statusColor)
-                    .symbolEffect(.pulse, isActive: model.runState == .listening)
+                    .symbolEffect(.pulse, isActive: model.runState == .listening && !reduceMotion)
             }
 
-            Text(model.runState.title)
-                .font(.title2.bold())
+            Text(model.runState == .off ? "Plats för din dag" : model.runState.title)
+                .font(.largeTitle.weight(.bold))
+                .multilineTextAlignment(.center)
             Text(model.statusMessage)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -155,11 +214,11 @@ private struct ControlsCard: View {
     let model: MioViewModel
 
     var body: some View {
-        Card {
+        GlassEffectContainer(spacing: 16) {
             VStack(spacing: 12) {
                 switch model.runState {
                 case .off, .failed, .unavailable:
-                    PrimaryActionButton(title: "Starta ny session", symbol: "mic.fill", color: .green) {
+                    PrimaryActionButton(title: "Starta ny session", symbol: "mic.fill", color: .indigo) {
                         model.beginListening()
                     }
                     .disabled(model.isInstallingAdvancedModel)
@@ -168,7 +227,7 @@ private struct ControlsCard: View {
                 case .preparing:
                     HStack(spacing: 12) {
                         ProgressView()
-                        Text("Förbereder SpeechAnalyzer och transkriptionsmodul …")
+                        Text("Förbereder din lokala session …")
                             .font(.headline)
                     }
                     .frame(maxWidth: .infinity)
@@ -181,7 +240,7 @@ private struct ControlsCard: View {
                 case .stopping:
                     HStack(spacing: 12) {
                         ProgressView()
-                        Text("Stänger mikrofon och SpeechAnalyzer säkert …")
+                        Text("Avslutar sessionen säkert …")
                             .font(.headline)
                     }
                     .frame(maxWidth: .infinity)
@@ -206,18 +265,19 @@ private struct ControlsCard: View {
                         Label("Pausa Mio", systemImage: "pause.circle")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 12))
+                            .padding(.vertical, 8)
                     }
+                    .buttonStyle(.glass)
+                    .controlSize(.large)
 
                 case .paused:
-                    PrimaryActionButton(title: "Fortsätt lyssna", symbol: "play.fill", color: .green) {
+                    PrimaryActionButton(title: "Fortsätt lyssna", symbol: "play.fill", color: .indigo) {
                         model.beginListening()
                     }
                     Button(role: .destructive) {
                         Task { await model.stopListening() }
                     } label: {
-                        Label("Avsluta testet", systemImage: "stop.circle")
+                        Label("Avsluta sessionen", systemImage: "stop.circle")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -383,7 +443,7 @@ private struct PrivacyCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 PrivacyLine(symbol: "iphone", text: "Tal till text sker lokalt i SpeechAnalyzer med SpeechTranscriber eller DictationTranscriber.")
                 PrivacyLine(symbol: "waveform.slash", text: "Mikrofonljud bearbetas tillfälligt i minnet men sparas aldrig som ljudfil.")
-                PrivacyLine(symbol: "cloud.slash", text: "Ingen OpenAI-nyckel finns i appen och inget skickas till OpenAI.")
+                PrivacyLine(symbol: "cloud", text: "AI är valfri och avstängd från början. Endast den fråga och kontext du granskar och godkänner skickas via din server. Ingen OpenAI-nyckel finns i appen.")
                 PrivacyLine(symbol: "mic.slash", text: "Stoppa eller pausa stänger AVAudioEngine och mikrofonens ljudsession.")
                 PrivacyLine(symbol: "person.2.slash", text: "Testa kontrollerat. Spela inte in andra, en lektion eller en arbetsplats utan tydligt tillstånd och enligt lokala regler.")
             }
@@ -608,11 +668,12 @@ private struct DataCard: View {
     let model: MioViewModel
     let contentModel: MioContentViewModel
     @Binding var showDeleteConfirmation: Bool
+    @Environment(MioAssistantViewModel.self) private var assistant
 
     var body: some View {
         Card(title: "Export och radering", symbol: "externaldrive") {
             VStack(spacing: 12) {
-                Text("Den versionsmärkta exporten innehåller manuellt innehåll, sessionstext och diagnostik, aldrig råljud. Radering kan inte återkalla kopior som redan delats eller sparats i en annan app.")
+                Text("Exporten innehåller poster, förslag, lektioner, sessionstext och diagnostik. Råljud och AI-inloggningsuppgifter ingår aldrig. Delade filer och kalenderkopior kan inte återkallas här.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -625,7 +686,7 @@ private struct DataCard: View {
                     .buttonStyle(.borderedProminent)
                 } else {
                     Button {
-                        Task { await contentModel.prepareExport(sessions: model.allSessions) }
+                        Task { await contentModel.prepareExport(sessions: model.allSessions, assistant: assistant.exportDocument) }
                     } label: {
                         if contentModel.isPreparingExport {
                             ProgressView()
@@ -658,9 +719,9 @@ private struct FirstRunCard: View {
             VStack(alignment: .leading, spacing: 9) {
                 Text("1. Tryck Starta ny session och tillåt mikrofonen.")
                 Text("2. Säg svenska meningar och ordet Mio.")
-                Text("3. Lås telefonen i minst fem minuter och fortsätt prata ibland.")
-                Text("4. Lås upp, kontrollera texten och stoppa sessionen.")
-                Text("5. Redigera sessionen i Tidslinje eller skapa manuella poster i de andra flikarna.")
+                Text("3. Prova ‘Mio, anteckna att vi arbetar med procent’. Se Förslag och välj Ja, Nej eller Inte nu.")
+                Text("4. Stoppa sessionen och öppna den i Tidslinje för att rätta eller dela in i lektioner.")
+                Text("5. Använd Morgon för dagens planer och Kväll för att se tillbaka.")
             }
             .font(.subheadline)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -715,7 +776,7 @@ private struct Card<Content: View>: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
     }
 }
 
@@ -730,11 +791,12 @@ private struct PrimaryActionButton: View {
             Label(title, systemImage: symbol)
                 .font(.headline)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
-                .foregroundStyle(.white)
-                .background(color, in: RoundedRectangle(cornerRadius: 13))
+                .padding(.vertical, 8)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glassProminent)
+        .tint(color)
+        .controlSize(.large)
+        .buttonBorderShape(.capsule)
     }
 }
 

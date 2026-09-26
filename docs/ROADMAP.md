@@ -1,33 +1,34 @@
-# Versioner och roadmap
+# Omfattning och leverans
 
-Versioner beskriver produktens omfattning. Ett versionsnummer är inte ett testresultat eller ett löfte om datum.
+Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhängande i stället för att leverera en funktionell version i taget. Användaren har också valt att AI-klient och server ska byggas, med molnet avstängt tills det konfigureras.
 
-| Version | Innehåll | Läge |
+**Helhetsbygget identifieras som 0.9.0, ej släppt.** Det ersätter de planerade separata v0.3–v0.5-leveranserna. v0.1.0 är historisk transkriptionsprototyp och v0.2.0 är den tidigare manuella grunden. Dessa etiketter ändrar inga gamla resultat.
+
+## Sammanhängande produkt
+
+| Område | Implementerad omfattning | Verifieringsgräns |
 |---|---|---|
-| v0.1.0 | Lokal transkription, Mio-detektion, sessioner, paus och diagnostik | Historisk prototyp; kort telefonprov godkänt, långtest öppna |
-| **v0.2.0** | Lokal manuell MVP: fem flikar, poster, sökning, rättningar och export | **Aktuell utvecklingsversion, ej släppt** |
-| v0.3.0 | Lokala frågor och förslag med **Ja / Nej / Inte nu**, vibration och förhandsgranskning | Planerad |
-| v0.4.0 | Kalenderintegration, alarm/notiser, morgonöversikt och kvällssammanfattning | Planerad; inom iOS begränsningar |
-| v0.5.0 | Begränsade OpenAI-svar via server efter uttryckligt godkännande | Planerad; kräver separat integrationsbeslut |
-| v1.0.0 | Tillförlitlig privat vardagsapp med accepterad omfattning | Inget datum; kräver dokumenterad stabilitet, batteritid och datakontroll |
+| Lokal fångst | Svensk SpeechAnalyzer, Mio-detektion, paus/stopp, diagnostik | Fysisk telefon krävs för kvalitet, bakgrund och batteri |
+| Innehåll | Fem manuella typer, sökning, redigering, uppgiftsstatus, export/radering | Ren installation och lagring provas på verklig telefon |
+| Assistent | Lokala kommandoförslag, redigerbar Ja/Nej/Inte nu, separat inkorg | Enkel kommandogrammatik; datum godkänns manuellt |
+| Lektioner | Namn, anteckning och tidsintervall över avslutade sessioner | Originaltext och tidsbevis får aldrig skrivas om |
+| Kalender | Användarbekräftad fristående kalenderkopia | Ingen bakgrundssynk eller läsning av hela kalendern |
+| Alarm/notiser | AlarmKit, engångs-/veckoalarm, postpåminnelse, morgon-/kvällsnotis | Behörighet och leverans måste provas på telefon |
+| Dagen | Lokal morgon- och kvällsöversikt av sparat innehåll | Ingen påstådd semantisk sammanfattning av transkript |
+| AI | Fråga + vald kontext → förhandsgranskning → egen HTTPS-server → OpenAI | Server/nyckel kräver egen konfiguration; av från början |
 
-Tidigare fas 1–5 motsvarar nu v0.1.0–v0.5.0. Det är en namnkonvention för historik och planering, inte retroaktiva releaser.
+## Leveransgrindar
 
-## Versionsregler
+1. Kontrollera projektfiler, privata data, lokala tester och dokumentation.
+2. Efter uttryckligt tillstånd: commit/push och GitHub Actions på faktisk tillgänglig `xcode-27`-runner. Release och XCTest måste bli gröna för samma commit.
+3. Hämta validerad IPA och installera rent på iPhone 16 Pro med `app.mio.assistant`; prova iPhone 13 senare.
+4. Kör [helhetstestet](TESTPLAN_HELHET.md) samt återstående [långtest](TESTPLAN_V0_1.md).
+5. Registrera exakt revision, build, enhet och resultat i [status](STATUS.md). Åtgärda verkliga fel innan daglig tillit.
 
-- `0.MINOR.0`: ny sammanhängande funktionalitet under utveckling. `0.MINOR.PATCH`: rättningar inom samma omfattning.
-- `1.0.0`: den överenskomna vardagsprodukten är verifierad. Därefter höjs major vid avsiktligt inkompatibla ändringar, minor för funktioner och patch för rättningar.
-- Skriv `v0.2.0` i dokument och taggar, `0.2.0` i Xcodes `MARKETING_VERSION`.
-- `CURRENT_PROJECT_VERSION` är ett separat byggnummer; höj inför en ny distribuerad build. Lagringens `schemaVersion` ändras bara när dataformatet kräver det.
-- Projektet heter alltid `Mio`. Byt inte bundle identifier eller lagringskatalog vid versionshöjning.
-- För ändringar i [CHANGELOG](../CHANGELOG.md) under **ej släppt**. Sätt släppdatum och skapa tagg först efter verifiering och uttrycklig begäran om publicering.
+Versionsnumret 1.0.0 används först när accepterad vardagsomfattning är verifierad. Inget datum eller löfte om heldagslyssning ges utan mätningar. Appversion, byggnummer och lagringsschema är separata värden. `CURRENT_PROJECT_VERSION` höjs inför nästa distribuerade build; bundle identifier och beständiga lagringsvägar ändras inte.
 
-## Nästa steg: verifiera v0.2.0
+Råljudslagring, automatisk molnöverföring, dold profilering och tyst kalenderbokning ingår inte. Konton och serverdrift behövs enbart om användaren aktiverar AI.
 
-1. Kör GitHub Actions-jobbet på `xcode-27`: Release, XCTest på iOS 27-simulator och validerad IPA. Kontrollera runnerns tillgänglighet och dokumentera utfallet för exakt commit.
-2. Exportera befintlig data privat; installera över Mio med samma appidentitet och signeringskonto.
-3. Kör [test A–M](TESTPLAN_V0_2.md): uppgradering, manuellt innehåll, persistens, export, radering, talflöde och tillgänglighet.
-4. Kör kvarvarande [transkriptionsprov](TESTPLAN_V0_1.md): låst skärm ≥10 min, batteri ≥60 min, avbrott, pauser och kvalitet. Prova 3–4 timmar först efter ett rimligt timtest.
-5. Dokumentera resultat för exakt commit och enhet i [status](STATUS.md).
+## Identitet och design, 2026-09-26
 
-Manuella funktioner kan verifieras även om heldagslyssningen ännu inte är godkänd. v1.0.0 får däremot inte lova heldagslyssning utan verklig evidens. Råljudslagring och molnsynk av ljud ingår inte i planen.
+Användaren har raderat prototypen. Appidentiteten är därför `app.mio.assistant` och lagringsmappen `Mio`, utan fasnamn, personnamn eller appversionsnummer. Ingen tidigare migrering behövs. Native Liquid Glass används för kontroller och navigation; innehållet har semantiska läsytor. Designen behöver visas och provas i verklig iOS, inte bara granskas i källkod.

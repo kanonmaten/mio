@@ -20,6 +20,8 @@ final class MioViewModel {
     var isRefreshingSupport = false
     var isInstallingAdvancedModel = false
     var isPreparingExport = false
+    /// Receives finalized text only; the assistant never observes or stores audio buffers.
+    @ObservationIgnored var onFinalizedTranscript: ((MioSession) -> Void)?
 
     @ObservationIgnored private let repository: SessionRepository
     @ObservationIgnored private var pipeline: LiveTranscriptionPipeline?
@@ -323,6 +325,8 @@ final class MioViewModel {
     }
 
     func editSession(id: UUID, title: String, note: String) async -> Bool {
+        guard MioMaintenanceState.shared.beginWrite() else { return false }
+        defer { MioMaintenanceState.shared.endWrite() }
         guard var session = session(id: id), session.endedAt != nil else {
             errorMessage = "Stoppa sessionen innan du redigerar den."
             return false
@@ -344,6 +348,8 @@ final class MioViewModel {
     }
 
     func correctTranscript(sessionID: UUID, segmentID: UUID, text: String) async -> Bool {
+        guard MioMaintenanceState.shared.beginWrite() else { return false }
+        defer { MioMaintenanceState.shared.endWrite() }
         guard var session = session(id: sessionID), session.endedAt != nil,
               let index = session.transcripts.firstIndex(where: { $0.id == segmentID })
         else {
@@ -371,6 +377,8 @@ final class MioViewModel {
     }
 
     func deleteSession(id: UUID) async -> Bool {
+        guard MioMaintenanceState.shared.beginWrite() else { return false }
+        defer { MioMaintenanceState.shared.endWrite() }
         if currentSession?.id == id, currentSession?.endedAt == nil {
             errorMessage = "Stoppa den aktiva sessionen innan du raderar den."
             return false
@@ -392,6 +400,8 @@ final class MioViewModel {
 
     func deleteAllData() async {
         guard runState == .off || runState == .failed || runState == .unavailable else { return }
+        saveTask?.cancel()
+        saveTask = nil
         do {
             try await repository.deleteAll()
             currentSession = nil
@@ -539,6 +549,9 @@ final class MioViewModel {
                 }
             }
             persistSoon()
+            if let currentSession {
+                onFinalizedTranscript?(currentSession)
+            }
         } else {
             liveTranscript = trimmed
         }
@@ -697,6 +710,8 @@ final class MioViewModel {
                     try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 }
                 try Task.checkCancellation()
+                guard MioMaintenanceState.shared.beginWrite() else { return }
+                defer { MioMaintenanceState.shared.endWrite() }
                 try await repository.upsert(session)
                 self.lastPersistedAt = .now
                 self.saveTask = nil
@@ -709,6 +724,8 @@ final class MioViewModel {
     }
 
     private func forceSave() async {
+        guard MioMaintenanceState.shared.beginWrite() else { return }
+        defer { MioMaintenanceState.shared.endWrite() }
         saveTask?.cancel()
         guard let currentSession else { return }
         do {

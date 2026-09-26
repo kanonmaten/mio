@@ -2,6 +2,21 @@
 
 Användarsynliga ändringar och kompatibilitet per version. Versioner följer `vMAJOR.MINOR.PATCH`; [roadmapen](docs/ROADMAP.md) definierar milstolpar och släppkrav. Ingen ny Git-tagg eller release har skapats genom namnbytet.
 
+## Helhetsbygge 0.9.0 — ej släppt
+
+Efter användarbeslut 2026-09-25 byggs hela produkten tillsammans. Detta är en sammanhängande utvecklingskandidat, inte en telefonverifierad release.
+
+- Lokal inkorg med redigerbara innehållsförslag och frågor, Ja/Nej/Inte nu och svenska Mio-kommandon. Stabilt godkännande-ID och skydd mot sen detektion efter radering.
+- Redigerbar lektionsindelning över avslutade sessioner, med tidsval ned till sekunder och bevarade originalbevis.
+- Bekräftade kalenderkopior via Apples editor, AlarmKit-alarm och lokala post-/morgon-/kvällspåminnelser. Privata posttexter visas inte på låsskärmen.
+- Lokal morgon- och kvällsöversikt. Mer lättåtkomliga assistentfunktioner; teknisk diagnostik finns i expanderbara avsnitt.
+- Valfri AI-klient och separat Node-server. Molnet är avstängt från början; exakt vald text visas före varje sändning. HTTPS, Keychain-gatewaytoken, serverägd OpenAI-nyckel, inga redirects eller automatiska omförsök.
+- Nytt separat assistantlager; export schema 2 med bakåtkompatibel avkodning. Total radering omfattar nya lager, systemåtgärder och AI-konfiguration med gemensam skrivspärr.
+- Nya XCTest-fall, serverns mocktester, portabel projektkontroll samt användar- och helhetstestguide.
+- Ny appikon med standard-, mörk och tonad variant samt redigerbara SVG-original i `design/`.
+
+Efter uppdaterat användarbeslut 2026-09-26 används appidentiteten `app.mio.assistant` och lagring under `Mio`; gammal fasmigrering har tagits bort. Första telefonprov sker på iPhone 16 Pro, senare iPhone 13. Native Liquid Glass tillagt i sessionskontrollerna med systemnavigation, semantiska läsytor och stöd för minskad rörelse. Användaren har godkänt commit, push och IPA-bygge; ingen servertjänst driftsätts och ingen release taggas. Faktiskt verifieringsläge dokumenteras i [status](docs/STATUS.md).
+
 ## v0.2.0 — ej släppt
 
 ### Tillagt sedan v0.1.0

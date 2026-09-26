@@ -30,7 +30,7 @@ actor MioContentRepository {
         ).first ?? fileManager.temporaryDirectory
         // This persisted path is independent of the app version and project name.
         self.storageURL = storageURL ?? applicationSupport
-            .appendingPathComponent("MioPhaseTwo", isDirectory: true)
+            .appendingPathComponent("Mio", isDirectory: true)
             .appendingPathComponent("content-v1.json", isDirectory: false)
         self.exportDirectoryURL = exportDirectoryURL ?? fileManager.temporaryDirectory
     }
@@ -92,7 +92,8 @@ actor MioContentRepository {
 
     func makeExportFile(
         content: [MioContentItem],
-        sessions: [MioSession]
+        sessions: [MioSession],
+        assistant: MioAssistantStoreDocument? = nil
     ) throws -> URL {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "sv-SE")
@@ -104,7 +105,8 @@ actor MioContentRepository {
         )
         let export = MioLocalExport(
             content: MioContentItem.timelineSorted(content),
-            sessions: sessions.sorted { $0.startedAt > $1.startedAt }
+            sessions: sessions.sorted { $0.startedAt > $1.startedAt },
+            assistant: assistant
         )
         let data = try Self.exportEncoder.encode(export)
         try data.write(to: exportURL, options: .atomic)

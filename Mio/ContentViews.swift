@@ -155,7 +155,7 @@ struct CalendarTabView: View {
                         systemImage: searchText.isEmpty ? "calendar.badge.plus" : "magnifyingglass",
                         description: Text(
                             searchText.isEmpty
-                                ? "Planer sparas lokalt i Mio. Ingen systemkalender används ännu."
+                                ? "Spara en lokal plan och öppna den för att lägga till en kopia i Apple Kalender eller ställa in alarm."
                                 : "Prova ett annat sökord."
                         )
                     )
@@ -439,69 +439,12 @@ struct NotesTabView: View {
 
 struct MorningTabView: View {
     @Bindable var contentModel: MioContentViewModel
-
-    @State private var searchText = ""
+    @Bindable var sessionModel: MioViewModel
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    Label("Alarm och morgonöversikt är planerade", systemImage: "sunrise")
-                        .font(.headline)
-                    Text("Här visas en lokal överblick över sådant du själv har sparat. Alarm och notiser stöds inte ännu.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("Nästa manuella plan") {
-                    if let nextPlan {
-                        ContentItemRow(item: nextPlan, linkedSessionTitle: nil)
-                    } else {
-                        Text(searchText.isEmpty ? "Ingen kommande plan." : "Ingen matchande plan.")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Öppna uppgifter") {
-                    if openTasks.isEmpty {
-                        Text(searchText.isEmpty ? "Inga öppna uppgifter." : "Inga matchande uppgifter.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(openTasks.prefix(5)) { task in
-                            ContentItemRow(item: task, linkedSessionTitle: nil)
-                        }
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-            .navigationTitle("Morgon")
-            .searchable(text: $searchText, prompt: "Sök i översikten")
+            DailyOverviewView(contentModel: contentModel, sessionModel: sessionModel)
         }
-    }
-
-    private var openTasks: [MioContentItem] {
-        contentModel
-            .filteredItems(kinds: Set([.task]), searchText: searchText)
-            .filter { !$0.isCompleted }
-            .sorted {
-                if $0.scheduledAt != $1.scheduledAt {
-                    return $0.scheduledAt < $1.scheduledAt
-                }
-                return $0.id.uuidString < $1.id.uuidString
-            }
-    }
-
-    private var nextPlan: MioContentItem? {
-        contentModel
-            .filteredItems(kinds: Set([.plan]), searchText: searchText)
-            .filter { $0.scheduledAt >= .now }
-            .sorted {
-                if $0.scheduledAt != $1.scheduledAt {
-                    return $0.scheduledAt < $1.scheduledAt
-                }
-                return $0.id.uuidString < $1.id.uuidString
-            }
-            .first
     }
 }
 
@@ -682,6 +625,16 @@ private struct ContentEditorView: View {
                     Text("Kopplingen duplicerar inte transkriptet.")
                 }
 
+                if let item, kind == .plan || kind == .task {
+                    if title == item.title && bodyText == item.body && scheduledAt == item.scheduledAt && kind == item.kind {
+                        ContentSystemActionsView(item: item)
+                    } else {
+                        Section {
+                            Text("Spara ändringarna och öppna posten igen för att använda kalender, alarm eller påminnelser. Befintliga systemtider ändras separat.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 if item != nil {
                     Section {
                         Button("Radera innehållet", role: .destructive) {
@@ -719,7 +672,7 @@ private struct ContentEditorView: View {
             }
             Button("Avbryt", role: .cancel) {}
         } message: {
-            Text("Posten tas bort från telefonen. En eventuell kopplad session påverkas inte.")
+            Text("Posten och dess Mio-alarm/påminnelse tas bort. Sessionen och eventuella kalenderkopior finns kvar.")
         }
         .alert("Kunde inte slutföra ändringen", isPresented: contentErrorIsPresented) {
             Button("OK", role: .cancel) {}
@@ -778,6 +731,7 @@ private struct ContentEditorView: View {
 }
 
 private struct SessionEditorView: View {
+    @Environment(MioAssistantViewModel.self) private var assistant
     @Environment(\.dismiss) private var dismiss
 
     let sessionID: UUID
@@ -798,6 +752,18 @@ private struct SessionEditorView: View {
             if let session = sessionModel.session(id: sessionID) {
                 Form {
                     sessionSection(session)
+                    Section("Ordna sessionen") {
+                        NavigationLink("Lektionsindelning") {
+                            LessonManagementView(session: session)
+                        }
+                        .disabled(session.endedAt == nil)
+                        Button("Hitta lokala Mio-förslag") {
+                            Task { _ = await assistant.detectSuggestions(in: session) }
+                        }
+                        Text("Endast uttryckliga Mio-kommandon blir förslag. Granska dem i Mio → Förslag.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        if let error = assistant.errorMessage { Text(error).foregroundStyle(.red) }
+                    }
                     transcriptSection(session)
                     linkedContentSection
                     deletionSection(session)
@@ -1041,9 +1007,15 @@ private struct SessionEditorView: View {
     }
 
     private func deleteSession() async {
+        guard MioMaintenanceState.shared.beginWrite() else { return }
+        defer { MioMaintenanceState.shared.endWrite() }
         isDeleting = true
         await contentModel.unlinkSession(id: sessionID)
         guard !contentModel.items.contains(where: { $0.sessionID == sessionID }) else {
+            isDeleting = false
+            return
+        }
+        guard await assistant.deleteSessionData(sessionID: sessionID) else {
             isDeleting = false
             return
         }

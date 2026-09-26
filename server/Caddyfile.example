@@ -1,0 +1,7 @@
+# Ersätt med din egen domän som pekar på servern.
+mio.example.se {
+    request_body {
+        max_size 20KB
+    }
+    reverse_proxy 127.0.0.1:8787
+}

@@ -1,94 +1,66 @@
-# Datamodell för v0.2.0
+# Datamodell för Mio
 
-Införd i v0.2.0. Se [status](STATUS.md) för verifiering. Lagringsnamnen nedan behålls över appversioner; namnbytet till Mio ändrar inte dataformatet.
+Helhetsbygge 0.9.0, nyinstallation enligt användarbeslut 2026-09-26. Appidentiteten är `app.mio.assistant`. Det finns ingen migrering från de borttagna prototyperna. Appversionen och JSON-scheman är separata värden.
 
-## Syfte
+## Lokala lager
 
-v0.2.0 lägger till ett gemensamt, helt lokalt innehållslager för manuella poster utan att skriva om den sessionsdata som samlades in i v0.1.0. Modellen ska göra det möjligt att skapa och ordna vardagsinnehåll nu, samtidigt som originaltranskriptioner och deras tekniska bevis förblir intakta.
+Filerna ligger under appens Application Support:
 
-## Två separata lokala lager
-
-| Sökväg i appens Application Support | Innehåll | Versionsregel |
+| Fil | Innehåll | Schema |
 |---|---|---|
-| `MioPhaseTwo/sessions.json` | Sessioner, originaltranskriptioner, ljudtider, diagnostik och batteriprover | Befintligt format behålls. Nya valfria metadatafält kan saknas i äldre filer. |
-| `MioPhaseTwo/content-v1.json` | Manuellt innehåll från v0.2.0 | Dokumentet innehåller `schemaVersion: 1`. Okända versioner ska rapporteras och får inte skrivas över. |
+| `Mio/sessions.json` | Originaltranskript, ljudtider, diagnostik, batteriprover, titel/anteckning/rättningar | Sessionsarray med valfria visningsmetadata |
+| `Mio/content-v1.json` | Tidslinjeposter, anteckningar, uppgifter, planer och uttryckliga minnen | `schemaVersion: 1`, `items` |
+| `Mio/assistant-v1.json` | Väntande frågor/förslag, lektioner och bearbetade källidentiteter | `schemaVersion: 1`, `suggestions`, `lessons`, `processedSources` |
 
-Vid en uppgradering med samma bundle identifier letar appen efter äldre `MioPhaseOne/sessions.json` om den nya sessionsfilen saknas. Filen avkodas först, skrivs atomiskt till `MioPhaseTwo/sessions.json` och tas därefter bort från den äldre platsen. Sessionsschema, fältvärden och identiteter bevaras semantiskt även om JSON-formateringen kan ändras vid återkodning. Migreringen gör inte om sessioner till manuella poster; en manuell post kan i stället ha en valfri koppling genom `sessionID`.
+Lagringen är atomisk och mappar undantas från enhetsbackup. Filskyddet tillåter en pågående ljudsession efter första upplåsning. Inget råljud lagras. Okända innehålls-/assistentscheman får inte skrivas över; explicit total radering är en separat användaråtgärd.
 
-## Gemensam innehållspost
+## Innehållspost
 
-Alla fem manuella typer använder samma grundmodell:
+`MioContentItem` har UUID, typ (`timeline`, `note`, `task`, `plan`, `memory`), obligatorisk trimmad rubrik, text, skapandetid, uppdateringstid, användarvald `scheduledAt`, valfri `completedAt` och valfri sessionskoppling. Endast uppgifter har klarstatus. En lokal plan är inte automatiskt en systemkalenderpost.
 
-| Fält | Typ | Regel |
-|---|---|---|
-| `id` | UUID | Stabil unik identitet. |
-| `kind` | enum | `timeline`, `note`, `task`, `plan` eller `memory`. |
-| `title` | text | Obligatorisk efter trimning. |
-| `body` | text | Valfri beskrivning eller anteckning. |
-| `createdAt` | tidpunkt | Sätts när posten skapas och ändras inte vid redigering. |
-| `updatedAt` | tidpunkt | Uppdateras när posten ändras. |
-| `scheduledAt` | tidpunkt | Den lokala tid som visas i tidslinje eller planering. Det är inte en systemkalenderpost. |
-| `completedAt` | tidpunkt eller null | Används endast för uppgifter. Övriga typer ska lagra null. |
-| `sessionID` | UUID eller null | Valfri relation till en session i aktiva `MioPhaseTwo/sessions.json`, inklusive en migrerad v0.1.0-session. |
+Ordning är fallande vald tid, skapandetid och slutligen UUID. Sökning normaliserar skiftläge, diakritik och teckenbredd med svensk lokal. Sessioner söks på titel, anteckning och visningstext.
 
-Typerna visas på svenska som **Tidslinjepost**, **Anteckning**, **Uppgift**, **Plan** och **Uttryckligt minne**. Ett uttryckligt minne skapas manuellt av användaren; appen bygger ingen dold profil från vanlig text.
+## Original och visningslager
 
-## Ordning och sökning
+En avslutad session får titel, manuell anteckning och separata `correctedText`-fält. Originalets `text`, `createdAt`, `audioStartedAt`, `audioEndedAt`, Mio-detektion, bakgrundsmarkering och tidsgiltighet ändras inte. En aktiv session måste stoppas före redigering.
 
-- Poster sorteras fallande på `scheduledAt`, därefter `createdAt` och slutligen UUID som stabil skiljeregel.
-- Sökning omfattar typens svenska namn, rubrik och brödtext.
-- Sökning normaliserar skiftläge, diakritiska tecken och teckenbredd med svensk lokal.
-- Sessioner kan sökas på egen titel, manuell anteckning och den text som visas efter en eventuell rättning.
+Lektioner har UUID, sessionID, rubrik, anteckning, start/slut och skapande-/ändringstid. Intervall måste ligga inom avslutad session och får inte överlappa. Visningen väljer originalsegment som överlappar intervallet. Segment delas aldrig; ett gränsöverskridande segment kan därför visas i två lektioner.
 
-## Redigerbart lager över sessioner
+## Förslag och frågor
 
-En avslutad session kan få:
+`MioSuggestion` har stabilt UUID, purpose (`content` eller `question`), innehållstyp, rubrik/text, skapandetid/vald tid, valfri session-/segmentkoppling, pending/deferred och uppskjutningstid. Saknad purpose avkodas som content. Frågor använder ingen ny innehållstyp och sparas inte automatiskt som anteckningar.
 
-- en valfri titel;
-- en valfri manuell anteckning;
-- en valfri `correctedText` för varje transkriptionssegment.
+Ja sparar en innehållspost med förslagets UUID och avför sedan frågan. Ett omförsök efter delvis misslyckad lagring skapar inte dubbletter eller skriver över senare ändringar. Nej tar bort förslagstexten; `processedSources` behåller endast UUID:n för deduplicering. Originaltranskriptet förblir synligt tills sessionen raderas. Inte nu behåller utkastet lokalt.
 
-Rättningen är ett visningslager. Följande ursprungsfält ska alltid bevaras:
+En AI-fråga stannar lokalt tills användaren går vidare till AI-vyn, väljer eventuell kontext och godkänner den exakta sändningen. Efter lyckat svar avförs inkorgsfrågan när användaren lämnar svaret. Vid fel eller avbryt finns frågan kvar.
 
-- originalfältet `text`;
-- `audioStartedAt` och `audioEndedAt`;
-- `createdAt`;
-- Mio-detektion;
-- bakgrundsmarkering och giltighet för ljudtid.
+## Systemdata och konfiguration
 
-Äldre `sessions.json` utan titel, anteckning eller rättningar ska kunna läsas med dessa fält som tomma. En aktiv session måste stoppas innan metadata eller text rättas.
+iOS är källa för AlarmKit-alarm och lokala notiser. Postalarm använder postens UUID; notiser `mio.reminder.<UUID>`; dagliga notiser fasta Mio-ID:n. En lista med enbart kända alarm-UUID:n finns i egna UserDefaults så att nekad behörighet inte döljer ett kvarvarande alarm vid radering. Kalenderkopior finns i den kalender användaren väljer och är fristående.
 
-Om en session raderas ska manuella poster inte raderas automatiskt. Deras `sessionID` ska i stället tas bort så att posten fortfarande är användbar utan en trasig relation.
+AI-aktivering och HTTPS-adress finns i egna UserDefaults. Separat gatewaytoken lagras i Keychain under `app.mio.assistant.cloud-gateway`, endast tillgänglig på upplåst aktuell enhet. OpenAI-nyckeln finns enbart på servern. Frågeutkast/svar i AI-vyn är tillfälliga och sparas inte som historik. Uppskjutna inkorgsfrågor finns i assistentlagret.
 
-## Lokal lagring och radering
+## Export och radering
 
-- Båda lagren skrivs atomiskt i appens sandbox.
-- Lagringen använder filskydd som tillåter en redan startad bakgrundssession efter telefonens första upplåsning.
-- De beständiga mapparna undantas från enhetsbackup.
-- **Radera all lokal data** ska radera både sessioner och manuellt innehåll efter en tydlig bekräftelse.
-- Delade kopior som redan finns i Filer, mejl eller en annan app ligger utanför Mios sandbox och kan inte återkallas av appen.
-- Inget lager får innehålla sparat råljud.
-
-## Gemensam export
-
-Den lokala exporten heter `Mio-lokal-export-ÅÅÅÅ-MM-DD-HHmm.json` och innehåller:
+Gemensam export heter `Mio-lokal-export-ÅÅÅÅ-MM-DD-HHmm.json`:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "exportedAt": "ISO-8601-tidpunkt",
   "content": [],
-  "sessions": []
+  "sessions": [],
+  "assistant": {
+    "schemaVersion": 1,
+    "suggestions": [],
+    "lessons": [],
+    "processedSources": []
+  }
 }
 ```
 
-`content` innehåller de fem manuella typerna. `sessions` innehåller sessionernas originaldata plus eventuella titlar, anteckningar och rättningar. Exporten innehåller aldrig råljud, API-nycklar, certifikat eller pairing-information.
+Exporten har inga ljuddata, token, API-nycklar eller systemkalenderkopior. Avkodning stöder även export utan assistantfält, men appen erbjuder ingen importknapp. Filernas egna schemaVersion är fortfarande 1.
 
-Exportformatet är versionsmärkt men v0.2.0 innehåller ingen importfunktion. En framtida schemaändring måste få en uttrycklig migrering eller ett nytt filnamn; okända schemaversioner får inte tyst skrivas över.
+Sessionens enskilda radering tar bort dess lektioner/förslag och lossar manuella poster. Radering av en post avbryter dess Mio-alarm/notis. Fullständig radering avbryter alla egna alarm/notiser, glömmer AI-konfiguration, raderar tre lokala lager och interna exportkopior. En gemensam skrivspärr och tombstones hindrar sena callbacks från att återskapa data. Systemfel ska visas, inte döljas som lyckad radering.
 
-## Avsiktliga gränser
-
-- En plan är endast lokal och skrivs inte till EventKit eller systemkalendern.
-- Morgonfliken skapar inga systemalarm eller lokala notiser i v0.2.0.
-- Ingen post skickas till OpenAI eller någon annan extern AI-tjänst.
-- Automatisk plan-, uppgifts- eller minnesdetektion hör till senare versioner och kräver då uttrycklig bekräftelse.
+Redan delade exporter, skickade molnfrågor och kalenderkopior ligger utanför appens lokala radering. De behöver hanteras där de sparats.

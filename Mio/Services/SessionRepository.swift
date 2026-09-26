@@ -5,41 +5,21 @@ import Foundation
 actor SessionRepository {
     private let fileManager: FileManager
     private let storageURL: URL
-    private let legacyStorageURL: URL?
     private var cachedSessions: [MioSession]?
 
-    init(
-        fileManager: FileManager = .default,
-        storageURL: URL? = nil,
-        legacyStorageURL: URL? = nil
-    ) {
+    init(fileManager: FileManager = .default, storageURL: URL? = nil) {
         self.fileManager = fileManager
-
-        if let storageURL {
-            self.storageURL = storageURL
-            self.legacyStorageURL = legacyStorageURL
-        } else {
-            let applicationSupport = fileManager.urls(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask
-            ).first ?? fileManager.temporaryDirectory
-            // Keep the existing storage directory across app/project renames.
-            self.storageURL = applicationSupport
-                .appendingPathComponent("MioPhaseTwo", isDirectory: true)
-                .appendingPathComponent("sessions.json", isDirectory: false)
-            self.legacyStorageURL = legacyStorageURL ?? applicationSupport
-                .appendingPathComponent("MioPhaseOne", isDirectory: true)
-                .appendingPathComponent("sessions.json", isDirectory: false)
-        }
+        let applicationSupport = fileManager.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first ?? fileManager.temporaryDirectory
+        self.storageURL = storageURL ?? applicationSupport
+            .appendingPathComponent("Mio", isDirectory: true)
+            .appendingPathComponent("sessions.json", isDirectory: false)
     }
 
     func loadSessions() throws -> [MioSession] {
         if let cachedSessions {
             return cachedSessions
-        }
-
-        if let migratedSessions = try migrateLegacySessionsIfNeeded() {
-            return migratedSessions
         }
 
         guard fileManager.fileExists(atPath: storageURL.path) else {
@@ -76,17 +56,11 @@ actor SessionRepository {
         if fileManager.fileExists(atPath: storageURL.path) {
             try fileManager.removeItem(at: storageURL)
         }
-        if let legacyStorageURL,
-           fileManager.fileExists(atPath: legacyStorageURL.path) {
-            try fileManager.removeItem(at: legacyStorageURL)
-        }
         let temporaryExports = try fileManager.contentsOfDirectory(
             at: fileManager.temporaryDirectory,
             includingPropertiesForKeys: nil
         ).filter {
-            ($0.lastPathComponent.hasPrefix("Mio-session-")
-                || $0.lastPathComponent.hasPrefix("Mio-fas-2-session-")
-                || $0.lastPathComponent.hasPrefix("Mio-fas-1-"))
+            $0.lastPathComponent.hasPrefix("Mio-session-")
                 && $0.pathExtension == "json"
         }
         for export in temporaryExports {
@@ -111,34 +85,6 @@ actor SessionRepository {
             ofItemAtPath: exportURL.path
         )
         return exportURL
-    }
-
-    /// Moves the legacy file only after it has decoded and been written successfully
-    /// at the current path. The bundle identifier remains unchanged, so both paths are
-    /// inside the same app container during an in-place upgrade.
-    private func migrateLegacySessionsIfNeeded() throws -> [MioSession]? {
-        guard !fileManager.fileExists(atPath: storageURL.path),
-              let legacyStorageURL,
-              fileManager.fileExists(atPath: legacyStorageURL.path)
-        else { return nil }
-
-        let data = try Data(contentsOf: legacyStorageURL)
-        let sessions = try Self.decoder.decode([MioSession].self, from: data)
-        try write(sessions)
-        do {
-            try fileManager.removeItem(at: legacyStorageURL)
-        } catch {
-            // Roll back the new copy so the next launch retries from the intact legacy file.
-            try? fileManager.removeItem(at: storageURL)
-            cachedSessions = nil
-            throw error
-        }
-        let legacyDirectory = legacyStorageURL.deletingLastPathComponent()
-        if let remainingFiles = try? fileManager.contentsOfDirectory(atPath: legacyDirectory.path),
-           remainingFiles.isEmpty {
-            try? fileManager.removeItem(at: legacyDirectory)
-        }
-        return sessions
     }
 
     private func write(_ sessions: [MioSession]) throws {

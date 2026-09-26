@@ -1,55 +1,46 @@
 # Bygg- och teststatus
 
-Senast uppdaterad: 2026-09-25. Aktuell utvecklingsversion: **v0.2.0, ej släppt**.
+Senast uppdaterad: **2026-09-26**. Aktuellt helhetsbygge: **0.9.0, ej släppt**. Resultaten nedan gäller den lokala arbetskopian; den lokala kontrollen gjordes före commit, push och Actions-körning. Användaren har därefter godkänt push och bygge; resultat redovisas när körningen är klar.
 
-Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskriver innehållet, [roadmapen](ROADMAP.md) beskriver planerna och testplanerna beskriver hur beteendet verifieras.
+Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskriver innehållet och [helhetstestet](TESTPLAN_HELHET.md) beskriver återstående acceptansprov.
 
-| Kontroll | v0.1.0, historiskt prov 2026-08-20 | v0.2.0, aktuell arbetskopia |
-|---|---|---|
-| Källkod | Transkriptionsprototyp | Lokal manuell MVP och namn-/dokumentstädning |
-| Statisk kontroll | Historiskt godkänd | Se lokal kontroll nedan |
-| Xcode / Release / IPA | Historiskt byggd i Actions | Ett `xcode-27`-jobb är konfigurerat; ingen verifierad körning för denna revision |
-| XCTest | Ingen dokumenterad körning | iOS 27-simulator är konfigurerad; testkod finns men är ej körd för denna revision |
-| Installation | SideStore på iPhone 13 | Ej verifierad för denna revision |
-| Telefonprov | 2 min 30 s; begränsad evidens | Test A–M återstår |
-| Långtest | Återstår | Återstår även som regression |
+## Aktuellt verifieringsläge
 
-## Lokal kontroll av städningen
+| Område | Resultat och begränsning |
+|---|---|
+| Källkod | Hela produktomfånget implementerat i arbetskopian: lokal transkription och innehåll, förslag, lektioner, kalenderkopior, alarm/notiser, dagsöversikt och valfri AI-klient/server. |
+| Portabel projektkontroll | Godkänd på Linux med `python3 scripts/verify_project.py`: projektregistrering, plist/XML, identitet, version, resurser, lagringsvägar, dokumentlänkar, workflow/Bash och whitespace. |
+| Swift-syntaxparser | Inga nya syntaxfynd jämfört med HEAD. Fyra parserfynd finns även i den oförändrade transkriptionskoden. Tree-sitter är inte Swift-kompilatorn och kontrollerar inte SDK-typer. |
+| Serverns tester | **14 av 14 godkända**, Node v26.8.2, med simulerad leverantör och lokal HTTP-testserver. Inga verkliga AI-anrop eller kostnader. |
+| Appikon | Tre opaka RGB-varianter, 1024 × 1024: standard, mörk och tonad. Standardikonen visuellt granskad som PNG. Ingen verifiering av ikonrendering på iOS ännu. |
+| Xcode / Release | **Ej körd för helhetsbygget.** Linux saknar Xcode och iOS SDK. Workflowen använder ett `xcode-27`-jobb; runnerns faktiska tillgänglighet är inte kontrollerad med en ny körning. |
+| XCTest | Nya och befintliga testfall finns och är registrerade i MioTests. **Ej kompilerade eller körda för helhetsbygget.** |
+| IPA / installation | **Ingen IPA byggd för denna arbetskopia; ingen installation verifierad.** |
+| Design och tillgänglighet | Native Liquid Glass-kontroller och systemnavigation implementerade. iOS-rendering, VoiceOver, större text, mörkt läge och tillgänglighetsinställningar återstår att prova. |
+| Telefonprov | **Ej körda.** Först iPhone 16 Pro; därefter iPhone 13. Exakt iOS-version ska registreras för varje prov. |
+| AI i drift | **Ingen server driftsatt**, ingen riktig modellfråga provad. Molnet är avstängt tills användaren konfigurerar och aktiverar det. |
 
-Godkänt på Linux 2026-09-22: lokala dokumentlänkar; Xcode-projektets filreferenser och Swift-källfiler i targets; scheme och produktnamn; plist/XML; workflow-YAML och inbäddad Bash-syntax; versionsfält och oförändrad appidentitet; bevarade lagringsvägar; nya och äldre exportprefix i radering och Git-ignore; oförändrade historiska telefonmätvärden; whitespace i diff och nya filer.
+Serverproven kontrollerar autentisering, routning, exakt godkänd payload, storleksgränser, sanitiserade fel, begränsning av antal anrop, timeout och redirects. De ersätter inte ett prov med en verklig HTTPS-server. De lokala kontrollerna ersätter varken Xcode, XCTest eller fysisk telefon.
 
-Detta är statisk kontroll, inte Swift-kompilering eller XCTest. Inga iPhone-resultat har tillkommit.
+Appidentiteten är nu `app.mio.assistant`. De tre lokala lagren ligger under `Mio/`; den raderade prototypen migreras inte. Minsta iOS-version är 26.0 och avsedd byggmiljö är Xcode 27.
 
-## Lokal kontroll av Xcode 27-flödet
+## Nästa kontroller
 
-Godkänt på Linux 2026-09-25: workflow-YAML kan parsas och innehåller exakt ett `xcode-27`-jobb; alla inbäddade Bash-steg klarar syntaxkontroll; simulatorfiltret väljer iOS 27 framför iOS 26 i ett kontrollerat JSON-exempel; Xcode-projektet behåller lägsta iOS-version 26.0 och bundle identifier `se.eyvin.MioPhaseOne`; `git diff --check` är utan anmärkning.
+1. Efter uttrycklig begäran: commit/push av granskad arbetskopia och körning av GitHub Actions. Kontrollera faktisk runner, Release, XCTest och IPA-validering för samma commit.
+2. Installera IPA:n enligt [installationsguiden](INSTALLATION.md), först på iPhone 16 Pro.
+3. Kör H01–H15 i [helhetstestet](TESTPLAN_HELHET.md). Börja med syntetiska data och håll AI avstängt.
+4. Prova behörigheter, tillgänglighet, dagbyte och radering. Kör sedan låst skärm, avbrott och längre batteriprov enligt [transkriptionstestet](TESTPLAN_V0_1.md).
+5. När användaren har konfigurerat [servern](../server/README.md): kör AI01–AI06 med en ofarlig fråga och minsta kontext.
 
-Workflowen kontrollerar den byggda appens iOS-minimum och bundle identifier innan IPA:n laddas upp. Detta är ännu inte provat i GitHub Actions. Varken IPA eller funktion på iOS 26/27 är verifierad av den lokala kontrollen.
+[Användarguiden](ANVANDNING.md) beskriver de dagliga flödena. Byggfel och telefonfynd ska åtgärdas innan helhetsbygget betraktas som verifierat.
 
-## v0.2.0: tester som återstår
+## Historisk evidens
 
-| Test | Område | Resultat |
-|---|---|---|
-| A | Uppgradering och bevarad äldre sessionsdata | Ej körd |
-| B | Fem flikar och navigering | Ej körd |
-| C | Fem manuella typer och rubrikvalidering | Ej körd |
-| D | Redigering, uppgiftsstatus, ordning och persistens | Ej körd |
-| E–F | Sessionskoppling, rättningar och bevarat originalbevis | Ej körda |
-| G | Svensk sökning | Ej körd |
-| H | Versionsmärkt gemensam export | Ej körd |
-| I | Enskild och total radering | Ej körd |
-| J | Offline och avsaknad av externa integrationer | Ej körd |
-| K | Modellinstallation, analyzer och fallback | Ej körd |
-| L | Mikrofon, paus och transkriptionsregression | Ej körd |
-| M | Dynamic Type och VoiceOver | Ej körd |
+[Telefonprovet 2026-08-20](TESTRESULTAT_V0_1.md) gäller en äldre revision på iPhone 13: 2 min 30 s, fem textsegment, två Mio-detektioner och DictationTranscriber med `sv_SE`. Bara elva sekunders bakgrund finns dokumenterat. Mätvärdena är oförändrade och bevisar inte aktuell versions funktion.
 
-Utförliga steg och godkännandekriterier finns i [testplan v0.2](TESTPLAN_V0_2.md). XCTest täcker modeller, svensk sökning, tidsordning, äldre sessionsdata, migrering, lagring, okänd schemaversion, export och Mio-detektion. Befintliga testfiler är inte körbevis.
+Tidigare statiska kontroller av v0.2.0 och byggflödet finns i projekthistoriken. Den äldre [testplanen v0.2](TESTPLAN_V0_2.md) är historiskt underlag; nya installationer följer helhetstestet.
 
-## Historisk evidens och öppna begränsningar
-
-[Telefonprovet 2026-08-20](TESTRESULTAT_V0_1.md) verifierade `DictationTranscriber` med `sv_SE`, fem textsegment och två Mio-detektioner. Endast elva sekunders bakgrund finns dokumenterat. Det bevisar varken låst skärm under lång tid, batteriförbrukning under en timme eller aktuell versions funktion.
-
-`SpeechTranscriber`-installation, stabil bakgrundsdrift, ljudavbrott och uppgradering av verklig appdata kräver fysisk telefon. Ett ljudvägsbyte kan kräva stopp/start. iOS återstartar inte lyssning efter tvångsavslutning; tidsstyrd paus kan kräva att appen öppnas igen.
+`SpeechTranscriber`-installation, stabil bakgrundsdrift och ljudavbrott kräver fysisk telefon. Ett ljudvägsbyte kan kräva stopp/start. iOS återstartar inte lyssning efter tvångsavslutning; tidsstyrd paus kan kräva att appen öppnas igen.
 
 ## Registrera nya resultat
 

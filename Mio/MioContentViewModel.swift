@@ -22,7 +22,7 @@ final class MioContentViewModel {
         do {
             items = try await repository.loadItems()
         } catch {
-            errorMessage = "Kunde inte läsa lokalt innehål: \(error.localizedDescription)"
+            errorMessage = "Kunde inte läsa lokalt innehåll: \(error.localizedDescription)"
         }
     }
 
@@ -36,6 +36,8 @@ final class MioContentViewModel {
         isCompleted: Bool,
         sessionID: UUID?
     ) async -> Bool {
+        guard MioMaintenanceState.shared.beginWrite() else { return false }
+        defer { MioMaintenanceState.shared.endWrite() }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanTitle.isEmpty else {
@@ -44,8 +46,15 @@ final class MioContentViewModel {
         }
 
         let existing = id.flatMap { item(id: $0) }
+        if let existing,
+           existing.kind == .task || existing.kind == .plan,
+           (kind == .task && isCompleted) || (kind != .task && kind != .plan),
+           !(await MioSystemServices.shared.cancelActions(for: existing.id)) {
+            errorMessage = MioSystemServices.shared.errorMessage ?? "Kunde inte avbryta postens systempåminnelser. Försök igen."
+            return false
+        }
         let contentItem = MioContentItem(
-            id: existing?.id ?? UUID(),
+            id: existing?.id ?? id ?? UUID(),
             kind: kind,
             title: cleanTitle,
             body: cleanBody,
@@ -69,6 +78,12 @@ final class MioContentViewModel {
     }
 
     func delete(id: UUID) async {
+        guard MioMaintenanceState.shared.beginWrite() else { return }
+        defer { MioMaintenanceState.shared.endWrite() }
+        guard await MioSystemServices.shared.cancelActions(for: id) else {
+            errorMessage = MioSystemServices.shared.errorMessage ?? "Kunde inte avbryta postens alarm eller påminnelse. Posten finns kvar."
+            return
+        }
         do {
             items = try await repository.delete(id: id)
             exportURL = nil
@@ -79,7 +94,13 @@ final class MioContentViewModel {
     }
 
     func setTaskCompleted(id: UUID, isCompleted: Bool) async {
+        guard MioMaintenanceState.shared.beginWrite() else { return }
+        defer { MioMaintenanceState.shared.endWrite() }
         guard var item = item(id: id), item.kind == .task else { return }
+        if isCompleted, !(await MioSystemServices.shared.cancelActions(for: id)) {
+            errorMessage = MioSystemServices.shared.errorMessage ?? "Kunde inte avbryta uppgiftens påminnelser. Försök igen."
+            return
+        }
         item.completedAt = isCompleted ? item.completedAt ?? .now : nil
         item.updatedAt = .now
         do {
@@ -92,6 +113,8 @@ final class MioContentViewModel {
     }
 
     func unlinkSession(id: UUID) async {
+        guard MioMaintenanceState.shared.beginWrite() else { return }
+        defer { MioMaintenanceState.shared.endWrite() }
         let linkedItems = items.filter { $0.sessionID == id }
         guard !linkedItems.isEmpty else { return }
         do {
@@ -108,14 +131,17 @@ final class MioContentViewModel {
         }
     }
 
-    func prepareExport(sessions: [MioSession]) async {
+    func prepareExport(sessions: [MioSession], assistant: MioAssistantStoreDocument? = nil) async {
+        guard MioMaintenanceState.shared.beginWrite() else { return }
+        defer { MioMaintenanceState.shared.endWrite() }
         guard !isPreparingExport else { return }
         isPreparingExport = true
         defer { isPreparingExport = false }
         do {
             exportURL = try await repository.makeExportFile(
                 content: items,
-                sessions: sessions
+                sessions: sessions,
+                assistant: assistant
             )
             errorMessage = nil
         } catch {
@@ -130,7 +156,7 @@ final class MioContentViewModel {
             exportURL = nil
             errorMessage = nil
         } catch {
-            errorMessage = "Kunde inte radera lokalt innehål: \(error.localizedDescription)"
+            errorMessage = "Kunde inte radera lokalt innehåll: \(error.localizedDescription)"
         }
     }
 

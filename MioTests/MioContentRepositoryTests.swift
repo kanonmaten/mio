@@ -7,7 +7,7 @@ final class MioContentRepositoryTests: XCTestCase {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         let sessionURL = fixture.root
-            .appendingPathComponent("MioPhaseTwo", isDirectory: true)
+            .appendingPathComponent("Mio", isDirectory: true)
             .appendingPathComponent("sessions.json")
         try FileManager.default.createDirectory(
             at: sessionURL.deletingLastPathComponent(),
@@ -43,41 +43,20 @@ final class MioContentRepositoryTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: sessionURL), sessionSentinel)
     }
 
-    func testSessionRepositoryMigratesLegacySessionFile() async throws {
+    func testSessionRepositoryStartsFreshAndPersistsAtConfiguredPath() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
-        let legacyURL = fixture.root
-            .appendingPathComponent("MioPhaseOne", isDirectory: true)
-            .appendingPathComponent("sessions.json")
-        let currentURL = fixture.root
-            .appendingPathComponent("MioPhaseTwo", isDirectory: true)
-            .appendingPathComponent("sessions.json")
-        try FileManager.default.createDirectory(
-            at: legacyURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        let expected = [
-            MioSession(
-                id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-                startedAt: Date(timeIntervalSince1970: 2_000),
-                endedAt: Date(timeIntervalSince1970: 2_010)
-            )
-        ]
-        try Self.encoder.encode(expected).write(to: legacyURL, options: .atomic)
-
-        let repository = SessionRepository(
-            storageURL: currentURL,
-            legacyStorageURL: legacyURL
-        )
-        let loaded = try await repository.loadSessions()
-
-        XCTAssertEqual(loaded, expected)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: currentURL.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyURL.path))
-
-        let reloadedRepository = SessionRepository(storageURL: currentURL)
-        let reloaded = try await reloadedRepository.loadSessions()
-        XCTAssertEqual(reloaded, expected)
+        let currentURL = fixture.root.appendingPathComponent("Mio/sessions.json")
+        let repository = SessionRepository(storageURL: currentURL)
+        let empty = try await repository.loadSessions()
+        XCTAssertTrue(empty.isEmpty)
+        let expected = MioSession(startedAt: Date(timeIntervalSince1970: 2_000),
+                                  endedAt: Date(timeIntervalSince1970: 2_010))
+        try await repository.upsert(expected)
+        let reloaded = try await SessionRepository(storageURL: currentURL).loadSessions()
+        XCTAssertEqual(reloaded, [expected])
+        try await repository.deleteAll()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: currentURL.path))
     }
 
     func testExportIsVersionedAndContainsNoRawAudioField() async throws {
@@ -100,7 +79,7 @@ final class MioContentRepositoryTests: XCTestCase {
         let export = try Self.decoder.decode(MioLocalExport.self, from: data)
         let json = String(decoding: data, as: UTF8.self)
 
-        XCTAssertEqual(export.schemaVersion, 1)
+        XCTAssertEqual(export.schemaVersion, 2)
         XCTAssertEqual(export.content, [item])
         XCTAssertTrue(export.sessions.isEmpty)
         XCTAssertFalse(json.localizedCaseInsensitiveContains("rawAudio"))
@@ -139,7 +118,7 @@ final class MioContentRepositoryTests: XCTestCase {
         try FileManager.default.createDirectory(at: exportURL, withIntermediateDirectories: true)
         return (
             root,
-            root.appendingPathComponent("MioPhaseTwo/content-v1.json"),
+            root.appendingPathComponent("Mio/content-v1.json"),
             exportURL
         )
     }

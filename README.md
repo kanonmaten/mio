@@ -1,37 +1,38 @@
 # Mio
 
-Privat iPhone-app för svensk lokal transkription, anteckningar och planering. Byggd i SwiftUI för iOS 26+, med iPhone 13 som måltelefon. Ingen App Store-distribution.
+Privat SwiftUI-app för iOS 26+ (första testtelefon iPhone 16 Pro, senare även iPhone 13): lokal svensk transkription, anteckningar, planering och en diskret vardagsassistent. Ingen App Store-distribution.
 
-**Aktuell utvecklingsversion: v0.2.0 — ej släppt.** Funktionerna finns i källkod; den aktuella revisionen behöver byggas, testas och installeras. Det äldre korta telefonprovet gäller bara v0.1.0-prototypen. Se [status](docs/STATUS.md).
+**Aktuellt helhetsbygge: 0.9.0 — ej släppt.** Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
 
-## Vad finns?
+## Funktioner
 
-- Fem flikar: **Mio**, **Tidslinje**, **Kalender**, **Anteckningar**, **Morgon**.
-- Lokal svensk transkription, upptäckt av ordet Mio, paus/stopp och sessionsdiagnostik.
-- Manuella tidslinjeposter, anteckningar, uppgifter, planer och uttryckliga minnen; skapa, sök, redigera, slutför och radera.
-- Sessionsrubriker, anteckningar och rättad visningstext som bevarar original och ljudtider.
-- Lokal JSON-lagring och export. Ingen råljudslagring, moln-AI, systemkalender eller systemalarm.
+- **Native gränssnitt:** Liquid Glass för sessionskontroller, systemnavigation och flikar; semantiska läsytor, Dynamic Type och minskad rörelse.
+- **Mio:** lokal transkription, paus/stopp, Mio-tilltal och förslag med **Ja / Nej / Inte nu**. Förslagen kan rättas innan de sparas.
+- **Tidslinje:** manuellt innehåll, sessioner, separat rättad text och redigerbar lektionsindelning med bevarade original.
+- **Kalender:** lokala planer och användarbekräftade kopior till Apple Kalender.
+- **Anteckningar:** sökbara anteckningar, uppgifter och synliga uttryckliga minnen.
+- **Morgon/Kväll:** lokal dagsöversikt, avklarade uppgifter, sessioner och lektioner; separata dagliga notiser.
+- **Alarm och påminnelser:** AlarmKit-alarm, återkommande veckodagar och lokala notiser. Behörigheter begärs först när du sparar en systemåtgärd.
+- **Valfri AI:** fråga via din egen server, manuellt vald kontext och exakt förhandsgranskning före varje sändning. Avstängt från början. OpenAI-nyckeln finns endast på servern.
+- Lokal versionsmärkt JSON-export och radering av appdata, egna alarm/notiser och AI-konfiguration. Inget råljud sparas.
 
-## Hitta rätt
+Lokala förslag bygger på tydliga svenska kommandon, inte allmän förståelse av samtal. Datum i fri text måste kontrolleras manuellt. Dagsöversikten visar sparade data; den påstår sig inte sammanfatta en lektion med AI.
 
-| Behöver du… | Läs |
-|---|---|
-| Se vad som ändrats | [CHANGELOG](CHANGELOG.md) |
-| Förstå versioner och nästa steg | [Roadmap](docs/ROADMAP.md) |
-| Se vad som faktiskt är verifierat | [Status](docs/STATUS.md) |
-| Bygga och installera på iPhone | [Installation](docs/INSTALLATION.md) |
-| Arbeta med koden | [AGENTS](AGENTS.md), [arbetsflöde](docs/WORKFLOW.md) |
-| Förstå produkten och tekniska regler | [Vision](docs/PRODUKTVISION.md), [beslut](docs/DECISIONS.md), [datamodell](docs/DATAMODELL.md) |
-| Testa appen | [v0.2-testplan](docs/TESTPLAN_V0_2.md), [transkription och långtest](docs/TESTPLAN_V0_1.md) |
+## Kom igång
+
+1. Läs [användarguiden](docs/ANVANDNING.md).
+2. Bygg och installera enligt [installation](docs/INSTALLATION.md). Linux kan inte bygga iOS-appen.
+3. Kör [helhetstestet](docs/TESTPLAN_HELHET.md) med syntetiska data före vardagsanvändning.
+4. Om du vill använda moln-AI: följ [serverguiden](server/README.md). Appens lokala funktioner kräver ingen server.
 
 ## Utveckling
 
-Öppna `Mio.xcodeproj`, välj schemat **Mio**. Appkod ligger i `Mio/`, XCTest i `MioTests/` och molnbygget i `.github/workflows/build-unsigned-ipa.yml`.
+Öppna `Mio.xcodeproj`, välj schemat **Mio**. Appkod finns i `Mio/`, XCTest i `MioTests/` och servern i `server/`. Kör `python3 scripts/verify_project.py` för säkra projektkontroller och `npm test --prefix server` för serverns tester. Xcode/SDK-verifiering sker i `.github/workflows/build-unsigned-ipa.yml`.
 
-Linux, Windows och den äldre Monterey-Macen används för redigering och Git. iOS-kompilering och XCTest kräver en kompatibel Mac med Xcode eller GitHub Actions. Workflowen använder GitHubs `xcode-27`-runner för Release, XCTest och osignerad IPA i samma jobb. Runnern är en offentlig förhandsversion; kontrollera dess tillgänglighet och faktiska resultat vid körning. Appens lägsta iOS-version är fortfarande 26.0.
+Läs [AGENTS](AGENTS.md), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMAP.md), [beslut](docs/DECISIONS.md), [datamodell](docs/DATAMODELL.md) och [ändringslogg](CHANGELOG.md). Commit, push och publicering kräver uttrycklig begäran.
 
 ## Integritet och kompatibilitet
 
-Lyssning startas av användaren. Spela bara in andra med tydligt samtycke och enligt skolans, arbetsplatsens och lokala regler. Mikrofonljud bearbetas i minnet; exporter kan innehålla känslig text och ska stanna utanför repot.
+Lyssningen startas av dig. Spela bara in andra med tydligt samtycke och enligt lokala regler. Exporter kan innehålla känslig text och ska förvaras privat utanför repot. Kalenderkopior kan synkas via ditt kalenderkonto; molnfrågor skickas bara efter ditt godkännande.
 
-Appidentiteten `se.eyvin.MioPhaseOne` och befintliga interna lagringsvägar behålls för uppgradering på plats. De äldre namnen är kompatibilitetsvärden, inte versionsnamn. Projekt, target, scheme och produkt heter **Mio** även i kommande versioner.
+Appidentiteten är `app.mio.assistant`; lagringen ligger i `Mio/content-v1.json`, `Mio/sessions.json` och `Mio/assistant-v1.json`. Det är en ren installation utan migrering från prototyperna. Projekt, target, scheme och produkt heter **Mio**; versionsnumret ligger separat i Xcode.

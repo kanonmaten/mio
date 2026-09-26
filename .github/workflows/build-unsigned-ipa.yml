@@ -142,7 +142,7 @@ jobs:
           test -x "$APP_PATH/Mio"
           test -f "$APP_PATH/PrivacyInfo.xcprivacy"
           test "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PATH/Info.plist")" = "$MINIMUM_IOS_VERSION"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")" = "se.eyvin.MioPhaseOne"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")" = "app.mio.assistant"
 
           rm -rf "$RUNNER_TEMP/Payload"
           mkdir -p "$RUNNER_TEMP/Payload"
