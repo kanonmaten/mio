@@ -2,6 +2,16 @@
 
 Användarsynliga ändringar och kompatibilitet per version. Versioner följer `vMAJOR.MINOR.PATCH`; [roadmapen](docs/ROADMAP.md) definierar milstolpar och släppkrav. Ingen ny Git-tagg eller release har skapats genom namnbytet.
 
+## Rättningar efter telefonprov 2026-09-26
+
+- Separat Starta lektion pausar vardags-Mio. Lektioner ersätter tidslinjen som huvudflik; historik och råtext finns kvar under Lektioner.
+- Löpande AI-tolkning efter uttrycklig aktivering: planer/uppgifter ur vanligt samtal utan Mio-tilltal, källcitat, tidsgranskning och Ja/Nej/Inte nu. Lektioner får huvudpunkter/läxor som AI-utkast efter avslut.
+- Separata svenska systeminstruktioner för frågor och analys, strikt schema och källvalidering, OpenAI-adapter med stabilt appkontrakt för framtida leverantörer. Ingen server driftsatt genom kodändringen.
+- Avbrytbara köer, skydd mot historisk text vid aktivering och sena svar vid radering, nya regressionstester. Lokalt stöd även för ”Mio, påminn mig om att …”.
+- Tydligare visning av aktiv transkriptionsmotor, specifika fallbackorsaker samt app/iOS-version och felkod i ny diagnostik. Ingen påstådd förbättring av Apples igenkänningsmodell utan nytt telefonprov.
+
+Aktuell evidens och kvarvarande kontroller finns i [status](docs/STATUS.md).
+
 ## Helhetsbygge 0.9.0 — ej släppt
 
 Efter användarbeslut 2026-09-25 byggs hela produkten tillsammans. Detta är en sammanhängande utvecklingskandidat, inte en telefonverifierad release.

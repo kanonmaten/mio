@@ -46,7 +46,11 @@ enum SpeechCapabilityService {
                 ? "SpeechAnalyzer använder SpeechTranscriber för svenska. Den nyare lokala modellasseten är installerad."
                 : "SpeechTranscriber stöder svenska. Modellassetens status är \(snapshot.advancedAssetStatus?.title.lowercased() ?? "okänd")."
         case .dictationTranscriber:
-            if snapshot.swedishLocaleIdentifier != nil,
+            if snapshot.speechTranscriberAvailable == false {
+                snapshot.details = "DictationTranscriber används. iOS anger att den nyare SpeechTranscriber-modulen inte är tillgänglig på enheten."
+            } else if snapshot.swedishLocaleIdentifier == nil {
+                snapshot.details = "DictationTranscriber används. SpeechTranscriber finns, men iOS erbjuder inte svenska för den på denna enhet. Det är inte samma sak som att en svensk modell bara saknar installation."
+            } else if snapshot.swedishLocaleIdentifier != nil,
                snapshot.advancedAssetStatus != .installed {
                 snapshot.details = "SpeechAnalyzer använder DictationTranscriber som fallback. SpeechTranscriber-asset: \(snapshot.advancedAssetStatus?.title.lowercased() ?? "okänd status")."
             } else {

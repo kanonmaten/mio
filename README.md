@@ -8,15 +8,15 @@ Privat SwiftUI-app för iOS 26+ (första testtelefon iPhone 16 Pro, senare även
 
 - **Native gränssnitt:** Liquid Glass för sessionskontroller, systemnavigation och flikar; semantiska läsytor, Dynamic Type och minskad rörelse.
 - **Mio:** lokal transkription, paus/stopp, Mio-tilltal och förslag med **Ja / Nej / Inte nu**. Förslagen kan rättas innan de sparas.
-- **Tidslinje:** manuellt innehåll, sessioner, separat rättad text och redigerbar lektionsindelning med bevarade original.
+- **Lektioner:** separat Starta lektion-knapp pausar vardags-Mio. AI kan välja ut huvudpunkter och läxor efter avslut. Äldre sessioner, manuella tidsintervall och råtext finns under Historik och råtext.
 - **Kalender:** lokala planer och användarbekräftade kopior till Apple Kalender.
 - **Anteckningar:** sökbara anteckningar, uppgifter och synliga uttryckliga minnen.
 - **Morgon/Kväll:** lokal dagsöversikt, avklarade uppgifter, sessioner och lektioner; separata dagliga notiser.
 - **Alarm och påminnelser:** AlarmKit-alarm, återkommande veckodagar och lokala notiser. Behörigheter begärs först när du sparar en systemåtgärd.
-- **Valfri AI:** fråga via din egen server, manuellt vald kontext och exakt förhandsgranskning före varje sändning. Avstängt från början. OpenAI-nyckeln finns endast på servern.
+- **Valfri AI:** aktivera löpande analys av nya textutdrag för planer/uppgifter utan Mio-tilltal, eller ställ en enskild fråga med förhandsgranskning. Av vid appstart. OpenAI först, med separat leverantörsadapter; nyckeln finns endast på servern.
 - Lokal versionsmärkt JSON-export och radering av appdata, egna alarm/notiser och AI-konfiguration. Inget råljud sparas.
 
-Lokala förslag bygger på tydliga svenska kommandon, inte allmän förståelse av samtal. Datum i fri text måste kontrolleras manuellt. Dagsöversikten visar sparade data; den påstår sig inte sammanfatta en lektion med AI.
+Utan AI används en enkel lokal kommandogrammatik. Med aktiverad AI kan även vanligt samtal ge förslag; innehåll och tider måste granskas. Lektionsanteckningar är källkopplade AI-utkast från textdelar, inte en garanti för fullständig sammanfattning. [Status](docs/STATUS.md) skiljer det tidigare bygget från dessa rättningar.
 
 ## Kom igång
 

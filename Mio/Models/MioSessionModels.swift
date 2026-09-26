@@ -225,6 +225,9 @@ struct MioSession: Identifiable, Codable, Hashable, Sendable {
     /// Optional session metadata. Missing keys decode as nil for legacy files.
     var title: String?
     var manualNote: String?
+    var captureMode: MioCaptureMode?
+
+    var isLesson: Bool { captureMode == .lesson }
 
     init(
         id: UUID = UUID(),
@@ -235,7 +238,8 @@ struct MioSession: Identifiable, Codable, Hashable, Sendable {
         batteryReadings: [BatteryReading] = [],
         backgroundIntervals: [BackgroundInterval] = [],
         title: String? = nil,
-        manualNote: String? = nil
+        manualNote: String? = nil,
+        captureMode: MioCaptureMode? = nil
     ) {
         self.id = id
         self.startedAt = startedAt
@@ -246,6 +250,7 @@ struct MioSession: Identifiable, Codable, Hashable, Sendable {
         self.backgroundIntervals = backgroundIntervals
         self.title = title
         self.manualNote = manualNote
+        self.captureMode = captureMode
     }
 
     var mioDetectionCount: Int {

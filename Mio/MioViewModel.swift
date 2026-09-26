@@ -20,8 +20,12 @@ final class MioViewModel {
     var isRefreshingSupport = false
     var isInstallingAdvancedModel = false
     var isPreparingExport = false
+    var isSwitchingCaptureMode = false
+    private var suspendedEverydaySessionID: UUID?
+    var isLessonActive: Bool { currentSession?.isLesson == true && currentSession?.endedAt == nil }
     /// Receives finalized text only; the assistant never observes or stores audio buffers.
     @ObservationIgnored var onFinalizedTranscript: ((MioSession) -> Void)?
+    @ObservationIgnored var onLessonFinished: ((MioSession) -> Void)?
 
     @ObservationIgnored private let repository: SessionRepository
     @ObservationIgnored private var pipeline: LiveTranscriptionPipeline?
@@ -61,7 +65,7 @@ final class MioViewModel {
 
         do {
             var sessions = try await repository.loadSessions()
-            if let unfinishedIndex = sessions.firstIndex(where: { $0.endedAt == nil }) {
+            for unfinishedIndex in sessions.indices where sessions[unfinishedIndex].endedAt == nil {
                 let recoveredAt = Date.now
                 sessions[unfinishedIndex].endedAt = recoveredAt
                 if let lastIntervalIndex = sessions[unfinishedIndex].backgroundIntervals.indices.last,
@@ -121,7 +125,8 @@ final class MioViewModel {
     }
 
     func beginListening() {
-        guard !isInstallingAdvancedModel else { return }
+        guard !isInstallingAdvancedModel, !isSwitchingCaptureMode else { return }
+        if currentSession?.isLesson == true, currentSession?.endedAt != nil { returnToEveryday() }
         guard runState == .off
                 || runState == .paused
                 || runState == .failed
@@ -140,6 +145,46 @@ final class MioViewModel {
                 self.startupTaskID = nil
             }
         }
+    }
+
+    func beginLesson(title: String) async {
+        guard !isSwitchingCaptureMode, !isInstallingAdvancedModel, !isLessonActive,
+              [.off, .paused, .listening, .interrupted, .failed, .unavailable].contains(runState) else { return }
+        guard MioMaintenanceState.shared.beginWrite() else { return }
+        isSwitchingCaptureMode = true
+        errorMessage = nil
+        defer { isSwitchingCaptureMode = false; MioMaintenanceState.shared.endWrite() }
+        if runState == .listening || runState == .interrupted { await pause(.untilResumed) }
+        pauseTask?.cancel(); pauseTask = nil; pauseUntil = nil
+        if let previous = currentSession, previous.endedAt == nil {
+            suspendedEverydaySessionID = previous.id
+            await forceSave()
+            guard errorMessage == nil else { return }
+        }
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        currentSession = MioSession(title: cleanTitle.isEmpty ? "Lektion" : String(cleanTitle.prefix(120)), captureMode: .lesson)
+        lastPersistedAt = nil
+        appendEvent(kind: .info, message: "Lektionsläget startades. Vardags-Mio är pausat. Inget råljud sparas.")
+        sampleBattery(reason: "Startvärde för lektionen")
+        runState = .off
+        // Use the same tracked startup task as everyday capture so Avbryt can stop preparation.
+        isSwitchingCaptureMode = false
+        beginListening()
+    }
+
+    func returnToEveryday() {
+        guard currentSession?.isLesson == true, currentSession?.endedAt != nil,
+              !isSwitchingCaptureMode, !runtimeFailureTeardownInProgress else { return }
+        if let id = suspendedEverydaySessionID, let suspended = previousSessions.first(where: { $0.id == id && $0.endedAt == nil }) {
+            currentSession = suspended
+            runState = .paused
+            statusMessage = "Lektionen är avslutad. Vardags-Mio är pausat tills du väljer Fortsätt Mio."
+        } else {
+            runState = .off
+            statusMessage = "Lektionen är avslutad. Du kan starta Mio igen."
+        }
+        suspendedEverydaySessionID = nil
+        liveTranscript = ""
     }
 
     func cancelPreparation() {
@@ -175,6 +220,9 @@ final class MioViewModel {
         }
 
         runState = .preparing
+        let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "okänd"
+        let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "okänt"
+        appendEvent(kind: .info, message: "Mio \(version) (\(build)); iOS \(UIDevice.current.systemVersion).")
         statusMessage = "Kontrollerar mikrofon, SpeechAnalyzer och svensk transkriptionsmodul …"
 
         let newPipeline = makePipeline()
@@ -184,7 +232,7 @@ final class MioViewModel {
             try Task.checkCancellation()
             guard pipeline === newPipeline else { return }
             runState = .listening
-            statusMessage = "Lyssnar på svenska lokalt. Säg några meningar och ordet Mio."
+            statusMessage = isLessonActive ? "Lektionsläge: fångar underlag till anteckningar. Vardags-Mio är pausat." : "Mio lyssnar. AI-tolkning kan föreslå planer ur vanliga samtal när du aktiverar den."
             appendEvent(
                 kind: .info,
                 message: "Mikrofonen och SpeechAnalyzer startade med \(details.engine.title) (\(details.localeIdentifier))."
@@ -193,6 +241,9 @@ final class MioViewModel {
                 appendEvent(kind: .info, message: "Apples svenska språkmodell hämtades till telefonen.")
             }
             await refreshSupport()
+            if support.selectedEngine != details.engine {
+                support.details = "Den aktuella lyssningen använder \(details.engine.title). Se diagnostiken för eventuell fallbackorsak."
+            }
             support.selectedEngine = details.engine
         } catch {
             if pipeline !== newPipeline {
@@ -243,10 +294,14 @@ final class MioViewModel {
         liveTranscript = ""
         statusMessage = "Mio är av. Mikrofonen används inte."
         await forceSave()
+        if let lesson = currentSession, lesson.isLesson, errorMessage == nil {
+            onLessonFinished?(lesson)
+            returnToEveryday()
+        }
     }
 
     func pause(_ length: PauseLength) async {
-        guard runState == .listening else { return }
+        guard runState == .listening || runState == .interrupted else { return }
         pauseTask?.cancel()
         let activePipeline = pipeline
         pipeline = nil
@@ -399,6 +454,7 @@ final class MioViewModel {
     }
 
     func deleteAllData() async {
+        suspendedEverydaySessionID = nil
         guard runState == .off || runState == .failed || runState == .unavailable else { return }
         saveTask?.cancel()
         saveTask = nil
@@ -425,11 +481,8 @@ final class MioViewModel {
     }
 
     var allSessions: [MioSession] {
-        var sessions = previousSessions
-        if let currentSession,
-           !sessions.contains(where: { $0.id == currentSession.id }) {
-            sessions.append(currentSession)
-        }
+        var sessions = previousSessions.filter { $0.id != currentSession?.id }
+        if let currentSession { sessions.append(currentSession) }
         return sessions.sorted { $0.startedAt > $1.startedAt }
     }
 
@@ -605,6 +658,8 @@ final class MioViewModel {
 
     private func receiveFailure(_ error: Error) {
         let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        let diagnosticError = error as NSError
+        appendEvent(kind: .info, message: "Feldomän: \(diagnosticError.domain); kod: \(diagnosticError.code).")
         if runtimeFailureTeardownInProgress {
             appendEvent(kind: .error, message: message)
             return

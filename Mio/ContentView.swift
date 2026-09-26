@@ -7,14 +7,17 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(MioAssistantViewModel.self) private var assistant
     @State private var maintenance = MioMaintenanceState.shared
+    @Environment(MioAnalysisCoordinator.self) private var analysis
+    @AppStorage(MioCloudSettings.enabledKey) private var cloudEnabled = false
+    @AppStorage(MioCloudSettings.serverKey) private var cloudServer = ""
 
     var body: some View {
         TabView {
             MioTabView(model: model, contentModel: contentModel)
                 .tabItem { Label("Mio", systemImage: "waveform.and.mic") }
 
-            TimelineTabView(contentModel: contentModel, sessionModel: model)
-                .tabItem { Label("Tidslinje", systemImage: "clock") }
+            LessonLibraryView(model: model, content: contentModel)
+                .tabItem { Label("Lektioner", systemImage: "book") }
 
             CalendarTabView(contentModel: contentModel, sessionModel: model)
                 .tabItem { Label("Kalender", systemImage: "calendar") }
@@ -44,6 +47,17 @@ struct ContentView: View {
                 Task { @MainActor in
                     guard maintenanceState?.isDeleting == false else { return }
                     _ = await assistantModel?.detectSuggestions(in: session)
+                    if let assistantModel, model.runState == .listening, model.currentSession?.id == session.id {
+                        analysis.observe(session, assistant: assistantModel)
+                    }
+                }
+            }
+            model.onLessonFinished = { [weak assistantModel, weak maintenanceState] session in
+                Task { @MainActor in
+                    guard let assistantModel, maintenanceState?.isDeleting == false, let endedAt = session.endedAt else { return }
+                    _ = await assistantModel.saveLesson(id: session.id, session: session, title: session.title ?? "Lektion",
+                                                        note: "", startedAt: session.startedAt, endedAt: endedAt)
+                    analysis.summarizeLesson(session, assistant: assistantModel)
                 }
             }
             await model.bootstrap()
@@ -51,6 +65,13 @@ struct ContentView: View {
         .onChange(of: scenePhase) { _, newPhase in
             model.handleScenePhase(newPhase)
         }
+        .onChange(of: model.runState) { _, state in
+            if state != .listening { analysis.pauseEveryday(assistant: assistant) }
+        }
+        .onChange(of: cloudEnabled) { _, enabled in if !enabled { analysis.disable() } }
+        .onChange(of: cloudServer) { _, _ in analysis.disable() }
+        .onReceive(NotificationCenter.default.publisher(for: MioCloudSettings.didResetNotification)) { _ in analysis.disable() }
+        .onChange(of: assistant.analyses) { _, _ in contentModel.exportURL = nil }
         .onChange(of: assistant.suggestions) { _, _ in contentModel.exportURL = nil }
         .onChange(of: assistant.lessons) { _, _ in contentModel.exportURL = nil }
         .onChange(of: model.allSessions) { _, _ in contentModel.exportURL = nil }
@@ -58,6 +79,7 @@ struct ContentView: View {
 }
 
 private struct MioTabView: View {
+    @Environment(MioAnalysisCoordinator.self) private var analysis
     @Bindable var model: MioViewModel
     @Bindable var contentModel: MioContentViewModel
     @State private var showDeleteConfirmation = false
@@ -69,6 +91,8 @@ private struct MioTabView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     StatusHeader(model: model)
+                    Text("Transkription: \(model.support.selectedEngine?.title ?? "kontrolleras")")
+                        .font(.footnote).foregroundStyle(.secondary)
                     ControlsCard(model: model)
                     AssistantHubView(contentModel: contentModel, sessionModel: model)
 
@@ -88,9 +112,9 @@ private struct MioTabView: View {
                     }
 
                     if let session = model.currentSession {
-                        LiveTranscriptCard(model: model, session: session)
-                        TranscriptCard(session: session)
-                        DisclosureGroup("Sessionsdetaljer och diagnostik") {
+                        DisclosureGroup("Transkription och diagnostik") {
+                            LiveTranscriptCard(model: model, session: session)
+                            TranscriptCard(session: session)
                             SessionStatisticsCard(model: model, session: session)
                             EvidenceCard(session: session)
                             DiagnosticCard(session: session)
@@ -135,6 +159,7 @@ private struct MioTabView: View {
             return
         }
         maintenance.isDeleting = true
+        analysis.disable()
         defer { maintenance.isDeleting = false }
         guard await MioSystemServices.shared.removeAll() else {
             contentModel.errorMessage = MioSystemServices.shared.errorMessage ?? "Kunde inte avbryta Mios alarm. Försök igen."
@@ -218,7 +243,7 @@ private struct ControlsCard: View {
             VStack(spacing: 12) {
                 switch model.runState {
                 case .off, .failed, .unavailable:
-                    PrimaryActionButton(title: "Starta ny session", symbol: "mic.fill", color: .indigo) {
+                    PrimaryActionButton(title: "Starta Mio", symbol: "mic.fill", color: .indigo) {
                         model.beginListening()
                     }
                     .disabled(model.isInstallingAdvancedModel)
@@ -247,7 +272,7 @@ private struct ControlsCard: View {
                     .padding()
 
                 case .listening:
-                    PrimaryActionButton(title: "Stoppa sessionen", symbol: "stop.fill", color: .red) {
+                    PrimaryActionButton(title: model.isLessonActive ? "Avsluta lektionen" : "Stäng av Mio", symbol: "stop.fill", color: .red) {
                         Task { await model.stopListening() }
                     }
 
@@ -262,7 +287,7 @@ private struct ControlsCard: View {
                             Task { await model.pause(.untilResumed) }
                         }
                     } label: {
-                        Label("Pausa Mio", systemImage: "pause.circle")
+                        Label(model.isLessonActive ? "Pausa lektionen" : "Pausa Mio", systemImage: "pause.circle")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
@@ -271,7 +296,7 @@ private struct ControlsCard: View {
                     .controlSize(.large)
 
                 case .paused:
-                    PrimaryActionButton(title: "Fortsätt lyssna", symbol: "play.fill", color: .indigo) {
+                    PrimaryActionButton(title: model.isLessonActive ? "Fortsätt lektionen" : "Fortsätt Mio", symbol: "play.fill", color: .indigo) {
                         model.beginListening()
                     }
                     Button(role: .destructive) {
@@ -296,7 +321,14 @@ private struct ControlsCard: View {
                     }
                     .buttonStyle(.bordered)
                 }
+                if !model.isLessonActive { LessonStartButton(model: model) }
+                if model.isLessonActive { Text("Lektionsläge · vardags-Mio är pausat").font(.footnote).foregroundStyle(.secondary) }
+                if model.currentSession?.isLesson == true, model.currentSession?.endedAt != nil,
+                   [.off, .failed, .unavailable].contains(model.runState) {
+                    Button("Tillbaka till vardags-Mio") { model.returnToEveryday() }
+                }
             }
+            .disabled(model.isSwitchingCaptureMode)
         }
     }
 }
@@ -717,10 +749,10 @@ private struct FirstRunCard: View {
     var body: some View {
         Card(title: "Börja med en lokal session", symbol: "1.circle") {
             VStack(alignment: .leading, spacing: 9) {
-                Text("1. Tryck Starta ny session och tillåt mikrofonen.")
+                Text("1. Tryck Starta Mio och tillåt mikrofonen.")
                 Text("2. Säg svenska meningar och ordet Mio.")
                 Text("3. Prova ‘Mio, anteckna att vi arbetar med procent’. Se Förslag och välj Ja, Nej eller Inte nu.")
-                Text("4. Stoppa sessionen och öppna den i Tidslinje för att rätta eller dela in i lektioner.")
+                Text("4. Använd Starta lektion för lektionsläge. Historik och råtext finns under Lektioner.")
                 Text("5. Använd Morgon för dagens planer och Kväll för att se tillbaka.")
             }
             .font(.subheadline)

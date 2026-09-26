@@ -10,11 +10,12 @@ Under **Telefonens stöd och integritet** kan du kontrollera svensk transkriptio
 
 ## Fånga och ordna
 
-1. Tryck **Starta ny session** i Mio och tillåt mikrofonen.
-2. Säg en vanlig svensk testmening. Den färdiga texten sparas lokalt; ljudet sparas inte.
-3. Pausa när du vill stänga mikrofonen tillfälligt. Stoppa när du är klar.
-4. Öppna sessionen i **Tidslinje**. Ge den en titel, skriv en anteckning och rätta text vid behov. Originaltext och ljudtider bevaras.
-5. Öppna **Lektionsindelning** för att ge olika tidsdelar egna namn. Lektioner får inte överlappa. Sekundkontrollerna under datumfälten hjälper vid korta prov. En textdel över en gräns kan visas i båda lektionerna.
+1. Tryck **Starta Mio** och tillåt mikrofonen. Paus/stopp stänger mikrofonen.
+2. Öppna **AI-assistent** och aktivera löpande AI-tolkning när servern är konfigurerad. Säg exempelvis ”Vi ses på biblioteket på tisdag klockan 15”. Mio-tilltal behövs inte i detta läge. Utdrag samlas ungefär en minut; granska förslagen i inkorgen.
+3. Tryck **Starta lektion**, ange ämne och starta. Vardags-Mio pausas. Lektionens text fångas lokalt utan sparat ljud.
+4. Välj **Avsluta lektionen**. Med AI aktiverad bearbetas texten i delar till huvudpunkter, exempel och läxförslag. Läs dem i **Lektioner**, öppna Textunderlag för att kontrollera citatet. AI kan missa eller misstolka viktigt innehåll.
+5. Tryck **Fortsätt Mio** för att återuppta den pausade vardagslyssningen. Mikrofonen startar inte automatiskt efter lektionen.
+6. **Lektioner → Historik och råtext** innehåller tidigare sessioner, manuella poster, texträttningar och äldre manuell lektionsindelning. Inga tidigare data är borttagna.
 
 Spela bara in andra med tydligt samtycke och enligt lokala regler. Paus/stopp ska släcka iOS mikrofonindikator. Långvarig drift med låst skärm behöver verifieras på din telefon; tvångsavslutning startar aldrig om lyssningen automatiskt.
 
@@ -29,7 +30,7 @@ Säg till exempel:
 
 Tydliga Mio-kommandon blir lokala frågor i **Mio → Förslag att granska**. Vanlig konversation blir inte automatiskt ett minne. Du kan även använda plusknappen i inkorgen för att skriva ett förslag själv, eller **Hitta lokala Mio-förslag** inne i en sparad session.
 
-Öppna frågan och kontrollera **typ, rubrik, text, datum och tid**. Mio tolkar inte datum i fri text automatiskt.
+Öppna frågan och kontrollera **typ, rubrik, text, datum och tid**. Lokala kommandon tolkar inte datum. AI kan föreslå en tid, men du måste markera att datum och tid är kontrollerade före Ja för AI-planer/uppgifter. Om klockslag saknas ber Mio dig välja det.
 
 - **Ja, spara:** skapar posten i Mio. Alarm, notiser och kalenderkopior aktiveras separat.
 - **Nej, glöm förslaget:** tar bort frågan. Originaltexten i sessionen finns kvar tills du raderar sessionen.
@@ -39,7 +40,7 @@ I förgrunden kan upptäckt av Mio ge vibration. Frågor kan behöva granskas ge
 
 ## Anteckningar, uppgifter och minnen
 
-Använd plusknappen i **Anteckningar** eller **Tidslinje**. Välj typ och fyll i rubrik, text och tid. Du kan koppla posten till en session. Sökningen hittar även svenska ord utan diakritiska tecken, exempelvis `ovning` för `Övning`.
+Använd plusknappen i **Anteckningar** eller historikvyn. Välj typ och fyll i rubrik, text och tid. Du kan koppla posten till en session. Sökningen hittar även svenska ord utan diakritiska tecken, exempelvis `ovning` för `Övning`.
 
 Markera uppgifter klara eller öppna dem igen. Synliga minnen kan ändras och raderas som andra poster. Mio skapar ingen dold profil.
 
@@ -63,6 +64,10 @@ Under **Mio → Alarm och påminnelser** kan du skapa fristående alarm, välja 
 
 ## Valfri AI
 
+Det finns två separata flöden. **AI-assistent → Aktivera AI-tolkning** ger samtycke till löpande nya vardagsutdrag och lektioner du avslutar medan läget är på. Läget återställs till av när app-processen startar om. Paus/stopp slänger väntande vardagsanalys; Stäng av AI-tolkning stoppar även lektionskön. Redan skickad text kan inte återkallas. Vid nät-/gränsfel stoppas läget och behöver aktiveras igen. En sparad lektion som inte analyserats kan skickas med ett separat godkännande från dess detaljvy.
+
+För **enskilda frågor** följer du stegen nedan:
+
 Hela lokalflödet fungerar utan server. Om du vill aktivera AI:
 
 1. Sätt upp den medföljande servern enligt [serverguiden](../server/README.md), med OpenAI-nyckeln enbart på servern.
@@ -75,6 +80,6 @@ Svaret kan innehålla fel, utför inga åtgärder och sparas inte som historik i
 
 ## Exportera och radera
 
-Stoppa sessionen och gå till **Mio → Export och radering → Skapa lokal export**. Dela/spara JSON-filen privat. Exporten innehåller innehåll, sessioner, förslag, lektioner och diagnostik; aldrig råljud eller åtkomsttoken. Det finns ingen importknapp i detta bygge.
+Stoppa sessionen och gå till **Mio → Export och radering → Skapa lokal export**. Dela/spara JSON-filen privat. Exporten innehåller innehåll, sessioner, förslag, lektioner, AI-anteckningar och diagnostik; aldrig råljud eller åtkomsttoken. Det finns ingen importknapp i detta bygge.
 
 **Radera all lokal data** tar efter bekräftelse bort alla tre lokala datalager, egna alarm/notiser och AI-konfiguration. Redan delade filer, skickade molnfrågor och kalenderkopior kan inte återkallas av detta. Om en systemåtgärd inte kan avbrytas visas ett fel så att du kan hantera den före fortsatt radering.

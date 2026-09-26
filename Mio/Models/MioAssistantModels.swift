@@ -22,6 +22,8 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
     var state: MioSuggestionState
     var deferredAt: Date?
     var purpose: MioSuggestionPurpose
+    var evidence: String?
+    var needsDateConfirmation: Bool?
 
     init(
         id: UUID = UUID(),
@@ -34,7 +36,9 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         sourceSegmentID: UUID? = nil,
         state: MioSuggestionState = .pending,
         deferredAt: Date? = nil,
-        purpose: MioSuggestionPurpose = .content
+        purpose: MioSuggestionPurpose = .content,
+        evidence: String? = nil,
+        needsDateConfirmation: Bool? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -47,10 +51,12 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         self.state = state
         self.deferredAt = deferredAt
         self.purpose = purpose
+        self.evidence = evidence
+        self.needsDateConfirmation = needsDateConfirmation
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, title, body, createdAt, scheduledAt, sessionID, sourceSegmentID, state, deferredAt, purpose
+        case id, kind, title, body, createdAt, scheduledAt, sessionID, sourceSegmentID, state, deferredAt, purpose, evidence, needsDateConfirmation
     }
 
     init(from decoder: Decoder) throws {
@@ -65,6 +71,8 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         sourceSegmentID = try values.decodeIfPresent(UUID.self, forKey: .sourceSegmentID)
         state = try values.decode(MioSuggestionState.self, forKey: .state)
         deferredAt = try values.decodeIfPresent(Date.self, forKey: .deferredAt)
+        evidence = try values.decodeIfPresent(String.self, forKey: .evidence)
+        needsDateConfirmation = try values.decodeIfPresent(Bool.self, forKey: .needsDateConfirmation)
         // Older assistant documents contain only proposed content items.
         purpose = try values.decodeIfPresent(MioSuggestionPurpose.self, forKey: .purpose) ?? .content
     }
@@ -146,17 +154,20 @@ struct MioAssistantStoreDocument: Codable, Sendable {
     var suggestions: [MioSuggestion]
     var lessons: [MioLesson]
     var processedSources: Set<MioProcessedSource>
+    var analyses: [MioAnalysisRecord]?
 
     init(
         schemaVersion: Int = currentSchemaVersion,
         suggestions: [MioSuggestion] = [],
         lessons: [MioLesson] = [],
-        processedSources: Set<MioProcessedSource> = []
+        processedSources: Set<MioProcessedSource> = [],
+        analyses: [MioAnalysisRecord]? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.suggestions = suggestions
         self.lessons = lessons
         self.processedSources = processedSources
+        self.analyses = analyses
     }
 }
 
@@ -288,7 +299,7 @@ enum MioLocalSuggestionEngine {
         }
         let rules: [(String, MioContentKind)] = [
             (#"^(?:kom ihåg att|kom ihåg|minns att)\s+"#, .memory),
-            (#"^(?:påminn mig att|lägg till en uppgift att|lägg till uppgiften|skapa en uppgift att|skapa en uppgift)\s+"#, .task),
+            (#"^(?:påminn mig (?:om att|att|om)|lägg till en uppgift att|lägg till uppgiften|skapa en uppgift att|skapa en uppgift)\s+"#, .task),
             (#"^(?:planera att|planera|lägg till en plan för|lägg till en plan|boka in)\s+"#, .plan),
             (#"^(?:anteckna att|anteckna|skriv en anteckning om|skriv en anteckning|spara en anteckning om)\s+"#, .note)
         ]

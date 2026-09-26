@@ -8,6 +8,8 @@ final class MioAssistantTests: XCTestCase {
         let cases: [(String, MioContentKind)] = [
             ("Mio, kom ihåg att jag föredrar en blå penna", .memory),
             ("MIO påminn mig att köpa mjölk", .task),
+            ("Mio. Påminn mig om att lämna boken på fredag", .task),
+            ("Mio, påminn mig om läxan", .task),
             ("Mio: planera middag på fredag", .plan),
             ("Mio, anteckna att provet gäller procent", .note)
         ]

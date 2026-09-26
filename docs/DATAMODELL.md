@@ -10,7 +10,7 @@ Filerna ligger under appens Application Support:
 |---|---|---|
 | `Mio/sessions.json` | Originaltranskript, ljudtider, diagnostik, batteriprover, titel/anteckning/rättningar | Sessionsarray med valfria visningsmetadata |
 | `Mio/content-v1.json` | Tidslinjeposter, anteckningar, uppgifter, planer och uttryckliga minnen | `schemaVersion: 1`, `items` |
-| `Mio/assistant-v1.json` | Väntande frågor/förslag, lektioner och bearbetade källidentiteter | `schemaVersion: 1`, `suggestions`, `lessons`, `processedSources` |
+| `Mio/assistant-v1.json` | Väntande frågor/förslag, lektioner och bearbetade källidentiteter | `schemaVersion: 1`, `suggestions`, `lessons`, `processedSources`, valfritt `analyses` |
 
 Lagringen är atomisk och mappar undantas från enhetsbackup. Filskyddet tillåter en pågående ljudsession efter första upplåsning. Inget råljud lagras. Okända innehålls-/assistentscheman får inte skrivas över; explicit total radering är en separat användaråtgärd.
 
@@ -54,7 +54,8 @@ Gemensam export heter `Mio-lokal-export-ÅÅÅÅ-MM-DD-HHmm.json`:
     "schemaVersion": 1,
     "suggestions": [],
     "lessons": [],
-    "processedSources": []
+    "processedSources": [],
+    "analyses": []
   }
 }
 ```
@@ -64,3 +65,11 @@ Exporten har inga ljuddata, token, API-nycklar eller systemkalenderkopior. Avkod
 Sessionens enskilda radering tar bort dess lektioner/förslag och lossar manuella poster. Radering av en post avbryter dess Mio-alarm/notis. Fullständig radering avbryter alla egna alarm/notiser, glömmer AI-konfiguration, raderar tre lokala lager och interna exportkopior. En gemensam skrivspärr och tombstones hindrar sena callbacks från att återskapa data. Systemfel ska visas, inte döljas som lyckad radering.
 
 Redan delade exporter, skickade molnfrågor och kalenderkopior ligger utanför appens lokala radering. De behöver hanteras där de sparats.
+
+## Lektionsläge och strukturerad AI-analys
+
+Sessioner har valfritt `captureMode` (`everyday`/`lesson`); saknat fält betyder tidigare vardagssession. Nya lektioner har en egen session och ett avslutat lektionsintervall. Flera oavslutade sessioner efter ett avbrott återställs som avslutade vid nästa appstart, utan automatisk mikrofonstart.
+
+`MioAnalysisRecord` lagrar sessionID, analyserade fragment-ID:n, huvudpunkter med käll-ID/exakt citat, osäkerheter och skapandetid. Fullt transkript dupliceras inte. Fragment-ID består av segmentets UUID och delindex; text delas vid behov utan att originalsegmentet ändras. Alla käll-ID:n/citat valideras före lagring. Även tomma resultat registreras så att samma utdrag inte skickas igen. Deduplicering av förslag jämför typ, rubrik, tid och session; den är inte en allmän semantisk dubblettkontroll.
+
+AI-förslag har valfria `evidence` och `needsDateConfirmation`. Äldre filer saknar dessa fält och kan fortfarande avkodas. Scheman är additivt bakåtkompatibla; version 1 behålls. Ett Nej tar bort förslagets text/citat men lämnar källidentiteter; lektionspunkter och originaltext raderas med sessionen. Export inkluderar analysutkast. Aktiveringssamtycke, kö och tillfällig token lagras inte i analysfilen och exporteras inte.

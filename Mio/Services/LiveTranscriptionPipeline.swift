@@ -265,6 +265,10 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                     )
                 }
             } else if let dictationLocale {
+                let reason = SpeechTranscriber.isAvailable
+                    ? "SpeechTranscriber finns, men iOS erbjuder inte svenska för den på denna enhet."
+                    : "iOS rapporterar att SpeechTranscriber inte är tillgänglig på denna enhet."
+                handlers.event(.backendFallback(reason + " DictationTranscriber används för svenska."))
                 details = try await prepare(
                     .dictation(
                         SpeechCapabilityService.makeResponsiveLongDictation(locale: dictationLocale),

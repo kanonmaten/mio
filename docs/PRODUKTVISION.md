@@ -15,8 +15,8 @@ Mio ska hjälpa en användare att fånga och ordna sin dag: lektioner, antecknin
 
 | Del | Helhetsbyggets omfattning | Kontroll |
 |---|---|---|
-| Mio | Lokal session, text, stödstatus, paus/stopp samt lokala frågor/förslag | Granskning med Ja/Nej/Inte nu; AI kräver separat sändningsgodkännande |
-| Tidslinje | Manuella poster, sessioner och redigerbar lektionsindelning | Originaltext och ljudtider bevaras |
+| Mio | Lokal session, text, stödstatus, paus/stopp samt lokala frågor/förslag | Granskning med Ja/Nej/Inte nu; Enskilda AI-frågor kräver sändningsgodkännande; löpande tolkning kräver aktiverat läge |
+| Lektioner | Separat läge pausar vardags-Mio; AI väljer huvudpunkter, exempel och läxor | Originaltext och tider bevaras; AI-utkast har textunderlag |
 | Kalender | Lokala planer och bekräftade systemkalenderkopior | Inga tysta åtgärder eller dold synk |
 | Anteckningar | Anteckningar, uppgifter och uttryckliga minnen | Synliga, redigerbara, raderbara |
 | Morgon | Dagens lokala översikt, kvällsläge, alarm och dagliga notiser | Lokal dataöversikt, ingen påstådd semantisk AI-sammanfattning |
@@ -24,3 +24,9 @@ Mio ska hjälpa en användare att fånga och ordna sin dag: lektioner, antecknin
 Måendecheckar ska vara frivilliga och förslag tydligt märkta. Mio ersätter inte lärare, vård eller professionell rådgivning. Funktionerna planeras i [roadmapen](ROADMAP.md); faktisk verifiering finns i [status](STATUS.md).
 
 Användarbeslut 2026-09-25: bygg dessa delar tillsammans. AI-stöd och server ingår i koden, men molnet är avstängt tills användaren konfigurerar det. Läs [användarguiden](ANVANDNING.md) för det konkreta flödet.
+
+## Förtydligande efter telefonprov, 2026-09-26
+
+Vanliga samtal ska kunna ge plan- och uppgiftsförslag utan väckningsord. Användaren har uttryckligen valt löpande textanalys efter aktivering av AI-läget. Inget minne eller kalenderinlägg skapas tyst. Äldre dokument nämnde tidslinje för dagens innehåll; råa sessioner som huvudflöde var ett implementationsval, inte kärnan i visionen. Historiken bevaras som en sekundär vy.
+
+En lektion är ett eget fångstläge med en separat knapp. Vardags-Mio pausas under lektionen och fortsätts uttryckligen efter avslut. Utan AI sparas lokalt textunderlag. Med aktiverad AI tas anteckningsutkast fram efter avslut, med citat som går att kontrollera. Ingen separat ljudinspelning sparas.

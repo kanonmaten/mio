@@ -1,23 +1,22 @@
 # Bygg- och teststatus
 
-Senast uppdaterad: **2026-09-26**. Aktuellt helhetsbygge: **0.9.0, ej släppt**. Helhetsbygget är pushat på `codex/helhetsbygge`. **Build 3 är kompilerad, XCTest-godkänd och paketerad som IPA.** Telefonprov återstår. Dokumentationscommit efter bygget ändrar inte appkoden; den byggda revisionen anges nedan.
-
+Senast uppdaterad: **2026-09-27**. Helhetsbygge **0.9.0, ej släppt**. Tidigare build 3 är merged till `main` och kompilerad/XCTest-godkänd. Efter användarens telefonexport och förtydliganden finns nya rättningar i arbetskopian; de har ännu inte byggts med Xcode.
 Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskriver innehållet och [helhetstestet](TESTPLAN_HELHET.md) beskriver återstående acceptansprov.
 
 ## Aktuellt verifieringsläge
 
 | Område | Resultat och begränsning |
 |---|---|
-| Källkod | Hela produktomfånget implementerat i arbetskopian: lokal transkription och innehåll, förslag, lektioner, kalenderkopior, alarm/notiser, dagsöversikt och valfri AI-klient/server. |
+| Källkod | Arbetskopian kompletterar build 3 med riktigt lektionsläge, löpande aktiverad AI-tolkning av vanligt samtal, strukturerade systeminstruktioner och bättre motordiagnostik. Den äldre beskrivningen av hela omfånget som färdigt var för bred. |
 | Portabel projektkontroll | Godkänd på Linux med `python3 scripts/verify_project.py`: projektregistrering, plist/XML, identitet, version, resurser, lagringsvägar, dokumentlänkar, workflow/Bash och whitespace. |
-| Swift-syntaxparser | Inga nya syntaxfynd jämfört med HEAD. Fyra parserfynd finns även i den oförändrade transkriptionskoden. Tree-sitter är inte Swift-kompilatorn och kontrollerar inte SDK-typer. |
-| Serverns tester | **14 av 14 godkända**, Node v26.8.2, med simulerad leverantör och lokal HTTP-testserver. Inga verkliga AI-anrop eller kostnader. |
+| Swift-syntaxparser | Tree-sitter-försöket kraschade i lokal parser/bindning och räknas inte som en godkänd kontroll. Xcode krävs för den nya revisionen. |
+| Serverns tester | **19 av 19 godkända**, Node v26.8.2, med simulerad leverantör och lokal HTTP-testserver. Inga verkliga AI-anrop eller kostnader. |
 | Appikon | Tre opaka RGB-varianter, 1024 × 1024: standard, mörk och tonad. Standardikonen visuellt granskad som PNG. Ingen verifiering av ikonrendering på iOS ännu. |
 | Xcode / Release | **Godkänd** för commit `f53aaa1` i Actions 36228684153 på faktisk runner `xcode-27-arm64`, Xcode 27.0 (27A266a), iOS SDK 27.0. Inga kompilatorvarningar i slutloggen. |
 | XCTest | **39 av 39 godkända** för `f53aaa1` på iOS 27-simulator (iPhone 17). |
 | IPA / installation | **0.9.0 (3)** skapad och lokalt ZIP-/plist-/SHA-256-kontrollerad. Identiteten är `app.mio.assistant`, minsta iOS 26.0. **Ingen fysisk installation verifierad.** |
 | Design och tillgänglighet | Native Liquid Glass-kontroller och systemnavigation implementerade. iOS-rendering, VoiceOver, större text, mörkt läge och tillgänglighetsinställningar återstår att prova. |
-| Telefonprov | **Ej körda.** Först iPhone 16 Pro; därefter iPhone 13. Exakt iOS-version ska registreras för varje prov. |
+| Telefonprov | Användaren har lämnat ett privat prov från 2026-09-26, se nedan. Byggnummer/enhets- och iOS-version saknas i exporten; inget komplett acceptansprov är styrkt. |
 | AI i drift | **Ingen server driftsatt**, ingen riktig modellfråga provad. Molnet är avstängt tills användaren konfigurerar och aktiverar det. |
 
 Serverproven kontrollerar autentisering, routning, exakt godkänd payload, storleksgränser, sanitiserade fel, begränsning av antal anrop, timeout och redirects. De ersätter inte ett prov med en verklig HTTPS-server. De lokala kontrollerna ersätter varken Xcode, XCTest eller fysisk telefon.
@@ -53,3 +52,11 @@ Tidigare statiska kontroller av v0.2.0 och byggflödet finns i projekthistoriken
 ## Registrera nya resultat
 
 Ange **commit, Actions-URL, IPA-kontrollsumma, appversion/byggnummer, iPhone-modell, iOS-version, test-ID, observation och resultat**. Använd Godkänd, Underkänd, Blockerad eller Ej körd. Spara bara avidentifierade slutsatser här; råexporter förvaras privat. En ny revision är inte verifierad av ett äldre grönt resultat.
+
+## Användarens privata export 2026-09-26
+
+Lokalt granskad, inte kopierad till Git eller skickad till AI: tre sessioner, totalt 111 textsegment, inga lagrade assistentförslag eller lektioner. Alla tre startade DictationTranscriber med sv_SE. Två visar ljudavbrott följda av Session activation failed. En längre session var cirka 33 minuter och 45 sekunder och hade batteripunkter 100 → 90 procent; detta är inte ett kontrollerat batteritest.
+
+Exporten saknar appbuild/exakt iOS och tillräcklig diagnostik för att fastställa varför SpeechTranscriber inte valdes. Utan ljudreferens kan igenkänningsprecision inte mätas. Nya diagnostiska fält gör nästa prov mer användbart; inget motorbyte eller förbättrad igenkänningskvalitet är verifierat.
+
+Portabel kontroll för rättningarna: 107 strukturella kontroller godkända före Xcode. Server: 19 syntetiska/mockade tester godkända. Nya XCTest-fall för fragment, källvalidering, radering, gammal text vid aktivering och avbruten kö är skrivna men ännu inte körda. Kör L01–L05 och A07–A14 för den nya revisionen.

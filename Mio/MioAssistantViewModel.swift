@@ -6,6 +6,7 @@ import Observation
 final class MioAssistantViewModel {
     private(set) var suggestions: [MioSuggestion] = []
     private(set) var lessons: [MioLesson] = []
+    private(set) var analyses: [MioAnalysisRecord] = []
     var errorMessage: String?
     private(set) var isBusy = false
 
@@ -21,7 +22,7 @@ final class MioAssistantViewModel {
     }
 
     var exportDocument: MioAssistantStoreDocument {
-        MioAssistantStoreDocument(suggestions: suggestions, lessons: lessons, processedSources: processedSources)
+        MioAssistantStoreDocument(suggestions: suggestions, lessons: lessons, processedSources: processedSources, analyses: analyses)
     }
 
     var pendingCount: Int { suggestions.filter { $0.state == .pending }.count }
@@ -81,6 +82,19 @@ final class MioAssistantViewModel {
             errorMessage = "Kunde inte läsa lokala Mio-kommandon: \(error.localizedDescription)"
             return 0
         }
+    }
+
+    func applyAnalysis(_ result: MioAnalysisResult, request: MioAnalysisRequest, session: MioSession) async throws -> Int {
+        guard !isDeletingAll, !sessionsBeingDeleted.contains(session.id),
+              MioMaintenanceState.shared.beginWrite() else { throw MioAssistantValidationError.deletedSession }
+        defer { MioMaintenanceState.shared.endWrite() }
+        let count = try await repository.applyAnalysis(result, request: request, session: session)
+        try await refresh()
+        return count
+    }
+
+    func analyzedFragmentIDs(for sessionID: UUID) -> Set<String> {
+        Set(analyses.filter { $0.sessionID == sessionID }.flatMap(\.fragmentIDs))
     }
 
     @discardableResult
@@ -192,5 +206,6 @@ final class MioAssistantViewModel {
             return $0.id.uuidString < $1.id.uuidString
         }
         processedSources = document.processedSources
+        analyses = document.analyses ?? []
     }
 }

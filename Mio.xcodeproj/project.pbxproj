@@ -38,6 +38,10 @@
 		B1CADA6CCA1050F76E1E3AD0 /* MioIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5D070EFAB8111A5D5EB9406 /* MioIntegrationTests.swift */; };
 		F94E384AB4A23960298BE742 /* MioCloudTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D1BEAF4CB210B06D6F6A3D7 /* MioCloudTests.swift */; };
 		ED26335892804000AAB10002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ED26335892804000AAB10001 /* Assets.xcassets */; };
+		FDEAE468A9D0E2963EBB439A /* MioAnalysisModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA777B6D2D5C06F62DFF3D3 /* MioAnalysisModels.swift */; };
+		3814826E9154155841DCF3FC /* MioAnalysisCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8176C1E54D96C9B75DA141FB /* MioAnalysisCoordinator.swift */; };
+		5D2BCAEF461598A056EA31C7 /* MioIntelligenceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED186F304655079D8F88FE48 /* MioIntelligenceViews.swift */; };
+		C168CEE7244CBC9C6D1CEBD3 /* MioAnalysisTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07B84A3FF8701FEC2ABC19DE /* MioAnalysisTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -85,6 +89,10 @@
 		C5D070EFAB8111A5D5EB9406 /* MioIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioIntegrationTests.swift; sourceTree = "<group>"; };
 		7D1BEAF4CB210B06D6F6A3D7 /* MioCloudTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioCloudTests.swift; sourceTree = "<group>"; };
 		ED26335892804000AAB10001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1AA777B6D2D5C06F62DFF3D3 /* MioAnalysisModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioAnalysisModels.swift; sourceTree = "<group>"; };
+		8176C1E54D96C9B75DA141FB /* MioAnalysisCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioAnalysisCoordinator.swift; sourceTree = "<group>"; };
+		ED186F304655079D8F88FE48 /* MioIntelligenceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioIntelligenceViews.swift; sourceTree = "<group>"; };
+		07B84A3FF8701FEC2ABC19DE /* MioAnalysisTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioAnalysisTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -117,6 +125,8 @@
 		710000000000000000000002 /* Mio */ = {
 			isa = PBXGroup;
 			children = (
+				ED186F304655079D8F88FE48 /* MioIntelligenceViews.swift */,
+				8176C1E54D96C9B75DA141FB /* MioAnalysisCoordinator.swift */,
 				24832E2A9856E255C6684632 /* SystemIntegrationViews.swift */,
 				34E2C98A8B7B5AF6E1E5B224 /* MioMaintenanceState.swift */,
 				61D4A526FE305E555BEA8CB9 /* MioAssistantViewModel.swift */,
@@ -139,6 +149,7 @@
 		710000000000000000000003 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				1AA777B6D2D5C06F62DFF3D3 /* MioAnalysisModels.swift */,
 				5DB135EA84D569A43919CE41 /* MioAssistantModels.swift */,
 				F10000000000000000000004 /* MioSessionModels.swift */,
 				F10000000000000000000010 /* MioContentModels.swift */,
@@ -165,6 +176,7 @@
 		710000000000000000000005 /* MioTests */ = {
 			isa = PBXGroup;
 			children = (
+				07B84A3FF8701FEC2ABC19DE /* MioAnalysisTests.swift */,
 				7D1BEAF4CB210B06D6F6A3D7 /* MioCloudTests.swift */,
 				C5D070EFAB8111A5D5EB9406 /* MioIntegrationTests.swift */,
 				D0F6E81FA93ACC149D484595 /* MioAssistantTests.swift */,
@@ -291,6 +303,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5D2BCAEF461598A056EA31C7 /* MioIntelligenceViews.swift in Sources */,
+				3814826E9154155841DCF3FC /* MioAnalysisCoordinator.swift in Sources */,
+				FDEAE468A9D0E2963EBB439A /* MioAnalysisModels.swift in Sources */,
 				6B0895CCC4BDDFFB12FDD7F2 /* SystemIntegrationViews.swift in Sources */,
 				68879F3DDCBD0200949BF351 /* MioSystemServices.swift in Sources */,
 				066BEC7479AC11D3C9009B56 /* MioCloudService.swift in Sources */,
@@ -320,6 +335,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C168CEE7244CBC9C6D1CEBD3 /* MioAnalysisTests.swift in Sources */,
 				F94E384AB4A23960298BE742 /* MioCloudTests.swift in Sources */,
 				B1CADA6CCA1050F76E1E3AD0 /* MioIntegrationTests.swift in Sources */,
 				FD18DEBA6FAC783D93B67542 /* MioAssistantTests.swift in Sources */,
@@ -450,7 +466,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -477,7 +493,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Mio/Info.plist;

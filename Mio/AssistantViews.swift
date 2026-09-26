@@ -14,10 +14,13 @@ struct AssistantHubView: View {
                     Label("Förslag att granska (\(assistant.suggestions.count))", systemImage: "tray.full")
                         .font(.headline)
                 }
-                Text("Säg till exempel ‘Mio, påminn mig att ta med boken’ eller ‘Mio, fråga varför himlen är blå’. Granska sedan frågan här. Du väljer alltid datum och tid själv.")
+                Text("Med AI-tolkning aktiverad kan Mio föreslå planer och uppgifter ur vanliga samtal. Direkta Mio-kommandon fungerar även lokalt. Kontrollera alltid innehåll, datum och tid.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Divider()
+                NavigationLink {
+                    AnalysisSettingsView(model: sessionModel, content: contentModel)
+                } label: { Label("AI-assistent och löpande tolkning", systemImage: "sparkles").frame(minHeight: 44) }
                 NavigationLink {
                     CloudAssistantView(items: contentModel.items, sessions: sessionModel.allSessions)
                 } label: {
@@ -56,7 +59,7 @@ struct SuggestionInboxView: View {
                     .foregroundStyle(.secondary)
             }
             if assistant.suggestions.isEmpty {
-                ContentUnavailableView("Inga väntande frågor", systemImage: "checkmark.bubble", description: Text("Skriv ett förslag med plusknappen eller tilltala Mio under en session."))
+                ContentUnavailableView("Inga väntande frågor", systemImage: "checkmark.bubble", description: Text("Aktivera AI-tolkning för förslag ur vanliga samtal, använd ett lokalt Mio-kommando eller skriv med plusknappen."))
             }
             suggestionSection("Att granska", state: .pending)
             suggestionSection("Inte nu", state: .deferred)
@@ -236,6 +239,7 @@ private struct SuggestionReviewView: View {
     @State private var title: String
     @State private var text: String
     @State private var date: Date
+    @State private var reviewedDate = false
     @State private var busy = false
 
     init(suggestion: MioSuggestion, contentModel: MioContentViewModel, sessionModel: MioViewModel) {
@@ -261,13 +265,24 @@ private struct SuggestionReviewView: View {
                 DatePicker("Datum och tid", selection: $date)
             }
             .disabled(alreadySaved)
+            if let evidence = suggestion.evidence {
+                Section("AI-förslagets textunderlag") {
+                    Text(evidence).textSelection(.enabled)
+                    Text("AI kan misstolka transkriptionen. Jämför förslaget med underlaget.").font(.footnote).foregroundStyle(.secondary)
+                    if kind == .plan || kind == .task {
+                        if suggestion.needsDateConfirmation == true { Text("Säker tid saknas i underlaget. Välj datum och tid ovan.") }
+                        Toggle("Jag har kontrollerat datum och tid", isOn: $reviewedDate)
+                    }
+                }
+            }
             Section {
                 Text(alreadySaved
                      ? "Posten har sparats. Tryck Ja igen för att avsluta frågan utan att skapa en dubblett."
-                     : "Ja sparar denna post i Mio. Kalender och alarm aktiveras separat när du öppnar den sparade posten. Uttalade datum tolkas inte automatiskt; kontrollera tiden ovan.")
+                     : "Ja sparar denna post i Mio. Kalender och alarm aktiveras separat när du öppnar den sparade posten. Kontrollera alltid tiden ovan; AI-tolkade datum är också förslag.")
                     .font(.footnote).foregroundStyle(.secondary)
                 Button("Ja, spara") { Task { await accept() } }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                              || (!alreadySaved && suggestion.evidence != nil && (kind == .plan || kind == .task) && !reviewedDate))
                 Button("Inte nu") {
                     Task {
                         busy = true
@@ -524,7 +539,7 @@ struct MioGuideView: View {
         List {
             Section("Börja här") {
                 Text("Skapa anteckningar, uppgifter, planer och egna minnen med plusknappen i flikarna. Allt detta fungerar utan mikrofon eller AI.")
-                Text("Starta en session i Mio när du vill transkribera. Paus och stopp stänger mikrofonen. Efter stopp kan du öppna sessionen i Tidslinje, rätta text och dela in den i lektioner.")
+                Text("Starta Mio för vardagslyssning. Starta lektion pausar vardags-Mio och samlar lektionsunderlag separat. Paus och stopp stänger mikrofonen. Historik och rättningar finns under Lektioner → Historik och råtext.")
             }
             Section("Tilltala Mio") {
                 Text("Mio, anteckna att vi arbetar med procent.")
@@ -532,7 +547,7 @@ struct MioGuideView: View {
                 Text("Mio, planera tandläkaren.")
                 Text("Mio, kom ihåg att jag föredrar blå pennor.")
                 Text("Mio, fråga varför himlen är blå.")
-                Text("Använd kommandot i början av en mening. Gå sedan till Förslag och granska typ, text och tid. Mio tolkar inte datum i fri text automatiskt. Vibration ges när Mio upptäcks i förgrunden; i bakgrunden kan du behöva öppna appen för att se frågor.")
+                Text("Använd kommandot i början av en mening. Gå sedan till Förslag och granska typ, text och tid. Lokala kommandon tolkar inte datum; även AI-tolkade tider måste granskas. Vibration ges när Mio upptäcks i förgrunden; i bakgrunden kan du behöva öppna appen för att se frågor.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Planera dagen") {
@@ -540,7 +555,7 @@ struct MioGuideView: View {
                 Text("Morgon visar dagens planer och uppgifter. Byt till Kväll för avklarade uppgifter, anteckningar och dagens sessioner. Alarm och dagliga påminnelser ställs in separat.")
             }
             Section("Valfri AI") {
-                Text("AI är avstängd från början. Din privata server behöver konfigureras först. Välj sedan en fråga och den minsta kontext du behöver. Läs förhandsvisningen innan Skicka. Svaret sparar inga planer och utför inga åtgärder.")
+                Text("Konfigurera din server först. Aktivera sedan AI-tolkning om du vill att nya textutdrag analyseras löpande för planer och uppgifter utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Läget är av vid appstart; alla föreslagna poster kräver Ja. Enskilda AI-frågor har en separat förhandsvisning före Skicka.")
             }
             Section("Din kontroll") {
                 Text("Inget råljud sparas. Spela bara in andra med tydligt samtycke och enligt lokala regler. Du kan ändra och radera synliga minnen i Anteckningar.")

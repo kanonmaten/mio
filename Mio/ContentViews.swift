@@ -730,8 +730,9 @@ private struct ContentEditorView: View {
     }
 }
 
-private struct SessionEditorView: View {
+struct SessionEditorView: View {
     @Environment(MioAssistantViewModel.self) private var assistant
+    @Environment(MioAnalysisCoordinator.self) private var analysis
     @Environment(\.dismiss) private var dismiss
 
     let sessionID: UUID
@@ -1010,6 +1011,7 @@ private struct SessionEditorView: View {
         guard MioMaintenanceState.shared.beginWrite() else { return }
         defer { MioMaintenanceState.shared.endWrite() }
         isDeleting = true
+        analysis.cancel(sessionID: sessionID, assistant: assistant)
         await contentModel.unlinkSession(id: sessionID)
         guard !contentModel.items.contains(where: { $0.sessionID == sessionID }) else {
             isDeleting = false

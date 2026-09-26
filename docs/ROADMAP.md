@@ -10,12 +10,12 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 |---|---|---|
 | Lokal fångst | Svensk SpeechAnalyzer, Mio-detektion, paus/stopp, diagnostik | Fysisk telefon krävs för kvalitet, bakgrund och batteri |
 | Innehåll | Fem manuella typer, sökning, redigering, uppgiftsstatus, export/radering | Ren installation och lagring provas på verklig telefon |
-| Assistent | Lokala kommandoförslag, redigerbar Ja/Nej/Inte nu, separat inkorg | Enkel kommandogrammatik; datum godkänns manuellt |
-| Lektioner | Namn, anteckning och tidsintervall över avslutade sessioner | Originaltext och tidsbevis får aldrig skrivas om |
+| Assistent | Lokala kommandoförslag och aktiverad AI-tolkning av vanligt samtal; Ja/Nej/Inte nu | Modellkvalitet måste provas; innehåll och datum godkänns manuellt |
+| Lektioner | Separat lektionsläge pausar vardags-Mio; huvudpunkter/läxor via valfri AI | Originaltext och tidsbevis får aldrig skrivas om |
 | Kalender | Användarbekräftad fristående kalenderkopia | Ingen bakgrundssynk eller läsning av hela kalendern |
 | Alarm/notiser | AlarmKit, engångs-/veckoalarm, postpåminnelse, morgon-/kvällsnotis | Behörighet och leverans måste provas på telefon |
 | Dagen | Lokal morgon- och kvällsöversikt av sparat innehåll | Ingen påstådd semantisk sammanfattning av transkript |
-| AI | Fråga + vald kontext → förhandsgranskning → egen HTTPS-server → OpenAI | Server/nyckel kräver egen konfiguration; av från början |
+| AI | Enskilda frågor eller aktiverad löpande tolkning → egen HTTPS-server → OpenAI-adapter | Server/nyckel kräver egen konfiguration; av från början |
 
 ## Leveransgrindar
 
@@ -27,8 +27,10 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 
 Versionsnumret 1.0.0 används först när accepterad vardagsomfattning är verifierad. Inget datum eller löfte om heldagslyssning ges utan mätningar. Appversion, byggnummer och lagringsschema är separata värden. `CURRENT_PROJECT_VERSION` höjs inför nästa distribuerade build; bundle identifier och beständiga lagringsvägar ändras inte.
 
-Råljudslagring, automatisk molnöverföring, dold profilering och tyst kalenderbokning ingår inte. Konton och serverdrift behövs enbart om användaren aktiverar AI.
+Råljudslagring, molnöverföring utan aktiverat samtycke, dold profilering och tyst kalenderbokning ingår inte. Konton och serverdrift behövs enbart om användaren aktiverar AI.
 
 ## Identitet och design, 2026-09-26
 
 Användaren har raderat prototypen. Appidentiteten är därför `app.mio.assistant` och lagringsmappen `Mio`, utan fasnamn, personnamn eller appversionsnummer. Ingen tidigare migrering behövs. Native Liquid Glass används för kontroller och navigation; innehållet har semantiska läsytor. Designen behöver visas och provas i verklig iOS, inte bara granskas i källkod.
+
+Förtydligande 2026-09-26: lektionsläge och vanlig samtalstolkning är korrigeringar mot visionen. Första AI-leverantör är OpenAI; andra kan senare implementeras bakom serverns stabila appkontrakt. Driftsättning och verkliga modellprov återstår.

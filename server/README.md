@@ -23,7 +23,7 @@ Tester använder syntetiska data, en lokal HTTP-port och mockad upstream. Ingen 
 
 1. Kopiera katalogen `server/` till en privat katalog på din server.
 2. Kopiera `env.example` till `.env`. Skydda filen med `chmod 600 .env`.
-3. Fyll i `OPENAI_API_KEY` och `MIO_OPENAI_MODEL` med en textmodell som ditt OpenAI-projekt har åtkomst till och som stöder Responses API. Modell väljs uttryckligen; servern gissar inte åt dig.
+3. Fyll i `OPENAI_API_KEY` och `MIO_OPENAI_MODEL` med en textmodell som ditt OpenAI-projekt har åtkomst till och som stöder Responses API och Structured Outputs. Behåll `MIO_AI_PROVIDER=openai`. Modell väljs uttryckligen; servern gissar inte åt dig.
 4. Skapa en separat slumpad gatewaytoken med följande kommando, lokalt på servern. Spara resultatet i `.env` som `MIO_GATEWAY_TOKEN` och privat i telefonens anslutningsfält. Publicera inte resultatet i en chatt eller Git.
 
 ```sh
@@ -46,7 +46,7 @@ För kontinuerlig drift, låt din processhanterare/systemd starta samma kommando
 
 6. Anpassa `Caddyfile.example` till din domän, rikta DNS till servern och konfigurera betrodd HTTPS. Exponera endast HTTPS-porten publikt, aldrig Node-port 8787. Caddy måste köras på samma värd för den angivna loopback-adressen. Kontrollera din installation mot [Caddys dokumentation](https://caddyserver.com/docs/quick-starts/https).
 7. Använd inga request-/body-/Authorization-loggar i proxyn. Exempelfilen slår inte på accessloggar. Håll server, certifikat och system uppdaterade.
-8. I Mio: **Fråga Mio med AI → Din privata server**. Ange endast HTTPS-origin, exempelvis `https://mio.din-domän.se`, och gatewaytoken. Spara och aktivera molnfrågor. Prova en syntetisk fråga utan kontext och kontrollera sändningspreview.
+8. I Mio: **Mio → AI-assistent → Konfigurera server och tillåt molnfrågor**. Ange endast HTTPS-origin, exempelvis `https://mio.din-domän.se`, och gatewaytoken. Spara och aktivera molnfrågor. Prova en syntetisk fråga utan kontext och kontrollera sändningspreview.
 
 Servern har ingen installation av OpenAI-nyckeln i appen, ingen OAuth och inga användarkonton. Dela inte gatewaytoken mellan oberoende användare. Rotera den genom att ändra `.env`, starta om servern och spara den nya tokenen i appen.
 
@@ -67,14 +67,34 @@ Ett lyckat svar är `{"answer":"…"}`. Andra statuskoder ger en fast felkod, al
 
 - Högst 2 000 UTF-8-byte fråga, sex utdrag, 200 byte etikett och 4 000 byte text per utdrag. All kontext högst 10 000 byte; HTTP-body högst 20 000 byte.
 - Upstream timeout 40 sekunder. Appens timeout är något längre. Klientavbrott försöker avbryta upstream men återkallar inte redan skickad text eller kostnad.
-- Högst två samtidiga upstream-anrop, normalt sex frågor/minut och 100/dygn. Gränser kan sänkas i `.env`.
+- Högst två samtidiga upstream-anrop, normalt sex anrop/minut och 100/dygn för båda rutterna tillsammans. Gränser kan sänkas i `.env`.
 - Räknarna finns bara i processminnet och nollställs vid omstart. Kör en process; flera instanser delar inte räknare. Detta är ingen hård månadsbudget: använd även OpenAI-projektets kostnadskontroller.
-- Svaret begränsas till 1 000 genererade tokens och 16 000 byte text. Ofullständiga svar avvisas.
+- Enskilda frågesvar begränsas till 1 000 genererade tokens (analys till 3 000) och 16 000 byte text. Ofullständiga svar avvisas.
 
 ## Datakontroll
 
-Appen visar exakt fråga, etiketter och utdrag före ett särskilt godkännande. Servern skickar bara detta som användarinnehåll samt fasta svenska systeminstruktioner till `https://api.openai.com/v1/responses`. Det finns inga verktyg, ingen automatiserad kalender-/minnesåtgärd, ingen konversationshistorik och inga automatiska omförsök.
+Enskilda frågor visar exakt fråga, etiketter och utdrag före godkännande. Löpande analys har ett separat samtycke till nya utdrag och avslutade lektioner tills läget stängs av. Servern skickar bara den godkända payloaden som användarinnehåll samt fasta svenska systeminstruktioner till `https://api.openai.com/v1/responses`. Det finns inga verktyg, ingen automatiserad kalender-/minnesåtgärd, ingen konversationshistorik och inga automatiska omförsök.
 
 Servern skriver inga frågor, svar, IP-adresser eller credentials till logg eller databas. Den begär `store: false`. Detta innebär inte att OpenAI saknar all datalagring; kontrollera [OpenAI:s datakontroller](https://developers.openai.com/api/docs/guides/your-data). [Responses API-kontraktet](https://developers.openai.com/api/reference/resources/responses/methods/create) är källa för anropsformatet.
 
 Telefonens **Glöm anslutning** tar bort lokal token/URL och stänger av AI. Det raderar inte en redan skickad fråga hos leverantören. Byt/återkalla servernyckel och token vid misstänkt läcka. Använd endast testdata i [AI01–AI06](../docs/TESTPLAN_HELHET.md) tills din egen installation är verifierad.
+
+## Löpande textanalys och lektionsanteckningar
+
+`POST /v1/analyze` använder samma autentisering och gränser. JSON innehåller `mode` (`everyday`/`lesson`), IANA-`timeZone` och 1–8 `fragments` med `id` (segment-UUID:delindex), `text`, `occurredAt` (ISO-8601 med offset). Varje fragment får vara 4 000 UTF-8-byte, sammanlagt 10 000. Appen skickar enbart färdig text, aldrig råljud.
+
+Svaret har `candidates` (högst sex), `highlights` (högst åtta, bara lektion) och `uncertainties` (högst sex). Kandidater innehåller typ, rubrik, text, nullable `scheduledAt`, käll-ID:n och exakt citat. Server och app avvisar okända källor, citat som inte finns i underlaget, ogiltiga tider och automatiska minnen. Det bevisar inte att modellens tolkning är korrekt; användaren granskar utkastet.
+
+[Systeminstruktionerna](src/prompts.mjs) beskriver svensk vardagsanalys, negation/osäkerhet, undervisning, datum, ingen dold profil och åtskillnad mellan data och instruktioner. [Adaptern](src/provider.mjs) använder [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) med `text.format`, strikt schema och inga verktyg. En ny leverantör behöver en adapter som uppfyller samma kontrakt och egna kvalitetsprov. En ändring av modell i `.env` kräver omstart.
+
+Vardagsanalys gör normalt högst ett anrop per minut; lektionsdelar minst tolv sekunder emellan. iOS bakgrundskörning kan fördröja arbetet. Dagsgränsen 100 kan därför nås efter cirka 100 aktiva analysminuter och tidigare om frågor/lektioner också skickas. Appen stoppar AI-läget vid fel, utan automatisk återförsöksslinga. Ändra gränsen först efter att ha mätt verklig användning/kostnad. Räknarna är inte en beständig månadsbudget.
+
+## Om du börjar utan konto eller server
+
+1. Skapa ett eget projekt på [OpenAI-plattformen](https://platform.openai.com/) och konfigurera API-betalning/åtkomst där. Skapa en API-nyckel som bara används i serverns privata `.env`, aldrig i telefonen eller chatten.
+2. Välj en tillgänglig modell med Responses och Structured Outputs. Fyll i dess exakta modell-ID. Modellkvalitet, svarstid och verklig kostnad provas med syntetiska exempel innan löpande lyssning aktiveras.
+3. Du kan först köra servern på din dator med stegen ovan och kontrollera `/health` samt mocktesterna. iPhone kräver en betrodd HTTPS-adress som når servern; `localhost` på telefonen är telefonen själv. Vanlig lokal HTTP fungerar inte som appanslutning.
+4. För ständig åtkomst behövs en påslagen värd och HTTPS/domän. Ingen serverplats köps eller skapas av detta repo. När driftplatsen är vald används samma Node-process bakom Caddy enligt ovan.
+5. Kör AI01–AI06 samt A07–A14 och L01–L05 i [testplanen](../docs/TESTPLAN_HELHET.md). Börja med syntetiska meningar och låg dagsgräns. Kontrollera faktiska modellresultat i appen, inte bara att servern svarar 200.
+
+En fungerande `/health` betyder inte att API-nyckel, modell eller betalning fungerar. Det första verkliga modellprovet kräver din konfigurerade server och kan kosta pengar. Installationsstegen lämnar AI avstängt tills du själv aktiverar det.

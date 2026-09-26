@@ -18,7 +18,7 @@ Läs [README](README.md), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMA
 - Använd Apples native navigation, semantiska färger och Dynamic Type. Liquid Glass hör till kontroller/navigation; läsytor ska förbli tydliga. Prova mörkt läge, större text, Minska rörelse och Minska genomskinlighet.
 - Rättningar är visningslager: ändra aldrig originaltranskription, ljudtider eller diagnostiskt bevis. Okända innehållsscheman får inte skrivas över.
 - `SpeechAnalyzer` kör en transkriptionsmodul åt gången. Välj `SpeechTranscriber` endast med installerad svensk asset; annars direkt `DictationTranscriber` med `sv_SE`. Sessionsstart får inte starta modellhämtningen. Vid förberedelsefel används en ny analyzer för fallback.
-- Lagra aldrig råljud. Commit aldrig privata exporter, inspelningar, pairing-filer, certifikat, Apple-uppgifter eller API-nycklar. Framtida molnfrågor kräver uttryckligt godkännande, minsta kontext och serverägd nyckel.
+- Lagra aldrig råljud. Commit aldrig privata exporter, inspelningar, pairing-filer, certifikat, Apple-uppgifter eller API-nycklar. Enskilda molnfrågor kräver sändningsgodkännande. Löpande analys kräver explicit aktiverat läge och använder enbart nya vardagsutdrag samt godkända lektioner; minsta kontext och serverägd nyckel gäller båda.
 - Dokumentera krav på samtycke och lokala regler vid inspelning av andra.
 
 ## Arbetsrutin

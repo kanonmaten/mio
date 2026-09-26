@@ -90,6 +90,7 @@ enum MioCloudSettings {
         try validateToken(token)
         try writeToken(token)
         UserDefaults.standard.set(normalizedOrigin, forKey: serverKey)
+        NotificationCenter.default.post(name: didResetNotification, object: nil)
     }
 
     static func connection() throws -> MioCloudConnection {
@@ -151,6 +152,23 @@ enum MioCloudSettings {
 
 enum MioCloudService {
     static func ask(_ payload: MioCloudRequest, connection: MioCloudConnection) async throws -> String {
+        let data = try await send(payload.validatedData(), connection: connection)
+        struct Answer: Decodable { let answer: String }
+        guard let decoded = try? JSONDecoder().decode(Answer.self, from: data),
+              !decoded.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { throw MioCloudError.invalidResponse }
+        return decoded.answer
+    }
+
+    static func analyze(_ payload: MioAnalysisRequest, connection: MioCloudConnection) async throws -> MioAnalysisResult {
+        let endpoint = connection.endpoint.deletingLastPathComponent().appendingPathComponent("analyze")
+        let data = try await send(payload.validatedData(), connection: MioCloudConnection(endpoint: endpoint, token: connection.token))
+        guard let result = try? JSONDecoder().decode(MioAnalysisResult.self, from: data) else { throw MioCloudError.invalidResponse }
+        try result.validate(against: payload)
+        return result
+    }
+
+    private static func send(_ body: Data, connection: MioCloudConnection) async throws -> Data {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.urlCredentialStorage = nil
@@ -167,7 +185,7 @@ enum MioCloudService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(connection.token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try payload.validatedData()
+        request.httpBody = body
         do {
             try Task.checkCancellation()
             let (bytes, response) = try await session.bytes(for: request, delegate: MioCloudRedirectGuard())
@@ -181,11 +199,7 @@ enum MioCloudService {
                 guard data.count < 32_768 else { throw MioCloudError.oversizedResponse }
                 data.append(byte)
             }
-            struct Answer: Decodable { let answer: String }
-            guard let decoded = try? JSONDecoder().decode(Answer.self, from: data),
-                  !decoded.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            else { throw MioCloudError.invalidResponse }
-            return decoded.answer
+            return data
         } catch is CancellationError {
             throw CancellationError()
         } catch let error as MioCloudError {

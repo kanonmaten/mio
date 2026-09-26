@@ -47,3 +47,16 @@ Användaren ersätter arbetet version för version med ett sammanhängande helhe
 - En gemensam skrivspärr skyddar fullständig radering mot pågående/eftersläpande UI-skrivningar. En misslyckad systemavbrytning får inte rapporteras som lyckad total radering.
 
 Referenser för plattformsval: [EventKitUI utan generell kalenderåtkomst](https://developer.apple.com/documentation/eventkit/accessing-the-event-store), [AlarmKit](https://developer.apple.com/documentation/alarmkit/scheduling-an-alarm-with-alarmkit), [Apples privacy-manifest](https://developer.apple.com/documentation/technotes/tn3183-adding-required-reason-api-entries-to-your-privacy-manifest). SDK-kompatibiliteten måste slutligen verifieras av Xcode för aktuell revision.
+
+## Korrigerat assistentflöde, 2026-09-26
+
+Användaren har efter telefonprov bekräftat löpande analys av korta textutdrag efter uttrycklig aktivering, och vill ha tydliga systeminstruktioner med OpenAI först och möjlighet att byta leverantör senare. Detta förtydligar de äldre reglerna ovan:
+
+- AI är av i varje ny app-process. Aktivering godkänner framtida vardagstext och text från lektioner som avslutas medan läget är på. En historisk lektion kräver ett separat val. Äldre vardagstext tas inte med vid aktivering, även när en vardagssession ligger pausad bakom en lektion.
+- Vardagsutdrag samlas ungefär en minut, högst åtta fragment/10 000 byte per anrop. Paus/stopp kastar väntande vardagsanalys. Avstängning/radering avbryter relevanta anrop och sena svar får inte återskapa data. Redan skickad text/kostnad kan inte återkallas.
+- Separat Starta lektion stoppar vardagens ljudflöde före lektionsstart. Efter avslut är vardags-Mio pausat tills Fortsätt Mio väljs. AI ger källkopplade delanteckningar; inget råljud sparas. Manuell historisk lektionsindelning bevaras men är inte det primära flödet.
+- `/v1/analyze` lämnar endast validerade plan-/uppgifts-/anteckningsutkast och lektionspunkter. Inga automatiska minnen, verktyg eller externa åtgärder. Datum tolkas mot källtid/tidszon, saknade tider är null, och användaren måste kontrollera tid före godkännande av AI-planer/uppgifter.
+- Serverns `prompts.mjs` skiljer vardag, lektion, källmaterial och instruktioner. `provider.mjs` isolerar OpenAI-anrop och svarstolkning. Endast OpenAI-adaptern är implementerad; modell väljs i servermiljön. Byte kräver modellprov, inte enbart ändring av URL.
+- För enskilda frågor gäller fortfarande exakt sändningspreview. Gatewaytoken ligger i Keychain och hålls dessutom i arbetsminnet under det aktiverade analysläget för låst skärm. Ändrad anslutning stänger av läget. API-nyckeln finns bara på servern.
+
+Källcitat och schema är tekniska kontroller, inte ett bevis på semantisk korrekthet eller skydd mot alla promptinjektioner. Modellens verkliga urval och svenska datumtolkning måste provas med syntetiska exempel före vardagsbruk.

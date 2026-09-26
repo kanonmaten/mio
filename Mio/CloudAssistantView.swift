@@ -32,7 +32,7 @@ struct CloudAssistantView: View {
             Section {
                 Toggle("Tillåt molnfrågor", isOn: $isEnabled)
                 Text(isEnabled
-                     ? "Varje fråga kräver din granskning och ett separat tryck på Skicka."
+                     ? "Enskilda frågor kräver granskning och Skicka. Löpande textanalys aktiveras separat under AI-assistent."
                      : "Avstängt. Ingen fråga eller transkription skickas till molnet.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -126,7 +126,7 @@ struct CloudAssistantView: View {
             if !enabled { clearConversation() }
         }
         .onReceive(NotificationCenter.default.publisher(for: MioCloudSettings.didResetNotification)) { _ in
-            serverAddress = ""
+            serverAddress = MioCloudSettings.serverAddress
             newToken = ""
             settingsMessage = nil
             clearConversation()

@@ -59,7 +59,7 @@ actor MioAssistantRepository {
 
     @discardableResult
     func detectSuggestions(in session: MioSession, now: Date = .now) throws -> Int {
-        guard !isDeleted(session) else { return 0 }
+        guard !isDeleted(session), !session.isLesson else { return 0 }
         var document = try loadDocument()
         var count = 0
         for segment in session.transcripts {
@@ -72,6 +72,45 @@ actor MioAssistantRepository {
             count += suggestions.count
         }
         if count > 0 { try write(document) }
+        return count
+    }
+
+    @discardableResult
+    func applyAnalysis(_ result: MioAnalysisResult, request: MioAnalysisRequest, session: MioSession) throws -> Int {
+        guard !isDeleted(session) else { throw MioAssistantValidationError.deletedSession }
+        _ = try request.validatedData()
+        try result.validate(against: request)
+        let actualFragments = Dictionary(uniqueKeysWithValues: session.transcripts.flatMap(MioAnalysisFragment.make).map { ($0.id, $0) })
+        guard request.fragments.allSatisfy({ actualFragments[$0.id] == $0 }) else { throw MioCloudError.invalidContext }
+        var document = try loadDocument()
+        let alreadyAnalyzed = Set((document.analyses ?? []).filter { $0.sessionID == session.id }.flatMap(\.fragmentIDs))
+        guard alreadyAnalyzed.isDisjoint(with: request.fragments.map(\.id)) else { return 0 }
+        let sources = Dictionary(uniqueKeysWithValues: request.fragments.map { ($0.id, $0) })
+        var count = 0
+        for candidate in result.candidates {
+            guard let firstID = candidate.sourceIDs.first, let segmentID = sources[firstID]?.segmentID else { continue }
+            let source = MioProcessedSource(sessionID: session.id, segmentID: segmentID)
+            // A segment can contain both a local command and an unrelated ordinary plan.
+            let date = candidate.scheduledAt.flatMap(MioAnalysisResult.parseDate)
+            let proposal = MioSuggestion(
+                kind: candidate.kind, title: candidate.title, body: candidate.body,
+                scheduledAt: date, sessionID: session.id, sourceSegmentID: segmentID,
+                evidence: candidate.evidence, needsDateConfirmation: date == nil
+            )
+            let duplicate = document.suggestions.contains {
+                $0.sessionID == session.id && $0.kind == proposal.kind
+                    && $0.scheduledAt == proposal.scheduledAt
+                    && $0.title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "sv_SE"))
+                    == proposal.title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "sv_SE"))
+            }
+            if !duplicate { document.suggestions.append(proposal); count += 1 }
+            document.processedSources.insert(source)
+        }
+        var records = document.analyses ?? []
+        records.append(MioAnalysisRecord(id: UUID(), sessionID: session.id, fragmentIDs: request.fragments.map(\.id),
+                                         highlights: result.highlights, uncertainties: result.uncertainties, createdAt: .now))
+        document.analyses = records
+        try write(document)
         return count
     }
 
@@ -118,8 +157,9 @@ actor MioAssistantRepository {
         document.suggestions.removeAll { $0.sessionID == sessionID }
         document.lessons.removeAll { $0.sessionID == sessionID }
         document.processedSources = document.processedSources.filter { $0.sessionID != sessionID }
+        document.analyses?.removeAll { $0.sessionID == sessionID }
         if document.suggestions != before.suggestions || document.lessons != before.lessons
-            || document.processedSources != before.processedSources {
+            || document.processedSources != before.processedSources || document.analyses != before.analyses {
             try write(document)
         }
         deletedSessionIDs.insert(sessionID)
