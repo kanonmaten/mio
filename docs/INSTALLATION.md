@@ -2,6 +2,8 @@
 
 Första testtelefon: iPhone 16 Pro. iPhone 13 provas senare. Lägsta iOS-version: 26.0; Xcode 27 och iOS 27 SDK används för bygget. Aktuellt helhetsbygge: **0.9.0, ej släppt**. [Status](STATUS.md) visar vad som faktiskt har byggts och provats.
 
+Färdig testfil: **0.9.0 (3)** från [Actions-körning 36228684153](https://github.com/kanonmaten/mio/actions/runs/36228684153). [Hämta Mio-IPA](https://github.com/kanonmaten/mio/actions/runs/36228684153/artifacts/10902176166), packa upp ZIP-filen och installera IPA:n enligt steg 5–8 nedan. Källrevision och SHA-256 finns i [status](STATUS.md).
+
 Huvudvägen är **GitHub Actions → osignerad IPA → SideStore**. Koden kan redigeras på Linux, Windows eller Monterey; iOS-kompilering sker på en Mac med kompatibel Xcode.
 
 ## Uppdatera via GitHub Actions och SideStore

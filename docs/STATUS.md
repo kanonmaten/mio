@@ -1,6 +1,6 @@
 # Bygg- och teststatus
 
-Senast uppdaterad: **2026-09-26**. Aktuellt helhetsbygge: **0.9.0, ej släppt**. Resultaten nedan gäller den lokala arbetskopian; den lokala kontrollen gjordes före commit, push och Actions-körning. Användaren har därefter godkänt push och bygge; resultat redovisas när körningen är klar.
+Senast uppdaterad: **2026-09-26**. Aktuellt helhetsbygge: **0.9.0, ej släppt**. Helhetsbygget är pushat på `codex/helhetsbygge`. **Build 3 är kompilerad, XCTest-godkänd och paketerad som IPA.** Telefonprov återstår. Dokumentationscommit efter bygget ändrar inte appkoden; den byggda revisionen anges nedan.
 
 Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskriver innehållet och [helhetstestet](TESTPLAN_HELHET.md) beskriver återstående acceptansprov.
 
@@ -13,9 +13,9 @@ Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskr
 | Swift-syntaxparser | Inga nya syntaxfynd jämfört med HEAD. Fyra parserfynd finns även i den oförändrade transkriptionskoden. Tree-sitter är inte Swift-kompilatorn och kontrollerar inte SDK-typer. |
 | Serverns tester | **14 av 14 godkända**, Node v26.8.2, med simulerad leverantör och lokal HTTP-testserver. Inga verkliga AI-anrop eller kostnader. |
 | Appikon | Tre opaka RGB-varianter, 1024 × 1024: standard, mörk och tonad. Standardikonen visuellt granskad som PNG. Ingen verifiering av ikonrendering på iOS ännu. |
-| Xcode / Release | **Ej körd för helhetsbygget.** Linux saknar Xcode och iOS SDK. Workflowen använder ett `xcode-27`-jobb; runnerns faktiska tillgänglighet är inte kontrollerad med en ny körning. |
-| XCTest | Nya och befintliga testfall finns och är registrerade i MioTests. **Ej kompilerade eller körda för helhetsbygget.** |
-| IPA / installation | **Ingen IPA byggd för denna arbetskopia; ingen installation verifierad.** |
+| Xcode / Release | **Godkänd** för commit `f53aaa1` i Actions 36228684153 på faktisk runner `xcode-27-arm64`, Xcode 27.0 (27A266a), iOS SDK 27.0. Inga kompilatorvarningar i slutloggen. |
+| XCTest | **39 av 39 godkända** för `f53aaa1` på iOS 27-simulator (iPhone 17). |
+| IPA / installation | **0.9.0 (3)** skapad och lokalt ZIP-/plist-/SHA-256-kontrollerad. Identiteten är `app.mio.assistant`, minsta iOS 26.0. **Ingen fysisk installation verifierad.** |
 | Design och tillgänglighet | Native Liquid Glass-kontroller och systemnavigation implementerade. iOS-rendering, VoiceOver, större text, mörkt läge och tillgänglighetsinställningar återstår att prova. |
 | Telefonprov | **Ej körda.** Först iPhone 16 Pro; därefter iPhone 13. Exakt iOS-version ska registreras för varje prov. |
 | AI i drift | **Ingen server driftsatt**, ingen riktig modellfråga provad. Molnet är avstängt tills användaren konfigurerar och aktiverar det. |
@@ -24,13 +24,21 @@ Serverproven kontrollerar autentisering, routning, exakt godkänd payload, storl
 
 Appidentiteten är nu `app.mio.assistant`. De tre lokala lagren ligger under `Mio/`; den raderade prototypen migreras inte. Minsta iOS-version är 26.0 och avsedd byggmiljö är Xcode 27.
 
+## Verifierad IPA
+
+- Byggd commit: `f53aaa1f0c18537d96bc80b21b3e55924ca5d537` på `codex/helhetsbygge`.
+- [Grön Actions-körning 36228684153](https://github.com/kanonmaten/mio/actions/runs/36228684153).
+- [Hämta artifacten Mio-IPA](https://github.com/kanonmaten/mio/actions/runs/36228684153/artifacts/10902176166), sparad i 14 dagar. Packa upp ZIP-filen en gång och installera `Mio-unsigned.ipa` via SideStore.
+- Version **0.9.0**, build **3**. SHA-256 för själva IPA:n: `43ed053b55c93d41046be4de45686ff906f690a4e1e79d0cd5f2c22dd1f138ec`.
+
+Första körningen, [36204571782](https://github.com/kanonmaten/mio/actions/runs/36204571782), godkände också Release och 39 XCTest för `3d4b041` (build 2), men rapporterade en samtidighetsvarning i kalenderdelegaten. Build 3 rättar den och är filen som ska användas.
+
 ## Nästa kontroller
 
-1. Efter uttrycklig begäran: commit/push av granskad arbetskopia och körning av GitHub Actions. Kontrollera faktisk runner, Release, XCTest och IPA-validering för samma commit.
-2. Installera IPA:n enligt [installationsguiden](INSTALLATION.md), först på iPhone 16 Pro.
-3. Kör H01–H15 i [helhetstestet](TESTPLAN_HELHET.md). Börja med syntetiska data och håll AI avstängt.
-4. Prova behörigheter, tillgänglighet, dagbyte och radering. Kör sedan låst skärm, avbrott och längre batteriprov enligt [transkriptionstestet](TESTPLAN_V0_1.md).
-5. När användaren har konfigurerat [servern](../server/README.md): kör AI01–AI06 med en ofarlig fråga och minsta kontext.
+1. Installera IPA:n enligt [installationsguiden](INSTALLATION.md), först på iPhone 16 Pro.
+2. Kör H01–H15 i [helhetstestet](TESTPLAN_HELHET.md). Börja med syntetiska data och håll AI avstängt.
+3. Prova behörigheter, tillgänglighet, dagbyte och radering. Kör sedan låst skärm, avbrott och längre batteriprov enligt [transkriptionstestet](TESTPLAN_V0_1.md).
+4. När användaren har konfigurerat [servern](../server/README.md): kör AI01–AI06 med en ofarlig fråga och minsta kontext.
 
 [Användarguiden](ANVANDNING.md) beskriver de dagliga flödena. Byggfel och telefonfynd ska åtgärdas innan helhetsbygget betraktas som verifierat.
 
