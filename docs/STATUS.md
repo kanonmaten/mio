@@ -1,13 +1,13 @@
 # Bygg- och teststatus
 
-Senast uppdaterad: **2026-09-27**. Helhetsbygge **0.9.0, ej släppt**. Tidigare build 3 är merged till `main` och kompilerad/XCTest-godkänd. Efter användarens telefonexport och förtydliganden finns nya rättningar i arbetskopian; **Build 4** för `595e4a8` har nu klarat Release och **46 XCTest** i Actions 36278717100. IPA:n är nedladdad och kontrollerad. Telefonprov för denna revision och verklig AI-drift återstår.
+Senast uppdaterad: **2026-09-27**. Helhetsbygge **0.9.0, ej släppt**. **Build 4** för `595e4a8` på `main` har klarat Release och **46 XCTest** i Actions 36278717100. IPA:n är nedladdad och kontrollerad. Cloudflare-gatewayen är publicerad men väntar på OpenAI-nyckel. Telefonprov för denna revision och verkliga modellprov återstår.
 Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskriver innehållet och [helhetstestet](TESTPLAN_HELHET.md) beskriver återstående acceptansprov.
 
 ## Aktuellt verifieringsläge
 
 | Område | Resultat och begränsning |
 |---|---|
-| Källkod | Arbetskopian kompletterar build 3 med riktigt lektionsläge, löpande aktiverad AI-tolkning av vanligt samtal, strukturerade systeminstruktioner och bättre motordiagnostik. Den äldre beskrivningen av hela omfånget som färdigt var för bred. |
+| Källkod | Build 4 kompletterar build 3 med riktigt lektionsläge, löpande aktiverad AI-tolkning av vanligt samtal, strukturerade systeminstruktioner och bättre motordiagnostik. Den äldre beskrivningen av hela omfånget som färdigt var för bred. |
 | Portabel projektkontroll | Godkänd på Linux med `python3 scripts/verify_project.py`: projektregistrering, plist/XML, identitet, version, resurser, lagringsvägar, dokumentlänkar, workflow/Bash och whitespace. |
 | Swift-syntaxparser | Tree-sitter-försöket kraschade i lokal parser/bindning och räknas inte som en godkänd kontroll. Xcode har därefter kompilerat den nya appen och godkänt 46 XCTest. |
 | Serverns tester | **22 av 22 godkända**, Node v26.10.0, med simulerad leverantör och lokal HTTP-testserver. Inga verkliga AI-anrop eller kostnader. |
@@ -17,7 +17,7 @@ Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskr
 | IPA / installation | **0.9.0 (4)** skapad och lokalt ZIP-/plist-/SHA-256-kontrollerad. Identiteten är `app.mio.assistant`, minsta iOS 26.0. **Ingen fysisk installation verifierad.** |
 | Design och tillgänglighet | Native Liquid Glass-kontroller och systemnavigation implementerade. iOS-rendering, VoiceOver, större text, mörkt läge och tillgänglighetsinställningar återstår att prova. |
 | Telefonprov | Användaren har lämnat ett privat prov från 2026-09-26, se nedan. Byggnummer/enhets- och iOS-version saknas i exporten; inget komplett acceptansprov är styrkt. |
-| AI i drift | **Ingen server driftsatt**, ingen riktig modellfråga provad. Molnet är avstängt tills användaren konfigurerar och aktiverar det. |
+| AI i drift | **Cloudflare Worker publicerad**, D1-kvottabell skapad och separat gatewaytoken sparad som Secret. HTTPS svarar 503 `gateway_not_configured` medan OpenAI-nyckeln saknas. Ingen riktig modellfråga provad. Molnet i appen är avstängt tills användaren konfigurerar och aktiverar det. |
 
 Serverproven kontrollerar autentisering, routning, exakt godkänd payload, storleksgränser, sanitiserade fel, begränsning av antal anrop, timeout och redirects. De ersätter inte ett prov med en verklig HTTPS-server. De lokala kontrollerna ersätter varken Xcode, XCTest eller fysisk telefon.
 
@@ -67,4 +67,8 @@ Portabel kontroll efter gatewaytillägget: 113 strukturella kontroller godkända
 
 `wrangler deploy --dry-run` godkänd med Wrangler 4.141.0. Det faktiska bundlade Worker-paketet har körts i lokal workerd/Miniflare med simulerad modell: hälsa, autentisering, ogiltiga payloads, enskild fråga, analys och beständig dygnsgräns godkända. All modelltrafik fångas i testet, inga riktiga API-anrop. Kvotens atomiska SQL är även provad mot SQLite.
 
-Node-kompatibiliteten krävde explicit hantering av headeralternativ, timers och redirect-status; dessa rättningar ingår i testat paket. Projektkontrollen undantar nu installerade beroenden och genererade Worker-filer. Cloudflare-kontot är ännu inte anslutet och ingen publik gateway är driftsatt. [Driftguide](../server/cloudflare/README.md).
+Node-kompatibiliteten krävde explicit hantering av headeralternativ, timers och redirect-status; dessa rättningar ingår i testat paket. Projektkontrollen undantar nu installerade beroenden och genererade Worker-filer.
+
+Efter användarens OAuth-godkännande och e-postverifiering publicerades gatewayen på `https://mio-private-gateway.mio-private-gateway.workers.dev`. Första publicerade kodversion: `4eb6e89a-f2fb-4ff5-8f7f-4468facba325`; därefter lades gatewaytoken till som separat Secret. D1-databasen `mio-limits` skapades och kvotschemat importerades. Inga transkript lagras där.
+
+Första konfigurerade provmodell är `gpt-6-luna`. HTTPS-kontrollen gav väntat 503 `gateway_not_configured` innan `OPENAI_API_KEY` lagts in. Det verifierar publicering och konfigurationsspärr, inte modellåtkomst, autentisering i fullt konfigurerad drift eller AI-kvalitet. Nästa steg är användarens API-nyckel direkt i Cloudflare och syntetiska modellprov. [Driftguide](../server/cloudflare/README.md).

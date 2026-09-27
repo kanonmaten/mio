@@ -4,6 +4,7 @@ Användarsynliga ändringar och kompatibilitet per version. Versioner följer `v
 
 ## Driftalternativ 2026-09-27
 
+- Gatewayen publicerad på användarens Cloudflare-konto efter godkänd inloggning. Kvotdatabas och privat gatewaytoken konfigurerade; OpenAI-nyckel och verkliga modellprov återstår. Första provmodell konfigurerad som `gpt-6-luna`.
 - Cloudflare Worker med inkluderad HTTPS-adress: ingen påslagen egen dator eller köpt domän behövs. Samma AI-kontrakt, systeminstruktioner och validering. Beständiga minut-/dygnsräknare i D1, inga lagrade textutdrag.
 - Låsta utvecklingsverktyg, mocktester för budget samt genomgångstest av det verkliga Worker-paketet i lokal runtime. Ingen publik tjänst eller verklig AI-trafik har skapats av dessa tester.
 

@@ -9,13 +9,13 @@
   "observability": { "enabled": false },
   "vars": {
     "MIO_AI_PROVIDER": "openai",
-    "MIO_OPENAI_MODEL": "configure-model-before-use",
+    "MIO_OPENAI_MODEL": "gpt-6-luna",
     "MIO_REQUESTS_PER_MINUTE": "6",
     "MIO_REQUESTS_PER_DAY": "100"
   },
   "d1_databases": [{
     "binding": "MIO_LIMITS",
     "database_name": "mio-limits",
-    "database_id": "00000000-0000-0000-0000-000000000000"
+    "database_id": "b59175d1-bdf4-4672-8178-5ce04d9d66da"
   }]
 }

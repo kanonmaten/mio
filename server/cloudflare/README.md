@@ -18,9 +18,9 @@ npx wrangler login
 npx wrangler d1 create mio-limits
 ```
 
-Logga in i webbläsaren. Sista kommandot skapar en liten kvotdatabas i ditt konto. Kopiera dess `database_id` till D1-delen av `server/wrangler.jsonc`, där det nu står nollor. Databasen innehåller bara minut-/dygnsräknare, inga transkript eller nycklar.
+Logga in i webbläsaren och verifiera Cloudflare-kontots e-postadress. Sista kommandot skapar en liten kvotdatabas i ditt konto. Kopiera dess `database_id` till D1-delen av `server/wrangler.jsonc`. Den incheckade konfigurationen pekar på Mios befintliga databas; skapa inte en ny vid en vanlig uppdatering. Databasen innehåller bara minut-/dygnsräknare, inga transkript eller nycklar.
 
-1. Ändra `MIO_OPENAI_MODEL` i `wrangler.jsonc` till exakt modell-ID för en modell med Responses API och Structured Outputs som ditt OpenAI-projekt har åtkomst till. Platshållaren fungerar inte som modell.
+1. Kontrollera `MIO_OPENAI_MODEL` i `wrangler.jsonc`. Första provmodellen är `gpt-6-luna`; projektets åtkomst och svensk analyskvalitet behöver verifieras med riktiga API-prov. Vid byte krävs en modell med Responses API och Structured Outputs.
 2. Behåll `MIO_AI_PROVIDER=openai`. Andra leverantörer kräver en ny serveradapter; appens API ändras inte.
 3. Skapa kvottabellen och publicera gatewayen:
 
@@ -36,6 +36,8 @@ npx wrangler secret put MIO_GATEWAY_TOKEN
 ```sh
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
 ```
+
+Alternativt lägger du in API-nyckeln i Cloudflares webbgränssnitt: **Workers & Pages → mio-private-gateway → Settings → Variables and Secrets → Add**. Välj typen **Secret**, namnet `OPENAI_API_KEY` och klistra in värdet där. Spara/publicera ändringen. Skapa nyckeln i ditt eget [OpenAI-projekt](https://platform.openai.com/api-keys); skicka den inte till Codex-chatten. API-användning debiteras separat från ChatGPT-abonnemanget.
 
 Tjänsten svarar med ett konfigurationsfel tills hemligheterna finns. Kör inte `wrangler tail` eller request-/bodyloggning med privat text. `observability` är av i den medföljande konfigurationen. Cloudflares och OpenAI:s egna drift-/datavillkor gäller fortfarande.
 
