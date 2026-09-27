@@ -1,10 +1,10 @@
 # Mios privata AI-server
 
-Valfri Node-server för en privat Mio-användare. Appens lokalflöde kräver ingen server. Detta paket är inte driftsatt automatiskt och saknar inbyggd molnprovisionering. Använd en server/domän du själv kontrollerar.
+Valfri Node-server för en privat Mio-användare. Appens lokalflöde kräver ingen server. Detta paket är inte driftsatt automatiskt och saknar inbyggd molnprovisionering. Välj den färdiga [Cloudflare-vägen](cloudflare/README.md) för drift utan påslagen egen dator eller köpt domän. Node/Caddy-vägen nedan finns kvar för egen server.
 
 ## Förutsättningar
 
-- Node.js 22 eller senare. Inga npm-bibliotek behöver installeras.
+- Node.js 22 eller senare. Node-servern har inga runtime-beroenden. `npm ci` installerar låsta utvecklingsverktyg för Cloudflare-alternativet.
 - Ett OpenAI-projekt med API-åtkomst och en kostnadsgräns som du själv väljer.
 - En HTTPS-domän och en reverse proxy, exempelvis Caddy, på samma värd som Node-processen.
 - En slumpad privat gatewaytoken. Den är **inte** din OpenAI-nyckel.
@@ -98,3 +98,7 @@ Vardagsanalys gör normalt högst ett anrop per minut; lektionsdelar minst tolv 
 5. Kör AI01–AI06 samt A07–A14 och L01–L05 i [testplanen](../docs/TESTPLAN_HELHET.md). Börja med syntetiska meningar och låg dagsgräns. Kontrollera faktiska modellresultat i appen, inte bara att servern svarar 200.
 
 En fungerande `/health` betyder inte att API-nyckel, modell eller betalning fungerar. Det första verkliga modellprovet kräver din konfigurerade server och kan kosta pengar. Installationsstegen lämnar AI avstängt tills du själv aktiverar det.
+
+## Kostnadsfri molngateway
+
+[Cloudflare-guiden](cloudflare/README.md) beskriver Workers, inkluderad HTTPS-adress och en beständig D1-kvot som bara lagrar räknare. Dessa räknare ersätter processens dygnsgräns som enda kostnadsskydd i molnet. Ingen privat dator behöver vara på. API-användningen debiteras separat. Ingen tjänst har driftsatts förrän användarens konto och hemligheter konfigurerats.

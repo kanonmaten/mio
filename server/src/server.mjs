@@ -117,7 +117,7 @@ async function readBody(request, timeoutMs, validate = validatePayload) {
       })(),
       new Promise((_, reject) => {
         timer = setTimeout(() => reject(new RequestError(408, 'request_timeout')), timeoutMs);
-        timer.unref();
+        timer.unref?.();
       })
     ]);
   } finally {
@@ -161,7 +161,7 @@ async function readUpstream(response) {
 }
 
 /** Single private user, one process. Counters contain numbers only; no transcripts or IPs are kept. */
-export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now = Date.now } = {}) {
+export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now = Date.now, reserveBudget, serverOptions = { maxHeaderSize: 8_192 } } = {}) {
   validateConfig(config);
   const expectedDigest = createHash('sha256').update(`Bearer ${config.gatewayToken}`).digest();
   let minuteBucket = -1;
@@ -193,7 +193,7 @@ export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now 
     dayCount += 1;
   }
 
-  const server = createServer({ maxHeaderSize: 8_192 }, async (request, response) => {
+  const server = createServer(serverOptions, async (request, response) => {
     try {
       if (request.method === 'GET' && request.url === '/health') {
         reply(response, 200, { status: 'ok' }); return;
@@ -214,15 +214,17 @@ export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now 
       const controller = new AbortController();
       activeControllers.add(controller);
       const timeout = setTimeout(() => controller.abort(), config.upstreamTimeoutMs);
-      timeout.unref();
+      timeout.unref?.();
       const onClose = () => { if (!response.writableEnded) controller.abort(); };
       response.on('close', onClose);
       try {
+        if (reserveBudget && !(await reserveBudget())) throw new RequestError(429, 'request_limit');
+        if (controller.signal.aborted || response.destroyed) return;
         const provider = providerRequest({ config, mode: isAnalysis ? 'analyze' : 'ask', payload });
         const upstream = await fetchImpl(provider.url, {
           method: 'POST',
           headers: provider.headers,
-          redirect: 'error',
+          redirect: 'manual',
           signal: controller.signal,
           body: JSON.stringify(provider.body)
         });

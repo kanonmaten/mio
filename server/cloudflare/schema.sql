@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS mio_budget (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  minute INTEGER NOT NULL,
+  minute_count INTEGER NOT NULL,
+  day INTEGER NOT NULL,
+  day_count INTEGER NOT NULL
+);

@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mio-private-gateway",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": false },
+  "vars": {
+    "MIO_AI_PROVIDER": "openai",
+    "MIO_OPENAI_MODEL": "configure-model-before-use",
+    "MIO_REQUESTS_PER_MINUTE": "6",
+    "MIO_REQUESTS_PER_DAY": "100"
+  },
+  "d1_databases": [{
+    "binding": "MIO_LIMITS",
+    "database_name": "mio-limits",
+    "database_id": "00000000-0000-0000-0000-000000000000"
+  }]
+}

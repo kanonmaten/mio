@@ -93,6 +93,8 @@ def main():
     check(result.returncode == 0, 'git diff --check')
     for folder in ('Mio', 'MioTests', 'server', 'scripts', 'docs'):
         for path in (ROOT / folder).rglob('*'):
+            if {'node_modules', '.wrangler', 'dist'}.intersection(path.relative_to(ROOT).parts):
+                continue
             if not path.is_file() or '.git' in path.parts or path.suffix not in ('.swift', '.md', '.mjs', '.py', '.json'):
                 continue
             for number, line in enumerate(path.read_text().splitlines(), 1):

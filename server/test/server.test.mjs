@@ -70,7 +70,7 @@ test('success uses fixed upstream, no storage, no tools and only approved contex
   assert.equal(f.calls.length, 1);
   const { url, init } = f.calls[0];
   assert.equal(url, 'https://api.openai.com/v1/responses');
-  assert.equal(init.redirect, 'error');
+  assert.equal(init.redirect, 'manual');
   assert.equal(init.headers.Authorization, `Bearer ${defaults.apiKey}`);
   assert.ok(!JSON.stringify(init).includes(token));
   const request = JSON.parse(init.body);

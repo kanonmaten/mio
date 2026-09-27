@@ -70,7 +70,7 @@ För **enskilda frågor** följer du stegen nedan:
 
 Hela lokalflödet fungerar utan server. Om du vill aktivera AI:
 
-1. Sätt upp den medföljande servern enligt [serverguiden](../server/README.md), med OpenAI-nyckeln enbart på servern.
+1. Sätt upp den medföljande servern enligt [Cloudflare-guiden](../server/cloudflare/README.md) utan påslagen egen dator, eller [serverguiden](../server/README.md) för egen värd, med OpenAI-nyckeln enbart på servern.
 2. Öppna **Mio → Fråga Mio med AI**. Ange din HTTPS-adress och serverns separata åtkomsttoken. Spara anslutningen och slå på **Tillåt molnfrågor**.
 3. Skriv frågan. Välj vid behov enstaka poster eller ett kort sessionsutdrag. Korta och rensa texten som ska skickas.
 4. Tryck **Granska innan du skickar**. Läs mottagare, exakt fråga och exakt kontext.

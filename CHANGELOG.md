@@ -2,6 +2,11 @@
 
 Användarsynliga ändringar och kompatibilitet per version. Versioner följer `vMAJOR.MINOR.PATCH`; [roadmapen](docs/ROADMAP.md) definierar milstolpar och släppkrav. Ingen ny Git-tagg eller release har skapats genom namnbytet.
 
+## Driftalternativ 2026-09-27
+
+- Cloudflare Worker med inkluderad HTTPS-adress: ingen påslagen egen dator eller köpt domän behövs. Samma AI-kontrakt, systeminstruktioner och validering. Beständiga minut-/dygnsräknare i D1, inga lagrade textutdrag.
+- Låsta utvecklingsverktyg, mocktester för budget samt genomgångstest av det verkliga Worker-paketet i lokal runtime. Ingen publik tjänst eller verklig AI-trafik har skapats av dessa tester.
+
 ## Rättningar efter telefonprov 2026-09-26
 
 - Separat Starta lektion pausar vardags-Mio. Lektioner ersätter tidslinjen som huvudflik; historik och råtext finns kvar under Lektioner.

@@ -60,3 +60,9 @@ Användaren har efter telefonprov bekräftat löpande analys av korta textutdrag
 - För enskilda frågor gäller fortfarande exakt sändningspreview. Gatewaytoken ligger i Keychain och hålls dessutom i arbetsminnet under det aktiverade analysläget för låst skärm. Ändrad anslutning stänger av läget. API-nyckeln finns bara på servern.
 
 Källcitat och schema är tekniska kontroller, inte ett bevis på semantisk korrekthet eller skydd mot alla promptinjektioner. Modellens verkliga urval och svenska datumtolkning måste provas med syntetiska exempel före vardagsbruk.
+
+## Drift utan egen påslagen dator, 2026-09-27
+
+Användaren vill slippa en påslagen egen dator och föredrar gratis drift. Cloudflare Workers med workers.dev-adress förbereds därför som alternativ till egen Node/Caddy-värd. Modellen körs fortfarande hos OpenAI. Direkt API från en privat klient är tekniskt möjligt men skulle kräva API-nyckeln på telefonen; gatewayen behåller serverägd nyckel. Samma systeminstruktioner, HTTP-kontrakt och validering återanvänds.
+
+En D1-tabell med fyra heltalsräknare ger global minut-/dygnskvot över Worker-omstarter. Inga texter, nycklar eller IP-adresser lagras där. Cloudflare-konto och egna hemligheter krävs före driftsättning; inga resurser är skapade genom kodändringen. [Driftguide](../server/cloudflare/README.md).

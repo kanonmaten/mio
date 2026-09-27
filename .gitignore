@@ -21,3 +21,8 @@ Mio-session-*.json
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+server/dist/
