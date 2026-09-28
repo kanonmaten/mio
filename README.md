@@ -2,18 +2,18 @@
 
 Privat SwiftUI-app för iOS 26+ (första testtelefon iPhone 16 Pro, senare även iPhone 13): lokal svensk transkription, anteckningar, planering och en diskret vardagsassistent. Ingen App Store-distribution.
 
-**Aktuellt helhetsbygge: 0.9.0 — ej släppt.** Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
+**Aktuellt helhetsbygge: 0.9.0 — ej släppt.** Nya AI-/lektionsändringar i arbetskopian är ännu inte Xcode-byggda eller publicerade; den befintliga build 5 innehåller dem inte. Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
 
 ## Funktioner
 
 - **Native gränssnitt:** Liquid Glass för sessionskontroller, systemnavigation och flikar; semantiska läsytor, Dynamic Type och minskad rörelse.
 - **Mio:** lokal transkription, paus/stopp, Mio-tilltal och förslag med **Ja / Nej / Inte nu**. Förslagen kan rättas innan de sparas.
-- **Lektioner:** separat Starta lektion-knapp pausar vardags-Mio. AI kan välja ut huvudpunkter och läxor efter avslut. Äldre sessioner, manuella tidsintervall och råtext finns under Historik och råtext.
+- **Lektioner:** separat Starta lektion-knapp pausar vardags-Mio. AI kan skriva detaljerade, kopierbara anteckningar efter avslut, med separata läxförslag. Färdiga delar sparas för manuell fortsättning efter avbrott. Äldre sessioner, manuella tidsintervall och råtext finns under Historik och råtext.
 - **Kalender:** lokala planer och användarbekräftade kopior till Apple Kalender.
 - **Anteckningar:** sökbara anteckningar, uppgifter och synliga uttryckliga minnen.
 - **Morgon/Kväll:** lokal dagsöversikt, avklarade uppgifter, sessioner och lektioner; separata dagliga notiser.
 - **Alarm och påminnelser:** AlarmKit-alarm, återkommande veckodagar och lokala notiser. Behörigheter begärs först när du sparar en systemåtgärd.
-- **Valfri AI:** aktivera löpande analys av nya textutdrag för planer/uppgifter utan Mio-tilltal, eller ställ en enskild fråga med förhandsgranskning. Av vid appstart. OpenAI först, med separat leverantörsadapter; nyckeln finns endast på servern.
+- **Valfri AI:** aktivera löpande analys av nya textutdrag för planer/uppgifter utan Mio-tilltal, eller ställ en enskild fråga med förhandsgranskning. Av vid appstart. Byt kompatibel modell/leverantör på servern enligt [bytesguiden](server/PROVIDERS.md); nyckeln finns endast på servern. Reasoning av, temperatur 0 och strikt schema krävs.
 - Lokal versionsmärkt JSON-export och radering av appdata, egna alarm/notiser och AI-konfiguration. Inget råljud sparas.
 
 Utan AI används en enkel lokal kommandogrammatik. Med aktiverad AI kan även vanligt samtal ge förslag; innehåll och tider måste granskas. Lektionsanteckningar är källkopplade AI-utkast från textdelar, inte en garanti för fullständig sammanfattning. [Status](docs/STATUS.md) skiljer det tidigare bygget från dessa rättningar.

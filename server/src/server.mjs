@@ -1,15 +1,17 @@
 import { createServer } from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { validateAnalysisPayload, validateAnalysisResult } from './analysis.mjs';
-import { providerRequest, providerResponseText, ProviderResponseError, validateProvider } from './provider.mjs';
+import { validateAnalysisPayload, validateAnalysisResult, validateLessonPayload, validateLessonResult, validateAskResult } from './analysis.mjs';
+import { providerRequest, providerResponseText, ProviderResponseError, ProviderCompatibilityError, validateProvider, providerProfile, PROVIDERS } from './provider.mjs';
+
+import { PROMPT_VERSION } from './prompts.mjs';
 
 const MAX_BODY_BYTES = 20_000;
 const MAX_UPSTREAM_BYTES = 65_536;
 
 
 class RequestError extends Error {
-  constructor(status, code) { super(code); this.status = status; this.code = code; }
+  constructor(status, code, retryAfter = 60) { super(code); this.status = status; this.code = code; this.retryAfter = retryAfter; }
 }
 
 function byteLength(value) { return Buffer.byteLength(value, 'utf8'); }
@@ -49,13 +51,18 @@ function positiveInteger(value, fallback, maximum) {
 }
 
 export function loadConfig(env = process.env) {
+  const provider = env.MIO_AI_PROVIDER ?? 'openai';
+  validateProvider(provider);
   const config = {
-    provider: env.MIO_AI_PROVIDER ?? 'openai',
-    apiKey: env.OPENAI_API_KEY ?? '',
+    provider,
+    apiKey: env[PROVIDERS[provider][1]] ?? '',
+    baseURL: env.MIO_AI_BASE_URL,
+    compatibility: env.MIO_AI_COMPATIBILITY,
+    lessonIntervalSeconds: positiveInteger(env.MIO_LESSON_INTERVAL_SECONDS, 60, 3600),
     gatewayToken: env.MIO_GATEWAY_TOKEN ?? '',
-    model: env.MIO_OPENAI_MODEL ?? '',
+    model: env.MIO_AI_MODEL ?? (provider === 'openai' ? env.MIO_OPENAI_MODEL : '') ?? '',
     port: positiveInteger(env.PORT, 8787, 65_535),
-    requestsPerMinute: positiveInteger(env.MIO_REQUESTS_PER_MINUTE, 6, 60),
+    requestsPerMinute: positiveInteger(env.MIO_REQUESTS_PER_MINUTE, provider === 'groq' ? 1 : 6, 60),
     requestsPerDay: positiveInteger(env.MIO_REQUESTS_PER_DAY, 100, 1_000),
     upstreamTimeoutMs: 40_000,
     bodyTimeoutMs: 5_000
@@ -72,22 +79,24 @@ function validateConfig(config) {
       || !/^[A-Za-z0-9_-]{32,256}$/u.test(config.gatewayToken)
       || config.gatewayToken.startsWith('sk-')
       || config.gatewayToken === config.apiKey
-      || typeof config.model !== 'string' || !/^[A-Za-z0-9._:-]{1,100}$/u.test(config.model)) {
-    throw new Error('Konfigurera OPENAI_API_KEY, en separat slumpad MIO_GATEWAY_TOKEN och MIO_OPENAI_MODEL.');
+      || typeof config.model !== 'string' || !/^[A-Za-z0-9._:/-]{1,150}$/u.test(config.model)) {
+    throw new Error('Konfigurera leverantörens API-nyckel, en separat MIO_GATEWAY_TOKEN och MIO_AI_MODEL.');
   }
+  if (config.lessonIntervalSeconds !== undefined && (!Number.isSafeInteger(config.lessonIntervalSeconds)
+      || config.lessonIntervalSeconds < 60 || config.lessonIntervalSeconds > 3600)) throw new Error('Lektionsintervallet måste vara 60–3600 sekunder.');
   for (const field of ['requestsPerMinute', 'requestsPerDay', 'upstreamTimeoutMs', 'bodyTimeoutMs']) {
     if (!Number.isSafeInteger(config[field]) || config[field] < 1) throw new Error('Ogiltig servergräns.');
   }
 }
 
-function reply(response, status, body) {
+function reply(response, status, body, retryAfter = 60) {
   if (response.destroyed || response.writableEnded) return;
   response.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
     'Connection': 'close',
-    ...(status === 429 ? { 'Retry-After': '60' } : {})
+    ...(status === 429 ? { 'Retry-After': String(retryAfter) } : {})
   });
   response.end(JSON.stringify(body));
 }
@@ -125,10 +134,13 @@ async function readBody(request, timeoutMs, validate = validatePayload) {
   }
 }
 
-async function readUpstream(response) {
+async function readUpstream(response, profile) {
   if (!response.ok) {
     await response.body?.cancel();
-    throw new RequestError(response.status === 429 ? 429 : 502, 'upstream_unavailable');
+    const seconds = Number(response.headers.get('retry-after'));
+    if ([400, 422].includes(response.status)) throw new RequestError(422, 'provider_model_incompatible');
+    throw new RequestError(response.status === 429 ? 429 : 502, 'upstream_unavailable',
+      Number.isFinite(seconds) && seconds > 0 ? Math.min(Math.ceil(seconds), 86400) : 60);
   }
   if (!response.headers.get('content-type')?.toLowerCase().startsWith('application/json')
       || Number(response.headers.get('content-length')) > MAX_UPSTREAM_BYTES || !response.body) {
@@ -149,9 +161,9 @@ async function readUpstream(response) {
     let data;
     try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
     catch { throw new RequestError(502, 'invalid_upstream_response'); }
-    try { return providerResponseText(data); }
+    try { return providerResponseText(data, profile); }
     catch (error) {
-      if (error instanceof ProviderResponseError) throw new RequestError(502, error.message);
+      if (error instanceof ProviderResponseError) throw new RequestError(error.message === 'provider_model_incompatible' ? 422 : 502, error.message);
       throw new RequestError(502, 'invalid_upstream_response');
     }
   } finally {
@@ -198,7 +210,7 @@ export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now 
       if (request.method === 'GET' && request.url === '/health') {
         reply(response, 200, { status: 'ok' }); return;
       }
-      if (request.method !== 'POST' || !['/v1/ask', '/v1/analyze'].includes(request.url)) {
+      if (request.method !== 'POST' || !['/v1/ask', '/v1/analyze', '/v1/lesson-notes'].includes(request.url)) {
         reply(response, 404, { error: 'not_found' }); return;
       }
       if (!authenticate(request)) { reply(response, 401, { error: 'unauthorized' }); return; }
@@ -206,9 +218,11 @@ export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now 
           || request.headers['content-encoding']) {
         reply(response, 415, { error: 'json_required' }); return;
       }
+      const isLesson = request.url === '/v1/lesson-notes';
       const isAnalysis = request.url === '/v1/analyze';
-      const payload = await readBody(request, config.bodyTimeoutMs, isAnalysis ? validateAnalysisPayload : validatePayload);
+      const payload = await readBody(request, config.bodyTimeoutMs, isLesson ? validateLessonPayload : isAnalysis ? validateAnalysisPayload : validatePayload);
       if (response.destroyed) return;
+      providerProfile(config);
       reserveRequest();
       active += 1;
       const controller = new AbortController();
@@ -220,7 +234,7 @@ export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now 
       try {
         if (reserveBudget && !(await reserveBudget())) throw new RequestError(429, 'request_limit');
         if (controller.signal.aborted || response.destroyed) return;
-        const provider = providerRequest({ config, mode: isAnalysis ? 'analyze' : 'ask', payload });
+        const provider = providerRequest({ config, mode: isLesson ? 'lesson' : isAnalysis ? 'analyze' : 'ask', payload });
         const upstream = await fetchImpl(provider.url, {
           method: 'POST',
           headers: provider.headers,
@@ -228,14 +242,23 @@ export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now 
           signal: controller.signal,
           body: JSON.stringify(provider.body)
         });
-        const answer = await readUpstream(upstream);
-        if (isAnalysis) {
+        const answer = await readUpstream(upstream, provider.profile);
+        if (isLesson) {
+          let result;
+          try { result = validateLessonResult(JSON.parse(answer), payload); }
+          catch { throw new RequestError(502, 'invalid_lesson_result'); }
+          reply(response, 200, { ...result, metadata: { provider: config.provider ?? 'openai', model: config.model,
+            promptVersion: PROMPT_VERSION, lessonIntervalSeconds: Math.max(60, config.lessonIntervalSeconds ?? 60) } });
+        } else if (isAnalysis) {
           let result;
           try { result = validateAnalysisResult(JSON.parse(answer), payload); }
           catch { throw new RequestError(502, 'invalid_analysis_result'); }
           reply(response, 200, result);
         } else {
-          reply(response, 200, { answer });
+          let result;
+          try { result = validateAskResult(JSON.parse(answer)); }
+          catch { throw new RequestError(502, 'invalid_upstream_answer'); }
+          reply(response, 200, result);
         }
       } catch (error) {
         if (controller.signal.aborted) throw new RequestError(504, 'upstream_timeout');
@@ -249,7 +272,8 @@ export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now 
       }
     } catch (error) {
       // Upstream bodies, error messages, credentials and user text must never enter logs or errors.
-      if (error instanceof RequestError) reply(response, error.status, { error: error.code });
+      if (error instanceof ProviderCompatibilityError) reply(response, 422, { error: 'provider_model_incompatible' });
+      else if (error instanceof RequestError) reply(response, error.status, { error: error.code }, error.retryAfter);
       else reply(response, 500, { error: 'request_failed' });
     }
   });

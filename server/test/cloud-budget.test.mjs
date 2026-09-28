@@ -32,7 +32,7 @@ test('independent concurrent reservations share one hard daily count', async t =
 });
 
 test('failed or exhausted cloud budget cannot make a provider call; auth runs first', async t => {
-  const config = { apiKey: 'fixture-upstream', gatewayToken: 'fixture_gateway_token_01234567890123456789', model: 'fixture-model',
+  const config = { apiKey: 'fixture-upstream', gatewayToken: 'fixture_gateway_token_01234567890123456789', model: 'gpt-6-luna',
     requestsPerMinute: 60, requestsPerDay: 100, upstreamTimeoutMs: 1000, bodyTimeoutMs: 1000 };
   let budgetCalls = 0;
   let fail = false;

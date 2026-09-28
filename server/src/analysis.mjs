@@ -73,3 +73,45 @@ export function validateAnalysisResult(value, payload) {
   }
   return value;
 }
+
+export const ASK_FORMAT = {
+  type: 'json_schema', name: 'mio_answer', strict: true,
+  schema: object({ answer: { type: 'string' } })
+};
+export function validateAskResult(value) {
+  if (!keys(value, ['answer']) || !text(value.answer, 16_000)) throw new Error('invalid_answer');
+  return value;
+}
+export const LESSON_FORMAT = {
+  type: 'json_schema', name: 'mio_lesson_notes_v1', strict: true,
+  schema: object({
+    candidates: ANALYSIS_FORMAT.schema.properties.candidates,
+    sections: { type: 'array', items: object({
+      heading: { type: 'string' }, body: { type: 'string' }, ...sourceFields
+    }) },
+    uncertainties: ANALYSIS_FORMAT.schema.properties.uncertainties
+  })
+};
+export function validateLessonPayload(value) {
+  validateAnalysisPayload(value);
+  if (value.mode !== 'lesson' || value.fragments.reduce((sum, f) => sum + Buffer.byteLength(f.text, 'utf8'), 0) > 3_500) {
+    throw new Error('invalid_lesson');
+  }
+  return value;
+}
+export function validateLessonResult(value, payload) {
+  if (!keys(value, ['candidates', 'sections', 'uncertainties']) || !Array.isArray(value.sections)
+      || value.sections.length > 12 || !Array.isArray(value.candidates)
+      || value.candidates.some(item => !['plan', 'task'].includes(item.kind))) throw new Error('invalid_lesson_result');
+  validateAnalysisResult({ candidates: value.candidates, highlights: [], uncertainties: value.uncertainties }, payload);
+  const sources = new Map(payload.fragments.map(f => [f.id, f.text]));
+  for (const section of value.sections) {
+    if (!keys(section, ['heading', 'body', 'sourceIDs', 'evidence']) || !text(section.heading, 240)
+        || !text(section.body, 8_000) || !text(section.evidence, 600)
+        || !Array.isArray(section.sourceIDs) || section.sourceIDs.length < 1 || section.sourceIDs.length > 8
+        || new Set(section.sourceIDs).size !== section.sourceIDs.length
+        || section.sourceIDs.some(id => !sources.has(id))
+        || !section.sourceIDs.some(id => sources.get(id).includes(section.evidence))) throw new Error('ungrounded_section');
+  }
+  return value;
+}

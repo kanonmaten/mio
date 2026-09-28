@@ -481,7 +481,7 @@ private struct PrivacyCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 PrivacyLine(symbol: "iphone", text: "Tal till text sker lokalt i SpeechAnalyzer med SpeechTranscriber eller DictationTranscriber.")
                 PrivacyLine(symbol: "waveform.slash", text: "Mikrofonljud bearbetas tillfälligt i minnet men sparas aldrig som ljudfil.")
-                PrivacyLine(symbol: "cloud", text: "AI är valfri och avstängd från början. Endast den fråga och kontext du granskar och godkänner skickas via din server. Ingen OpenAI-nyckel finns i appen.")
+                PrivacyLine(symbol: "cloud", text: "AI är valfri och avstängd från början. Endast den fråga och kontext du granskar och godkänner skickas via din server. Ingen leverantörsnyckel finns i appen.")
                 PrivacyLine(symbol: "mic.slash", text: "Stoppa eller pausa stänger AVAudioEngine och mikrofonens ljudsession.")
                 PrivacyLine(symbol: "person.2.slash", text: "Testa kontrollerat. Spela inte in andra, en lektion eller en arbetsplats utan tydligt tillstånd och enligt lokala regler.")
             }

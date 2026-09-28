@@ -16,6 +16,7 @@ final class MioAnalysisCoordinator {
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var activeSessionID: UUID?
     @ObservationIgnored private var lastSentAt: Date?
+    @ObservationIgnored private var lessonInterval: TimeInterval = 60
     @ObservationIgnored private var deletedSessionIDs: Set<UUID> = []
     @ObservationIgnored private let loadConnection: @MainActor () throws -> MioCloudConnection
     @ObservationIgnored private let configurationMatches: @MainActor (MioCloudConnection) -> Bool
@@ -98,11 +99,13 @@ final class MioAnalysisCoordinator {
     func summarizeLesson(_ session: MioSession, assistant: MioAssistantViewModel) {
         guard enabled, session.isLesson, session.endedAt != nil, !deletedSessionIDs.contains(session.id), activeSessionID != session.id,
               !queue.contains(where: { $0.session.id == session.id }) else { return }
-        let processed = assistant.analyzedFragmentIDs(for: session.id)
+        let processed = assistant.analyzedFragmentIDs(for: session.id, detailedLesson: true)
         let queued = Set(queue.filter { $0.session.id == session.id }.flatMap { $0.request.fragments.map(\.id) })
         let fragments = session.transcripts.flatMap(MioAnalysisFragment.make)
             .filter { !processed.contains($0.id) && !queued.contains($0.id) }
-        enqueue(session: session, mode: .lesson, fragments: fragments, assistant: assistant)
+        let remaining = MioAnalysisRequest.batches(mode: .lesson, fragments: fragments)
+        queue += remaining.prefix(max(0, 100 - queue.count)).map { Work(session: session, request: $0) }
+        startWorker(assistant: assistant)
     }
 
     private func enqueue(session: MioSession, mode: MioCaptureMode, fragments: [MioAnalysisFragment], assistant: MioAssistantViewModel) {
@@ -118,6 +121,7 @@ final class MioAnalysisCoordinator {
         guard enabled, worker == nil, !queue.isEmpty else { return }
         let token = generation
         workerMode = queue.first?.request.mode
+        isWorking = true
         worker = Task { [weak self, weak assistant] in
             guard let self, let assistant else { return }
             defer {
@@ -131,9 +135,13 @@ final class MioAnalysisCoordinator {
                 while self.enabled, self.generation == token, !self.queue.isEmpty {
                     try Task.checkCancellation()
                     if let last = self.lastSentAt {
-                        let minimumInterval: TimeInterval = self.queue.first?.request.mode == .lesson ? 12 : 60
+                        let minimumInterval: TimeInterval = self.queue.first?.request.mode == .lesson ? self.lessonInterval : 60
                         let remaining = minimumInterval - Date.now.timeIntervalSince(last)
-                        if remaining > 0 { try await self.wait(remaining) }
+                        if remaining > 0 {
+                            self.isWorking = true
+                            self.status = "Väntar mellan AI-anrop för att begränsa förbrukningen …"
+                            try await self.wait(remaining)
+                        }
                     }
                     guard self.generation == token, !MioMaintenanceState.shared.isDeleting,
                           let connection = self.connection,
@@ -144,15 +152,19 @@ final class MioAnalysisCoordinator {
                     self.workerMode = work.request.mode
                     self.activeSessionID = work.session.id
                     self.isWorking = true
-                    self.status = work.request.mode == .lesson ? "AI väljer ut lektionsanteckningar …" : "AI granskar senaste textutdraget …"
+                    self.status = work.request.mode == .lesson ? "AI skriver detaljerade lektionsanteckningar …" : "AI granskar senaste textutdraget …"
                     self.lastSentAt = .now
                     let result = try await self.send(work.request, connection)
                     try Task.checkCancellation()
                     guard self.enabled, self.generation == token else { return }
+                    if let metadata = result.metadata { self.lessonInterval = TimeInterval(metadata.lessonIntervalSeconds) }
                     let count = try await assistant.applyAnalysis(result, request: work.request, session: work.session)
                     self.activeSessionID = nil
                     self.sentBatches += 1
                     self.status = "Senast analyserat \(Date.now.formatted(date: .omitted, time: .shortened)). \(count) nya förslag."
+                    if work.request.mode == .lesson {
+                        self.status = MioLessonDocument(session: work.session, records: assistant.analyses).progress
+                    }
                     self.isWorking = false
                 }
             } catch is CancellationError {

@@ -13,7 +13,7 @@ const result = { candidates: [{ kind: 'plan', title: 'Biblioteket', body: 'Kontr
   scheduledAt: '2026-09-29T15:00:00+02:00', sourceIDs: [id], evidence: 'Vi ses på biblioteket på tisdag klockan 15.' }],
   highlights: [], uncertainties: [] };
 const token = 'fixture_gateway_token_01234567890123456789';
-const config = { provider: 'openai', apiKey: 'fixture-upstream', gatewayToken: token, model: 'fixture-model',
+const config = { provider: 'openai', apiKey: 'fixture-upstream', gatewayToken: token, model: 'gpt-6-luna',
   requestsPerMinute: 6, requestsPerDay: 100, upstreamTimeoutMs: 1000, bodyTimeoutMs: 1000 };
 
 test('analysis input accepts ordinary speech without a wake word and preserves timestamps', () => {

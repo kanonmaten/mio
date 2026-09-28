@@ -54,7 +54,7 @@ struct MioAnalysisRequest: Codable, Sendable {
         var current: [MioAnalysisFragment] = []
         var bytes = 0
         for fragment in fragments {
-            if current.count == 8 || bytes + fragment.text.utf8.count > 10_000 {
+            if !current.isEmpty && (current.count == 8 || bytes + fragment.text.utf8.count > (mode == .lesson ? 3_500 : 10_000)) {
                 batches.append(Self(mode: mode, timeZone: timeZone, fragments: current))
                 current = []; bytes = 0
             }
@@ -84,9 +84,16 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
     let candidates: [MioAnalysisCandidate]
     let highlights: [MioLessonHighlight]
     let uncertainties: [String]
+    var sections: [MioLessonSection]? = nil
+    var metadata: MioAnalysisMetadata? = nil
 
     func validate(against request: MioAnalysisRequest) throws {
         _ = try request.validatedData()
+        if let sections {
+            guard request.mode == .lesson, highlights.isEmpty, sections.count <= 12,
+                  candidates.allSatisfy({ [.task, .plan].contains($0.kind) }),
+                  let metadata, metadata.isValid else { throw MioCloudError.invalidResponse }
+        } else if metadata != nil { throw MioCloudError.invalidResponse }
         let sources = Dictionary(uniqueKeysWithValues: request.fragments.map { ($0.id, $0.text) })
         func grounded(_ ids: [String], _ evidence: String) -> Bool {
             !ids.isEmpty && ids.count <= 8 && Set(ids).count == ids.count
@@ -105,6 +112,13 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
                       && grounded(candidate.sourceIDs, candidate.evidence)
               }), highlights.allSatisfy({ !$0.text.isEmpty && $0.text.utf8.count <= 1_500 && grounded($0.sourceIDs, $0.evidence) })
         else { throw MioCloudError.invalidResponse }
+        for section in sections ?? [] {
+            guard !section.heading.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  section.heading.utf8.count <= 240,
+                  !section.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  section.body.utf8.count <= 8_000, grounded(section.sourceIDs, section.evidence)
+            else { throw MioCloudError.invalidResponse }
+        }
     }
 
     static func parseDate(_ value: String) -> Date? {
@@ -123,4 +137,62 @@ struct MioAnalysisRecord: Identifiable, Codable, Hashable, Sendable {
     let highlights: [MioLessonHighlight]
     let uncertainties: [String]
     let createdAt: Date
+    var sections: [MioLessonSection]? = nil
+    var metadata: MioAnalysisMetadata? = nil
+}
+
+struct MioLessonSection: Codable, Hashable, Sendable {
+    let heading: String
+    let body: String
+    let sourceIDs: [String]
+    let evidence: String
+}
+
+struct MioAnalysisMetadata: Codable, Hashable, Sendable {
+    let provider: String
+    let model: String
+    let promptVersion: String
+    let lessonIntervalSeconds: Int
+
+    var isValid: Bool {
+        [provider, model, promptVersion].allSatisfy { !$0.isEmpty && $0.utf8.count <= 150 }
+            && (60...3600).contains(lessonIntervalSeconds)
+    }
+}
+
+/// Pure presentation over persisted parts; no extra summarizing model call.
+struct MioLessonDocument {
+    let session: MioSession
+    let records: [MioAnalysisRecord]
+
+    var fragments: [MioAnalysisFragment] { session.transcripts.flatMap(MioAnalysisFragment.make) }
+    var orderedRecords: [MioAnalysisRecord] {
+        let order = Dictionary(uniqueKeysWithValues: fragments.enumerated().map { ($0.element.id, $0.offset) })
+        return records.filter { $0.sessionID == session.id && $0.sections != nil }.sorted {
+            ($0.fragmentIDs.compactMap { order[$0] }.min() ?? Int.max)
+                < ($1.fragmentIDs.compactMap { order[$0] }.min() ?? Int.max)
+        }
+    }
+    var completedCount: Int {
+        let completed = Set(orderedRecords.flatMap(\.fragmentIDs))
+        return fragments.filter { completed.contains($0.id) }.count
+    }
+    var isComplete: Bool { session.endedAt != nil && !fragments.isEmpty && completedCount == fragments.count }
+    var progress: String {
+        "\(completedCount) av \(fragments.count) textdelar bearbetade. "
+            + (isComplete ? "Alla textdelar är bearbetade; granska AI-utkastet." : "Ofullständiga anteckningar – återstående text kan bearbetas senare.")
+    }
+    var markdown: String {
+        var parts = ["# \(session.title ?? "Lektion")", session.startedAt.formatted(date: .abbreviated, time: .shortened),
+                     "AI-utkast. \(progress)"]
+        for record in orderedRecords {
+            for section in record.sections ?? [] {
+                parts.append("## \(section.heading)\n\n\(section.body)")
+            }
+            if !record.uncertainties.isEmpty {
+                parts.append("### Osäkerheter\n\n" + record.uncertainties.map { "- " + $0 }.joined(separator: "\n"))
+            }
+        }
+        return parts.joined(separator: "\n\n")
+    }
 }

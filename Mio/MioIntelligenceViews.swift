@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AnalysisSettingsView: View {
     @Environment(MioAnalysisCoordinator.self) private var analysis
@@ -115,6 +116,7 @@ struct LessonDetailView: View {
     @Environment(MioAssistantViewModel.self) private var assistant
     @Environment(MioAnalysisCoordinator.self) private var analysis
     @State private var confirmAnalysis = false
+    @State private var copied = false
     private var session: MioSession? { model.session(id: sessionID) }
 
     var body: some View {
@@ -128,20 +130,52 @@ struct LessonDetailView: View {
                     }
                 }
                 let records = assistant.analyses.filter { $0.sessionID == sessionID }
-                Section("Viktigt från lektionen · AI-utkast") {
-                    if records.flatMap(\.highlights).isEmpty {
-                        Text("Inga AI-anteckningar ännu. Aktivera AI-tolkning och avsluta lektionen, eller analysera den sparade lektionen här.")
+                let document = MioLessonDocument(session: session, records: records)
+                Section("Detaljerade lektionsanteckningar · AI-utkast") {
+                    if document.orderedRecords.isEmpty {
+                        Text("Avsluta lektionen och välj att skapa anteckningar med AI. Du kan sedan kopiera dem till valfri AI för vidare hjälp.")
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(records) { record in
-                        ForEach(Array(record.highlights.enumerated()), id: \.offset) { _, point in
+                    Text(document.progress).font(.footnote).foregroundStyle(.secondary)
+                    if !document.orderedRecords.isEmpty {
+                        Button(copied ? "Anteckningen kopierad" : "Kopiera hela anteckningen", systemImage: "doc.on.doc") {
+                            UIPasteboard.general.string = document.markdown
+                            copied = true
+                        }
+                    }
+                    ForEach(document.orderedRecords) { record in
+                        ForEach(Array((record.sections ?? []).enumerated()), id: \.offset) { _, section in
                             VStack(alignment: .leading, spacing: 8) {
-                                Text(point.text).textSelection(.enabled)
-                                DisclosureGroup("Textunderlag") { Text(point.evidence).font(.footnote).textSelection(.enabled) }
+                                Text(section.heading).font(.headline)
+                                Text(section.body).textSelection(.enabled)
+                                DisclosureGroup("Textunderlag") {
+                                    Text(section.evidence).font(.footnote).textSelection(.enabled)
+                                }
                             }
                         }
                         ForEach(Array(record.uncertainties.enumerated()), id: \.offset) { _, uncertainty in
                             Label(uncertainty, systemImage: "questionmark.circle").foregroundStyle(.secondary)
+                        }
+                        if let metadata = record.metadata {
+                            DisclosureGroup("Om AI-utkastet") {
+                                Text("\(metadata.provider) · \(metadata.model) · instruktion \(metadata.promptVersion)")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                if records.contains(where: { $0.sections == nil && !$0.highlights.isEmpty }) {
+                    Section("Äldre korta huvudpunkter") {
+                        ForEach(records.filter { $0.sections == nil }) { record in
+                            ForEach(Array(record.highlights.enumerated()), id: \.offset) { _, point in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(point.text).textSelection(.enabled)
+                                    DisclosureGroup("Textunderlag") { Text(point.evidence).font(.footnote).textSelection(.enabled) }
+                                }
+                            }
+                            ForEach(Array(record.uncertainties.enumerated()), id: \.offset) { _, uncertainty in
+                                Label(uncertainty, systemImage: "questionmark.circle").foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -149,8 +183,8 @@ struct LessonDetailView: View {
                     Text(analysis.status).font(.footnote).foregroundStyle(.secondary)
                     if let error = analysis.errorMessage { Text(error).foregroundStyle(.red) }
                     if session.endedAt != nil {
-                        Button("Analysera återstående lektionsdelar med AI …") { confirmAnalysis = true }
-                            .disabled(!analysis.enabled || analysis.isWorking)
+                        Button("Skapa eller fortsätt detaljerade anteckningar …") { confirmAnalysis = true }
+                            .disabled(!analysis.enabled || analysis.isWorking || document.isComplete)
                     }
                     NavigationLink("Granska föreslagna läxor och planer") { SuggestionInboxView(contentModel: content, sessionModel: model) }
                     NavigationLink("Originaltext, egen anteckning och radering") {
@@ -160,10 +194,12 @@ struct LessonDetailView: View {
             } else { Text("Lektionen finns inte längre.") }
         }
         .navigationTitle(session?.title ?? "Lektion")
+        .onChange(of: assistant.analyses) { _, _ in copied = false }
+        .onChange(of: session?.title) { _, _ in copied = false }
         .confirmationDialog("Skicka lektionsunderlaget till AI?", isPresented: $confirmAnalysis, titleVisibility: .visible) {
             Button("Ja, analysera denna lektion") {
                 if let session { analysis.summarizeLesson(session, assistant: assistant) }
             }
-        } message: { Text("De delar av denna lektions text som inte redan analyserats skickas till din AI-server. Råljud skickas inte.") }
+        } message: { Text("Återstående textdelar skickas till din AI-server för detaljerade anteckningar. Äldre korta huvudpunkter räknas inte som detaljerade anteckningar. Färdiga delar sparas. Håll appen öppen under bearbetningen; efter avbrott kan du fortsätta här. Råljud skickas inte.") }
     }
 }

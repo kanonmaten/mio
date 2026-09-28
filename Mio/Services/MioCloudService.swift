@@ -37,12 +37,13 @@ enum MioCloudError: LocalizedError {
     case disabled, invalidServer, invalidToken, keychain, invalidQuestion, invalidContext
     case changedConfiguration, invalidResponse, oversizedResponse, network
     case serverStatus(Int)
+    case rateLimited(Int)
 
     var errorDescription: String? {
         switch self {
         case .disabled: "Molnfrågor är avstängda."
         case .invalidServer: "Ange serverns HTTPS-adress utan sökväg, inloggning, frågetecken eller fragment, till exempel https://mio.example.se."
-        case .invalidToken: "Ange serverns separata åtkomsttoken: 32–256 bokstäver, siffror, bindestreck eller understreck. Använd aldrig en OpenAI-nyckel i appen. Vid byte av server krävs en ny token."
+        case .invalidToken: "Ange serverns separata åtkomsttoken: 32–256 bokstäver, siffror, bindestreck eller understreck. Använd aldrig en leverantörs API-nyckel i appen. Vid byte av server krävs en ny token."
         case .keychain: "Kunde inte läsa eller ändra den skyddade åtkomsttokenen. Lås upp telefonen och försök igen."
         case .invalidQuestion: "Skriv en fråga på högst 2 000 UTF-8-byte. Svenska bokstäver kan ta flera byte."
         case .invalidContext: "Välj högst sex utdrag. Varje rubrik får vara högst 200 byte, varje text 4 000 byte och all vald kontext 10 000 byte. Tomma utdrag behöver tas bort eller fyllas i."
@@ -50,9 +51,11 @@ enum MioCloudError: LocalizedError {
         case .invalidResponse: "Servern gav inget fullständigt läsbart svar. Försök med en kortare fråga."
         case .oversizedResponse: "Serverns svar var för stort och avbröts."
         case .network: "Kunde inte nå servern. Kontrollera internet, HTTPS-adressen och serverns konfiguration. Inget nytt försök görs automatiskt."
+        case .rateLimited(let seconds): "AI-gränsen är nådd. Vänta minst \(seconds) sekunder och fortsätt sedan manuellt. Sparade lektionsdelar finns kvar."
         case .serverStatus(let status):
             switch status {
             case 401, 403: "Servern nekade åtkomst. Kontrollera serverns separata åtkomsttoken."
+            case 422: "Modellen stöder inte Mios krav: reasoning av, temperatur 0 och strikt JSON-schema. Kontrollera modellvalet i Cloudflare."
             case 429: "Serverns frågegräns är nådd. Vänta och försök senare."
             case 504: "Svaret tog för lång tid. Försök senare med en kortare fråga."
             default: "Servern kunde inte besvara frågan. Kontrollera servern och försök senare."
@@ -154,18 +157,64 @@ enum MioCloudService {
     static func ask(_ payload: MioCloudRequest, connection: MioCloudConnection) async throws -> String {
         let data = try await send(payload.validatedData(), connection: connection)
         struct Answer: Decodable { let answer: String }
+        try validateWire(data, lesson: false, ask: true)
         guard let decoded = try? JSONDecoder().decode(Answer.self, from: data),
-              !decoded.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+              !decoded.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, decoded.answer.utf8.count <= 16_000
         else { throw MioCloudError.invalidResponse }
         return decoded.answer
     }
 
     static func analyze(_ payload: MioAnalysisRequest, connection: MioCloudConnection) async throws -> MioAnalysisResult {
-        let endpoint = connection.endpoint.deletingLastPathComponent().appendingPathComponent("analyze")
+        let endpoint = connection.endpoint.deletingLastPathComponent().appendingPathComponent(payload.mode == .lesson ? "lesson-notes" : "analyze")
         let data = try await send(payload.validatedData(), connection: MioCloudConnection(endpoint: endpoint, token: connection.token))
-        guard let result = try? JSONDecoder().decode(MioAnalysisResult.self, from: data) else { throw MioCloudError.invalidResponse }
+        try validateWire(data, lesson: payload.mode == .lesson)
+        let result: MioAnalysisResult
+        if payload.mode == .lesson {
+            struct LessonReply: Decodable {
+                let candidates: [MioAnalysisCandidate]
+                let sections: [MioLessonSection]
+                let uncertainties: [String]
+                let metadata: MioAnalysisMetadata
+            }
+            guard let reply = try? JSONDecoder().decode(LessonReply.self, from: data) else { throw MioCloudError.invalidResponse }
+            result = MioAnalysisResult(candidates: reply.candidates, highlights: [], uncertainties: reply.uncertainties,
+                                       sections: reply.sections, metadata: reply.metadata)
+        } else {
+            guard let reply = try? JSONDecoder().decode(MioAnalysisResult.self, from: data) else { throw MioCloudError.invalidResponse }
+            result = reply
+        }
         try result.validate(against: payload)
         return result
+    }
+
+    // Codable ignores unknown keys; validate the wire shape before decoding it.
+    static func validateWire(_ data: Data, lesson: Bool, ask: Bool = false) throws {
+        func exact(_ value: Any?, _ keys: Set<String>) -> Bool {
+            guard let object = value as? [String: Any] else { return false }
+            return Set(object.keys) == keys
+        }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw MioCloudError.invalidResponse
+        }
+        if ask {
+            guard exact(root, ["answer"]) else { throw MioCloudError.invalidResponse }
+            return
+        }
+        let expected: Set<String> = lesson ? ["candidates", "sections", "uncertainties", "metadata"]
+            : ["candidates", "highlights", "uncertainties"]
+        guard exact(root, expected), let candidates = root["candidates"] as? [[String: Any]],
+              candidates.allSatisfy({ exact($0, ["kind", "title", "body", "scheduledAt", "sourceIDs", "evidence"]) })
+        else { throw MioCloudError.invalidResponse }
+        if lesson {
+            guard let sections = root["sections"] as? [[String: Any]],
+                  sections.allSatisfy({ exact($0, ["heading", "body", "sourceIDs", "evidence"]) }),
+                  exact(root["metadata"], ["provider", "model", "promptVersion", "lessonIntervalSeconds"])
+            else { throw MioCloudError.invalidResponse }
+        } else {
+            guard let highlights = root["highlights"] as? [[String: Any]],
+                  highlights.allSatisfy({ exact($0, ["text", "sourceIDs", "evidence"]) })
+            else { throw MioCloudError.invalidResponse }
+        }
     }
 
     private static func send(_ body: Data, connection: MioCloudConnection) async throws -> Data {
@@ -190,6 +239,10 @@ enum MioCloudService {
             try Task.checkCancellation()
             let (bytes, response) = try await session.bytes(for: request, delegate: MioCloudRedirectGuard())
             guard let response = response as? HTTPURLResponse else { throw MioCloudError.invalidResponse }
+            if response.statusCode == 429 {
+                let seconds = Int(response.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 60
+                throw MioCloudError.rateLimited(min(86_400, max(1, seconds)))
+            }
             guard response.statusCode == 200 else { throw MioCloudError.serverStatus(response.statusCode) }
             guard response.mimeType == "application/json" else { throw MioCloudError.invalidResponse }
             guard response.expectedContentLength <= 32_768 else { throw MioCloudError.oversizedResponse }

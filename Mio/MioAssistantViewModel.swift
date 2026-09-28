@@ -93,8 +93,8 @@ final class MioAssistantViewModel {
         return count
     }
 
-    func analyzedFragmentIDs(for sessionID: UUID) -> Set<String> {
-        Set(analyses.filter { $0.sessionID == sessionID }.flatMap(\.fragmentIDs))
+    func analyzedFragmentIDs(for sessionID: UUID, detailedLesson: Bool = false) -> Set<String> {
+        Set(analyses.filter { $0.sessionID == sessionID && (!detailedLesson || $0.sections != nil) }.flatMap(\.fragmentIDs))
     }
 
     @discardableResult

@@ -83,7 +83,7 @@ actor MioAssistantRepository {
         let actualFragments = Dictionary(uniqueKeysWithValues: session.transcripts.flatMap(MioAnalysisFragment.make).map { ($0.id, $0) })
         guard request.fragments.allSatisfy({ actualFragments[$0.id] == $0 }) else { throw MioCloudError.invalidContext }
         var document = try loadDocument()
-        let alreadyAnalyzed = Set((document.analyses ?? []).filter { $0.sessionID == session.id }.flatMap(\.fragmentIDs))
+        let alreadyAnalyzed = Set((document.analyses ?? []).filter { $0.sessionID == session.id && (result.sections == nil || $0.sections != nil) }.flatMap(\.fragmentIDs))
         guard alreadyAnalyzed.isDisjoint(with: request.fragments.map(\.id)) else { return 0 }
         let sources = Dictionary(uniqueKeysWithValues: request.fragments.map { ($0.id, $0) })
         var count = 0
@@ -108,7 +108,8 @@ actor MioAssistantRepository {
         }
         var records = document.analyses ?? []
         records.append(MioAnalysisRecord(id: UUID(), sessionID: session.id, fragmentIDs: request.fragments.map(\.id),
-                                         highlights: result.highlights, uncertainties: result.uncertainties, createdAt: .now))
+                                         highlights: result.highlights, uncertainties: result.uncertainties, createdAt: .now,
+                                         sections: result.sections, metadata: result.metadata))
         document.analyses = records
         try write(document)
         return count

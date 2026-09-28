@@ -1,11 +1,20 @@
 # Ändringslogg
 
+## Arbetskopia 2026-09-28 — AI och detaljerade lektioner, ej publicerad
+
+- Åtta leverantörspresets och egen kompatibel endpoint; neutralt modellval i Cloudflare med separata API-hemligheter. Reasoning av, temperatur 0, strikt schema även för frågor och tydliga kompatibilitetsfel.
+- Detaljerade källkopplade lektionsdelar, modell-/promptmetadata, framsteg och kopiering av hela anteckningen. Sparade delar används vid manuell fortsättning; äldre huvudpunkter bevaras.
+- Mindre lektionsbatcher, minst 60 sekunders konfigurerbar takt och väntetid vid kvotfel. Inga automatiska återförsök eller inbyggda läromedel.
+- Mocktester och lokal Worker-verifiering; nya XCTest-fall tillagda men ej körda. Ny appkod är inte Xcode-byggd, telefonprovad eller publicerad.
+
+
 Användarsynliga ändringar och kompatibilitet per version. Versioner följer `vMAJOR.MINOR.PATCH`; [roadmapen](docs/ROADMAP.md) definierar milstolpar och släppkrav. Ingen ny Git-tagg eller release har skapats genom namnbytet.
 
-## Arbetskopia 2026-09-28 — ännu inte byggd
+## Build 5, 2026-09-28 — byggd, telefonprov återstår
 
 - Sessionsstart försöker installera en stödd men saknad svensk SpeechTranscriber-modell före fallback. Avbruten start får inte fortsätta med reservmotorn.
 - Motordiagnostik visar svenska språkvarianter i supportedLocales/installedLocales, resolved locale, assetstatus och hämtningsbehov; sessionsexporten får före/efter-händelser. Installations-/startfel vid fallback får felkod och domän.
+- Release och 48 XCTest godkända för `1b4ae6c` i Actions 36382509184. IPA 0.9.0 (5) kontrollerad lokalt.
 - Instruktioner och enhetsprov uppdaterade. Ingen ny talmotor eller bevisad kvalitetsförbättring; fysisk iPhone-verifiering återstår.
 
 ## Driftalternativ 2026-09-27

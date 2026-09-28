@@ -2,7 +2,7 @@
 
 Första testtelefon: iPhone 16 Pro. iPhone 13 provas senare. Lägsta iOS-version: 26.0; Xcode 27 och iOS 27 SDK används för bygget. Aktuellt helhetsbygge: **0.9.0, ej släppt**. [Status](STATUS.md) visar vad som faktiskt har byggts och provats.
 
-Färdig testfil: **0.9.0 (3)** från [Actions-körning 36228684153](https://github.com/kanonmaten/mio/actions/runs/36228684153). [Hämta Mio-IPA](https://github.com/kanonmaten/mio/actions/runs/36228684153/artifacts/10902176166), packa upp ZIP-filen och installera IPA:n enligt steg 5–8 nedan. Källrevision och SHA-256 finns i [status](STATUS.md).
+Färdig testfil: **0.9.0 (5)** från [Actions-körning 36382509184](https://github.com/kanonmaten/mio/actions/runs/36382509184). [Hämta Mio-IPA](https://github.com/kanonmaten/mio/actions/runs/36382509184/artifacts/10953378415), packa upp ZIP-filen och installera IPA:n enligt steg 5–8 nedan. Källrevision och SHA-256 finns i [status](STATUS.md).
 
 Huvudvägen är **GitHub Actions → osignerad IPA → SideStore**. Koden kan redigeras på Linux, Windows eller Monterey; iOS-kompilering sker på en Mac med kompatibel Xcode.
 
@@ -48,7 +48,7 @@ Tester finns i `MioTests/`: modeller, innehållslagring, förslag, lektioner, ra
 | Situation | Åtgärd |
 |---|---|
 | Första start | Gå igenom fem flikar, invänta Telefonens stöd och tillåt mikrofonen vid sessionsstart |
-| Svensk modell saknas | Prova separat **Installera SpeechTranscriber-modell** med Wi-Fi och appen öppen. Starta inte session under installation. Kontrollera status igen; fallback är `DictationTranscriber` med `sv_SE` |
+| Svensk modell saknas | Build 5 försöker installera stödd svensk SpeechTranscriber vid Starta Mio. Använd Wi-Fi och håll appen öppen; separat förinstallation finns också. Läs stödfälten och händelseloggens fallbackorsak om hämtning/start misslyckas |
 | Mikrofon nekad | Aktivera Mio under **Integritet och säkerhet → Mikrofon** |
 | Texten stannar efter ljudvägsbyte | Stoppa/starta sessionen och spara observationen med händelseloggen |
 | Stabilt Actions-jobb är rött | Spara första tydliga felet, stegets namn, körnings-URL och commit. Senare fel kan vara följdfel |
@@ -62,3 +62,9 @@ Spela bara in personer som tydligt samtycker och följ lokala regler. Använd sy
 ## Användning och valfri server
 
 Efter installation: följ [användarguiden](ANVANDNING.md). AI är avstängd från början och kräver [separat serverkonfiguration](../server/README.md); ingen OpenAI-nyckel ska anges i iPhone-appen. Alarm och notiser begär egna tillstånd först vid Spara. Kalenderkopior granskas och sparas i Apples editor.
+
+## Leverantörsbyte och ny lektionsvy
+
+Arbetskopians AI-utökning är inte med i build 5 ovan. Publicera först den nya gatewaykoden efter godkännande, bygg därefter aktuell apprevision i Xcode/Actions och installera dess IPA. Höj byggnumret inför den nya distribuerade builden. Den nya appen använder `/v1/lesson-notes`; en äldre gateway ger 404 där. Gamla appversioners `/v1/ask` och `/v1/analyze` behålls i den nya gatewayen.
+
+När båda är uppdaterade görs modell-/leverantörsbyte enligt [Cloudflare-guiden](../server/PROVIDERS.md), utan ytterligare IPA. Slå av AI i telefonen under bytet och slå på igen efter konfigurering och publicering. Hemligheter kopieras aldrig till repot.

@@ -4,11 +4,11 @@ import { once } from 'node:events';
 import { createMioServer, loadConfig, validatePayload } from '../src/server.mjs';
 
 const token = 'fixture_gateway_token_01234567890123456789';
-const defaults = { apiKey: 'fixture-upstream-credential', gatewayToken: token, model: 'fixture-model',
+const defaults = { apiKey: 'fixture-upstream-credential', gatewayToken: token, model: 'gpt-6-luna',
   requestsPerMinute: 30, requestsPerDay: 100, upstreamTimeoutMs: 1000, bodyTimeoutMs: 1000 };
 const payload = { question: 'Vad betyder procent?', context: [{ label: 'Anteckning', text: 'Vi övar procent.' }] };
 const completion = (text = 'Procent betyder hundradelar.') => new Response(JSON.stringify({
-  status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }]
+  status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify({ answer: text }) }] }]
 }), { headers: { 'Content-Type': 'application/json' } });
 
 async function fixture(t, options = {}) {

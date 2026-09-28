@@ -6,7 +6,7 @@ Detta är guiden för helhetsbygget 0.9.0. Koden behöver först byggas och inst
 
 Öppna de fem flikarna. Du kan skriva manuella poster direkt, utan mikrofon, notiser eller AI. **Mio → Så använder du Mio** innehåller en kort guide i appen.
 
-Under **Telefonens stöd och integritet** kan du kontrollera svensk transkription och vid behov installera SpeechTranscriber-modellen med wifi. Nästa källversion försöker även installera en stödd men saknad svensk modell när du startar Mio. Under hämtningen visas ett förberedelseläge och mikrofonen har inte startat. Avbryt håller Mio avstängd. Dictation används vid saknat stöd eller installations-/startfel; orsaken finns i händelseloggen. Build 4 har fortfarande separat installation.
+Under **Telefonens stöd och integritet** kan du kontrollera svensk transkription och vid behov installera SpeechTranscriber-modellen med wifi. Build 5 försöker även installera en stödd men saknad svensk modell när du startar Mio. Under hämtningen visas ett förberedelseläge och mikrofonen har inte startat. Avbryt håller Mio avstängd. Dictation används vid saknat stöd eller installations-/startfel; orsaken finns i händelseloggen. Build 4 har fortfarande separat installation.
 
 ## Fånga och ordna
 
@@ -83,3 +83,15 @@ Svaret kan innehålla fel, utför inga åtgärder och sparas inte som historik i
 Stoppa sessionen och gå till **Mio → Export och radering → Skapa lokal export**. Dela/spara JSON-filen privat. Exporten innehåller innehåll, sessioner, förslag, lektioner, AI-anteckningar och diagnostik; aldrig råljud eller åtkomsttoken. Det finns ingen importknapp i detta bygge.
 
 **Radera all lokal data** tar efter bekräftelse bort alla tre lokala datalager, egna alarm/notiser och AI-konfiguration. Redan delade filer, skickade molnfrågor och kalenderkopior kan inte återkallas av detta. Om en systemåtgärd inte kan avbrytas visas ett fel så att du kan hantera den före fortsatt radering.
+
+## Nya AI-val och detaljerade lektionsanteckningar
+
+Detta gäller arbetskopians nya kod; befintlig build 5 behöver ersättas med en ny verifierad IPA och gatewayen behöver uppdateras.
+
+**Byta till Groq:** följ [Cloudflare-bytesguiden](../server/PROVIDERS.md). Modell och API-nyckel ändras på servern; appens adress och gatewaytoken behålls. Reasoning är av, temperatur 0 och strikt JSON används automatiskt. Modellens JSON visas som vanliga anteckningar och förslag i appen.
+
+**Lektion:** tryck Starta lektion, avsluta när undervisningen är slut och öppna lektionen i Lektioner. Med godkänd AI-tolkning kan bearbetningen starta efter avslut; annars aktiverar du AI och väljer **Skapa eller fortsätt detaljerade anteckningar …** samt godkänner sändningen. Låt appen vara öppen medan den bearbetar textdelarna. Du ser antal bearbetade textdelar, detaljerade rubriker/anteckningar och öppningsbara källcitat. Läxor granskas separat med Ja/Nej/Inte nu.
+
+Tryck **Kopiera hela anteckningen** och klistra in den hos valfri AI för att exempelvis få en förklaring eller skapa frågekort. Mio skapar inga sådana läromedel själv. Kopieringen är vanlig läsbar text med rubriker; den innehåller också osäkerheter och tydlig markering om delar återstår. Även när alla delar är bearbetade måste AI-utkastet granskas mot underlaget.
+
+Efter nätfel, kvotfel eller omstart: färdiga detaljerade delar finns kvar. Vänta vid kvotfel, aktivera AI igen och fortsätt från samma lektionsknapp. Redan färdiga delar skickas inte om. Äldre korta huvudpunkter finns kvar separat men räknas inte som detaljerade anteckningar. Mycket långa lektioner kan kräva flera godkända omgångar (högst 100 delar i kön per omgång).

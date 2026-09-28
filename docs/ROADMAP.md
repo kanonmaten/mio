@@ -11,11 +11,11 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 | Lokal fångst | Svensk SpeechAnalyzer, Mio-detektion, paus/stopp, diagnostik | Fysisk telefon krävs för kvalitet, bakgrund och batteri |
 | Innehåll | Fem manuella typer, sökning, redigering, uppgiftsstatus, export/radering | Ren installation och lagring provas på verklig telefon |
 | Assistent | Lokala kommandoförslag och aktiverad AI-tolkning av vanligt samtal; Ja/Nej/Inte nu | Modellkvalitet måste provas; innehåll och datum godkänns manuellt |
-| Lektioner | Separat lektionsläge pausar vardags-Mio; huvudpunkter/läxor via valfri AI | Originaltext och tidsbevis får aldrig skrivas om |
+| Lektioner | Separat lektionsläge pausar vardags-Mio; detaljerade kopierbara anteckningar och läxförslag via valfri kompatibel AI | Originaltext och tidsbevis får aldrig skrivas om |
 | Kalender | Användarbekräftad fristående kalenderkopia | Ingen bakgrundssynk eller läsning av hela kalendern |
 | Alarm/notiser | AlarmKit, engångs-/veckoalarm, postpåminnelse, morgon-/kvällsnotis | Behörighet och leverans måste provas på telefon |
 | Dagen | Lokal morgon- och kvällsöversikt av sparat innehåll | Ingen påstådd semantisk sammanfattning av transkript |
-| AI | Enskilda frågor eller aktiverad löpande tolkning → egen HTTPS-server → OpenAI-adapter | Server/nyckel kräver egen konfiguration; av från början |
+| AI | Enskilda frågor eller aktiverad löpande tolkning → egen HTTPS-server → vald leverantörsadapter | Server/nyckel kräver egen konfiguration; av från början |
 
 ## Leveransgrindar
 
@@ -34,3 +34,7 @@ Råljudslagring, molnöverföring utan aktiverat samtycke, dold profilering och 
 Användaren har raderat prototypen. Appidentiteten är därför `app.mio.assistant` och lagringsmappen `Mio`, utan fasnamn, personnamn eller appversionsnummer. Ingen tidigare migrering behövs. Native Liquid Glass används för kontroller och navigation; innehållet har semantiska läsytor. Designen behöver visas och provas i verklig iOS, inte bara granskas i källkod.
 
 Förtydligande 2026-09-26: lektionsläge och vanlig samtalstolkning är korrigeringar mot visionen. Första AI-leverantör är OpenAI; andra kan senare implementeras bakom serverns stabila appkontrakt. Driftsättning och verkliga modellprov återstår.
+
+## Arbetskopians utökning 2026-09-28
+
+Leverantörsadaptrar, strikt schema även för frågor och detaljerade lektionsanteckningar med kopiering/fortsättning finns i källkoden. Native ljudmotor och vardagsanalysens aktiveringsregler behålls. Ingen modellväljare, presentation eller frågekortsvy tillkommer. Nästa grindar är Xcode/XCTest för denna ändring, godkänd publicering av gatewayen, ny IPA och syntetiska modell-/telefonprov. Den publicerade äldre gatewayen och build 5 verifierar inte detta arbete.

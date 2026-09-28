@@ -52,7 +52,7 @@ struct CloudAssistantView: View {
                     .disabled(isAsking)
                 Button("Glöm anslutning och stäng av", role: .destructive) { forgetConnection() }
                 if let settingsMessage { Text(settingsMessage).font(.footnote) }
-                Text("Ange serverns separata åtkomsttoken. OpenAI-nyckeln hör bara hemma på servern. Att spara anslutningen gör inget nätanrop.")
+                Text("Ange serverns separata åtkomsttoken. Leverantörens API-nyckel hör bara hemma på servern. Att spara anslutningen gör inget nätanrop.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -303,7 +303,7 @@ private struct CloudRequestPreviewView: View {
             Form {
                 Section("Mottagare") {
                     Text(preview.connection.endpoint.absoluteString).textSelection(.enabled)
-                    Text("Din server vidarebefordrar texten till OpenAI. Servern använder sin egen API-nyckel och anropet kan kosta pengar.")
+                    Text("Din server vidarebefordrar texten till den AI-leverantör och eventuell mellanliggande gateway som du valt i serverinställningarna. Servern använder sin egen API-nyckel och anropet kan kosta pengar.")
                 }
                 Section("Exakt fråga som skickas") { Text(verbatim: preview.request.question).textSelection(.enabled) }
                 Section("Exakt vald kontext som skickas") {
@@ -317,8 +317,7 @@ private struct CloudRequestPreviewView: View {
                 }
                 Section {
                     Text("Skicka bara text som du får dela. Inget ljud, andra poster, teknisk sessionsdiagnostik eller tidigare frågor följer med. Den separata åtkomsttokenen skickas skyddat till din server för inloggning.")
-                    Text("Mio-servern sparar inga frågor eller svar och begär att OpenAI inte sparar svaret som konversationshistorik. OpenAI kan ändå behålla uppgifter enligt sina villkor för säkerhet och missbruksövervakning.")
-                    Link("OpenAI:s regler för API-data", destination: URL(string: "https://developers.openai.com/api/docs/guides/your-data")!)
+                    Text("Mio-servern sparar inga frågor eller svar. Vald AI-leverantör och eventuell mellanliggande gateway behandlar texten enligt sina datavillkor. Granska villkoren när du byter leverantör.")
                     Button("Ja, skicka denna fråga till molnet", action: send)
                         .buttonStyle(.borderedProminent)
                 }

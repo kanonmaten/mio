@@ -1,8 +1,21 @@
 # Bygg- och teststatus
 
-Senast uppdaterad: **2026-09-28**. Helhetsbygge **0.9.0, ej släppt**. **Build 4** för `595e4a8` på `main` har klarat Release och **46 XCTest** i Actions 36278717100. IPA:n är nedladdad och kontrollerad. Gatewayens hälsokontroll svarade HTTP 200 den 28 september; riktiga modellprov saknas. Telefonprov för denna revision och verkliga modellprov återstår.
+## Ny arbetskopia: AI-/lektionsändringar 2026-09-28
 
-**Arbetskopian avviker nu från build 4:** installation av stödd svensk SpeechTranscriber vid start och utökad diagnostik. 113 strukturella kontroller passerar; nya XCTest är skrivna men inte körda. Ingen Swift-kompilering, ny IPA eller telefonverifiering för dessa ändringar finns ännu. Den gamla gröna körningen verifierar endast build 4.
+**Inte publicerad, inte Xcode-kompilerad och inte iPhone-verifierad.** Den tidigare build 5 och driftsatta gatewayen nedan innehåller inte dessa ändringar.
+
+- Implementerat i arbetskopian: åtta leverantörspresets + custom, neutralt modellval och separata hemligheter, reasoning av/temperatur 0/strikt schema, detaljerade lektionsdelar med källor och metadata, kopiering, framsteg och manuell fortsättning.
+- **40/40 serverprov godkända** med Node v26.10.0 och simulerade modeller. Kontrollerar bland annat nio adapterkonfigurationer, inkompatibilitet, schema, källvalidering, 429, timeout och kvoter. Inga verkliga modell-/betalningsprov.
+- **Worker dry-run och lokal workerd/Miniflare godkända**, både OpenAI Responses och Groq Chat Completions inklusive nya lektionsrutten och D1. All upstream-trafik fångad i mock; inget publicerat.
+- **121 portabla strukturkontroller godkända**. Sju nya XCTest-fall finns i koden men har inte körts på denna Linux-värd. De 48 godkända testen nedan gäller endast den äldre revisionen.
+- Återstår: Xcode Release/XCTest, ny IPA, publicering efter uttrycklig begäran, samt P01–P04 och L06–L11 på telefon med vald modell. Semantisk kvalitet, faktisk temperatur-/reasoningefterlevnad, latens och kostnader är ännu inte verifierade hos leverantörerna.
+
+## Tidigare verifierad revision — build 5
+
+
+Senast uppdaterad: **2026-09-28**. Helhetsbygge **0.9.0, ej släppt**. **Build 5** för `1b4ae6c` på `main` har klarat Release och **48 XCTest** i Actions 36382509184. IPA:n är nedladdad och kontrollerad. Gatewayens hälsokontroll svarade HTTP 200 den 28 september; riktiga modellprov saknas. Telefonprov för denna revision och verkliga modellprov återstår.
+
+**Build 5 innehåller** installation av stödd svensk SpeechTranscriber vid start och utökad diagnostik. 113 strukturella kontroller passerar. Release, testkompilering och 48 simulatorprov är godkända; automatisk modellinstallation och svenskstöd på måltelefonen är fortfarande **ej verifierade**.
 
 Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskriver innehållet och [helhetstestet](TESTPLAN_HELHET.md) beskriver återstående acceptansprov.
 
@@ -10,14 +23,14 @@ Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskr
 
 | Område | Resultat och begränsning |
 |---|---|
-| Källkod | Build 4 kompletterar build 3 med riktigt lektionsläge, löpande aktiverad AI-tolkning av vanligt samtal, strukturerade systeminstruktioner och bättre motordiagnostik. Den äldre beskrivningen av hela omfånget som färdigt var för bred. |
+| Källkod | Build 5 lägger till installation före fallback och språk-/assetdiagnostik. Build 4 kompletterar build 3 med riktigt lektionsläge, löpande aktiverad AI-tolkning av vanligt samtal, strukturerade systeminstruktioner och bättre motordiagnostik. Den äldre beskrivningen av hela omfånget som färdigt var för bred. |
 | Portabel projektkontroll | Godkänd på Linux med `python3 scripts/verify_project.py`: projektregistrering, plist/XML, identitet, version, resurser, lagringsvägar, dokumentlänkar, workflow/Bash och whitespace. |
-| Swift-syntaxparser | Tree-sitter-försöket kraschade i lokal parser/bindning och räknas inte som en godkänd kontroll. Xcode har därefter kompilerat den nya appen och godkänt 46 XCTest. |
+| Swift-syntaxparser | Tree-sitter-försöket kraschade i lokal parser/bindning och räknas inte som en godkänd kontroll. Xcode har därefter kompilerat den nya appen och godkänt 48 XCTest i build 5. |
 | Serverns tester | **22 av 22 godkända**, Node v26.10.0, med simulerad leverantör och lokal HTTP-testserver. Inga verkliga AI-anrop eller kostnader. |
 | Appikon | Tre opaka RGB-varianter, 1024 × 1024: standard, mörk och tonad. Standardikonen visuellt granskad som PNG. Ingen verifiering av ikonrendering på iOS ännu. |
-| Xcode / Release | **Godkänd** för commit `595e4a8` i Actions 36278717100 på faktisk runner `xcode-27-arm64`, Xcode 27.0 (27A266a), iOS SDK 27.0. Inga kompilatorvarningar i slutloggen. |
-| XCTest | **46 av 46 godkända** för `595e4a8` på iOS 27-simulator (iPhone 17). |
-| IPA / installation | **0.9.0 (4)** skapad och lokalt ZIP-/plist-/SHA-256-kontrollerad. Identiteten är `app.mio.assistant`, minsta iOS 26.0. **Ingen fysisk installation verifierad.** |
+| Xcode / Release | **Godkänd** för commit `1b4ae6c` i Actions 36382509184 på runner `GitHub Actions 1000000012` med etiketten `xcode-27`, Xcode 27.0 (27A266a), iOS SDK 27.0. Inga kompilatorvarningar i slutloggen. |
+| XCTest | **48 av 48 godkända** för `1b4ae6c` på iOS 27-simulator (iPhone 17). |
+| IPA / installation | **0.9.0 (5)** skapad och lokalt ZIP-/plist-/SHA-256-kontrollerad. Identiteten är `app.mio.assistant`, minsta iOS 26.0. **Ingen fysisk installation verifierad.** |
 | Design och tillgänglighet | Native Liquid Glass-kontroller och systemnavigation implementerade. iOS-rendering, VoiceOver, större text, mörkt läge och tillgänglighetsinställningar återstår att prova. |
 | Telefonprov | Användaren har lämnat ett privat prov från 2026-09-26, se nedan. Byggnummer/enhets- och iOS-version saknas i exporten; inget komplett acceptansprov är styrkt. |
 | AI i drift | **Cloudflare Worker publicerad**, D1-kvottabell skapad och separat gatewaytoken sparad som Secret. Vid granskning 2026-09-28 svarar `/health` HTTP 200; det verifierar konfigurationskontrollen, inte nyckelns giltighet, modellåtkomst eller saldo. Ingen riktig modellfråga provad. Molnet i appen är avstängt tills användaren konfigurerar och aktiverar det. |
@@ -28,19 +41,19 @@ Appidentiteten är nu `app.mio.assistant`. De tre lokala lagren ligger under `Mi
 
 ## Verifierad IPA
 
-- Byggd appcommit: `595e4a8659ae79c8221b06500a8ad0b6f3eea547` på `main`.
-- [Grön Actions-körning 36278717100](https://github.com/kanonmaten/mio/actions/runs/36278717100).
-- [Hämta artifacten Mio-IPA](https://github.com/kanonmaten/mio/actions/runs/36278717100/artifacts/10918600976), sparad i 14 dagar. Packa upp ZIP-filen och installera `Mio-unsigned.ipa` via SideStore.
-- Version **0.9.0**, build **4**. SHA-256 för IPA:n: `1b02246908dd71fbcba0101c71f6c1a94f20f15e2c4638056425a1fc6134fb8b`.
+- Byggd appcommit: `1b4ae6ccc41495e0645fb421f789e96785ab6e66` på `main`.
+- [Grön Actions-körning 36382509184](https://github.com/kanonmaten/mio/actions/runs/36382509184).
+- [Hämta artifacten Mio-IPA](https://github.com/kanonmaten/mio/actions/runs/36382509184/artifacts/10953378415), sparad i 14 dagar. Packa upp ZIP-filen och installera `Mio-unsigned.ipa` via SideStore.
+- Version **0.9.0**, build **5**. SHA-256 för IPA:n: `e5dc9c7e9cf07443abfc41fb26d0f4faca9ca8750376811920b4f21d60733a96`.
 - ZIP-integritet och Info.plist kontrollerade lokalt. `app.mio.assistant`, minsta iOS 26.0. Inga kompilatorvarningar i byggloggen. Ingen telefoninstallation verifierad.
-- Efterföljande gateway-/dokumentationsändringar ändrar inte den byggda appkoden; servern körs separat.
+- Efterföljande dokumentationsändringar ändrar inte den byggda appkoden; servern körs separat.
 
-Historiskt: build 3 (`f53aaa1`, Actions 36228684153) klarade 39 XCTest. Build 2 (`3d4b041`, Actions 36204571782) klarade också 39 men hade en kalenderdelegatvarning som rättades i build 3. De resultaten verifierar inte nya funktioner i build 4.
+Historiskt: build 4 (`595e4a8`, Actions 36278717100) klarade 46 XCTest. Build 3 (`f53aaa1`, Actions 36228684153) klarade 39 XCTest. Build 2 (`3d4b041`, Actions 36204571782) klarade också 39 men hade en kalenderdelegatvarning som rättades i build 3. De resultaten verifierar inte nya funktioner i build 5.
 
 ## Nästa kontroller
 
 1. Installera IPA:n enligt [installationsguiden](INSTALLATION.md), först på iPhone 16 Pro.
-2. Kör H01–H15 i [helhetstestet](TESTPLAN_HELHET.md). Börja med syntetiska data och håll AI avstängt.
+2. Kör först S01–S07 för svensk talmodell, därefter H01–H15 i [helhetstestet](TESTPLAN_HELHET.md). Börja med syntetiska data och håll AI avstängt.
 3. Prova behörigheter, tillgänglighet, dagbyte och radering. Kör sedan låst skärm, avbrott och längre batteriprov enligt [transkriptionstestet](TESTPLAN_V0_1.md).
 4. När [Cloudflare-gatewayen](../server/cloudflare/README.md) eller egen server är konfigurerad: kör AI01–AI06, A07–A14 och L01–L05 med syntetiska data.
 
@@ -74,4 +87,4 @@ Node-kompatibiliteten krävde explicit hantering av headeralternativ, timers och
 
 Efter användarens OAuth-godkännande och e-postverifiering publicerades gatewayen på `https://mio-private-gateway.mio-private-gateway.workers.dev`. Första publicerade kodversion: `4eb6e89a-f2fb-4ff5-8f7f-4468facba325`; därefter lades gatewaytoken till som separat Secret. D1-databasen `mio-limits` skapades och kvotschemat importerades. Inga transkript lagras där.
 
-Första konfigurerade provmodell är `gpt-6-luna`. HTTPS-kontrollen gav väntat 503 `gateway_not_configured` innan `OPENAI_API_KEY` lagts in. Det verifierar publicering och konfigurationsspärr, inte modellåtkomst, autentisering i fullt konfigurerad drift eller AI-kvalitet. Nästa steg är användarens API-nyckel direkt i Cloudflare och syntetiska modellprov. [Driftguide](../server/cloudflare/README.md).
+Första konfigurerade provmodell är `gpt-6-luna`. HTTPS-kontrollen gav väntat 503 `gateway_not_configured` innan `OPENAI_API_KEY` lagts in. Det verifierar publicering och konfigurationsspärr, inte modellåtkomst, autentisering i fullt konfigurerad drift eller AI-kvalitet. Senare hälsokontroll 2026-09-28 gav HTTP 200. Syntetiska prov med riktig modell återstår tills användaren vill använda API-saldo. [Driftguide](../server/cloudflare/README.md).

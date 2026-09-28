@@ -16,7 +16,7 @@ Mio ska hjälpa en användare att fånga och ordna sin dag: lektioner, antecknin
 | Del | Helhetsbyggets omfattning | Kontroll |
 |---|---|---|
 | Mio | Lokal session, text, stödstatus, paus/stopp samt lokala frågor/förslag | Granskning med Ja/Nej/Inte nu; Enskilda AI-frågor kräver sändningsgodkännande; löpande tolkning kräver aktiverat läge |
-| Lektioner | Separat läge pausar vardags-Mio; AI väljer huvudpunkter, exempel och läxor | Originaltext och tider bevaras; AI-utkast har textunderlag |
+| Lektioner | Separat läge pausar vardags-Mio; AI skriver detaljerade kopierbara anteckningar samt separata läxförslag | Originaltext och tider bevaras; AI-utkast har textunderlag |
 | Kalender | Lokala planer och bekräftade systemkalenderkopior | Inga tysta åtgärder eller dold synk |
 | Anteckningar | Anteckningar, uppgifter och uttryckliga minnen | Synliga, redigerbara, raderbara |
 | Morgon | Dagens lokala översikt, kvällsläge, alarm och dagliga notiser | Lokal dataöversikt, ingen påstådd semantisk AI-sammanfattning |
@@ -30,3 +30,9 @@ Användarbeslut 2026-09-25: bygg dessa delar tillsammans. AI-stöd och server in
 Vanliga samtal ska kunna ge plan- och uppgiftsförslag utan väckningsord. Användaren har uttryckligen valt löpande textanalys efter aktivering av AI-läget. Inget minne eller kalenderinlägg skapas tyst. Äldre dokument nämnde tidslinje för dagens innehåll; råa sessioner som huvudflöde var ett implementationsval, inte kärnan i visionen. Historiken bevaras som en sekundär vy.
 
 En lektion är ett eget fångstläge med en separat knapp. Vardags-Mio pausas under lektionen och fortsätts uttryckligen efter avslut. Utan AI sparas lokalt textunderlag. Med aktiverad AI tas anteckningsutkast fram efter avslut, med citat som går att kontrollera. Ingen separat ljudinspelning sparas.
+
+## Förtydligande 2026-09-28
+
+Mio ska bevara detaljerade lektionsanteckningar: förklaringar, begrepp, exempel, arbetssteg och läxor. Användaren kopierar dem till valfri vanlig AI för vidare lärande. Presentationer, frågekort och avancerade undervisningsupplägg ingår inte i Mio. En lektion kan ta flera minuter att bearbeta; utförlighet följer innehållet, inte ett visst sidantal.
+
+AI-leverantör och kompatibel modell byts i Cloudflare, utan modellväljare i appen. Reasoning ska vara av, temperatur 0 och svaren strikt strukturerade. Modeller som inte uppfyller kraven stoppas. Förslag blir inte handlingar utan användarens Ja.
