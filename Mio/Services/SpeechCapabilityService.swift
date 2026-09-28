@@ -8,6 +8,8 @@ enum SpeechCapabilityService {
         var snapshot = SpeechSupportSnapshot()
         snapshot.microphonePermission = microphonePermission
         snapshot.speechTranscriberAvailable = SpeechTranscriber.isAvailable
+        snapshot.supportedSwedishLocales = swedishIdentifiers(in: await SpeechTranscriber.supportedLocales)
+        snapshot.installedSwedishLocales = swedishIdentifiers(in: await SpeechTranscriber.installedLocales)
 
         if SpeechTranscriber.isAvailable,
            let speechLocale = await SpeechTranscriber.supportedLocale(equivalentTo: requestedLocale) {
@@ -50,9 +52,8 @@ enum SpeechCapabilityService {
                 snapshot.details = "DictationTranscriber används. iOS anger att den nyare SpeechTranscriber-modulen inte är tillgänglig på enheten."
             } else if snapshot.swedishLocaleIdentifier == nil {
                 snapshot.details = "DictationTranscriber används. SpeechTranscriber finns, men iOS erbjuder inte svenska för den på denna enhet. Det är inte samma sak som att en svensk modell bara saknar installation."
-            } else if snapshot.swedishLocaleIdentifier != nil,
-               snapshot.advancedAssetStatus != .installed {
-                snapshot.details = "SpeechAnalyzer använder DictationTranscriber som fallback. SpeechTranscriber-asset: \(snapshot.advancedAssetStatus?.title.lowercased() ?? "okänd status")."
+            } else if snapshot.advancedAssetStatus == .unsupported {
+                snapshot.details = "iOS erbjuder en svensk locale men rapporterar att SpeechTranscriber-resursen inte stöds. DictationTranscriber är reservmotor."
             } else {
                 snapshot.details = snapshot.dictationModelInstalled == true
                     ? "SpeechAnalyzer använder DictationTranscriber för svenska och dess lokala modellasset är installerad."
@@ -60,6 +61,9 @@ enum SpeechCapabilityService {
             }
         case nil:
             snapshot.details = "Varken SpeechTranscriber eller DictationTranscriber erbjuder svenska på telefonen."
+        }
+        if snapshot.advancedDownloadNeeded == true {
+            snapshot.details = "Svensk talmodell behöver laddas ner. Mio försöker installera SpeechTranscriber när du startar; du kan också installera den här i förväg."
         }
         return snapshot
     }
@@ -91,6 +95,7 @@ enum SpeechCapabilityService {
         engineTitle: String,
         status: @escaping (String) -> Void
     ) async throws -> Bool {
+        try Task.checkCancellation()
         let initialState = await assetState(for: modules)
         switch initialState {
         case .installed:
@@ -100,7 +105,7 @@ enum SpeechCapabilityService {
         case .downloading:
             status("iOS fortsätter hämta modellasseten för \(engineTitle), \(locale.identifier) …")
         case .supported:
-            status("Reserverar modellasseten för \(engineTitle) på telefonen …")
+            status("Svensk talmodell behöver laddas ner. Förbereder installation av \(engineTitle) …")
         }
 
         // Although the installation request normally reserves a locale automatically,
@@ -133,6 +138,12 @@ enum SpeechCapabilityService {
         case .unsupported: .unsupported
         @unknown default: .unsupported
         }
+    }
+
+    // Diagnostic lists are informational; supportedLocale(equivalentTo:) decides support.
+    static func swedishIdentifiers(in locales: [Locale]) -> [String] {
+        locales.filter { $0.language.languageCode?.identifier == "sv" }
+            .map { $0.identifier(.bcp47) }.sorted()
     }
 
     static func shouldUseSpeechTranscriber(assetState: SpeechAssetState) -> Bool {

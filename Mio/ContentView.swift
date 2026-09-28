@@ -370,7 +370,7 @@ private struct CapabilityCard: View {
                 )
                 Divider()
                 CheckRow(
-                    title: "Vald transkriptionsmodul",
+                    title: "Installerad eller aktiv transkriptionsmodul",
                     detail: model.support.selectedEngine?.title ?? "Ingen svensk modul hittades",
                     result: model.support.selectedEngine != nil
                 )
@@ -380,6 +380,12 @@ private struct CapabilityCard: View {
                     detail: "Projektet innehåller Apples audio-bakgrundsläge",
                     result: true
                 )
+
+                Text(model.support.diagnosticDescription)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 12)
 
                 Text(model.support.details)
                     .font(.footnote)

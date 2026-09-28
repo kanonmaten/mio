@@ -643,6 +643,9 @@ final class MioViewModel {
                 kind: .warning,
                 message: "Talmotorn hann inte med och totalt \(count) mikrofonbuffertar har tappats."
             )
+        case let .speechSupport(snapshot):
+            support = snapshot
+            appendEvent(kind: .info, message: snapshot.diagnosticDescription)
         case let .backendFallback(message):
             appendEvent(kind: .warning, message: message)
         case .mediaServicesReset:

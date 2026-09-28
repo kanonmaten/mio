@@ -2,6 +2,12 @@
 
 Användarsynliga ändringar och kompatibilitet per version. Versioner följer `vMAJOR.MINOR.PATCH`; [roadmapen](docs/ROADMAP.md) definierar milstolpar och släppkrav. Ingen ny Git-tagg eller release har skapats genom namnbytet.
 
+## Arbetskopia 2026-09-28 — ännu inte byggd
+
+- Sessionsstart försöker installera en stödd men saknad svensk SpeechTranscriber-modell före fallback. Avbruten start får inte fortsätta med reservmotorn.
+- Motordiagnostik visar svenska språkvarianter i supportedLocales/installedLocales, resolved locale, assetstatus och hämtningsbehov; sessionsexporten får före/efter-händelser. Installations-/startfel vid fallback får felkod och domän.
+- Instruktioner och enhetsprov uppdaterade. Ingen ny talmotor eller bevisad kvalitetsförbättring; fysisk iPhone-verifiering återstår.
+
 ## Driftalternativ 2026-09-27
 
 - Gatewayen publicerad på användarens Cloudflare-konto efter godkänd inloggning. Kvotdatabas och privat gatewaytoken konfigurerade; OpenAI-nyckel och verkliga modellprov återstår. Första provmodell konfigurerad som `gpt-6-luna`.

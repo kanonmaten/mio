@@ -1,6 +1,9 @@
 # Bygg- och teststatus
 
-Senast uppdaterad: **2026-09-27**. Helhetsbygge **0.9.0, ej släppt**. **Build 4** för `595e4a8` på `main` har klarat Release och **46 XCTest** i Actions 36278717100. IPA:n är nedladdad och kontrollerad. Cloudflare-gatewayen är publicerad men väntar på OpenAI-nyckel. Telefonprov för denna revision och verkliga modellprov återstår.
+Senast uppdaterad: **2026-09-28**. Helhetsbygge **0.9.0, ej släppt**. **Build 4** för `595e4a8` på `main` har klarat Release och **46 XCTest** i Actions 36278717100. IPA:n är nedladdad och kontrollerad. Gatewayens hälsokontroll svarade HTTP 200 den 28 september; riktiga modellprov saknas. Telefonprov för denna revision och verkliga modellprov återstår.
+
+**Arbetskopian avviker nu från build 4:** installation av stödd svensk SpeechTranscriber vid start och utökad diagnostik. 113 strukturella kontroller passerar; nya XCTest är skrivna men inte körda. Ingen Swift-kompilering, ny IPA eller telefonverifiering för dessa ändringar finns ännu. Den gamla gröna körningen verifierar endast build 4.
+
 Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskriver innehållet och [helhetstestet](TESTPLAN_HELHET.md) beskriver återstående acceptansprov.
 
 ## Aktuellt verifieringsläge
@@ -17,7 +20,7 @@ Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskr
 | IPA / installation | **0.9.0 (4)** skapad och lokalt ZIP-/plist-/SHA-256-kontrollerad. Identiteten är `app.mio.assistant`, minsta iOS 26.0. **Ingen fysisk installation verifierad.** |
 | Design och tillgänglighet | Native Liquid Glass-kontroller och systemnavigation implementerade. iOS-rendering, VoiceOver, större text, mörkt läge och tillgänglighetsinställningar återstår att prova. |
 | Telefonprov | Användaren har lämnat ett privat prov från 2026-09-26, se nedan. Byggnummer/enhets- och iOS-version saknas i exporten; inget komplett acceptansprov är styrkt. |
-| AI i drift | **Cloudflare Worker publicerad**, D1-kvottabell skapad och separat gatewaytoken sparad som Secret. HTTPS svarar 503 `gateway_not_configured` medan OpenAI-nyckeln saknas. Ingen riktig modellfråga provad. Molnet i appen är avstängt tills användaren konfigurerar och aktiverar det. |
+| AI i drift | **Cloudflare Worker publicerad**, D1-kvottabell skapad och separat gatewaytoken sparad som Secret. Vid granskning 2026-09-28 svarar `/health` HTTP 200; det verifierar konfigurationskontrollen, inte nyckelns giltighet, modellåtkomst eller saldo. Ingen riktig modellfråga provad. Molnet i appen är avstängt tills användaren konfigurerar och aktiverar det. |
 
 Serverproven kontrollerar autentisering, routning, exakt godkänd payload, storleksgränser, sanitiserade fel, begränsning av antal anrop, timeout och redirects. De ersätter inte ett prov med en verklig HTTPS-server. De lokala kontrollerna ersätter varken Xcode, XCTest eller fysisk telefon.
 

@@ -6,7 +6,7 @@ Detta är guiden för helhetsbygget 0.9.0. Koden behöver först byggas och inst
 
 Öppna de fem flikarna. Du kan skriva manuella poster direkt, utan mikrofon, notiser eller AI. **Mio → Så använder du Mio** innehåller en kort guide i appen.
 
-Under **Telefonens stöd och integritet** kan du kontrollera svensk transkription och vid behov installera SpeechTranscriber-modellen med wifi. Installation är separat från sessionsstart; annars används DictationTranscriber med svenska när telefonen stöder det.
+Under **Telefonens stöd och integritet** kan du kontrollera svensk transkription och vid behov installera SpeechTranscriber-modellen med wifi. Nästa källversion försöker även installera en stödd men saknad svensk modell när du startar Mio. Under hämtningen visas ett förberedelseläge och mikrofonen har inte startat. Avbryt håller Mio avstängd. Dictation används vid saknat stöd eller installations-/startfel; orsaken finns i händelseloggen. Build 4 har fortfarande separat installation.
 
 ## Fånga och ordna
 

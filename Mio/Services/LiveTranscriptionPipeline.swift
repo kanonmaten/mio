@@ -210,6 +210,8 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                 throw MioError.microphoneDenied
             }
             handlers.status("Förbereder SpeechAnalyzer och en svensk transkriptionsmodul …")
+            handlers.event(.speechSupport(await SpeechCapabilityService.inspect()))
+            try Task.checkCancellation()
             let dictationLocale = await DictationTranscriber.supportedLocale(
                 equivalentTo: SpeechCapabilityService.requestedLocale
             )
@@ -225,43 +227,24 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                     ),
                     locale: locale
                 )
-                let advancedState = await SpeechCapabilityService.assetState(
-                    for: [advancedBackend.module]
-                )
-                if SpeechCapabilityService.shouldUseSpeechTranscriber(assetState: advancedState) {
-                    do {
-                        details = try await prepare(advancedBackend)
-                    } catch {
-                        try Task.checkCancellation()
-                        guard let dictationLocale else { throw error }
-                        handlers.event(
-                            .backendFallback(
-                                "SpeechTranscriber kunde inte starta (\(error.localizedDescription)). Provar DictationTranscriber i en ny SpeechAnalyzer."
-                            )
-                        )
-                        await discardPreparedBackend()
-                        details = try await prepare(
-                            .dictation(
-                                SpeechCapabilityService.makeResponsiveLongDictation(locale: dictationLocale),
-                                locale: dictationLocale
-                            )
-                        )
-                    }
-                } else if let dictationLocale {
-                    handlers.event(
-                        .backendFallback(
-                            "SpeechTranscribers svenska modell är \(advancedState.title.lowercased()), inte installerad. Startar DictationTranscriber i SpeechAnalyzer; installera den nyare modellen separat."
-                        )
-                    )
+                // prepare installs missing supported assets before starting the analyzer.
+                do {
+                    details = try await prepare(advancedBackend)
+                } catch {
+                    if error is CancellationError { throw error }
+                    try Task.checkCancellation()
+                    guard lifecycleLock.withLock({ !stopping }) else { throw CancellationError() }
+                    guard let dictationLocale else { throw error }
+                    let failure = error as NSError
+                    handlers.event(.backendFallback(
+                        "SpeechTranscriber kunde inte installeras eller starta: \(failure.localizedDescription) [\(failure.domain):\(failure.code)]. Provar DictationTranscriber i en ny SpeechAnalyzer."
+                    ))
+                    await discardPreparedBackend()
                     details = try await prepare(
                         .dictation(
                             SpeechCapabilityService.makeResponsiveLongDictation(locale: dictationLocale),
                             locale: dictationLocale
                         )
-                    )
-                } else {
-                    throw MioError.speechAssetNotReady(
-                        "SpeechTranscribers svenska modell är \(advancedState.title.lowercased()). Installera modellen innan du startar en session."
                     )
                 }
             } else if let dictationLocale {
@@ -279,6 +262,11 @@ final class LiveTranscriptionPipeline: @unchecked Sendable {
                 throw MioError.swedishUnavailable
             }
 
+            var finalSupport = await SpeechCapabilityService.inspect()
+            finalSupport.selectedEngine = details.engine
+            finalSupport.details = "Den aktuella lyssningen använder \(details.engine.title). Se händelseloggen för eventuell fallbackorsak."
+            handlers.event(.speechSupport(finalSupport))
+            try Task.checkCancellation()
             try startAudioResourcesIfAllowed()
 
             handlers.status("SpeechAnalyzer bearbetar svenska lokalt på telefonen.")

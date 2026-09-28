@@ -83,3 +83,19 @@ Dessa prov gäller den nya koden, inte tidigare build 3. Registrera byggnummer o
 | A14 | Nej/Inte nu/Ja, omstart och återanalys av samma lektionsdel | Förslag återuppstår inte från samma analyserade fragment. Bekräftade poster skapas en gång. AI-läget är av efter ny app-process |
 
 Bedöm kvalitetsproven separat: vad sades, vad transkriberades, vad valde modellen, och vad godkände användaren? Spara endast syntetiska eller avidentifierade resultat i repot. Verifiera kostnad och svarstid med den valda modellen innan längre vardagsbruk.
+
+## Svensk SpeechTranscriber — nästa källversion efter build 4
+
+Alla nedanstående prov är **ej körda** på fysisk telefon. Ange appbuild, telefonmodell och exakt iOS. Spara exporten privat.
+
+| ID | Prov | Förväntat |
+|---|---|---|
+| S01 | Öppna Telefonens stöd och läs alla motorfält | Tillgänglighet, resolved sv-SE, svenska i supportedLocales/installedLocales, assetstatus och hämtningsbehov kan särskiljas. Tom installerad lista betyder inte saknat stöd |
+| S02 | På telefon där svenska stöds men asset saknas: starta Mio med nät | Synligt hämtningsläge innan mikrofonstart; installera först, därefter SpeechTranscriber. Om tillståndet inte kan återskapas, markera Blockerad i stället för godkänd |
+| S03 | Starta med redan installerad asset, även offline | SpeechTranscriber startar utan ny hämtning; svensk text produceras |
+| S04 | Avbryt medan modellen hämtas | Ingen fallback eller mikrofonstart efter avbryt. iOS kan förvalta sin nedladdning separat; kontrollera nästa start också |
+| S05 | Prova saknat stöd eller installationsfel, exempelvis utan nät och utan asset | Begriplig specifik fallbackorsak. Dictation kan också behöva en resurs; om båda misslyckas ska appen ge fel och hålla mikrofonen stängd |
+| S06 | Exportera efter start och eventuellt fallback | Händelser visar före/efter-status, använd motor och eventuell felorsak/domän/kod; inga ljuddata eller hemligheter |
+| S07 | Läs samma svenska facit på nära håll och lektionsavstånd, och kör långproven ovan | Mät precision, latens, batteri och avbrott separat. Ingen automatisk kvalitetsbedömning utifrån motorns namn |
+
+Slutrapport för måltelefonen ska besvara: stöds sv-SE, är modellen installerad, lyckas automatisk installation, varför inträffar fallback och vilken motor fungerade bäst i dessa prov?

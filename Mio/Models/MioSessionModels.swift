@@ -45,6 +45,25 @@ struct SpeechSupportSnapshot: Sendable {
     var microphonePermission: MicrophonePermission = .notDetermined
     var speechTranscriberAvailable: Bool?
     var swedishLocaleIdentifier: String?
+    var supportedSwedishLocales: [String] = []
+    var installedSwedishLocales: [String] = []
+
+    var advancedDownloadNeeded: Bool? {
+        guard advancedAssetStatus != nil else { return nil }
+        switch advancedAssetStatus {
+        case .supported, .downloading: return true
+        case .installed: return false
+        case .unsupported, nil: return nil
+        }
+    }
+
+    var diagnosticDescription: String {
+        let available = speechTranscriberAvailable.map { $0 ? "ja" : "nej" } ?? "okänt"
+        let supported = supportedSwedishLocales.isEmpty ? "inga" : supportedSwedishLocales.joined(separator: ", ")
+        let installed = installedSwedishLocales.isEmpty ? "inga" : installedSwedishLocales.joined(separator: ", ")
+        let download = advancedDownloadNeeded.map { $0 ? "ja" : "nej" } ?? "ej fastställt"
+        return "SpeechTranscriber tillgänglig: \(available); sv-SE → \(swedishLocaleIdentifier ?? "ingen stödd locale"); svenska i supportedLocales: \(supported); svenska i installedLocales: \(installed); assetstatus: \(advancedAssetStatus?.title ?? "ej fastställt"); hämtning behövs: \(download)."
+    }
     var swedishModelInstalled: Bool?
     var advancedAssetStatus: SpeechAssetState?
     var advancedLocaleReserved: Bool?
@@ -322,6 +341,7 @@ enum PauseLength: Sendable {
 }
 
 enum PipelineEvent: Sendable {
+    case speechSupport(SpeechSupportSnapshot)
     case interruptionBegan
     case interruptionEnded(shouldResume: Bool)
     case routeChanged(String)

@@ -14,7 +14,7 @@ Gällande beslut samlade på ett ställe. [Ändringsloggen](../CHANGELOG.md) bes
 | Separata datalager | Poster, sessioner och assistentdata lagras separat; aktuella kontrakt beskrivs i datamodellen | 2026-08-24 |
 | Bevarade original | Sessionstitel, anteckning och texträttningar läggs ovanpå originaltext, tider och bevis | 2026-08-24 |
 | Resurs före modulstart | `SpeechTranscriber` endast efter installerad svensk assetstatus; separat installationsknapp | 2026-08-24 |
-| Omedelbar fallback | Ingen modellhämtning vid sessionsstart; saknad resurs ger `DictationTranscriber`. Förberedelsefel ger ny analyzer | 2026-08-24 |
+| Installation före fallback | Ersätter omedelbar fallback: stödd saknad svensk resurs installeras vid start. Verkliga fel ger ny analyzer för Dictation; avbryt startar inte fallback | 2026-09-28 |
 | Inga externa integrationer i v0.2.0 | Ingen OpenAI, EventKit, systemalarm eller konto; Kalender och Morgon är lokala vyer | 2026-08-24 |
 | Gemensamt Xcode 27-bygge | Ett jobb på `xcode-27` är konfigurerat för Release, XCTest och osignerad IPA med iOS 27 SDK och lägsta iOS-version 26.0 | 2026-09-25 |
 | Beständiga namn och versioner | Projektet heter Mio; produktmilstolpar använder v0.x.y enligt roadmapen | 2026-09-22 |
@@ -66,3 +66,13 @@ Källcitat och schema är tekniska kontroller, inte ett bevis på semantisk korr
 Användaren vill slippa en påslagen egen dator och föredrar gratis drift. Cloudflare Workers med workers.dev-adress förbereds därför som alternativ till egen Node/Caddy-värd. Modellen körs fortfarande hos OpenAI. Direkt API från en privat klient är tekniskt möjligt men skulle kräva API-nyckeln på telefonen; gatewayen behåller serverägd nyckel. Samma systeminstruktioner, HTTP-kontrakt och validering återanvänds.
 
 En D1-tabell med fyra heltalsräknare ger global minut-/dygnskvot över Worker-omstarter. Inga texter, nycklar eller IP-adresser lagras där. Cloudflare-konto och egna hemligheter krävs före driftsättning; inga resurser är skapade genom kodändringen. [Driftguide](../server/cloudflare/README.md).
+
+## Svensk talmodell 2026-09-28 — källändring, ej telefonverifierad
+
+Apples [SpeechTranscriber](https://developer.apple.com/documentation/speech/speechtranscriber) skiljer stödda/nedladdningsbara språk från installerade. [AssetInventory](https://developer.apple.com/documentation/speech/assetinventory) hanterar hämtning innan analyzerstart. [WWDC25](https://developer.apple.com/videos/play/wwdc2025/277/) visar detta flöde för långvarig transkription.
+
+Val: behåll Apples lokala kedja, men försök installation när `supportedLocale(equivalentTo:)` hittar svenska. Det tar bort antagandet att en saknad installation kräver omedelbar fallback. Första start kan ta längre tid och kräva nät; efter installation används lokala resurser. Ingen avgiftsbelagd AI-tjänst används för talet. Både separat förinstallation och installation vid start finns. Dictation förblir reserv vid saknat stöd eller faktiskt fel.
+
+Alternativet att alltid starta Dictation ger snabbare första start men kan permanent lämna den nyare modellen oanvänd. WhisperKit eller annan motor tillför modellhantering och underhåll; inget sådant byte görs före enhetsprov enligt användarens instruktion. Precision, batteri, värme och faktisk startlatens är inte jämförda på måltelefonen och får inte antas bättre. API-stödet kräver iOS 26+, men språk/hårdvarustöd kontrolleras vid körning.
+
+Diagnostiken visar tillgänglighet, resolved svensk locale, svenska poster i supportedLocales och installedLocales, assetstatus och hämtningsbehov. Före/efter start sparas detta som vanliga diagnostikhändelser i befintlig sessionsexport. Fallbackfel innehåller domän/kod. Tom installedLocales innebär inte att svenska är ostött.
