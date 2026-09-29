@@ -1,13 +1,20 @@
 # Bygg- och teststatus
 
+## Cloudflare livegranskning 2026-09-29
+
+- Worker `mio-private-gateway` har D1-bindningen `MIO_LIMITS` till befintliga `mio-limits`; D1 Studio visar tabellen `mio_budget`. I produktion finns `MIO_AI_PROVIDER=groq`, `MIO_AI_MODEL=qwen/qwen3.8-27b`, `MIO_REQUESTS_PER_DAY=100`, `MIO_REQUESTS_PER_MINUTE=6` och `MIO_LESSON_INTERVAL_SECONDS=60`. `GROQ_API_KEY` och `MIO_GATEWAY_TOKEN` finns som maskerade Secrets; deras innehåll eller giltighet kan inte avläsas i Dashboard. Den äldre textvariabeln `MIO_OPENAI_MODEL` är borttagen.
+- Worker Access kräver inloggning för all trafik på både produktions- och förhandsvisningsadresser. Zero Trust-appen `Mio service token` har en Service Auth-policy som inkluderar endast tjänstetoken `Mio iPhone`. Tjänstetoken är aktiverad och löper ut 2027-09-29, men Dashboard anger **Not Seen Yet**: inget lyckat Access-anrop med den har verifierats.
+- Anonyma HTTPS-anrop till `/health`, `/v1/ask`, `/v1/analyze` och `/v1/lesson-notes` gav alla HTTP 403 från Cloudflare Access. Detta verifierar den yttre spärren, inte gatewaytoken, Groq-nyckeln, modellåtkomst eller appens anslutning. Ingen AI-trafik skickades.
+- Aktiv version `4c22cc43` skapades av ändringen av `MIO_GATEWAY_TOKEN`. De senaste tio versionerna i Dashboard är variabel-/Secret-ändringar; ingen ny gatewaykod eller build visas där. Arbetskopians Groq-/lektionskod är därför **inte verifierad som publicerad**. Den äldre iPhone-build 5 saknar Access-fälten och kan inte nå en Access-skyddad Worker. Nästa steg är publicering av avsedd gatewaykod efter uttrycklig begäran, nytt iOS-bygge/installation och syntetiska anslutnings- och modellprov.
+
 ## Anslutningsguide och Access-klient, 2026-09-29
 
-- Ny guide för Groq/Qwen, självständiga provider-/modellbyten, gatewaytoken/rotation och Worker-specifik Access med Service Auth. Officiell Cloudflare-/Groq-dokumentation läst. Inget Cloudflare-konto ändrat eller liveskydd verifierat.
+- Ny guide för Groq/Qwen, självständiga provider-/modellbyten, gatewaytoken/rotation och Worker-specifik Access med Service Auth. Officiell Cloudflare-/Groq-dokumentation läst. Vid detta tidigare guidearbete ändrades inget Cloudflare-konto och liveskyddet var ännu inte verifierat; senare livegranskning står ovan.
 - Appkoden har valfria Access-fält och gemensam Keychain-lagring med äldre tokenläsning. Tre nya XCTest-fall för format/rotation/headerhantering finns men är **inte körda**. Ingen Xcode-kompilering eller iPhone-verifiering av denna revision.
 - **40/40 serverprov godkända** med Node v26.10.0, mockad AI och localhost. Första sandboxkörningen blockerades av `listen EPERM`; körning med nödvändig localhost-åtkomst passerade.
 - **Worker dry-run och lokal workerd/Miniflare godkända** med Wrangler 4.141.0: OpenAI/Groq, alla tre AI-rutters auth, D1-kvot och att Access-headers inte vidarebefordras till modellen. Ingen verklig Cloudflare Access-policy provas av mocktestet. Ingen modelltrafik eller publicering.
 - **127 portabla strukturkontroller och `git diff --check` godkända**. Dessa är inte Swift-kompilering.
-- Nästa enhets-/driftprov: ny IPA, AC01–AC05 samt Qwen med syntetisk fråga/vardag/lektion enligt guiden. Gatewaykoden måste publiceras och Access konfigureras separat.
+- Nästa enhets-/driftprov: ny IPA, AC01–AC05 samt Qwen med syntetisk fråga/vardag/lektion enligt guiden. Gatewaykoden måste fortfarande publiceras; Access är nu konfigurerat men tjänstetoken behöver provas.
 
 ## Ny arbetskopia: AI-/lektionsändringar 2026-09-28
 

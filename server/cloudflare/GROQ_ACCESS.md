@@ -2,7 +2,7 @@
 
 Den här guiden använder **Groq → `qwen/qwen3.8-27b`**. Du kan sedan själv byta till andra modeller i [Mios kompatibilitetskatalog](../PROVIDERS.md#presets-och-tillåtna-modeller), utan Codex. Guiden skiljer engångsuppdatering från vanliga modellbyten.
 
-**Läget 2026-09-29:** källkoden har leverantörsbyte och nu även valfria Access-fält. Den tidigare publicerade gatewayen och iPhone-build 5 innehåller inte allt detta. Källkodens ändring aktiverar inte Cloudflare Access i ditt konto. Den nya appkoden behöver byggas och installeras; denna guide är inte bevis för genomförd driftsättning.
+**Läget 2026-09-29:** källkoden har leverantörsbyte och nu även valfria Access-fält. Cloudflare Access är aktiverat för den befintliga Workern och blockerar anonyma anrop med HTTP 403. Den aktiva tjänstetoken `Mio iPhone` visas ännu som **Not Seen Yet** i Zero Trust. Dashboard visar Groq/Qwen-variablerna, men bara variabel-/Secret-ändringar efter den äldre kodpubliceringen; Groq-koden är inte verifierad som publicerad. iPhone-build 5 saknar Access-fälten. Den nya gatewaykoden behöver publiceras och appkoden byggas och installeras innan anslutningen kan slutprovas.
 
 ## 1. Vilken token är vilken?
 
@@ -125,6 +125,8 @@ Cloudflare Access kontrollerar anrop före Workern. Guidens val är **Access på
 4. Gå till **Access controls → Policies → Add a policy** (äldre meny: Access → Policies). Namnge den `Mio service token`. Skapa policyn med **Action: Service Auth**, **Include → Service Token → Mio iPhone**. Välj just denna token. Använd inte `Bypass`, `Everyone` eller `Any valid service token`.
 
 Service-token-paret är en separat maskininloggning. `Allow` kan kräva webbinloggning, som Mio inte genomför. [Cloudflares service tokens](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/) och [Access-policyer](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/).
+
+**Session Duration:** 24 timmar, som nu är valt för Access-applikationen, är ett rimligt standardvärde. Mio skickar Client ID och Client Secret på varje anrop och använder ingen webbläsarsession; det är tjänstetokens **separata utgångsdatum** som avgör när paret måste förnyas eller bytas. Den nuvarande `Mio iPhone`-tokenen löper ut 2027-09-29. [Cloudflares sessionshantering](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) och [service-tokenhantering](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/).
 
 ### B. Koppla policyn till hela Workern
 
