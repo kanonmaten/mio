@@ -31,10 +31,37 @@ struct MioCloudRequest: Codable, Equatable, Sendable {
 struct MioCloudConnection: Equatable, Sendable {
     let endpoint: URL
     let token: String
+    var access: MioAccessCredentials? = nil
+}
+
+struct MioAccessCredentials: Codable, Equatable, Sendable {
+    let clientID: String
+    let clientSecret: String
+
+    func validate() throws {
+        for value in [clientID, clientSecret] {
+            guard (1...512).contains(value.utf8.count), value.utf8.allSatisfy({
+                (65...90).contains($0) || (97...122).contains($0)
+                    || (48...57).contains($0) || [45, 46, 95].contains($0)
+            }) else { throw MioCloudError.invalidAccess }
+        }
+    }
+}
+
+// One Keychain item keeps the gateway and Access credentials in sync on failed saves.
+struct MioCloudCredentials: Codable, Equatable {
+    let token: String
+    var access: MioAccessCredentials? = nil
+
+    static func decode(_ data: Data) throws -> Self {
+        if data.first == 123 { return try JSONDecoder().decode(Self.self, from: data) }
+        guard let token = String(data: data, encoding: .utf8) else { throw MioCloudError.keychain }
+        return Self(token: token) // Existing installations stored only the gateway token.
+    }
 }
 
 enum MioCloudError: LocalizedError {
-    case disabled, invalidServer, invalidToken, keychain, invalidQuestion, invalidContext
+    case disabled, invalidServer, invalidToken, invalidAccess, keychain, invalidQuestion, invalidContext
     case changedConfiguration, invalidResponse, oversizedResponse, network
     case serverStatus(Int)
     case rateLimited(Int)
@@ -44,7 +71,8 @@ enum MioCloudError: LocalizedError {
         case .disabled: "Molnfrågor är avstängda."
         case .invalidServer: "Ange serverns HTTPS-adress utan sökväg, inloggning, frågetecken eller fragment, till exempel https://mio.example.se."
         case .invalidToken: "Ange serverns separata åtkomsttoken: 32–256 bokstäver, siffror, bindestreck eller understreck. Använd aldrig en leverantörs API-nyckel i appen. Vid byte av server krävs en ny token."
-        case .keychain: "Kunde inte läsa eller ändra den skyddade åtkomsttokenen. Lås upp telefonen och försök igen."
+        case .invalidAccess: "Ange både Client ID och Client Secret från Cloudflare Access. Lämna båda tomma för att behålla ett sparat par på samma server."
+        case .keychain: "Kunde inte läsa eller ändra de skyddade anslutningsuppgifterna. Lås upp telefonen och försök igen."
         case .invalidQuestion: "Skriv en fråga på högst 2 000 UTF-8-byte. Svenska bokstäver kan ta flera byte."
         case .invalidContext: "Välj högst sex utdrag. Varje rubrik får vara högst 200 byte, varje text 4 000 byte och all vald kontext 10 000 byte. Tomma utdrag behöver tas bort eller fyllas i."
         case .changedConfiguration: "Inställningarna ändrades. Förhandsgranska frågan igen."
@@ -54,7 +82,8 @@ enum MioCloudError: LocalizedError {
         case .rateLimited(let seconds): "AI-gränsen är nådd. Vänta minst \(seconds) sekunder och fortsätt sedan manuellt. Sparade lektionsdelar finns kvar."
         case .serverStatus(let status):
             switch status {
-            case 401, 403: "Servern nekade åtkomst. Kontrollera serverns separata åtkomsttoken."
+            case 401, 403: "Servern nekade åtkomst. Kontrollera MIO_GATEWAY_TOKEN och, om Access används, Client ID, Client Secret och Service Auth-policyn."
+            case 300...399: "Servern hänvisade till en annan adress. För Cloudflare Access behövs en Service Auth-policy och rätt service token; webbinloggning fungerar inte i Mio."
             case 422: "Modellen stöder inte Mios krav: reasoning av, temperatur 0 och strikt JSON-schema. Kontrollera modellvalet i Cloudflare."
             case 429: "Serverns frågegräns är nådd. Vänta och försök senare."
             case 504: "Svaret tog för lång tid. Försök senare med en kortare fråga."
@@ -85,13 +114,35 @@ enum MioCloudSettings {
         return origin.appendingPathComponent("v1").appendingPathComponent("ask")
     }
 
-    static func save(serverAddress: String, newToken: String) throws {
+    static var usesAccess: Bool { (try? readCredentials().access) != nil }
+
+    static func updatedCredentials(previous: MioCloudCredentials?, newToken: String,
+                                   useAccess: Bool, clientID: String, clientSecret: String) throws -> MioCloudCredentials {
+        let token = newToken.isEmpty ? previous?.token ?? "" : newToken
+        try validateToken(token)
+        let access: MioAccessCredentials?
+        if !useAccess {
+            access = nil
+        } else if clientID.isEmpty && clientSecret.isEmpty, let saved = previous?.access {
+            access = saved
+        } else {
+            access = MioAccessCredentials(clientID: clientID, clientSecret: clientSecret)
+        }
+        try access?.validate()
+        return MioCloudCredentials(token: token, access: access)
+    }
+
+    static func save(serverAddress: String, newToken: String, useAccess: Bool = false,
+                     clientID: String = "", clientSecret: String = "") throws {
         let endpoint = try endpoint(for: serverAddress)
         let normalizedOrigin = endpoint.deletingLastPathComponent().deletingLastPathComponent().absoluteString
         let sameServer = (try? self.endpoint(for: self.serverAddress)) == endpoint
-        let token = newToken.isEmpty && sameServer ? try readToken() : newToken
-        try validateToken(token)
-        try writeToken(token)
+        // Never carry credentials to a changed origin, even when the form is blank.
+        let needsPrevious = newToken.isEmpty || (useAccess && clientID.isEmpty && clientSecret.isEmpty)
+        let previous = sameServer && needsPrevious ? try readCredentials() : nil
+        let credentials = try updatedCredentials(previous: previous, newToken: newToken,
+                                                 useAccess: useAccess, clientID: clientID, clientSecret: clientSecret)
+        try writeCredentials(credentials)
         UserDefaults.standard.set(normalizedOrigin, forKey: serverKey)
         NotificationCenter.default.post(name: didResetNotification, object: nil)
     }
@@ -99,9 +150,10 @@ enum MioCloudSettings {
     static func connection() throws -> MioCloudConnection {
         guard UserDefaults.standard.bool(forKey: enabledKey) else { throw MioCloudError.disabled }
         let endpoint = try endpoint(for: serverAddress)
-        let token = try readToken()
-        try validateToken(token)
-        return MioCloudConnection(endpoint: endpoint, token: token)
+        let credentials = try readCredentials()
+        try validateToken(credentials.token)
+        try credentials.access?.validate()
+        return MioCloudConnection(endpoint: endpoint, token: credentials.token, access: credentials.access)
     }
 
     /// Disable first even if Keychain deletion fails. Credentials are never part of exports.
@@ -127,21 +179,21 @@ enum MioCloudSettings {
               }) else { throw MioCloudError.invalidToken }
     }
 
-    private static func readToken() throws -> String {
+    private static func readCredentials() throws -> MioCloudCredentials {
         var query = keychainQuery
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecItemNotFound { throw MioCloudError.invalidToken }
-        guard status == errSecSuccess, let data = result as? Data,
-              let token = String(data: data, encoding: .utf8) else { throw MioCloudError.keychain }
-        return token
+        guard status == errSecSuccess, let data = result as? Data else { throw MioCloudError.keychain }
+        do { return try MioCloudCredentials.decode(data) }
+        catch { throw MioCloudError.keychain }
     }
 
-    private static func writeToken(_ token: String) throws {
+    private static func writeCredentials(_ credentials: MioCloudCredentials) throws {
         let attributes: [String: Any] = [
-            kSecValueData as String: Data(token.utf8),
+            kSecValueData as String: try JSONEncoder().encode(credentials),
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
         var status = SecItemUpdate(keychainQuery as CFDictionary, attributes as CFDictionary)
@@ -166,7 +218,7 @@ enum MioCloudService {
 
     static func analyze(_ payload: MioAnalysisRequest, connection: MioCloudConnection) async throws -> MioAnalysisResult {
         let endpoint = connection.endpoint.deletingLastPathComponent().appendingPathComponent(payload.mode == .lesson ? "lesson-notes" : "analyze")
-        let data = try await send(payload.validatedData(), connection: MioCloudConnection(endpoint: endpoint, token: connection.token))
+        let data = try await send(payload.validatedData(), connection: MioCloudConnection(endpoint: endpoint, token: connection.token, access: connection.access))
         try validateWire(data, lesson: payload.mode == .lesson)
         let result: MioAnalysisResult
         if payload.mode == .lesson {
@@ -217,6 +269,21 @@ enum MioCloudService {
         }
     }
 
+    static func makeRequest(_ body: Data, connection: MioCloudConnection) throws -> URLRequest {
+        try connection.access?.validate()
+        var request = URLRequest(url: connection.endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(connection.token)", forHTTPHeaderField: "Authorization")
+        if let access = connection.access {
+            request.setValue(access.clientID, forHTTPHeaderField: "CF-Access-Client-Id")
+            request.setValue(access.clientSecret, forHTTPHeaderField: "CF-Access-Client-Secret")
+        }
+        request.httpBody = body
+        return request
+    }
+
     private static func send(_ body: Data, connection: MioCloudConnection) async throws -> Data {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
@@ -229,12 +296,7 @@ enum MioCloudService {
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
 
-        var request = URLRequest(url: connection.endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("Bearer \(connection.token)", forHTTPHeaderField: "Authorization")
-        request.httpBody = body
+        let request = try makeRequest(body, connection: connection)
         do {
             try Task.checkCancellation()
             let (bytes, response) = try await session.bytes(for: request, delegate: MioCloudRedirectGuard())

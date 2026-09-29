@@ -20,6 +20,8 @@ const options = convertV4MiniflareOptions({
   d1Databases: { MIO_LIMITS: 'test-limits' },
   outboundService: async request => {
     modelCalls++;
+    assert.equal(request.headers.get('cf-access-client-id'), null);
+    assert.equal(request.headers.get('cf-access-client-secret'), null);
     assert.equal(request.url, 'https://api.openai.com/v1/responses');
     const body = await request.json();
     assert.equal(body.store, false); assert.deepEqual(body.tools, []);
@@ -31,13 +33,16 @@ options.telemetry = { enabled: false };
 options.cf = false;
 const runtime = new Miniflare(options);
 const send = (path, body, auth = token) => runtime.dispatchFetch(`https://mio.example${path}`, {
-  method: 'POST', headers: { Authorization: `Bearer ${auth}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  method: 'POST', headers: { Authorization: `Bearer ${auth}`, 'Content-Type': 'application/json',
+    'CF-Access-Client-Id': 'fixture.access', 'CF-Access-Client-Secret': 'fixture-secret' }, body: JSON.stringify(body)
 });
 try {
   const db = await runtime.getD1Database('MIO_LIMITS');
   await db.exec((await readFile(new URL('../cloudflare/schema.sql', import.meta.url), 'utf8')).replaceAll('\n', ' '));
   assert.equal((await runtime.dispatchFetch('https://mio.example/health')).status, 200);
-  assert.equal((await send('/v1/ask', { question: 'Syntetiskt prov', context: [] }, 'wrong')).status, 401);
+  for (const route of ['ask', 'analyze', 'lesson-notes']) {
+    assert.equal((await send(`/v1/${route}`, {}, 'wrong')).status, 401);
+  }
   assert.equal((await send('/v1/analyze', {})).status, 400);
   assert.equal(modelCalls, 0);
   const question = await send('/v1/ask', { question: 'Syntetiskt prov', context: [] });

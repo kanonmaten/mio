@@ -1,5 +1,14 @@
 # Bygg- och teststatus
 
+## Anslutningsguide och Access-klient, 2026-09-29
+
+- Ny guide för Groq/Qwen, självständiga provider-/modellbyten, gatewaytoken/rotation och Worker-specifik Access med Service Auth. Officiell Cloudflare-/Groq-dokumentation läst. Inget Cloudflare-konto ändrat eller liveskydd verifierat.
+- Appkoden har valfria Access-fält och gemensam Keychain-lagring med äldre tokenläsning. Tre nya XCTest-fall för format/rotation/headerhantering finns men är **inte körda**. Ingen Xcode-kompilering eller iPhone-verifiering av denna revision.
+- **40/40 serverprov godkända** med Node v26.10.0, mockad AI och localhost. Första sandboxkörningen blockerades av `listen EPERM`; körning med nödvändig localhost-åtkomst passerade.
+- **Worker dry-run och lokal workerd/Miniflare godkända** med Wrangler 4.141.0: OpenAI/Groq, alla tre AI-rutters auth, D1-kvot och att Access-headers inte vidarebefordras till modellen. Ingen verklig Cloudflare Access-policy provas av mocktestet. Ingen modelltrafik eller publicering.
+- **127 portabla strukturkontroller och `git diff --check` godkända**. Dessa är inte Swift-kompilering.
+- Nästa enhets-/driftprov: ny IPA, AC01–AC05 samt Qwen med syntetisk fråga/vardag/lektion enligt guiden. Gatewaykoden måste publiceras och Access konfigureras separat.
+
 ## Ny arbetskopia: AI-/lektionsändringar 2026-09-28
 
 **Inte publicerad, inte Xcode-kompilerad och inte iPhone-verifierad.** Den tidigare build 5 och driftsatta gatewayen nedan innehåller inte dessa ändringar.

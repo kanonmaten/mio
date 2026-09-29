@@ -81,3 +81,7 @@ AI-förslag har valfria `evidence` och `needsDateConfirmation`. Äldre filer sak
 En färdig detaljerad del registreras även när dess sectionlista är tom. Framsteg och återstående arbete härleds från sessionens fragment-ID:n och sparade detaljerade poster, så inget nytt beständigt samtycke eller köformat behövs. Spara före nästa anrop. Sammanställningen sorteras efter källfragmentens ordning; kopierad text innehåller rubrik, datum, anteckningar, osäkerheter och en markering om bearbetningen är ofullständig, aldrig interna käll-ID:n. Originaltexten ändras inte. Radering tar bort hela analysen och dess metadata som tidigare.
 
 Detaljerade delar analyserar den visningstext som fanns vid sändningen. Senare manuella rättningar ger ingen automatisk omanalys av redan bearbetade fragment. Källcitatet bevaras som bevis för vilket underlag som användes.
+
+## Molnanslutning med Access, 2026-09-29
+
+Keychain-posten `app.mio.assistant.cloud-gateway` / `gateway-token` innehåller efter nästa sparning ett JSON-objekt med gatewaytoken och valfritt Access-par. Äldre post med enbart tokensträng kan läsas. Alla hemligheter uppdateras i en Keychain-skrivning med `WhenUnlockedThisDeviceOnly`, ingår aldrig i export och raderas tillsammans vid glömd anslutning/fullständig radering. Ändrad server kräver att hemligheter anges igen. Anslutningens jämförelse inkluderar Access-paret vid förhandsgranskning. Sparning/radering skickar samma återställningsnotis som tidigare och stoppar pågående analys. Inga innehållsscheman ändras.

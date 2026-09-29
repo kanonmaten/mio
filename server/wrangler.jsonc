@@ -5,11 +5,12 @@
   "compatibility_date": "2025-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "keep_vars": true,
   "preview_urls": false,
   "observability": { "enabled": false },
   "vars": {
-    "MIO_AI_PROVIDER": "openai",
-    "MIO_AI_MODEL": "gpt-6-luna",
+    "MIO_AI_PROVIDER": "groq",
+    "MIO_AI_MODEL": "qwen/qwen3.8-27b",
     "MIO_REQUESTS_PER_MINUTE": "6",
     "MIO_LESSON_INTERVAL_SECONDS": "60",
     "MIO_REQUESTS_PER_DAY": "100"

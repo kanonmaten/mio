@@ -1,5 +1,13 @@
 # Ändringslogg
 
+## Arbetskopia 2026-09-29 — anslutning och Access, ej publicerad
+
+- Ny sammanhängande Groq/Qwen-guide: engångsuppdatering, egna framtida provider-/modellbyten, gatewaytoken, rotation och Cloudflare Access med Service Auth samt negativa skyddsprov.
+- Grå granskningsknapp förklarar nu att molnfrågor måste vara på och frågetext ifylld. Guiden skiljer Wrangler-påminnelsen från autentiseringsfel och rättar sammanblandningen av `MIO_OPENAI_MODEL` och `MIO_AI_MODEL` för Groq.
+- Förtydligad åtkomsttoken i appen och valfria separata Access-fält. Gatewaytoken och Access-par sparas atomiskt i samma Keychain-post, skickas på alla tre AI-rutter och följer aldrig redirects. Befintlig gatewaytoken kan läsas efter uppgradering.
+- Wrangler-exemplet väljer Groq/Qwen och bevarar extra Dashboard-variabler. Explicita variabler i filen behöver fortfarande synkas före senare deploy.
+- Access-policy måste aktiveras separat i Cloudflare. Inget konto ändrat, ingen publicering eller nytt iOS-bygge utfört.
+
 ## Arbetskopia 2026-09-28 — AI och detaljerade lektioner, ej publicerad
 
 - Åtta leverantörspresets och egen kompatibel endpoint; neutralt modellval i Cloudflare med separata API-hemligheter. Reasoning av, temperatur 0, strikt schema även för frågor och tydliga kompatibilitetsfel.

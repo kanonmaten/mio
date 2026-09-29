@@ -6,9 +6,11 @@ Workers och D1 har kostnadsfria nivåer. Det passar Mios begränsade privata tra
 
 Direkta API-anrop från en privat telefon är tekniskt möjliga med en egen nyckel på enheten. Den valda lösningen behåller nyckeln i molnets hemlighetslager enligt [OpenAI:s rekommendation](https://developers.openai.com/api/reference/overview). Mio innehåller varken din API-nyckel eller en gemensam nyckel som alla installationer delar.
 
-## Byta till Groq eller annan modell
+## Börja här om du redan har Mios Worker
 
-Följ [den enkla bytesguiden](../PROVIDERS.md). För Groq: `MIO_AI_PROVIDER=groq`, `MIO_AI_MODEL=qwen/qwen3.8-27b` och Secret `GROQ_API_KEY`. Behåll gatewaytoken och appens adress. **Den nya gatewaykoden måste först publiceras**; den äldre driftsatta versionen stöder bara OpenAI. Den nya lektionsvyn kräver ny IPA.
+**[Groq, inloggning och Cloudflare Access — steg för steg](GROQ_ACCESS.md)** är huvudguiden för Qwen, återställning av åtkomsttoken, skydd mot obehöriga och framtida modellbyten utan Codex. `MIO_GATEWAY_TOKEN` är samma värde som appens åtkomsttoken. Groq-nyckel, Cloudflare API token och Access service token är separata saker.
+
+Nedan finns grundinstallationen för ett nytt konto. Skapa inte om den befintliga databasen vid byte av modell.
 
 ## En gång: konton och installation
 
@@ -24,14 +26,14 @@ npx wrangler d1 create mio-limits
 
 Logga in i webbläsaren och verifiera Cloudflare-kontots e-postadress. Sista kommandot skapar en liten kvotdatabas i ditt konto. Kopiera dess `database_id` till D1-delen av `server/wrangler.jsonc`. Den incheckade konfigurationen pekar på Mios befintliga databas; skapa inte en ny vid en vanlig uppdatering. Databasen innehåller bara minut-/dygnsräknare, inga transkript eller nycklar.
 
-1. Kontrollera `MIO_AI_MODEL` i `wrangler.jsonc`. Första provmodellen är `gpt-6-luna`; projektets åtkomst och svensk analyskvalitet behöver verifieras med riktiga API-prov. Vid byte används kompatibilitetskatalogen i bytesguiden.
-2. Välj `MIO_AI_PROVIDER` och rätt hemlighetsnamn enligt bytesguiden. Kommandona nedan visar OpenAI-exemplet; för Groq används `GROQ_API_KEY`.
+1. Kontrollera `MIO_AI_MODEL` i `wrangler.jsonc`. Arbetskopians val är Groq `qwen/qwen3.8-27b`; projektets åtkomst och svensk analyskvalitet behöver verifieras med riktiga API-prov. Vid byte används kompatibilitetskatalogen i bytesguiden.
+2. Välj `MIO_AI_PROVIDER` och rätt hemlighetsnamn enligt bytesguiden. Kommandona nedan använder Groq och `GROQ_API_KEY`.
 3. Skapa kvottabellen och publicera gatewayen:
 
 ```sh
 npx wrangler d1 execute mio-limits --remote --file cloudflare/schema.sql
 npx wrangler deploy
-npx wrangler secret put OPENAI_API_KEY
+npx wrangler secret put GROQ_API_KEY
 npx wrangler secret put MIO_GATEWAY_TOKEN
 ```
 
@@ -41,7 +43,7 @@ npx wrangler secret put MIO_GATEWAY_TOKEN
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
 ```
 
-Alternativt lägger du in API-nyckeln i Cloudflares webbgränssnitt: **Workers & Pages → mio-private-gateway → Settings → Variables and Secrets → Add**. Välj typen **Secret**, namnet `OPENAI_API_KEY` och klistra in värdet där. Spara/publicera ändringen. Skapa nyckeln i ditt eget [OpenAI-projekt](https://platform.openai.com/api-keys); skicka den inte till Codex-chatten. API-användning debiteras separat från ChatGPT-abonnemanget.
+Alternativt lägger du in API-nyckeln i Cloudflares webbgränssnitt: **Workers & Pages → mio-private-gateway → Settings → Variables and Secrets → Add**. Välj typen **Secret**, namnet `GROQ_API_KEY` och klistra in värdet där. Spara/publicera ändringen. Skapa nyckeln i [Groq Console](https://console.groq.com/keys); skicka den inte till Codex-chatten. API-kvot och eventuell betalning hanteras hos Groq.
 
 Tjänsten svarar med ett konfigurationsfel tills hemligheterna finns. Kör inte `wrangler tail` eller request-/bodyloggning med privat text. `observability` är av i den medföljande konfigurationen. Cloudflares och vald AI-leverantörs egna drift-/datavillkor gäller fortfarande.
 
@@ -49,7 +51,7 @@ Tjänsten svarar med ett konfigurationsfel tills hemligheterna finns. Kör inte 
 
 Wrangler visar din HTTPS-adress, exempelvis `https://mio-private-gateway.ditt-namn.workers.dev`.
 
-1. Öppna adressen med `/health` på slutet. `{"status":"ok"}` visar att gatewayen är igång; det bevisar inte att modellen fungerar.
+1. Utan Access: öppna adressen med `/health` på slutet. Med Access används i stället [skyddsproven](GROQ_ACCESS.md#6-kontrollera-anslutning-och-skydd). `{"status":"ok"}` visar att gatewayen är igång; det bevisar inte att modellen fungerar.
 2. I Mio: **AI-assistent → Konfigurera server och tillåt molnfrågor**. Skriv adressen **utan** `/health`, samt gatewaytoken. Spara och tillåt molnfrågor.
 3. Fråga ”Vad är 2 + 2?” utan kontext, granska och skicka. Kontrollera både svaret och modellkontots faktiska användning.
 4. Aktivera **AI-tolkning** separat. Prova A07–A14 och L01–L05 i [helhetstestet](../../docs/TESTPLAN_HELHET.md) med syntetiska meningar.

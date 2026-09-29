@@ -2,7 +2,7 @@
 
 Valfri Node-server för en privat Mio-användare. Appens lokalflöde kräver ingen server. Detta paket är inte driftsatt automatiskt och saknar inbyggd molnprovisionering. Välj den färdiga [Cloudflare-vägen](cloudflare/README.md) för drift utan påslagen egen dator eller köpt domän. Node/Caddy-vägen nedan finns kvar för egen server.
 
-För byte till Groq eller annan leverantör, följ [modell- och leverantörsguiden](PROVIDERS.md). Den beskriver exakt vilka modeller som tillåts med reasoning av, temperatur 0 och strikt schema.
+För byte till Groq eller annan leverantör, följ [steg-för-steg-guiden för Groq, token och Access](cloudflare/GROQ_ACCESS.md) och [kompatibilitetskatalogen](PROVIDERS.md). Den beskriver exakt vilka modeller som tillåts med reasoning av, temperatur 0 och strikt schema.
 
 ## Förutsättningar
 

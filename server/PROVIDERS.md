@@ -2,29 +2,13 @@
 
 Gäller den nya arbetskopian från 2026-09-28. **Gatewaykoden måste publiceras först.** Den redan publicerade äldre gatewayen kan inte byta till Groq genom enbart variabler. Det nya lektionsgränssnittet behöver också en ny appbuild. Därefter kräver vanliga modellbyten ingen ny IPA.
 
-## Enkelt: Groq i Cloudflare
+## Börja här: Groq, åtkomsttoken och skydd
 
-1. Stäng av AI-tolkningen i Mio under bytet.
-2. Öppna **Workers & Pages → mio-private-gateway → Settings → Variables and Secrets** i [Cloudflare](https://dash.cloudflare.com/).
-3. Lägg till/ändra följande vanliga textvariabler:
+Följ [steg-för-steg-guiden för Groq och Cloudflare Access](cloudflare/GROQ_ACCESS.md). Den visar engångspubliceringen, Qwen-konfigurationen, exakt vilken token som ska in i Mio, rotation och skydd mot obehöriga Worker-anrop.
 
-   | Namn | Värde |
-   |---|---|
-   | `MIO_AI_PROVIDER` | `groq` |
-   | `MIO_AI_MODEL` | `qwen/qwen3.8-27b` |
-   | `MIO_LESSON_INTERVAL_SECONDS` | `60` |
-   | `MIO_REQUESTS_PER_MINUTE` | `1` |
-   | `MIO_REQUESTS_PER_DAY` | `100` |
+**Framtida byten utan Codex:** Workers & Pages → mio-private-gateway → Settings → Variables and Secrets. Ändra `MIO_AI_PROVIDER` och `MIO_AI_MODEL`, lägg till rätt Secret enligt tabellen nedan och tryck Deploy. Behåll appens domän, `MIO_GATEWAY_TOKEN` och Access-par. Detta fungerar när den nya gatewaykoden redan är publicerad och modellen finns i katalogen; okända modeller kräver kodgranskning.
 
-4. Lägg till **Secret** med namnet `GROQ_API_KEY` och din Groq-nyckel som värde. Den ska inte skrivas i appen, Git eller chatten. Lämna `MIO_GATEWAY_TOKEN` oförändrad.
-5. Spara och publicera konfigurationen. Kontrollera `/health`, men kom ihåg att det inte gör något modellprov.
-6. I Mio används samma serveradress och gatewaytoken. Skicka först en liten syntetisk fråga med sändningsgodkännande. Aktivera sedan AI-tolkningen och prova en kort lektion.
-
-Reasoning är av, temperaturen är 0 och svar begärs med strikt JSON-schema automatiskt. Det är inte inställningar du behöver hitta i appen eller Groqs Playground. Playground-inställningar påverkar inte Mios API-anrop.
-
-`MIO_AI_MODEL` har företräde framför det äldre `MIO_OPENAI_MODEL`. Den gamla variabeln läses endast när leverantören är OpenAI och den nya saknas. Rensa gärna bort den gamla modellvariabeln för tydlighet. Gamla API-hemligheter används inte när en annan leverantör valts.
-
-**Vid senare Wrangler-publicering:** variabler i `wrangler.jsonc` kan ersätta Dashboard-värden. Uppdatera därför de icke-hemliga värdena i den filen till ditt val före nästa kodpublicering. API-nycklar ska fortsatt vara Secrets, aldrig läggas i filen.
+`MIO_AI_MODEL` har företräde framför äldre `MIO_OPENAI_MODEL`. Den äldre variabeln används endast för OpenAI när den nya saknas. Inför en senare Wrangler-kodpublicering måste även modell/provider i `wrangler.jsonc` motsvara ditt aktuella Dashboard-val. `keep_vars: true` bevarar extra Dashboard-variabler, men skyddar inte värden som också anges i filen mot att ersättas.
 
 ## Presets och tillåtna modeller
 

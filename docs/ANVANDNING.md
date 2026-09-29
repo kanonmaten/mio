@@ -70,8 +70,8 @@ För **enskilda frågor** följer du stegen nedan:
 
 Hela lokalflödet fungerar utan server. Om du vill aktivera AI:
 
-1. Sätt upp den medföljande servern enligt [Cloudflare-guiden](../server/cloudflare/README.md) utan påslagen egen dator, eller [serverguiden](../server/README.md) för egen värd, med OpenAI-nyckeln enbart på servern.
-2. Öppna **Mio → Fråga Mio med AI**. Ange din HTTPS-adress och serverns separata åtkomsttoken. Spara anslutningen och slå på **Tillåt molnfrågor**.
+1. Sätt upp den medföljande servern enligt [Cloudflare-guiden](../server/cloudflare/README.md) utan påslagen egen dator, eller [serverguiden](../server/README.md) för egen värd, med leverantörens API-nyckel enbart på servern.
+2. Öppna **Mio → Fråga Mio med AI**. Ange din HTTPS-adress och åtkomsttoken: exakt samma hemliga värde som Workerns `MIO_GATEWAY_TOKEN`, utan `Bearer`. Efter rotation ska det nya värdet sparas även här. Spara anslutningen och slå på **Tillåt molnfrågor**.
 3. Skriv frågan. Välj vid behov enstaka poster eller ett kort sessionsutdrag. Korta och rensa texten som ska skickas.
 4. Tryck **Granska innan du skickar**. Läs mottagare, exakt fråga och exakt kontext.
 5. Välj **Ja, skicka denna fråga till molnet**. Först då görs nätanropet. Avbryt i stället om du inte vill dela texten.
@@ -95,3 +95,5 @@ Detta gäller arbetskopians nya kod; befintlig build 5 behöver ersättas med en
 Tryck **Kopiera hela anteckningen** och klistra in den hos valfri AI för att exempelvis få en förklaring eller skapa frågekort. Mio skapar inga sådana läromedel själv. Kopieringen är vanlig läsbar text med rubriker; den innehåller också osäkerheter och tydlig markering om delar återstår. Även när alla delar är bearbetade måste AI-utkastet granskas mot underlaget.
 
 Efter nätfel, kvotfel eller omstart: färdiga detaljerade delar finns kvar. Vänta vid kvotfel, aktivera AI igen och fortsätt från samma lektionsknapp. Redan färdiga delar skickas inte om. Äldre korta huvudpunkter finns kvar separat men räknas inte som detaljerade anteckningar. Mycket långa lektioner kan kräva flera godkända omgångar (högst 100 delar i kön per omgång).
+
+För [Groq, tokenåterställning och Cloudflare Access](../server/cloudflare/GROQ_ACCESS.md) finns en sammanhängande steg-för-steg-guide. Access kräver den nya appens separata Client ID-/Client Secret-fält; de finns inte i build 5.

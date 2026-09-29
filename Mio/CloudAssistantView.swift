@@ -8,6 +8,9 @@ struct CloudAssistantView: View {
     @AppStorage("mio.cloud.enabled") private var isEnabled = false
     @State private var serverAddress = ""
     @State private var newToken = ""
+    @State private var useAccess = false
+    @State private var accessClientID = ""
+    @State private var accessClientSecret = ""
     @State private var settingsMessage: String?
     @State private var question = ""
     @State private var drafts: [CloudContextDraft] = []
@@ -48,11 +51,22 @@ struct CloudAssistantView: View {
                 SecureField("Ny åtkomsttoken eller tomt för att behålla", text: $newToken)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                Toggle("Använd Cloudflare Access", isOn: $useAccess)
+                if useAccess {
+                    SecureField("Access Client ID", text: $accessClientID)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    SecureField("Access Client Secret", text: $accessClientSecret)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    Text("Hämta paret från din service token i Cloudflare Zero Trust. Båda tomma behåller sparade värden på samma server. Stäng av och spara för att ta bort dem från telefonen.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Button("Spara anslutning") { saveSettings() }
                     .disabled(isAsking)
                 Button("Glöm anslutning och stäng av", role: .destructive) { forgetConnection() }
                 if let settingsMessage { Text(settingsMessage).font(.footnote) }
-                Text("Ange serverns separata åtkomsttoken. Leverantörens API-nyckel hör bara hemma på servern. Att spara anslutningen gör inget nätanrop.")
+                Text("Åtkomsttoken är samma hemliga värde som MIO_GATEWAY_TOKEN på din Worker. Klistra in värdet utan Bearer eller citattecken. Efter rotation behöver det nya värdet sparas här också. Groq-nyckeln hör bara hemma på servern. Att spara gör inget nätanrop.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -102,6 +116,13 @@ struct CloudAssistantView: View {
                 } else {
                     Button("Granska innan du skickar") { preparePreview() }
                         .disabled(!isEnabled || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if !isEnabled {
+                        Text("Slå på Tillåt molnfrågor högst upp för att kunna granska en fråga. AI-tolkning behöver inte vara på.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    } else if question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("Skriv en fråga i Din fråga för att kunna granska den.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
                 if let errorMessage {
                     Label(errorMessage, systemImage: "exclamationmark.triangle")
@@ -120,14 +141,13 @@ struct CloudAssistantView: View {
         }
         .navigationTitle("Fråga Mio AI")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { serverAddress = MioCloudSettings.serverAddress }
-        .onDisappear { clearConversation() }
+        .onAppear { loadSettings() }
+        .onDisappear { clearConversation(); newToken = ""; accessClientID = ""; accessClientSecret = "" }
         .onChange(of: isEnabled) { _, enabled in
             if !enabled { clearConversation() }
         }
         .onReceive(NotificationCenter.default.publisher(for: MioCloudSettings.didResetNotification)) { _ in
-            serverAddress = MioCloudSettings.serverAddress
-            newToken = ""
+            loadSettings()
             settingsMessage = nil
             clearConversation()
         }
@@ -199,12 +219,20 @@ struct CloudAssistantView: View {
         drafts.append(CloudContextDraft(id: id, label: label, text: text))
     }
 
+    private func loadSettings() {
+        serverAddress = MioCloudSettings.serverAddress
+        useAccess = MioCloudSettings.usesAccess
+        newToken = ""
+        accessClientID = ""
+        accessClientSecret = ""
+    }
+
     private func saveSettings() {
         do {
-            try MioCloudSettings.save(serverAddress: serverAddress, newToken: newToken)
-            serverAddress = MioCloudSettings.serverAddress
-            newToken = ""
-            settingsMessage = "Anslutningen sparades på telefonen."
+            try MioCloudSettings.save(serverAddress: serverAddress, newToken: newToken, useAccess: useAccess,
+                                      clientID: accessClientID, clientSecret: accessClientSecret)
+            loadSettings()
+            settingsMessage = "Anslutningen sparades på telefonen. Ingen anslutningskontroll har gjorts."
             errorMessage = nil
         } catch {
             settingsMessage = nil
@@ -221,7 +249,8 @@ struct CloudAssistantView: View {
 
     private func preparePreview() {
         do {
-            guard newToken.isEmpty,
+            guard newToken.isEmpty, accessClientID.isEmpty, accessClientSecret.isEmpty,
+                  useAccess == MioCloudSettings.usesAccess,
                   (try? MioCloudSettings.endpoint(for: serverAddress))
                     == (try? MioCloudSettings.endpoint(for: MioCloudSettings.serverAddress))
             else { throw MioCloudError.changedConfiguration }

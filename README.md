@@ -23,7 +23,7 @@ Utan AI används en enkel lokal kommandogrammatik. Med aktiverad AI kan även va
 1. Läs [användarguiden](docs/ANVANDNING.md).
 2. Bygg och installera enligt [installation](docs/INSTALLATION.md). Linux kan inte bygga iOS-appen.
 3. Kör [helhetstestet](docs/TESTPLAN_HELHET.md) med syntetiska data före vardagsanvändning.
-4. Om du vill använda moln-AI: följ [Cloudflare-guiden](server/cloudflare/README.md) för drift utan påslagen dator, eller [serverguiden](server/README.md) för egen värd. Appens lokala funktioner kräver ingen server.
+4. Om du vill använda moln-AI: följ [Groq, åtkomsttoken och Access steg för steg](server/cloudflare/GROQ_ACCESS.md) för befintlig Worker eller [Cloudflare-grundinstallationen](server/cloudflare/README.md) för drift utan påslagen dator, eller [serverguiden](server/README.md) för egen värd. Appens lokala funktioner kräver ingen server.
 
 ## Utveckling
 
