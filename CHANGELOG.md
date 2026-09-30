@@ -1,5 +1,11 @@
 # Ändringslogg
 
+## Arbetskopia 2026-09-30 — granskad Pianissimo-driftguide
+
+- Alla källsökvägar uttryckliga: installation, systemd och utvecklarprov fungerar från valfri katalog. Endast serverns Python-kod, paketdefinition och låsfil kopieras till `/opt`; ingen hel projektkopia eller befintlig `.venv`.
+- Dokumenterat avvägningen mellan låst Python/systemd och Docker, en varm GPU-process, uppdatering av rätt driftmiljö, förhämtning före laddningstimeout, health/felsökning, Tailscale-taggning och energihantering. Officiella källor granskade; ingen driftsättning.
+- systemd anger uttryckligen `StateDirectoryMode=0700` så att tjänstens katalogbehörighet motsvarar installationsguiden även vid start.
+
 ## Arbetskopia 2026-09-30 — rättning av testkompilering
 
 - Rättat ogiltiga Swift-decimaltal `.1`/`.5` till `0.1`/`0.5` i TranscriptionTests. Actions 36686984521 stoppades vid testkompilering med dessa fel. Ny Xcode-körning krävs; parserkontrollen fångade inte felet.

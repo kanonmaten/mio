@@ -26,6 +26,7 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 StateDirectory=mio-transcription
+StateDirectoryMode=0700
 
 [Install]
 WantedBy=multi-user.target

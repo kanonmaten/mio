@@ -1,5 +1,13 @@
 # Bygg- och teststatus
 
+## Pianissimo-driftguide granskad, 2026-09-30
+
+- Guiden använder uttryckliga källsökvägar vid installation, systemd och utvecklarprov. Till `/opt` kopieras bara Python-paketet, `pyproject.toml` och `uv.lock`. Valet av låst Python/systemd/Tailscale jämförs med Docker och terminaldrift, med källor och kvarvarande driftbegränsningar.
+- **10 Bash-block och deras inbäddade Python-exempel syntaxkontrollerade.** Kopieringskommandona provade från `/tmp` med mellanslag i en temporär källsökväg: exakt sex serverfiler kopierades med filmode `0644`; syntetiska privata filer, `.venv` och cache uteslöts. `--chown` och root-installationen utfördes inte i detta prov.
+- **142 portabla projektkontroller och `git diff --check` godkända.** systemd-filens nya `StateDirectoryMode=0700` syntaxkontrollerad med `systemd-analyze verify` på en temporär kopia där enbart ExecStart-programmet ersattes med `/usr/bin/true`, eftersom `/opt`-installationen saknas. Första försöket blockerades av sandboxens socketbegränsning; kontrollen utanför sandboxen passerade. Detta verifierar inte faktisk tjänstestart eller katalogmode i drift.
+- **Aktuell GPU-status läst**, ingen inference körd: RTX 4060 Ti, driver 615.71.09, 8188 MiB totalt och 6398 MiB ledigt vid kontrollen. `nvidia-smi` misslyckades inne i sandboxen men fungerade utanför den. Tidigare GPU-smoke nedan är separat evidens.
+- Ingen systeminstallation, hämtning av modellvikter, tjänstestart, Tailscale-ändring, commit/push eller iOS-körning gjord i denna granskning. Nästa prov är installation enligt guiden, autentiserad health, svenskt tal med ordtider, privat HTTPS samt omstart/telefonprov enligt T01–T20.
+
 ## Actions-fel och lokal rättning, 2026-09-30
 
 Stegstatus verifierad via GitHub: **Bygg osignerad iPhone-app lyckades** för `a67b0ee`. Testkompileringen misslyckades; XCTest, IPA-paketering och uppladdning hoppades över. Ingen ny IPA producerades av körningen. Detta uppdaterar verifieringsläget från arbetskopians tidigare status nedan.
