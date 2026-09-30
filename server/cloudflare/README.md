@@ -58,7 +58,7 @@ Wrangler visar din HTTPS-adress, exempelvis `https://mio-private-gateway.ditt-na
 
 ## Gränser och drift
 
-Alla tre AI-rutterna delar en beständig gräns: standard sex anrop per minut och 100 per UTC-dygn. En atomisk D1-skrivning reserverar ett anrop före modelltrafik; fel räknas också. Ingen kvot kan reserveras när databasen är otillgänglig. Två samtidiga modellförfrågningar tillåts per Worker-instans; den globala minuttakten och dygnskvoten begränsas i databasen.
+Alla fyra AI-rutterna (`/v1/ask`, `/v1/analyze`, `/v1/lesson-notes`, `/v2/analyze`) delar en beständig gräns: standard sex anrop per minut och 100 per UTC-dygn. En atomisk D1-skrivning reserverar ett anrop före modelltrafik; fel räknas också. Ingen kvot kan reserveras när databasen är otillgänglig. Två samtidiga modellförfrågningar tillåts per Worker-instans; den globala minuttakten och dygnskvoten begränsas i databasen. Den skyddade `/v1/status` gör inga modellanrop och använder ingen AI-kvot.
 
 Gränsen 100 kan räcka ungefär 100 minuters aktiv vardagsanalys om ett utdrag skickas varje minut; frågor och lektionsdelar delar samma pott. Vid 429 stoppas AI-läget och lokal transkription fortsätter. Ändra dygnsgränsen först efter kostnadsprov. En anropskvot är inte en exakt valutabudget.
 

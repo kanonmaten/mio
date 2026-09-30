@@ -1,5 +1,10 @@
 # Ändringslogg
 
+## Dokumentationsrättning 2026-09-30 — efter implementation och push
+
+- AI-felsökningsrapporten skiljer nu genomförda ändringar i `e906585` från återstående Cloudflare-publicering, nytt iOS-bygge och telefon-/modellprov. Gamla rekommendationer och testantal ersätts med implementationsstatus.
+- Gatewayguiden beskriver uppdatering av befintlig Worker, bevarande av Secrets/Access/D1 och autentiserad statuskontroll utan modelltrafik. Kontext, stopp/paus och de fyra AI-rutterna dokumenteras enligt aktuell kod. Ingen Cloudflare-publicering utförd genom denna dokumentationsrättning.
+
 ## Arbetskopia 2026-09-30 — AI-kontext och diagnostik
 
 - Vardagsanalys v2 separerar nya fragment från högst en minuts godkänd bakåtkontext. Samma öppna förslag kan kompletteras över anropsgränsen; Ja/Nej skyddas med beständiga textfria beslut.

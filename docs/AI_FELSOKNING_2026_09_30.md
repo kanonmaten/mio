@@ -1,90 +1,60 @@
-# AI-fel, diagnostik och sammanhang mellan anrop
+# AI-fel: genomförda rättningar och kvarvarande driftsättning
 
-Utredning 2026-09-30. **Utredningens ursprungliga designförslag godkändes därefter genom ”Implementera planen”. Implementation och verifiering i arbetskopian följs i [status](STATUS.md) och [beslut](DECISIONS.md).** Inga privata exporter eller bilder kopieras till repot. Ingen publicering, modelltrafik eller iOS-körning har utförts.
+Uppdaterad 2026-09-30 efter implementation och commit/push av **`e906585`**. Det tidigare designförslaget är genomfört i källkoden. **Publicering i Cloudflare, nytt iOS-bygge och telefonprov återstår.** Att koden är pushad till GitHub uppdaterar inte automatiskt Workern eller appen på telefonen.
 
-## Bekräftat driftfel
+## Genomfört i källkoden
 
-Cloudflares aktiva deployment är `4c22cc43-a625-48d1-86e5-e45638cbcb8e`, skapad 2026-09-29 som en Secret-ändring. Versionsmetadata och den faktiska publicerade koden hämtades med läsanrop via befintlig Wrangler-inloggning. Inga hemlighetsvärden visas eller sparas.
+| Område | Implementerat |
+|---|---|
+| AI-fel och export | Beständig textfri journal, högst 200 händelser/sju dagar; säkra HTTP-/gateway-/nätfel, storlekar och versionsmetadata. Export fungerar utan session och kan återskapas med Skapa ny export efter senare fel |
+| Serverkompatibilitet | Skyddad `GET /v1/status` utan modelltrafik eller D1-kvot. Klienten kräver det nya sammanhangskontraktet och använder ingen tyst fallback |
+| Sammanhang över anropsgränser | `POST /v2/analyze` skiljer nya `fragments` från `contextFragments`. Högst 60 sekunder/4000 byte tidigare godkänd text; totalt åtta fragment/10000 byte källtext/20000 byte JSON. Nya fragment kapas inte |
+| Förslagsbeslut | Textfria `priorDecisions` och uttrycklig `replacesID` kompletterar samma öppna förslag. Ja/Nej stänger beslutet; sena svar får inte ändra godkända poster eller återuppliva stängda beslut |
+| Timing och avbrott | Normalt 60 s samling, högst 60 s extra mjuk meningsväntan. Nästa sändning tidigast 60 s efter föregående sändningsslut. Stopp/paus väcker väntan för kvarvarande godkänd text; nästa lyssning får ny kontextgräns. Ljudluckor bryter kontinuitet |
+| Integritet och radering | Inga råljud, frågor, svar, transkriptkopior eller hemligheter i journalen. Okänt schema skyddas och sena writes avvisas efter total radering |
 
-Den publicerade koden:
+Lektioner behåller `/v1/lesson-notes` och budgeten 3500 byte. Enskilda frågor kräver fortfarande exakt sändningsgodkännande. Detaljer finns i [datamodellen](DATAMODELL.md) och [besluten](DECISIONS.md).
 
-- tillåter endast `provider === "openai"`;
-- läser `OPENAI_API_KEY` och `MIO_OPENAI_MODEL`;
-- saknar Groq-adapter och `/v1/lesson-notes`;
-- fångar fel under initiering som HTTP 503 med `gateway_not_configured`.
+Vid implementationskontrollen passerade **53 portabla Swift-kärntester**, **47 Node-tester**, lokal Worker-runtime och **194 projektkontroller**. Detta verifierar inte native iOS-transport, SwiftUI, telefonens bakgrundsbeteende eller modellens svenska kvalitet. Se [exakt teststatus](STATUS.md).
 
-Den aktiva versionens bindningar anger däremot `MIO_AI_PROVIDER=groq`, `MIO_AI_MODEL=qwen/qwen3.8-27b` och `GROQ_API_KEY`. `OPENAI_API_KEY` och `MIO_OPENAI_MODEL` saknas. Denna kombination kan inte initiera den publicerade gatewayen. Samma fel reproducerades utan nät/modell genom att anropa `loadConfig` från repots äldre revision `c6e6f57` med syntetiska Groq-inställningar: `Endast OpenAI-adaptern finns ännu.`
+## Driftfelet som hittades före rättningen
 
-Ett anonymt GET till `/health` gav HTTP 403 och HTML från det yttre Access-skyddet. Det är separat evidens: det säger inget om telefonens autentisering. Telefonbildens generella serverfel är förenligt med 503, men exporten innehåller ingen anropsstatus som bevisar just telefonanropets väg. Installerat byggnummer och fungerande Access-par är fortfarande okända.
+Vid läskontrollen 2026-09-30 var aktiv Cloudflare-version `4c22cc43-a625-48d1-86e5-e45638cbcb8e`. Dess faktiska kod stödde bara OpenAI och läste `OPENAI_API_KEY`/`MIO_OPENAI_MODEL`. Bindningarna angav däremot Groq/Qwen och `GROQ_API_KEY`, utan dessa OpenAI-inställningar. Initieringen kunde därför inte lyckas; kodens felväg var 503 `gateway_not_configured`. Samma konflikt reproducerades med syntetisk konfiguration utan modelltrafik.
 
-**Direkt åtgärd:** publicera den redan befintliga, uppdaterade gatewaykoden efter uttrycklig begäran. Lägg inte tillbaka OpenAI-inställningar för att kringgå versionsfelet. Behåll Access, gatewaytoken, Groq-inställningar och D1. Kontrollera faktisk aktiv kodversion efter publicering; ett anonymt 403 är inte bevis för fungerande Groq. Verkligt syntetiskt modellprov kräver separat godkänd sändning.
+Ett anonymt anrop gav 403 från Cloudflare Access. Det bevisade det yttre skyddet, inte telefonens autentisering. Den bifogade exporten var tom och saknade då AI-anropsjournal, så telefonanropets exakta status kunde inte fastställas. Detta beskriver **den äldre kod som lästes vid kontrollen**, inte en ny livekontroll efter implementationen.
 
-## Varför exporten inte hjälper
+## Det som behöver göras med Cloudflare/gatewayen
 
-Den bifogade exporten har schema 2 och tomma innehålls-, sessions- och assistentlistor. Den säger inte varför AI-anropet misslyckades. Detta är en produktbrist, inte bevis för förlorat innehåll.
+1. **Publicera den nya koden på befintliga `mio-private-gateway`.** Använd `server/` från `e906585` eller en senare granskad revision. Ändringar av variabler/Secrets installerar inte Groq-adaptern eller v2-rutten. Behåll den befintliga domänen, D1-databasen `mio-limits` och bindningen `MIO_LIMITS`; ingen ny databas eller schemaändring behövs för denna rättning.
+2. **Kontrollera konfigurationen före publicering.** `MIO_AI_PROVIDER=groq`, `MIO_AI_MODEL=qwen/qwen3.8-27b`; Secrets `GROQ_API_KEY` och `MIO_GATEWAY_TOKEN`. Behåll befintliga fungerande hemligheter. Deras giltighet är ännu inte verifierad; ersätt dem endast om de saknas eller visar sig felaktiga. `server/wrangler.jsonc` innehåller rätt provider/modell och `keep_vars: true`; explicit angivna filvärden behöver fortfarande stämma med Dashboard före deploy. [Cloudflares konfigurationsregler](https://developers.cloudflare.com/workers/wrangler/configuration/#source-of-truth).
+3. **Behåll Access-skyddet.** Policyn ska vara `Service Auth` för telefonens service token och skydda hela Workern. Den uppdaterade appen behöver både gatewaytoken och Access Client ID/Client Secret. Anonym 403 är väntat med detta skydd; det ska inte lösas genom att stänga av Access.
+4. **Verifiera aktiv release och autentiserad status efter deploy.** Kontrollera Deployments och hämta `/v1/status` med alla tre autentiseringsuppgifterna. För denna kod ska status ge `protocolVersion: 2`, `release: "2026-09-30.1"`, `configured: true`, provider `groq`, modell `qwen/qwen3.8-27b` och capability `analysis-context-v2`. Statuskontrollen gör inget modellanrop och använder ingen AI-kvot. Den bevisar inte nyckelns giltighet, saldo eller modellkvalitet.
+5. **Gör därefter ett godkänt syntetiskt modellprov**, till exempel ”Vad är 2 + 2?” utan kontext, och kontrollera användningen hos Groq. Detta använder API-kvot och kan kosta pengar. Prova sedan vardagskontext och en lektion med syntetiskt underlag.
 
-`MioCloudService.send` avvisar icke-200 utan att läsa serverns tillåtna felkod. Därför blir exempelvis `gateway_not_configured`, `upstream_unavailable` och `invalid_upstream_answer` oskiljbara för användaren. Övriga nätfel blir samma `.network`; underliggande domän/kod går förlorade. Exportmodellen innehåller bara de tre innehållslagren. Sessionsdiagnostik kan inte hjälpa en enskild fråga utan session, och det finns ingen beständig AI-anropsjournal.
+Från repots rot, i en terminal med rätt Cloudflare-konto:
 
-Föreslagen rättning:
+```sh
+cd server
+npm ci
+npx wrangler login
+npm test
+WRANGLER_SEND_METRICS=false npm run worker:test
+npx wrangler deploy
+npx wrangler deployments list
+```
 
-1. En separat lokal diagnostikjournal, även när ingen session finns. Atomisk lagring, backupundantag och samma filskydd som övriga textlager. Högst 200 händelser och sju dagars retention är föreslagna startvärden. Okänt journalschema får inte skrivas över. Fullständig radering omfattar journalen och spärrar sena diagnostikskrivningar.
-2. Exportens valfria `diagnostics` innehåller appversion/build, systemversion, maskinidentifierare, tidszon, ögonblicksbild av aktiverings-/konfigurationsstatus och journalen. Additivt fält behåller schema 2 och äldre avkodning. Dokumentation och H13 uppdateras först vid implementation.
-3. Varje anrop får lokalt ID, tid, operation/rutt, varaktighet, request-/response-byteantal, HTTP-status, tillåten gatewayfelkod, begränsad Retry-After och validerade korrelations-ID:n såsom CF-Ray. Nätfel sparar domän och numerisk kod, aldrig godtycklig felbeskrivning. Analys anger nya respektive kontextfragment, källintervall, köstorlek och eventuella kontextbegränsningar. Journalen sparar ingen fråga, transkriptkopia, svarstext, råljud, token eller godtycklig header/svarskropp.
-4. Klienten läser en liten, storleksbegränsad JSON-felkropp och känner endast igen förutbestämda felkoder. HTML, okända fält och leverantörens råfel visas eller lagras aldrig. Feltext skiljer Access/auth, ej konfigurerad gateway, inkompatibel modell, kvot, timeout och ogiltigt svar. Kvot/timeout startar ingen automatisk återförsöksslinga.
-5. Servern kompletterar med en autentiserad kapabilitets-/statuskontroll utan modelltrafik: protokoll, releaseidentifierare, stödda rutter, modell/provider/promptversion och konfigurationsstatus. Nyckel närvarande betyder inte verifierad nyckel. Ofarlig konfigurationsmetadata hålls tillgänglig även när modellkonfigurationen inte kan initieras; Access och gatewayautentisering ska fortfarande skydda den. Modell- och promptmetadata för fråga/vardag kan återföras i validerade headers utan att bryta de strikta nuvarande svarskropparna.
+`login` behövs om Wrangler inte redan är inloggat. **`deploy` ändrar live-Workern**; övriga prov ovan gör ingen verklig modelltrafik. Wrangler publicerar den nya versionen direkt enligt [Cloudflares deploymentmodell](https://developers.cloudflare.com/workers/versions-and-deployments/). Kommandona är instruktioner; de har inte körts som publicering i detta arbete.
 
-## Bekräftad gränsbrist
+Detaljerade steg och ett autentiserat statusprov utan hemligheter i kommandoraden finns i [gatewayguiden](../server/cloudflare/GROQ_ACCESS.md#2-engångsuppdateringen-som-behövs-nu) och [dess anslutningskontroll](../server/cloudflare/GROQ_ACCESS.md#6-kontrollera-anslutning-och-skydd).
 
-`MioAnalysisCoordinator.observe` väljer bara nya segment efter aktiveringssamtycket. Väntande text slås ihop, men text från ett avslutat AI-anrop används inte i nästa. `MioAnalysisRequest.batches` delar efter fragment-/bytebudget. Modellen har därför inget sammanhang över dessa gränser. Pianissimos ljudöverlapp löser ordtranskription, inte text-AI:ns sammanhang.
+## Det som behöver göras på telefonen
 
-En enkel extra minut i samma `fragments` fungerar inte med nuvarande lagring: `MioAssistantRepository.applyAnalysis` returnerar 0 för **hela resultatet** om något fragment redan analyserats. Nuvarande dubblettkontroll jämför dessutom rubrik/typ/tid och endast fortfarande befintliga förslag. Ett omskrivet eller avvisat förslag kan återkomma om nya källfragment införs utan att beslutets identitet bevaras.
+Bygg den nya apprevisionen med Release/iOS-XCTest i Xcode/Actions, höj byggnumret inför distribution och installera den verifierade IPA:n enligt [installationsguiden](INSTALLATION.md). Build 5 innehåller inte Access-fälten eller dessa nya funktioner. GitHub-workflowen startas manuellt och har inte startats genom pushen.
 
-## Alternativ och rekommendation
+Spara befintlig serveradress, gatewaytoken och Access-par i den nya appen. Gör [D01–D08](TESTPLAN_HELHET.md#ai-kontext-och-diagnostik--nya-prov-ej-körda-på-iphone), särskilt delade meningar, datumkorrigering, Ja/Nej under pågående svar, stopp/paus, låst skärm och ny export efter ett fel. Aktivera löpande AI separat; en sparad anslutning aktiverar inte läget.
 
-| Lösning | Sammanhang och tillförlitlighet | Latens, kostnad och integritet | Komplexitet |
-|---|---|---|---|
-| Alltid föregående minut | Hjälper över vanliga gränser men saknar skydd mot dubbletter, korrigeringar och tankar längre än fönstret | Fler input-token och mer återutsänd text; ungefär dubbelt källunderlag vid jämnt minutflöde | Liten klientändring men nödvändiga ändringar i validering/lagring |
-| Vänta tills samtalet verkar slut | Kan samla en hel tanke men tystnad eller interpunktion bevisar inte att samtalet är färdigt | Oförutsägbar väntan vid långa samtal; separat semantisk modell innebär drift-/precisionstest och eventuellt fler anrop | Högre komplexitet, särskilt med svensk kvalitet och nuvarande 20 s transkriptionsdelar |
-| **Begränsad bakåtkontext + mjuka gränser + stabila beslut** | Förenar nya delar med föregående text; minskar för tidiga förslag och hanterar upprepning/korrigering | Kontrollerad extra input, inga separata AI-anrop för samtalsslut; befintlig minst-minut-takt behålls | Måttlig ändring av befintligt analysflöde och dess kontrakt; rekommenderas |
+## Varför lösningen valdes och vad den inte garanterar
 
-Rekommendationen är en projektanpassad slutsats, inte ett verifierat kvalitetsresultat. [Deepgram skiljer slutligt textsegment från avslutat yttrande](https://developers.deepgram.com/docs/understand-endpointing-interim-results) och beskriver sammanslagning av flera slutliga delar. [AssemblyAI beskriver semantisk och akustisk turdetektion](https://www.assemblyai.com/docs/universal-streaming/turn-detection); tänkpauser kan felaktigt dela tal vid enbart tystnadsdetektion. Det motiverar att gränser behandlas som ledtrådar. Ingendera källan bevisar svensk precision eller att en mänsklig samtalstur motsvarar en färdig plan i Mio. Ingen ny molntranskription införs.
+Begränsad bakåtkontext med mjuka gränser valdes och implementerades. Enbart tystnad/interpunktion är osäkra ledtrådar till avslutad tanke; en extra semantisk detektionsmodell skulle ge ytterligare drift, latens och kostnad. [Deepgram](https://developers.deepgram.com/docs/understand-endpointing-interim-results) skiljer slutligt textsegment från avslutat yttrande, och [AssemblyAI](https://www.assemblyai.com/docs/universal-streaming/turn-detection) beskriver risken att tänkpauser delar en tur. Ingen ny molntranskription införs.
 
-### Föreslaget beteende för vardag
-
-- **Separata nya källor och kontext.** Ett versionsmärkt analyskontrakt skiljer `newFragments` från `contextFragments`. Modellen får läsa båda, men varje nytt/ändrat förslag måste använda minst en ny källa. Endast de nya fragmenten registreras som analyserade. Källcitat kontrolleras mot exakt skickade fragment; käll-ID:n och originaltider bevaras. Gamla klienter/rutter behålls, och en ny klient stoppar med begripligt versionsfel om gatewayen saknar kontraktet. Ingen tyst nedgradering utan sammanhang.
-- **Fönster.** Skicka normalt högst 60 s direkt föregående godkänd vardagstext i samma session. Föreslagen gemensam budget är fortfarande åtta fragment och 10 000 byte källtext/20 000 byte payload, med högst 4 000 byte bakåtkontext. Nytt underlag får inte kapas för att göra plats: batchstorlek anpassas och äldre kontext prioriteras bort först. Kontextbegränsning journalförs och modellen instrueras att markera otillräckligt underlag. Förslag om längre fönster kräver kvalitets-/kostnadsmätning.
-- **Mjuka gränser.** Analysera ungefär en gång per minut som tidigare. Vid uppenbar fortsättning vid gränsen kan sändningen skjutas upp till nästa färdiga 20 s-del; sätt ett föreslaget hårt tak på 120 s väntan för äldsta nya text. Tal-/ordtider och interpunktion är ledtrådar, inte säker samtalsslutsdetektion. Saknad interpunktion får inte orsaka oändlig väntan. Om det fortfarande är ofullständigt ska modellen avstå från säkra detaljer och markera osäkerhet. Sista texten vid användarens stopp måste tas om hand inom befintlig takt; eventuell iOS-avbruten bearbetning märks och kräver manuellt nytt samtycke, utan bakgrundslöfte.
-- **Stabila förslagsbeslut.** Bevara en beslutskoppling till källor och händelseidentitet, inte enbart modellens rubrik. En komplettering får uppdatera ett väntande utkast med spårbara nya källor; godkända poster ändras aldrig tyst. Avvisade händelser återkommer inte genom omskrivning av samma underlag. En uttrycklig senare ny plan ska däremot kunna föreslås. Låg säkerhet vid sammanslagning leder till synlig fråga, inte en tyst sammanslagning. Exakt identitets-/uppdateringskontrakt behöver fastställas i implementationens spec; detta är designens mest krävande del.
-- **Samtycke och avbrott.** Kontext får aldrig hämtas från tiden före aktivering, en annan session, vardag före lektion eller ett raderat underlag. Avstängning, konfigurationsbyte, paus/lektionsbyte och radering rensar relevant arbetskontext och avvisar sena svar. Ljudluckor bryter kontinuitet: fragment före och efter får inte framställas som en komplett mening. Bara lokala begränsade textreferenser behövs; ingen AI-genererad dold minnesprofil och ingen serverägd samtalshistorik.
-
-Exempel: första delen ”Vi ses på biblioteket” och nästa ”på tisdag klockan femton” kan ge ett förslag med båda källorna. Om nästa del säger ”nej, torsdag i stället” används en spårbar komplettering av det väntande utkastet. En redan godkänd plan ändras inte utan ny granskning.
-
-Lektionsanteckningar har ett separat kontrakt och budget på 3500 byte; vardagsfönstret får inte appliceras på dem automatiskt. En eventuell senare lektionsövergångskontext måste rymmas inom samma budget, bevara anteckningarnas ordning och inte räknas som nya färdiga delar. Ingen extra komprimeringsmodell föreslås.
-
-### Precision, batteri och underhåll
-
-Mer lokal textkontext kräver ingen extra GPU-transkription och inget extra turdetektionsanrop. Extra input-token kan öka kostnad och modelllatens; detta ska mätas med syntetiskt material. Telefonens mikrofondrift och befintliga transkriptionsanrop fortsätter, så batteriförbättring får inte påstås. Begränsad lokal textbearbetning bedöms enklare att underhålla än ännu en svensk semantisk ljudmodell. Kontextfönstret kan ändå missa en hänvisning flera minuter bakåt; systemet ska fråga när underlag saknas.
-
-Den lästa aktiva konfigurationen har också ett tak på **100 modellanrop per UTC-dygn**, gemensamt för frågor, vardag och lektioner. Vid ett analyserbart vardagsanrop varje minut räcker det till cirka 100 minuter sådan bearbetning; tysta minuter utan ny text använder inga anrop, och frågor/lektioner minskar återstående utrymme. Kontextöverlapp får därför inte skapa ett extra anrop per del. Detta är en separat kapacitetsbegränsning, inte förklaringen till det bekräftade initieringsfelet. En senare kvotändring kräver uttryckligt val utifrån verklig kostnad och användning.
-
-Groqs aktuella officiella dokumentation listar [Qwen med strikt schema](https://console.groq.com/docs/structured-outputs) och [reasoning_effort=none som faktisk avstängning](https://console.groq.com/docs/reasoning). Dessa delar stämmer med arbetskopians adapter. Det bevisar inte kontoåtkomst, verkligt temperaturbeteende, kvalitet eller att den publicerade äldre koden har dessa funktioner.
-
-## Kontroller utförda nu
-
-- Arbetskopian var ren vid start; utredningen ändrar endast dokumentation.
-- `npm test --prefix server`: **40/40 godkända**, mockad AI.
-- `WRANGLER_SEND_METRICS=false npm run worker:test --prefix server`: **dry-run och lokal Worker-runtime godkända** för OpenAI/Groq, fråga/analys/lektion, metadata/takt och beständig D1-kvot. Inga externa modellanrop.
-- `python3 scripts/verify_project.py`: **142 godkända före dokumentationsändringen, 144 efter**, ingen Swift-kompilering/XCTest.
-- Publicerad version och dess kod/bindningar lästa; anonym Access-spärr HTTP 403 kontrollerad. Historiskt konfigurationsfel reproducerat med syntetiska inställningar.
-- Ingen publicering, commit/push, ändring av hemligheter/Access, iOS-kompilering, installation eller telefonverifiering.
-
-## Regressioner inför implementation
-
-1. Delad mening, tre eller fler delar, saknad interpunktion, tänkpaus och senare datumkorrigering. Modellkvalitet bedöms separat från mockad transport.
-2. Redan analyserad kontext får inte stoppa nytt resultat; kontext ensam får inte skapa nya förslag. Nej/Ja/Inte nu, omstart och omskrivna rubriker återupplivar inte samma beslut.
-3. Samtyckesgräns, fördröjd transkription, sessions-/lektionsbyte, verklig ljudlucka, paus/stopp, konfigurationsbyte och radering under väntan/anrop.
-4. Svenska multibyte-tecken, fragment-/bytebudget, mycket text/backlog och lång oavslutad tanke: inget nytt underlag förloras tyst och begränsning syns.
-5. 401/403/redirect/503, tillåtna/okända felkoder, HTML-fel, 429/Retry-After, nätfel/timeout och för stora felkroppar. Journal utan session, retention/omstart, okänt schema och fullständig radering. Hemligheter och privat text får inte läcka genom fel/headers.
-6. Gamla exporter/gatewayversioner och lektionskontrakt bevaras. Xcode Release/XCTest och telefonprov gäller exakt den nya revisionen; de lokala kontrollerna ovan verifierar inte ännu föreslagna ändringar.
-
-Nästa steg: uttrycklig publiceringsbegäran för den befintliga testade Groq-gatewayen; granskning av designförslaget före implementation av diagnostik och nytt sammanhangskontrakt.
+Fönstret kan missa hänvisningar längre bakåt än en minut. Nätlatens och anropstakt kan förlänga väntan utöver den mjuka gränsens 120 s; iOS kan avbryta bakgrundsarbetet. Dessa beteenden och semantisk kvalitet kräver telefon-/modellprov. Standardkvoten **100 anrop per UTC-dygn**, gemensam för frågor/vardag/lektioner, är oförändrad och utgör ingen heldagsbudget.
