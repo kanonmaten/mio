@@ -1,5 +1,18 @@
 # Ändringslogg
 
+## Arbetskopia 2026-09-30 — AI-kontext och diagnostik
+
+- Vardagsanalys v2 separerar nya fragment från högst en minuts godkänd bakåtkontext. Samma öppna förslag kan kompletteras över anropsgränsen; Ja/Nej skyddas med beständiga textfria beslut.
+- Mjuka meningsgränser med begränsad extra väntan, minst en minuts väntan efter föregående sändningsslut och hantering av sluttext vid stopp/paus. Kontext återställs vid paus, ljudlucka och lektionsbyte.
+- Lokal AI-journal, 200 händelser/sju dagar, med säkra felkoder, HTTP-/nätdata, storlekar, källantal och versionsmetadata. Exporten får diagnostik även utan session och behåller schema 2; Skapa ny export tar med senare AI-fel. Fullständig radering omfattar journalen och avvisar sena writes.
+- Skyddad gatewaystatus utan modell-/kvotanrop och tydligt kompatibilitetsfel. Gatewayen stöder Groq/Qwen i arbetskopian; publicerad gammal kod är fortfarande separat och behöver uppdateras efter uttrycklig begäran.
+- Verifieringsresultat och kvarvarande Xcode-/telefon-/modellprov anges i [status](docs/STATUS.md). Ingen publicering utförd.
+
+## Utredning 2026-09-30 — AI-driftfel och sammanhang
+
+- Läskontroll av faktiskt publicerad Worker bekräftar äldre OpenAI-kod med nya Groq-inställningar: gatewayen kan inte initieras. Uppdaterad befintlig gateway passerar mocktester och lokal Worker-verifiering; ingen publicering utförd.
+- Dokumenterat varför exporten saknar AI-anropsbevis och föreslagit lokal begränsad diagnostik samt separerat nytt underlag/bakåtkontext, mjuka gränser och stabila förslagsbeslut. Detta var ett designförslag vid utredningen; implementationen ovan följer användarens efterföljande godkännande; se [utredningen](docs/AI_FELSOKNING_2026_09_30.md).
+
 ## Arbetskopia 2026-09-30 — granskad Pianissimo-driftguide
 
 - Alla källsökvägar uttryckliga: installation, systemd och utvecklarprov fungerar från valfri katalog. Endast serverns Python-kod, paketdefinition och låsfil kopieras till `/opt`; ingen hel projektkopia eller befintlig `.venv`.

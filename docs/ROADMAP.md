@@ -44,3 +44,7 @@ Leverantörsadaptrar, strikt schema även för frågor och detaljerade lektionsa
 Prioriterad implementation finns i arbetskopian: (1) versionsmärkt ljud-API/originalmodell och driftpaket, (2) mikrofon separerad från nätet och begränsad RAM-kö, (3) sessionsbevarande vid avbrott/luckor och iOS-lifecycle, (4) samlade inställningar/status/återkoppling, (5) dokumentation och tester. Ingen HA, publik ljudport eller lokal Apple-fallback.
 
 Återstående leveransgrindar: nytt Xcode-bygge och XCTest, installera systemd/Tailscale enligt driftguiden, därefter [Pianissimo-acceptansprov](TESTPLAN_PIANISSIMO.md), särskilt svensk precision över chunkgränser, låst skärm, omstart, nätbyte och batteri. GPU-laddning i utvecklingsmiljö ersätter inte dessa prov.
+
+## Kontext och AI-diagnostik, 2026-09-30
+
+Godkänd plan implementeras i arbetskopian: lokal textfri journal/export, skyddad gatewaystatus och versionsmärkt vardagskontext med stabila förslagsbeslut. Återstående grindar är publicering efter uttrycklig begäran, Release/XCTest/ny IPA och [D01–D08](TESTPLAN_HELHET.md#ai-kontext-och-diagnostik--nya-prov-ej-körda-på-iphone). Den gamla publicerade OpenAI-koden är inkompatibel med dagens Groq-konfiguration; implementationen ändrar inte drift utan publicering.

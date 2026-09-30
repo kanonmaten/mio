@@ -10,10 +10,12 @@ final class MioContentViewModel {
     var isPreparingExport = false
 
     @ObservationIgnored private let repository: MioContentRepository
+    @ObservationIgnored private let diagnostics: MioDiagnosticsRepository
     @ObservationIgnored private var hasBootstrapped = false
 
-    init(repository: MioContentRepository = MioContentRepository()) {
+    init(repository: MioContentRepository = MioContentRepository(), diagnostics: MioDiagnosticsRepository = .shared) {
         self.repository = repository
+        self.diagnostics = diagnostics
     }
 
     func bootstrap() async {
@@ -138,12 +140,22 @@ final class MioContentViewModel {
         isPreparingExport = true
         defer { isPreparingExport = false }
         do {
+            let journal = await diagnostics.snapshot()
+            let configuration = MioDiagnosticsConfiguration(
+                cloudEnabled: UserDefaults.standard.bool(forKey: MioCloudSettings.enabledKey),
+                analysisEnabled: MioDiagnosticsRuntime.analysisEnabled,
+                serverConfigured: (try? MioCloudSettings.endpoint(for: MioCloudSettings.serverAddress)) != nil,
+                accessConfigured: MioCloudSettings.usesAccess
+            )
+            let diagnosticExport = MioDiagnosticsExport(configuration: configuration, journal: journal)
             exportURL = try await repository.makeExportFile(
                 content: items,
                 sessions: sessions,
-                assistant: assistant
+                assistant: assistant,
+                diagnostics: diagnosticExport
             )
-            errorMessage = nil
+            errorMessage = journal.storageStatus == .available ? nil
+                : "Exporten skapades, men diagnostikjournalen kunde inte läsas eller sparas fullständigt. Se journalens lagringsstatus i exporten."
         } catch {
             errorMessage = "Kunde inte skapa exportfilen: \(error.localizedDescription)"
         }

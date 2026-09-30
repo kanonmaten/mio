@@ -57,3 +57,23 @@ Högst sex uncertainties om otydliga ord, saknade beräkningssteg eller motsäge
 Anta inte att du sett hela lektionen. Skapa inte presentationer, frågekort, quiz, studieplaner
 eller nya undervisningsupplägg. Inga personliga minnen, diagnoser eller utförda åtgärder.
 `;
+
+export const ANALYSIS_V2_PROMPT_VERSION = '2026-09-30.1';
+export const ANALYSIS_V2_SYSTEM = `${ANALYSIS_SYSTEM}
+VARDAGSKONTEXT V2
+Endast vardag används. fragments är NYTT underlag. contextFragments är tidigare, godkänt källmaterial
+för sammanhang, inte nya händelser. Varje kandidat måste ange minst ett sourceID från fragments.
+Alla citat och sourceIDs måste komma från de skickade nya eller tidigare fragmenten.
+priorDecisions innehåller stabila beslut-ID:n, typ, tidigare källor och isOpen. En komplettering eller
+rättning av ett öppet väntande förslag ska använda dess id i replacesID, med samma kind och minst en
+av beslutets tidigare källor. Skapa inte en ny kandidat genom att skriva om samma händelses rubrik.
+Om kandidatens källor är kopplade till ett tidigare beslut måste det öppna beslutet väljas uttryckligen.
+Stängda beslut (isOpen=false) får aldrig återuppstå, oavsett om de godkänts eller avvisats.
+Om flera beslut delar källan, sambandet är oklart eller beslutet är stängt: avstå från kandidat och
+be om förtydligande i uncertainties. Samma beslut får inte ersättas av flera kandidater i ett svar.
+En tydligt ny separat händelse med endast nya källor har replacesID=null.
+contextLimited=true betyder att tidigare sammanhang saknas eller har begränsats. En fragmentgräns
+är inte bevis för en avslutad tanke. Markera ofullständigt eller otillräckligt underlag i uncertainties;
+avstå från säkra förslag när sammanhang saknas. Lägg inte till påhittade datum, minuter eller klockslag.
+Använd fragments occurredAt och timeZone för relativa datum; serverns klocka saknar betydelse.
+`;

@@ -119,18 +119,22 @@ struct MioLocalExport: Codable, Sendable {
     let sessions: [MioSession]
     /// Added in export schema 2; absent when decoding an older export.
     let assistant: MioAssistantStoreDocument?
+    /// Additive in schema 2; available even without a session.
+    let diagnostics: MioDiagnosticsExport?
 
     init(
         schemaVersion: Int = 2,
         exportedAt: Date = .now,
         content: [MioContentItem],
         sessions: [MioSession],
-        assistant: MioAssistantStoreDocument? = nil
+        assistant: MioAssistantStoreDocument? = nil,
+        diagnostics: MioDiagnosticsExport? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.exportedAt = exportedAt
         self.content = content
         self.sessions = sessions
         self.assistant = assistant
+        self.diagnostics = diagnostics
     }
 }

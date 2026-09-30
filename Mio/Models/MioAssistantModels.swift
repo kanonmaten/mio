@@ -147,6 +147,15 @@ struct MioLesson: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// Retained decisions contain identities only, so rejection cannot preserve proposal text.
+struct MioAnalysisDecision: Codable, Hashable, Sendable {
+    let id: UUID
+    let sessionID: UUID
+    let kind: MioContentKind
+    var sourceIDs: [String]
+    var isClosed: Bool
+}
+
 struct MioAssistantStoreDocument: Codable, Sendable {
     static let currentSchemaVersion = 1
 
@@ -155,19 +164,22 @@ struct MioAssistantStoreDocument: Codable, Sendable {
     var lessons: [MioLesson]
     var processedSources: Set<MioProcessedSource>
     var analyses: [MioAnalysisRecord]?
+    var analysisDecisions: [MioAnalysisDecision]?
 
     init(
         schemaVersion: Int = currentSchemaVersion,
         suggestions: [MioSuggestion] = [],
         lessons: [MioLesson] = [],
         processedSources: Set<MioProcessedSource> = [],
-        analyses: [MioAnalysisRecord]? = nil
+        analyses: [MioAnalysisRecord]? = nil,
+        analysisDecisions: [MioAnalysisDecision]? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.suggestions = suggestions
         self.lessons = lessons
         self.processedSources = processedSources
         self.analyses = analyses
+        self.analysisDecisions = analysisDecisions
     }
 }
 

@@ -69,7 +69,7 @@ Ett lyckat svar är `{"answer":"…"}`. Andra statuskoder ger en fast felkod, al
 
 - Högst 2 000 UTF-8-byte fråga, sex utdrag, 200 byte etikett och 4 000 byte text per utdrag. All kontext högst 10 000 byte; HTTP-body högst 20 000 byte.
 - Upstream timeout 40 sekunder. Appens timeout är något längre. Klientavbrott försöker avbryta upstream men återkallar inte redan skickad text eller kostnad.
-- Högst två samtidiga upstream-anrop, normalt sex anrop/minut och 100/dygn för alla tre AI-rutter tillsammans. Gränser kan sänkas i `.env`.
+- Högst två samtidiga upstream-anrop, normalt sex anrop/minut och 100/dygn för alla fyra AI-rutter tillsammans. Gränser kan sänkas i `.env`.
 - Räknarna finns bara i processminnet och nollställs vid omstart. Kör en process; flera instanser delar inte räknare. Detta är ingen hård månadsbudget: använd även leverantörens kostnadskontroller.
 - Enskilda frågesvar begränsas till 1 000 genererade tokens (analys till 3 000) och 16 000 byte text. Ofullständiga svar avvisas.
 
@@ -110,3 +110,56 @@ En fungerande `/health` betyder inte att API-nyckel, modell eller betalning fung
 ## Kostnadsfri molngateway
 
 [Cloudflare-guiden](cloudflare/README.md) beskriver Workers, inkluderad HTTPS-adress och en beständig D1-kvot som bara lagrar räknare. Dessa räknare ersätter processens dygnsgräns som enda kostnadsskydd i molnet. Ingen privat dator behöver vara på. API-användningen debiteras separat. Ingen tjänst har driftsatts förrän användarens konto och hemligheter konfigurerats.
+
+## Status och vardagskontext v2 — arbetskopia 2026-09-30
+
+`GET /v1/status` kräver samma gatewaytoken och eventuella Cloudflare Access-uppgifter som AI-rutterna.
+Det gör inget modellanrop och använder ingen process-/D1-kvot. Svaret har exakt:
+
+```json
+{
+  "protocolVersion": 2,
+  "release": "2026-09-30.1",
+  "configured": true,
+  "provider": "groq",
+  "model": "qwen/qwen3.8-27b",
+  "promptVersion": "2026-09-30.1",
+  "capabilities": ["analysis-context-v2", "ask-v1", "analysis-v1", "lesson-notes-v1"]
+}
+```
+
+`configured` kräver syntaktiskt giltiga inställningar och stöd i modellkatalogen; det bevisar inte
+nyckelns giltighet, kontoåtkomst, saldo eller modellkvalitet. Worker-status kan svara med `configured=false`
+även om modellkonfigurationen inte kan initieras. Okänd provider eller modell med otillåtna tecken
+återges som tom sträng; inga nycklar, endpointadresser eller råfel lämnas ut. Den vanliga Node-processen
+behåller sin startspärr för saknade/ogiltiga miljöinställningar.
+
+`POST /v2/analyze` använder ett separat strikt vardagskontrakt:
+
+- Exakt `mode: "everyday"`, `timeZone`, `fragments`, `contextFragments`, `priorDecisions`, `contextLimited`.
+- `fragments` är nya källor (minst en), `contextFragments` är tidigare godkända källor. Båda använder
+  v1-fragmentens `id`, `text`, `occurredAt`. ID:n är distinkta även mellan listorna. Totalt högst åtta
+  fragment/10 000 UTF-8-byte text, varav högst 4 000 byte kontext, och 20 000 byte HTTP-body.
+- Högst tolv distinkta `priorDecisions`, med exakt `id` (UUID), `kind` (`plan`/`task`/`note`),
+  `sourceIDs` (icke-tomma, distinkta och enbart från kontexten), `isOpen` (boolesk).
+- `contextLimited` är boolesk; modellen instrueras att markera saknat/ofullständigt underlag och
+  avstå från säkra detaljer. En textgräns är inte bevis för en färdig tanke.
+
+Svaret behåller `candidates`, tomma `highlights` och `uncertainties`, men varje kandidat kräver
+`replacesID` (UUID eller null) utöver v1-fälten. Varje kandidat ska använda minst en ny källa och
+ett exakt citat från en angiven källa inom unionen. En ersättning ska peka på ett öppet beslut av
+samma typ och dela minst en av dess kontextkällor. När en kandidat använder källor knutna till ett
+tidigare beslut måste det beslutet väljas uttryckligen. Stängda, flera möjliga eller felaktiga
+beslutskopplingar och flera ersättningar av samma beslut avvisas. En separat ny händelse med enbart
+nya källor får `replacesID: null`. Servern lagrar ingen samtalshistorik eller beslutslista.
+
+AI-rutternas svar och sanitiserade fel har `X-Mio-Release`, `X-Mio-Provider`, `X-Mio-Model`,
+`X-Mio-Prompt-Version` och ett servergenererat UUID i `X-Mio-Request-ID`; inkommande request-ID används
+inte. Release är `2026-09-30.1`. V2-prompten är `2026-09-30.1`; v1/fråga/lektion behåller
+`2026-09-28.1`. Tidig Worker-503 kan enbart ange release. Svarskropparna i v1 och lektionskontraktet
+är oförändrade. Alla fyra AI-rutter delar samma kvot. V2 kräver en kompatibel gateway;
+klienten ska visa versionsfel om kapabiliteten saknas, utan tyst nedgradering till v1.
+
+Kör Node-proven och `worker:test` ovan före publicering. De använder syntetiska källor och mockad
+modell; verklig tolkning av delade meningar/datumrättningar, tjänstetoken, latens och kostnad måste
+provas separat efter godkänd publicering och sändning. Denna beskrivning betyder inte att koden är publicerad.

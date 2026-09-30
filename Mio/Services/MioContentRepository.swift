@@ -93,7 +93,8 @@ actor MioContentRepository {
     func makeExportFile(
         content: [MioContentItem],
         sessions: [MioSession],
-        assistant: MioAssistantStoreDocument? = nil
+        assistant: MioAssistantStoreDocument? = nil,
+        diagnostics: MioDiagnosticsExport? = nil
     ) throws -> URL {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "sv-SE")
@@ -106,7 +107,8 @@ actor MioContentRepository {
         let export = MioLocalExport(
             content: MioContentItem.timelineSorted(content),
             sessions: sessions.sorted { $0.startedAt > $1.startedAt },
-            assistant: assistant
+            assistant: assistant,
+            diagnostics: diagnostics
         )
         let data = try Self.exportEncoder.encode(export)
         try data.write(to: exportURL, options: .atomic)

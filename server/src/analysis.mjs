@@ -115,3 +115,71 @@ export function validateLessonResult(value, payload) {
   }
   return value;
 }
+
+export const ANALYSIS_V2_FORMAT = {
+  ...ANALYSIS_FORMAT, name: 'mio_analysis_v2',
+  schema: object({ ...ANALYSIS_FORMAT.schema.properties,
+    candidates: { type: 'array', items: object({
+      ...ANALYSIS_FORMAT.schema.properties.candidates.items.properties,
+      replacesID: { type: ['string', 'null'] }
+    }) }
+  })
+};
+const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/iu.test(value);
+export function validateAnalysisV2Payload(value) {
+  if (!keys(value, ['mode', 'timeZone', 'fragments', 'contextFragments', 'priorDecisions', 'contextLimited'])
+      || value.mode !== 'everyday' || typeof value.contextLimited !== 'boolean'
+      || !Array.isArray(value.fragments) || value.fragments.length < 1 || !Array.isArray(value.contextFragments)
+      || !Array.isArray(value.priorDecisions) || value.priorDecisions.length > 12) throw new Error('invalid_analysis');
+  // The existing source contract also enforces disjoint IDs and the shared eight-source/UTF-8 budget.
+  validateAnalysisPayload({ mode: value.mode, timeZone: value.timeZone,
+    fragments: [...value.fragments, ...value.contextFragments] });
+  if (value.contextFragments.reduce((sum, f) => sum + Buffer.byteLength(f.text, 'utf8'), 0) > 4_000) {
+    throw new Error('context_too_large');
+  }
+  const contextIDs = new Set(value.contextFragments.map(f => f.id));
+  const decisionIDs = new Set();
+  for (const decision of value.priorDecisions) {
+    if (!keys(decision, ['id', 'kind', 'sourceIDs', 'isOpen']) || !uuid(decision.id)
+        || decisionIDs.has(decision.id.toLowerCase()) || !['plan', 'task', 'note'].includes(decision.kind)
+        || typeof decision.isOpen !== 'boolean' || !Array.isArray(decision.sourceIDs)
+        || decision.sourceIDs.length < 1 || decision.sourceIDs.length > 8
+        || new Set(decision.sourceIDs).size !== decision.sourceIDs.length
+        || !decision.sourceIDs.every(id => contextIDs.has(id))) throw new Error('invalid_prior_decision');
+    decisionIDs.add(decision.id.toLowerCase());
+  }
+  return value;
+}
+export function validateAnalysisV2Result(value, payload) {
+  if (!keys(value, ['candidates', 'highlights', 'uncertainties']) || !Array.isArray(value.candidates)) {
+    throw new Error('invalid_analysis_result');
+  }
+  const stripped = value.candidates.map(candidate => {
+    if (!keys(candidate, ['kind', 'title', 'body', 'scheduledAt', 'sourceIDs', 'evidence', 'replacesID'])) {
+      throw new Error('invalid_candidate');
+    }
+    const { replacesID, ...legacy } = candidate;
+    return legacy;
+  });
+  validateAnalysisResult({ ...value, candidates: stripped }, {
+    mode: 'everyday', fragments: [...payload.fragments, ...payload.contextFragments]
+  });
+  const newIDs = new Set(payload.fragments.map(f => f.id));
+  const replacements = new Set();
+  for (const candidate of value.candidates) {
+    if (!candidate.sourceIDs.some(id => newIDs.has(id))
+        || !(candidate.replacesID === null || uuid(candidate.replacesID))) throw new Error('invalid_replacement');
+    const linked = payload.priorDecisions.filter(decision => decision.sourceIDs.some(id => candidate.sourceIDs.includes(id)));
+    // Shared sources cannot identify which event changed. Closed events must never be revived.
+    if (linked.length > 1 || linked.some(decision => !decision.isOpen)
+        || (linked.length && candidate.replacesID === null)) throw new Error('ambiguous_replacement');
+    if (candidate.replacesID !== null) {
+      const id = candidate.replacesID.toLowerCase();
+      const decision = payload.priorDecisions.find(item => item.id.toLowerCase() === id);
+      if (!decision?.isOpen || decision.kind !== candidate.kind || linked[0] !== decision
+          || replacements.has(id)) throw new Error('invalid_replacement');
+      replacements.add(id);
+    }
+  }
+  return value;
+}

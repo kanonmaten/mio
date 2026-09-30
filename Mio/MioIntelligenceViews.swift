@@ -19,7 +19,7 @@ struct AnalysisSettingsView: View {
                 } else {
                     Button("Aktivera AI-tolkning …") { confirmEnable = true }
                 }
-                Text("Läget är av vid varje appstart. Under vardagslyssning skickas nya textutdrag ungefär en gång per minut. Paus/stopp avbryter väntande vardagsanalys. Avstängning avbryter även pågående lektionsanalys.")
+                Text("Läget är av vid varje appstart. Under vardagslyssning skickas nya textutdrag med högst en minut tidigare godkänd text från samma obrutna lyssning. Anrop sker tidigast var minut; en oavslutad mening kan vänta upp till två minuter. Paus/stopp bearbetar kvarvarande godkänd text. Avstängning avbryter även pågående lektionsanalys.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Lektioner") {
@@ -40,7 +40,7 @@ struct AnalysisSettingsView: View {
                 catch { self.error = error.localizedDescription }
             }
         } message: {
-            Text("Nya textutdrag från vardagslyssning och text från lektioner du avslutar skickas till \(MioCloudSettings.serverAddress.isEmpty ? "din konfigurerade server" : MioCloudSettings.serverAddress) och vidare till dess AI-leverantör. Det sker utan godkännande för varje utdrag tills du stänger av läget. Använd läget bara när berörda personer samtycker. Kalender, uppgifter och minnen kräver fortfarande ditt godkännande.")
+            Text("Nya textutdrag från vardagslyssning och text från lektioner du avslutar skickas till \(MioCloudSettings.serverAddress.isEmpty ? "din konfigurerade server" : MioCloudSettings.serverAddress) och vidare till dess AI-leverantör. Vardagsutdrag kan ta med högst en minut tidigare text efter denna aktivering, inom samma obrutna lyssning. Det sker utan godkännande för varje utdrag tills du stänger av läget. Använd läget bara när berörda personer samtycker. Kalender, uppgifter och minnen kräver fortfarande ditt godkännande.")
         }
     }
 }

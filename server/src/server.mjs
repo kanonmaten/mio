@@ -1,10 +1,10 @@
 import { createServer } from 'node:http';
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { validateAnalysisPayload, validateAnalysisResult, validateLessonPayload, validateLessonResult, validateAskResult } from './analysis.mjs';
+import { validateAnalysisPayload, validateAnalysisResult, validateAnalysisV2Payload, validateAnalysisV2Result, validateLessonPayload, validateLessonResult, validateAskResult } from './analysis.mjs';
 import { providerRequest, providerResponseText, ProviderResponseError, ProviderCompatibilityError, validateProvider, providerProfile, PROVIDERS } from './provider.mjs';
 
-import { PROMPT_VERSION } from './prompts.mjs';
+import { PROMPT_VERSION, ANALYSIS_V2_PROMPT_VERSION } from './prompts.mjs';
+import { authenticated, gatewayStatus, metadataHeaders } from './status.mjs';
 
 const MAX_BODY_BYTES = 20_000;
 const MAX_UPSTREAM_BYTES = 65_536;
@@ -175,20 +175,13 @@ async function readUpstream(response, profile) {
 /** Single private user, one process. Counters contain numbers only; no transcripts or IPs are kept. */
 export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now = Date.now, reserveBudget, serverOptions = { maxHeaderSize: 8_192 } } = {}) {
   validateConfig(config);
-  const expectedDigest = createHash('sha256').update(`Bearer ${config.gatewayToken}`).digest();
+  const status = gatewayStatus(config);
   let minuteBucket = -1;
   let dayBucket = -1;
   let minuteCount = 0;
   let dayCount = 0;
   let active = 0;
   const activeControllers = new Set();
-
-  function authenticate(request) {
-    const supplied = request.headers.authorization;
-    if (typeof supplied !== 'string' || supplied.length > 263) return false;
-    const suppliedDigest = createHash('sha256').update(supplied).digest();
-    return timingSafeEqual(suppliedDigest, expectedDigest);
-  }
 
   function reserveRequest() {
     const time = now();
@@ -206,21 +199,28 @@ export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now 
   }
 
   const server = createServer(serverOptions, async (request, response) => {
+    const promptVersion = ['/v2/analyze', '/v1/status'].includes(request.url) ? ANALYSIS_V2_PROMPT_VERSION : PROMPT_VERSION;
+    for (const [key, value] of Object.entries(metadataHeaders(status, promptVersion))) response.setHeader(key, value);
     try {
+      if (request.method === 'GET' && request.url === '/v1/status') {
+        if (!authenticated(request.headers.authorization, config.gatewayToken)) { reply(response, 401, { error: 'unauthorized' }); return; }
+        reply(response, 200, status); return;
+      }
       if (request.method === 'GET' && request.url === '/health') {
         reply(response, 200, { status: 'ok' }); return;
       }
-      if (request.method !== 'POST' || !['/v1/ask', '/v1/analyze', '/v1/lesson-notes'].includes(request.url)) {
+      if (request.method !== 'POST' || !['/v1/ask', '/v1/analyze', '/v2/analyze', '/v1/lesson-notes'].includes(request.url)) {
         reply(response, 404, { error: 'not_found' }); return;
       }
-      if (!authenticate(request)) { reply(response, 401, { error: 'unauthorized' }); return; }
+      if (!authenticated(request.headers.authorization, config.gatewayToken)) { reply(response, 401, { error: 'unauthorized' }); return; }
       if (request.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json'
           || request.headers['content-encoding']) {
         reply(response, 415, { error: 'json_required' }); return;
       }
       const isLesson = request.url === '/v1/lesson-notes';
-      const isAnalysis = request.url === '/v1/analyze';
-      const payload = await readBody(request, config.bodyTimeoutMs, isLesson ? validateLessonPayload : isAnalysis ? validateAnalysisPayload : validatePayload);
+      const isV2 = request.url === '/v2/analyze';
+      const isAnalysis = isV2 || request.url === '/v1/analyze';
+      const payload = await readBody(request, config.bodyTimeoutMs, isLesson ? validateLessonPayload : isV2 ? validateAnalysisV2Payload : isAnalysis ? validateAnalysisPayload : validatePayload);
       if (response.destroyed) return;
       providerProfile(config);
       reserveRequest();
@@ -234,7 +234,7 @@ export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now 
       try {
         if (reserveBudget && !(await reserveBudget())) throw new RequestError(429, 'request_limit');
         if (controller.signal.aborted || response.destroyed) return;
-        const provider = providerRequest({ config, mode: isLesson ? 'lesson' : isAnalysis ? 'analyze' : 'ask', payload });
+        const provider = providerRequest({ config, mode: isLesson ? 'lesson' : isV2 ? 'analyze-v2' : isAnalysis ? 'analyze' : 'ask', payload });
         const upstream = await fetchImpl(provider.url, {
           method: 'POST',
           headers: provider.headers,
@@ -251,7 +251,7 @@ export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now 
             promptVersion: PROMPT_VERSION, lessonIntervalSeconds: Math.max(60, config.lessonIntervalSeconds ?? 60) } });
         } else if (isAnalysis) {
           let result;
-          try { result = validateAnalysisResult(JSON.parse(answer), payload); }
+          try { result = (isV2 ? validateAnalysisV2Result : validateAnalysisResult)(JSON.parse(answer), payload); }
           catch { throw new RequestError(502, 'invalid_analysis_result'); }
           reply(response, 200, result);
         } else {

@@ -299,7 +299,7 @@ struct MioPrivacySettingsView: View {
             Button("Radera permanent", role: .destructive) { Task { await deleteEverything() } }
             Button("Avbryt", role: .cancel) {}
         } message: {
-            Text("Sessioner, poster, förslag, lektioner och båda serveranslutningarna raderas. Mios alarm och notiser avbryts. Delade filer och kalenderkopior finns kvar där.")
+            Text("Sessioner, poster, förslag, lektioner, diagnostik och båda serveranslutningarna raderas. Mios alarm och notiser avbryts. Delade filer och kalenderkopior finns kvar där.")
         }
     }
     private func deleteEverything() async {
@@ -309,6 +309,7 @@ struct MioPrivacySettingsView: View {
             return
         }
         maintenance.isDeleting = true
+        await MioDiagnosticsRepository.shared.invalidateForDeletion()
         analysis.disable()
         defer { maintenance.isDeleting = false }
         guard await MioSystemServices.shared.removeAll() else {
@@ -323,6 +324,8 @@ struct MioPrivacySettingsView: View {
         guard model.errorMessage == nil else { return }
         await contentModel.deleteAllData()
         guard contentModel.errorMessage == nil else { return }
-        _ = await assistant.deleteAllData()
+        guard await assistant.deleteAllData() else { return }
+        do { try await MioDiagnosticsRepository.shared.deleteAll() }
+        catch { contentModel.errorMessage = "Kunde inte radera diagnostikjournalen: \(error.localizedDescription)" }
     }
 }

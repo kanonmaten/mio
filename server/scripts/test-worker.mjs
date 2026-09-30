@@ -45,6 +45,9 @@ try {
   }
   assert.equal((await send('/v1/analyze', {})).status, 400);
   assert.equal(modelCalls, 0);
+  const status = await runtime.dispatchFetch('https://mio.example/v1/status', { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(status.status, 200); assert.equal((await status.json()).configured, true);
+  assert.equal((await runtime.dispatchFetch('https://mio.example/v1/status')).status, 401);
   const question = await send('/v1/ask', { question: 'Syntetiskt prov', context: [] });
   assert.equal(question.status, 200); assert.deepEqual(await question.json(), { answer: 'Ett syntetiskt svar.' });
   const analysis = await send('/v1/analyze', payload);
@@ -60,7 +63,7 @@ const groqOptions = convertV4MiniflareOptions({
   modules: true, scriptPath: fileURLToPath(new URL('../dist/worker.js', import.meta.url)),
   compatibilityDate: '2025-09-01', compatibilityFlags: ['nodejs_compat'],
   bindings: { MIO_AI_PROVIDER: 'groq', MIO_AI_MODEL: 'qwen/qwen3.8-27b', GROQ_API_KEY: 'fixture-groq',
-    MIO_GATEWAY_TOKEN: token, MIO_REQUESTS_PER_MINUTE: '6', MIO_REQUESTS_PER_DAY: '2', MIO_LESSON_INTERVAL_SECONDS: '120' },
+    MIO_GATEWAY_TOKEN: token, MIO_REQUESTS_PER_MINUTE: '6', MIO_REQUESTS_PER_DAY: '3', MIO_LESSON_INTERVAL_SECONDS: '120' },
   d1Databases: { MIO_LIMITS: 'test-groq-limits' },
   outboundService: async request => {
     groqCalls++;
@@ -71,6 +74,8 @@ const groqOptions = convertV4MiniflareOptions({
     assert.equal(body.response_format.json_schema.strict, true);
     const output = body.response_format.json_schema.name === 'mio_lesson_notes_v1' ? {
       candidates: [], sections: [{ heading: 'Plan', body: 'Biblioteket på tisdag klockan 15.', sourceIDs: [id], evidence: 'Vi ses på biblioteket' }], uncertainties: []
+    } : body.response_format.json_schema.name === 'mio_analysis_v2' ? {
+      ...result, candidates: [{ ...result.candidates[0], replacesID: null }]
     } : { answer: 'Syntetiskt Groq-svar.' };
     return Response.json({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(output) } }] });
   }
@@ -90,7 +95,44 @@ try {
   assert.equal(value.metadata.provider, 'groq'); assert.equal(value.metadata.lessonIntervalSeconds, 120);
   const ask = await sendGroq('/v1/ask', { question: 'Syntetiskt prov', context: [] });
   assert.equal(ask.status, 200); assert.deepEqual(await ask.json(), { answer: 'Syntetiskt Groq-svar.' });
+  const v2 = await sendGroq('/v2/analyze', { ...payload, contextFragments: [], priorDecisions: [], contextLimited: false });
+  assert.equal(v2.status, 200); assert.equal((await v2.json()).candidates[0].replacesID, null);
+  assert.equal(v2.headers.get('x-mio-prompt-version'), '2026-09-30.1');
   assert.equal((await sendGroq('/v1/lesson-notes', { ...payload, mode: 'lesson' })).status, 429);
-  assert.equal(groqCalls, 2);
+  assert.equal(groqCalls, 3);
   console.log('Groq Worker runtime: strict ask, detailed lessons, metadata, pacing and shared D1 quota PASS. No external requests.');
 } finally { await groqRuntime.dispose(); }
+
+// Status must remain authenticated and readable even when model initialization fails.
+for (const bindings of [
+  { MIO_AI_PROVIDER: 'unknown-provider', MIO_AI_MODEL: 'valid-looking-unsupported' },
+  { MIO_AI_PROVIDER: 'groq', MIO_AI_MODEL: 'unreviewed-model', GROQ_API_KEY: 'fixture-key' },
+  { MIO_AI_PROVIDER: 'groq', MIO_AI_MODEL: 'qwen/qwen3.8-27b' }
+]) {
+  let calls = 0;
+  const invalidOptions = convertV4MiniflareOptions({ modules: true,
+    scriptPath: fileURLToPath(new URL('../dist/worker.js', import.meta.url)),
+    compatibilityDate: '2025-09-01', compatibilityFlags: ['nodejs_compat'],
+    bindings: { ...bindings, MIO_GATEWAY_TOKEN: token },
+    outboundService: async () => { calls++; throw new Error('No upstream allowed'); }
+  });
+  invalidOptions.telemetry = { enabled: false }; invalidOptions.cf = false;
+  const invalidRuntime = new Miniflare(invalidOptions);
+  try {
+    const unauthorized = await invalidRuntime.dispatchFetch('https://mio.example/v1/status');
+    assert.equal(unauthorized.status, 401);
+    assert.match(unauthorized.headers.get('x-mio-request-id'), /^[a-f0-9-]{36}$/u);
+    const status = await invalidRuntime.dispatchFetch('https://mio.example/v1/status', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    assert.equal(status.status, 200);
+    const metadata = await status.json();
+    assert.equal(metadata.configured, false); assert.equal(metadata.protocolVersion, 2);
+    assert.deepEqual(metadata.capabilities, ['analysis-context-v2', 'ask-v1', 'analysis-v1', 'lesson-notes-v1']);
+    assert.equal(status.headers.get('cache-control'), 'no-store');
+    assert.equal(status.headers.get('x-mio-release'), '2026-09-30.1');
+    assert.match(status.headers.get('x-mio-request-id'), /^[a-f0-9-]{36}$/u);
+    assert.equal(calls, 0);
+  } finally { await invalidRuntime.dispose(); }
+}
+console.log('Worker invalid configuration: authenticated safe status, no quota/model side effects PASS.');

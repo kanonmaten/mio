@@ -81,29 +81,57 @@ actor MioAssistantRepository {
         _ = try request.validatedData()
         try result.validate(against: request)
         let actualFragments = Dictionary(uniqueKeysWithValues: session.transcripts.flatMap(MioAnalysisFragment.make).map { ($0.id, $0) })
-        guard request.fragments.allSatisfy({ actualFragments[$0.id] == $0 }) else { throw MioCloudError.invalidContext }
+        guard request.allFragments.allSatisfy({ actualFragments[$0.id] == $0 }) else { throw MioCloudError.invalidContext }
         var document = try loadDocument()
         let alreadyAnalyzed = Set((document.analyses ?? []).filter { $0.sessionID == session.id && (result.sections == nil || $0.sections != nil) }.flatMap(\.fragmentIDs))
         guard alreadyAnalyzed.isDisjoint(with: request.fragments.map(\.id)) else { return 0 }
-        let sources = Dictionary(uniqueKeysWithValues: request.fragments.map { ($0.id, $0) })
+        let sources = Dictionary(uniqueKeysWithValues: request.allFragments.map { ($0.id, $0) })
+        var decisions = document.analysisDecisions ?? []
         var count = 0
         for candidate in result.candidates {
             guard let firstID = candidate.sourceIDs.first, let segmentID = sources[firstID]?.segmentID else { continue }
             let source = MioProcessedSource(sessionID: session.id, segmentID: segmentID)
             // A segment can contain both a local command and an unrelated ordinary plan.
             let date = candidate.scheduledAt.flatMap(MioAnalysisResult.parseDate)
+            let linked = decisions.filter { $0.sessionID == session.id
+                && !Set($0.sourceIDs).isDisjoint(with: candidate.sourceIDs.filter { !request.fragments.map(\.id).contains($0) }) }
+            if let replacement = candidate.replacesID {
+                // The persisted decision is authoritative: acceptance/rejection may
+                // have happened while the server was preparing this response.
+                guard linked.count == 1, linked[0].id == replacement, !linked[0].isClosed,
+                      linked[0].kind == candidate.kind,
+                      let suggestionIndex = document.suggestions.firstIndex(where: { $0.id == replacement }),
+                      let decisionIndex = decisions.firstIndex(where: { $0.id == replacement }) else { continue }
+                document.suggestions[suggestionIndex].title = candidate.title
+                document.suggestions[suggestionIndex].body = candidate.body
+                document.suggestions[suggestionIndex].scheduledAt = date ?? document.suggestions[suggestionIndex].scheduledAt
+                document.suggestions[suggestionIndex].needsDateConfirmation = date == nil
+                document.suggestions[suggestionIndex].evidence = candidate.evidence
+                decisions[decisionIndex].sourceIDs = Array(Set(decisions[decisionIndex].sourceIDs + candidate.sourceIDs)).sorted()
+                document.processedSources.insert(source)
+                count += 1
+                continue
+            }
+            guard linked.isEmpty else { continue }
             let proposal = MioSuggestion(
                 kind: candidate.kind, title: candidate.title, body: candidate.body,
                 scheduledAt: date, sessionID: session.id, sourceSegmentID: segmentID,
                 evidence: candidate.evidence, needsDateConfirmation: date == nil
             )
-            let duplicate = document.suggestions.contains {
+            // V2 never guesses whether identical new-only events mean the same
+            // plan. Only an explicit, grounded replacement may merge identities.
+            let duplicate = !request.usesContextContract && document.suggestions.contains {
                 $0.sessionID == session.id && $0.kind == proposal.kind
                     && $0.scheduledAt == proposal.scheduledAt
                     && $0.title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "sv_SE"))
                     == proposal.title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "sv_SE"))
             }
-            if !duplicate { document.suggestions.append(proposal); count += 1 }
+            if !duplicate {
+                document.suggestions.append(proposal)
+                decisions.append(MioAnalysisDecision(id: proposal.id, sessionID: session.id,
+                    kind: proposal.kind, sourceIDs: candidate.sourceIDs, isClosed: false))
+                count += 1
+            }
             document.processedSources.insert(source)
         }
         var records = document.analyses ?? []
@@ -111,6 +139,7 @@ actor MioAssistantRepository {
                                          highlights: result.highlights, uncertainties: result.uncertainties, createdAt: .now,
                                          sections: result.sections, metadata: result.metadata))
         document.analyses = records
+        document.analysisDecisions = decisions
         try write(document)
         return count
     }
@@ -129,6 +158,9 @@ actor MioAssistantRepository {
         var document = try loadDocument()
         guard document.suggestions.contains(where: { $0.id == id }) else { return }
         document.suggestions.removeAll { $0.id == id }
+        if let index = document.analysisDecisions?.firstIndex(where: { $0.id == id }) {
+            document.analysisDecisions?[index].isClosed = true
+        }
         // processedSources contains only UUIDs, so a rejection cannot keep its text.
         try write(document)
     }
@@ -159,8 +191,10 @@ actor MioAssistantRepository {
         document.lessons.removeAll { $0.sessionID == sessionID }
         document.processedSources = document.processedSources.filter { $0.sessionID != sessionID }
         document.analyses?.removeAll { $0.sessionID == sessionID }
+        document.analysisDecisions?.removeAll { $0.sessionID == sessionID }
         if document.suggestions != before.suggestions || document.lessons != before.lessons
-            || document.processedSources != before.processedSources || document.analyses != before.analyses {
+            || document.processedSources != before.processedSources || document.analyses != before.analyses
+            || document.analysisDecisions != before.analysisDecisions {
             try write(document)
         }
         deletedSessionIDs.insert(sessionID)

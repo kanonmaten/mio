@@ -4,6 +4,7 @@ import UIKit
 struct ContentView: View {
     @Bindable var model: MioViewModel
     @State private var showSettings = false
+    @State private var endingEverydaySessionID: UUID?
     @Bindable var contentModel: MioContentViewModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(MioAssistantViewModel.self) private var assistant
@@ -52,12 +53,17 @@ struct ContentView: View {
             let assistantModel = assistant
             let maintenanceState = maintenance
             model.onFinalizedTranscript = { [weak assistantModel, weak maintenanceState] session in
+                guard maintenanceState?.isDeleting == false else { return }
+                // Capture completion can arrive while stop/pause is draining its RAM queue.
+                // Observe before asynchronous local detection so final text cannot miss the boundary.
+                if let assistantModel, !session.isLesson,
+                   model.currentSession?.id == session.id || endingEverydaySessionID == session.id,
+                   model.runState == .listening || model.runState == .stopping || endingEverydaySessionID == session.id {
+                    analysis.observe(session, assistant: assistantModel)
+                }
                 Task { @MainActor in
                     guard maintenanceState?.isDeleting == false else { return }
                     _ = await assistantModel?.detectSuggestions(in: session)
-                    if let assistantModel, model.runState == .listening, model.currentSession?.id == session.id {
-                        analysis.observe(session, assistant: assistantModel)
-                    }
                 }
             }
             model.onLessonFinished = { [weak assistantModel, weak maintenanceState] session in
@@ -74,7 +80,19 @@ struct ContentView: View {
             model.handleScenePhase(newPhase)
         }
         .onChange(of: model.runState) { _, state in
-            if state != .listening { analysis.pauseEveryday(assistant: assistant) }
+            if state == .stopping, let session = model.currentSession, !session.isLesson {
+                endingEverydaySessionID = session.id
+                analysis.beginEndingEveryday(sessionID: session.id)
+            } else if state == .off || state == .paused {
+                let finalSession = endingEverydaySessionID.flatMap { id in model.allSessions.first { $0.id == id } }
+                    ?? model.currentSession.flatMap { $0.isLesson ? nil : $0 }
+                if let finalSession { analysis.finishEveryday(finalSession, assistant: assistant) }
+                else { analysis.pauseEveryday(assistant: assistant) }
+                endingEverydaySessionID = nil
+            } else if state == .interrupted || state == .failed || state == .unavailable {
+                endingEverydaySessionID = nil
+                analysis.pauseEveryday(assistant: assistant)
+            }
         }
         .onChange(of: cloudEnabled) { _, enabled in if !enabled { analysis.disable() } }
         .onChange(of: cloudServer) { _, _ in analysis.disable() }
@@ -532,7 +550,7 @@ struct DataCard: View {
     var body: some View {
         Card(title: "Export och radering", symbol: "externaldrive") {
             VStack(spacing: 12) {
-                Text("Exporten innehåller poster, förslag, lektioner, sessionstext och diagnostik. Råljud och AI-inloggningsuppgifter ingår aldrig. Delade filer och kalenderkopior kan inte återkallas här.")
+                Text("Exporten är en ögonblicksbild av poster, förslag, lektioner, sessionstext och diagnostik. Skapa en ny export efter nya AI-fel. Råljud och AI-inloggningsuppgifter ingår aldrig. Delade filer och kalenderkopior kan inte återkallas här.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -543,21 +561,21 @@ struct DataCard: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                } else {
-                    Button {
-                        Task { await contentModel.prepareExport(sessions: model.allSessions, assistant: assistant.exportDocument) }
-                    } label: {
-                        if contentModel.isPreparingExport {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                        } else {
-                            Label("Skapa lokal export", systemImage: "doc.badge.plus")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(!canManageData)
+                    .disabled(contentModel.isPreparingExport)
                 }
+                Button {
+                    Task { await contentModel.prepareExport(sessions: model.allSessions, assistant: assistant.exportDocument) }
+                } label: {
+                    if contentModel.isPreparingExport {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Label(contentModel.exportURL == nil ? "Skapa lokal export" : "Skapa ny export", systemImage: "doc.badge.plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(!canManageData || contentModel.isPreparingExport)
 
                 Button("Radera all lokal data", role: .destructive) {
                     showDeleteConfirmation = true

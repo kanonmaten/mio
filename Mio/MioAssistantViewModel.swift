@@ -7,6 +7,7 @@ final class MioAssistantViewModel {
     private(set) var suggestions: [MioSuggestion] = []
     private(set) var lessons: [MioLesson] = []
     private(set) var analyses: [MioAnalysisRecord] = []
+    private(set) var analysisDecisions: [MioAnalysisDecision] = []
     var errorMessage: String?
     private(set) var isBusy = false
 
@@ -22,7 +23,7 @@ final class MioAssistantViewModel {
     }
 
     var exportDocument: MioAssistantStoreDocument {
-        MioAssistantStoreDocument(suggestions: suggestions, lessons: lessons, processedSources: processedSources, analyses: analyses)
+        MioAssistantStoreDocument(suggestions: suggestions, lessons: lessons, processedSources: processedSources, analyses: analyses, analysisDecisions: analysisDecisions)
     }
 
     var pendingCount: Int { suggestions.filter { $0.state == .pending }.count }
@@ -207,5 +208,6 @@ final class MioAssistantViewModel {
         }
         processedSources = document.processedSources
         analyses = document.analyses ?? []
+        analysisDecisions = document.analysisDecisions ?? []
     }
 }

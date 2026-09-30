@@ -10,7 +10,8 @@ Filerna ligger under appens Application Support:
 |---|---|---|
 | `Mio/sessions.json` | Originaltranskript, ljudtider, diagnostik, batteriprover, titel/anteckning/rättningar | Sessionsarray med valfria visningsmetadata |
 | `Mio/content-v1.json` | Tidslinjeposter, anteckningar, uppgifter, planer och uttryckliga minnen | `schemaVersion: 1`, `items` |
-| `Mio/assistant-v1.json` | Väntande frågor/förslag, lektioner och bearbetade källidentiteter | `schemaVersion: 1`, `suggestions`, `lessons`, `processedSources`, valfritt `analyses` |
+| `Mio/diagnostics-v1.json` | Begränsad textfri AI-anropsjournal | `schemaVersion: 1`, `events` |
+| `Mio/assistant-v1.json` | Väntande frågor/förslag, lektioner och bearbetade källidentiteter | `schemaVersion: 1`, `suggestions`, `lessons`, `processedSources`, valfritt `analyses`, `analysisDecisions` |
 
 Lagringen är atomisk och mappar undantas från enhetsbackup. Filskyddet tillåter en pågående ljudsession efter första upplåsning. Inget råljud lagras. Okända innehålls-/assistentscheman får inte skrivas över; explicit total radering är en separat användaråtgärd.
 
@@ -60,9 +61,9 @@ Gemensam export heter `Mio-lokal-export-ÅÅÅÅ-MM-DD-HHmm.json`:
 }
 ```
 
-Exporten har inga ljuddata, token, API-nycklar eller systemkalenderkopior. Avkodning stöder även export utan assistantfält, men appen erbjuder ingen importknapp. Filernas egna schemaVersion är fortfarande 1.
+Exporten har ett additivt valfritt `diagnostics`-fält; äldre export utan fältet kan fortfarande avkodas. Exporten har inga ljuddata, token, API-nycklar eller systemkalenderkopior. Avkodning stöder även export utan assistantfält, men appen erbjuder ingen importknapp. Filernas egna schemaVersion är fortfarande 1.
 
-Sessionens enskilda radering tar bort dess lektioner/förslag och lossar manuella poster. Radering av en post avbryter dess Mio-alarm/notis. Fullständig radering avbryter alla egna alarm/notiser, glömmer AI-konfiguration, raderar tre lokala lager och interna exportkopior. En gemensam skrivspärr och tombstones hindrar sena callbacks från att återskapa data. Systemfel ska visas, inte döljas som lyckad radering.
+Sessionens enskilda radering tar bort dess lektioner/förslag och lossar manuella poster. Radering av en post avbryter dess Mio-alarm/notis. Fullständig radering avbryter alla egna alarm/notiser, glömmer AI-konfiguration, raderar fyra lokala lager och interna exportkopior. En gemensam skrivspärr och tombstones hindrar sena callbacks från att återskapa data. Systemfel ska visas, inte döljas som lyckad radering.
 
 Redan delade exporter, skickade molnfrågor och kalenderkopior ligger utanför appens lokala radering. De behöver hanteras där de sparats.
 
@@ -93,3 +94,11 @@ Keychain-posten `app.mio.assistant.cloud-gateway` / `gateway-token` innehåller 
 Transkriptionsadress ligger i `mio.transcription.server` (UserDefaults); separat token i Keychain (`app.mio.assistant.transcription`, `access-token`, WhenUnlockedThisDeviceOnly). Aktiv session håller sin fasta adress/token i RAM så att låst skärm fungerar efter användarstart. Ny adress kräver ny token. Inställningsbyte är spärrat under fångst och återkallar gammal klient. Token, ljudbuffertar och WAV-delar ingår aldrig i lagring eller export. Hela RAM-kön rensas vid avslut/radering; servern har en kort textcache för retries, se [API](../transcription-server/API.md).
 
 Löpande vardags-AI får bara segment vars **ljudstart** ligger efter aktiveringen. Ett fördröjt transkript från tidigare ljud räknas inte som nytt godkänt underlag. En ljuddel som korsar samtyckesgränsen kan därför hoppas över konservativt.
+
+## AI-kontext och diagnostik, 2026-09-30
+
+Vardagsanalys använder `/v2/analyze`: `fragments` är enbart nya källor, `contextFragments` innehåller högst 60 sekunder/4000 byte tidigare godkänd text inom samma lyssningskontinuitet. Alla fragment behåller identitet och text; äldre kontext kan uteslutas helt med `contextLimited`. Totalt högst åtta fragment/10000 byte/20000 byte JSON. Nya batcher reserverar kontextutrymme med högst fem fragment/6000 byte. Kontext går aldrig före aktiveringen eller över en ljudlucka/paus/lektionsgräns. Lektionens kontrakt ändras inte.
+
+`analysisDecisions` i assistentlagret är additivt valfritt. Varje beslut har förslags-ID, sessionID, typ, källfragment-ID:n och `isClosed`. `priorDecisions` skickar bara beslut kopplade till vald kontext, med `isOpen`, aldrig tidigare förslagstext. En v2-kandidat har nullable `replacesID` och minst en ny källa. En komplettering uppdaterar samma öppna förslags-ID och behåller skapandetid/uppskjutning. Ja/Nej stänger beslutet och tar bort förslagstext; ett sent svar kontrolleras mot senaste lagrade beslut. V2 slår bara ihop förslag via `replacesID`; även identiska nya fristående kandidater behåller egna beslut/källor. Bearbetningsposter registrerar bara nya fragment. Sessionsradering tar även bort dess beslut.
+
+`diagnostics` i schema 2-exporten innehåller appversion/build, OS, maskinidentifierare, tidszon, fyra konfigurationsbooleans och journalens lagringsstatus/händelser. Den sparar högst 200 händelser i sju dagar oberoende av sessioner. Varje händelse innehåller fast operation/rutt, tid/duration, byteantal, HTTP-status, tillåten gatewayfelkod, Retry-After, tillåten nätfel-domän/-kod och säkra release-/provider-/modell-/prompt-/request-ID-/CF-Ray-fält. Analys kan ha fragmentantal, källtidsintervall, köstorlek och kontextbegränsning. Inga frågor, transkript, svar, felkroppar, fullständiga URL:er, headerdumpningar, hemligheter eller råljud lagras. Okänt journalschema skrivs inte över; lagringsfel märks i exporten. Raderingsgeneration och starttidsgräns avvisar sena händelser efter total radering.

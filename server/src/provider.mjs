@@ -1,5 +1,5 @@
-import { ASK_SYSTEM, ANALYSIS_SYSTEM, LESSON_SYSTEM } from './prompts.mjs';
-import { ANALYSIS_FORMAT, LESSON_FORMAT, ASK_FORMAT } from './analysis.mjs';
+import { ASK_SYSTEM, ANALYSIS_SYSTEM, ANALYSIS_V2_SYSTEM, LESSON_SYSTEM } from './prompts.mjs';
+import { ANALYSIS_FORMAT, ANALYSIS_V2_FORMAT, LESSON_FORMAT, ASK_FORMAT } from './analysis.mjs';
 
 export const PROVIDERS = {
   openai: ['https://api.openai.com/v1', 'OPENAI_API_KEY', 'responses'],
@@ -62,8 +62,8 @@ export function providerProfile(config) {
 }
 export function providerRequest({ config, mode, payload }) {
   const profile = providerProfile(config);
-  const format = mode === 'lesson' ? LESSON_FORMAT : mode === 'analyze' ? ANALYSIS_FORMAT : ASK_FORMAT;
-  const instructions = mode === 'lesson' ? LESSON_SYSTEM : mode === 'analyze' ? ANALYSIS_SYSTEM : ASK_SYSTEM;
+  const format = mode === 'lesson' ? LESSON_FORMAT : mode === 'analyze-v2' ? ANALYSIS_V2_FORMAT : mode === 'analyze' ? ANALYSIS_FORMAT : ASK_FORMAT;
+  const instructions = mode === 'lesson' ? LESSON_SYSTEM : mode === 'analyze-v2' ? ANALYSIS_V2_SYSTEM : mode === 'analyze' ? ANALYSIS_SYSTEM : ASK_SYSTEM;
   const maxTokens = mode === 'ask' ? 1_000 : 3_000;
   const headers = { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' };
   const content = JSON.stringify(payload);

@@ -9,7 +9,12 @@ struct MioAnalysisFragment: Codable, Hashable, Sendable {
     let text: String
     let occurredAt: String
 
-    var segmentID: UUID? { UUID(uuidString: String(id.prefix(36))) }
+    var segmentID: UUID? {
+        let parts = id.split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2, parts[0].count == 36, !parts[1].isEmpty,
+              parts[1].utf8.allSatisfy({ (48...57).contains($0) }) else { return nil }
+        return UUID(uuidString: String(parts[0]))
+    }
 
     static func make(from segment: TranscriptSegment) -> [Self] {
         var parts: [String] = []
@@ -31,18 +36,75 @@ struct MioAnalysisFragment: Codable, Hashable, Sendable {
     }
 }
 
+struct MioAnalysisDecisionHint: Codable, Hashable, Sendable {
+    let id: UUID
+    let kind: MioContentKind
+    let sourceIDs: [String]
+    let isOpen: Bool
+}
+
 struct MioAnalysisRequest: Codable, Sendable {
     let mode: MioCaptureMode
     let timeZone: String
     let fragments: [MioAnalysisFragment]
+    var contextFragments: [MioAnalysisFragment] = []
+    var priorDecisions: [MioAnalysisDecisionHint] = []
+    var contextLimited: Bool = false
+    var usesContextContract: Bool = false
+    var queueSize: Int? = nil
+
+    var allFragments: [MioAnalysisFragment] { contextFragments + fragments }
+
+    private enum CodingKeys: String, CodingKey {
+        case mode, timeZone, fragments, contextFragments, priorDecisions, contextLimited
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(mode, forKey: .mode)
+        try values.encode(timeZone, forKey: .timeZone)
+        try values.encode(fragments, forKey: .fragments)
+        if usesContextContract {
+            try values.encode(contextFragments, forKey: .contextFragments)
+            try values.encode(priorDecisions, forKey: .priorDecisions)
+            try values.encode(contextLimited, forKey: .contextLimited)
+        }
+    }
+
+    init(mode: MioCaptureMode, timeZone: String, fragments: [MioAnalysisFragment],
+         contextFragments: [MioAnalysisFragment] = [], priorDecisions: [MioAnalysisDecisionHint] = [],
+         contextLimited: Bool = false, usesContextContract: Bool = false, queueSize: Int? = nil) {
+        self.mode = mode; self.timeZone = timeZone; self.fragments = fragments
+        self.contextFragments = contextFragments; self.priorDecisions = priorDecisions
+        self.contextLimited = contextLimited; self.usesContextContract = usesContextContract; self.queueSize = queueSize
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        mode = try values.decode(MioCaptureMode.self, forKey: .mode)
+        timeZone = try values.decode(String.self, forKey: .timeZone)
+        fragments = try values.decode([MioAnalysisFragment].self, forKey: .fragments)
+        usesContextContract = values.contains(.contextFragments)
+        contextFragments = try values.decodeIfPresent([MioAnalysisFragment].self, forKey: .contextFragments) ?? []
+        priorDecisions = try values.decodeIfPresent([MioAnalysisDecisionHint].self, forKey: .priorDecisions) ?? []
+        contextLimited = try values.decodeIfPresent(Bool.self, forKey: .contextLimited) ?? false
+    }
 
     func validatedData() throws -> Data {
-        guard TimeZone(identifier: timeZone) != nil, (1...8).contains(fragments.count),
-              Set(fragments.map(\.id)).count == fragments.count,
-              fragments.allSatisfy({ $0.segmentID != nil && $0.id.utf8.count <= 80
+        let all = allFragments
+        let contextIDs = Set(contextFragments.map(\.id))
+        guard TimeZone(identifier: timeZone) != nil, !fragments.isEmpty, (1...8).contains(all.count),
+              Set(all.map(\.id)).count == all.count,
+              all.allSatisfy({ $0.segmentID != nil && $0.id.utf8.count <= 80
                   && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                   && $0.text.utf8.count <= 4_000 && ISO8601DateFormatter().date(from: $0.occurredAt) != nil }),
-              fragments.reduce(0, { $0 + $1.text.utf8.count }) <= 10_000
+              all.reduce(0, { $0 + $1.text.utf8.count }) <= 10_000,
+              contextFragments.reduce(0, { $0 + $1.text.utf8.count }) <= 4_000,
+              priorDecisions.count <= 12, Set(priorDecisions.map(\.id)).count == priorDecisions.count,
+              priorDecisions.allSatisfy({ [.plan, .task, .note].contains($0.kind)
+                  && !$0.sourceIDs.isEmpty && Set($0.sourceIDs).count == $0.sourceIDs.count
+                  && Set($0.sourceIDs).isSubset(of: contextIDs) }),
+              usesContextContract ? mode == .everyday : (contextFragments.isEmpty && priorDecisions.isEmpty && !contextLimited)
         else { throw MioCloudError.invalidContext }
         let data = try JSONEncoder().encode(self)
         guard data.count <= 20_000 else { throw MioCloudError.invalidContext }
@@ -72,6 +134,7 @@ struct MioAnalysisCandidate: Codable, Hashable, Sendable {
     let scheduledAt: String?
     let sourceIDs: [String]
     let evidence: String
+    var replacesID: UUID? = nil
 }
 
 struct MioLessonHighlight: Codable, Hashable, Sendable {
@@ -94,14 +157,26 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
                   candidates.allSatisfy({ [.task, .plan].contains($0.kind) }),
                   let metadata, metadata.isValid else { throw MioCloudError.invalidResponse }
         } else if metadata != nil { throw MioCloudError.invalidResponse }
-        let sources = Dictionary(uniqueKeysWithValues: request.fragments.map { ($0.id, $0.text) })
+        let sources = Dictionary(uniqueKeysWithValues: request.allFragments.map { ($0.id, $0.text) })
         func grounded(_ ids: [String], _ evidence: String) -> Bool {
             !ids.isEmpty && ids.count <= 8 && Set(ids).count == ids.count
                 && ids.allSatisfy { sources[$0] != nil }
                 && !evidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 && evidence.utf8.count <= 600 && ids.contains { sources[$0]?.contains(evidence) == true }
         }
-        guard candidates.count <= 6, highlights.count <= 8, uncertainties.count <= 6,
+        let newIDs = Set(request.fragments.map(\.id))
+        func validReplacement(_ candidate: MioAnalysisCandidate) -> Bool {
+            guard request.usesContextContract else { return candidate.replacesID == nil }
+            guard !newIDs.isDisjoint(with: candidate.sourceIDs) else { return false }
+            let linked = request.priorDecisions.filter { !Set($0.sourceIDs).isDisjoint(with: candidate.sourceIDs) }
+            if let replacement = candidate.replacesID {
+                return linked.count == 1 && linked[0].id == replacement && linked[0].isOpen && linked[0].kind == candidate.kind
+            }
+            return linked.isEmpty
+        }
+        let replacements = candidates.compactMap(\.replacesID)
+        guard Set(replacements).count == replacements.count,
+              candidates.count <= 6, highlights.count <= 8, uncertainties.count <= 6,
               uncertainties.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 500 }),
               request.mode == .lesson || highlights.isEmpty,
               candidates.allSatisfy({ candidate in
@@ -109,7 +184,7 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
                       && !candidate.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                       && candidate.title.utf8.count <= 240 && candidate.body.utf8.count <= 2_000
                       && (candidate.scheduledAt == nil || MioAnalysisResult.parseDate(candidate.scheduledAt!) != nil)
-                      && grounded(candidate.sourceIDs, candidate.evidence)
+                      && grounded(candidate.sourceIDs, candidate.evidence) && validReplacement(candidate)
               }), highlights.allSatisfy({ !$0.text.isEmpty && $0.text.utf8.count <= 1_500 && grounded($0.sourceIDs, $0.evidence) })
         else { throw MioCloudError.invalidResponse }
         for section in sections ?? [] {

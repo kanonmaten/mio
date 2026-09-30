@@ -1,5 +1,24 @@
 # Bygg- och teststatus
 
+## AI-kontext och diagnostik implementerade i arbetskopian, 2026-09-30
+
+Användarens godkända plan är implementerad: skyddad status/v2-kontrakt, begränsad bakåtkontext och nya källor, stabila öppna/stängda beslut, mjuka meningsgränser/sluttext samt textfri diagnostik/export/radering. **Kontrollerna nedan utfördes före commit/push. Ingen publicering, Xcode-körning, installation eller telefonverifiering av denna revision.** Den gamla aktiva Workern nedan är fortfarande inkompatibel med Groq-inställningarna.
+
+- **47/47 Node-tester godkända**, mockade modeller. **Worker dry-run och verklig lokal workerd/Miniflare godkända**: v1/OpenAI, Groq/fråga/lektion/v2, skyddad status, metadata, D1-kvot och status vid felaktig provider/modell/saknad nyckel. Ingen extern modelltrafik.
+- **53/53 portabla XCTest godkända med Swift 6.3 på Linux** via `scripts/verify_swift_core.py`: 7 kontext-/beslutsprov, 9 diagnostik-/exportprov, 6 koordinatorprov samt 31 befintliga analys-/assistent-/lagringsprov. Produktionsmodeller, lager, assistent-vymodell och koordinator kompileras. Endast plattformsgränser ersätts: Keychain-konfigurationsladdning och Apples URLSession.bytes; nätstubben kan inte skicka trafik. Ett UIKit-beroende snapshotprov undantas uttryckligen. Dessa är **inte iOS-XCTest eller appkompilering**.
+- **44 Swift-filer syntaxkontrollerade med Swift-kompilatorns parser** i Swift 5-läge. **194 portabla projektkontroller godkända**, inklusive faktiska grupprelativa Xcode-sökvägar och alla target-filer, samt `git diff --check`. Parsern typkontrollerar inte SwiftUI/iOS-API:er.
+- Regressioner verifierade från felande till godkända för saknad kontext, raderingsrace, kolon i giltiga modellnamn, tyst dubblettsammanslagning, sluttextens väckning av väntan, kontextbegränsning vid gap och anropstakt efter lång statuskontroll. Oberoende kodgranskning slutförd utan kvarstående kritiska/viktiga fynd efter rättningarna; fyra felaktiga nya Xcode-gruppkopplingar fångades och rättades med en först felande sökvägskontroll.
+- Exporten är en ögonblicksbild. **Skapa ny export** finns även efter en tidigare export, så nya frågefel/konfigurationsval kan tas med utan innehållsändring. Prov med tom session, tidigare export och senare 503 bekräftar att regenererad fil innehåller den nya händelsen.
+
+Nästa drift-/enhetsgrindar: publicera avsedd gateway efter uttrycklig begäran och läsverifiera aktiv release/status; verkligt syntetiskt Groq-prov med godkänd sändning; Release och iOS-XCTest för exakt denna revision, ny IPA och [D01–D08](TESTPLAN_HELHET.md#ai-kontext-och-diagnostik--nya-prov-ej-körda-på-iphone). Prova särskilt Access, native URLSession/Keychain/filskydd, stopp/paus/lektionsbyte/låst skärm och semantisk kvalitet. Modellen anropas tidigast 60 s efter att föregående sändning avslutats; nätlatens och kö kan därför göra väntan längre än meningsgränsens 120 s. Kvoten 100 anrop/dygn är oförändrad och räcker inte för heldagsanalys.
+
+## AI-driftfel läsverifierat, 2026-09-30
+
+- Aktiv Worker-version `4c22cc43-a625-48d1-86e5-e45638cbcb8e` och dess faktiska kod hämtade med läsanrop. Publicerad kod stöder endast OpenAI och läser äldre OpenAI-inställningar; aktiva bindningar anger Groq/Qwen och saknar OpenAI-nyckel/-modell. Initieringen kan därför inte lyckas och kodens felväg är 503 `gateway_not_configured`. Samma konfigurationsfel reproducerat mot äldre repokod med syntetiska inställningar, utan modelltrafik.
+- Anonym `/health` gav HTTP 403 från Access. Telefonanropets exakta status, installerat byggnummer och Access-autentisering kan inte bestämmas från den bifogade tomma exporten. Ingen fungerande Groq-nyckel eller verklig modellåtkomst har verifierats.
+- Befintlig arbetskopias **40/40 Node-prov**, **Worker dry-run och lokal OpenAI/Groq-runtime** samt **144 portabla projektkontroller efter dokumentationsändringen** godkända. Alla AI-prov mockade. Ingen publicering, Xcode/XCTest, installation eller telefonverifiering.
+- [Utredning och designförslag](AI_FELSOKNING_2026_09_30.md) beskriver saknad AI-diagnostik, bekräftad kontext-/dedupliceringsbrist och rekommenderad begränsad bakåtkontext med mjuka gränser och stabila beslut. Vid utredningstillfället var detta ett förslag; efterföljande godkännande och implementation redovisas ovan. Befintlig Groq-kod kan publiceras efter uttrycklig begäran.
+
 ## Pianissimo-driftguide granskad, 2026-09-30
 
 - Guiden använder uttryckliga källsökvägar vid installation, systemd och utvecklarprov. Till `/opt` kopieras bara Python-paketet, `pyproject.toml` och `uv.lock`. Valet av låst Python/systemd/Tailscale jämförs med Docker och terminaldrift, med källor och kvarvarande driftbegränsningar.
@@ -28,7 +47,7 @@ Stegstatus verifierad via GitHub: **Bygg osignerad iPhone-app lyckades** för `a
 
 Nästa grindar: begärd commit/push för ny Release/XCTest/IPA, installation av tjänst och Tailscale, T01–T20 samt hela appens regressionsprov. Mät svensk precision vid delgränser, batteri och låst skärm. Äldre export visade `Session activation failed`, men ingen exakt rotorsak eller förbättrad stabilitet på måltelefonen är bevisad.
 
-Kvarvarande funktionsbegränsning, identifierad vid eftergranskning: vardags-AI samlar flera textdelar per anrop men återför inte tidigare textkontext över gränsen till nästa anrop. En mening/plan som korsar den gränsen kan därför missas eller bli ofullständig. Lokal Mio-kommandotolkning arbetar också per textsegment. Ljudets överlappning löser inte detta; begränsad textkontext, deduplicering och regressionstester återstår.
+Kvarvarande funktionsbegränsning, identifierad vid eftergranskning: vardags-AI samlar flera textdelar per anrop men återför inte tidigare textkontext över gränsen till nästa anrop. En mening/plan som korsar den gränsen kan därför missas eller bli ofullständig. Lokal Mio-kommandotolkning arbetar också per textsegment. Ljudets överlappning löser inte detta. Vardags-AI-bristen har därefter åtgärdats i arbetskopian enligt den nya sektionen ovan; den lokala kommandotolkningen arbetar fortfarande per segment och verkliga modell-/telefonprov återstår.
 
 All status längre ned är daterad historisk evidens och verifierar inte denna arbetskopia.
 

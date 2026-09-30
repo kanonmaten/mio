@@ -20,7 +20,7 @@ def check(condition, description):
 
 
 def object_body(project, identifier):
-    match = re.search(r'\b' + identifier + r' /\*[^*]+\*/ = \{', project)
+    match = re.search(r'\b' + identifier + r'(?: /\*[^*]+\*/)? = \{', project)
     if not match:
         return ''
     start = match.end()
@@ -32,11 +32,30 @@ def object_body(project, identifier):
     return ''
 
 
+def resolved_group_files(project, references, group, parent=Path('.')):
+    """Resolve group-relative file paths, not just filenames in Sources phases."""
+    body = object_body(project, group)
+    path = re.search(r'\bpath = ([^;]+);', body)
+    directory = parent / path.group(1).strip('"') if path else parent
+    children = re.search(r'children = \((.*?)\);', body, re.S)
+    resolved = []
+    for child in re.findall(r'[A-F0-9]{24}', children.group(1) if children else ''):
+        if child in references:
+            name = references[child].strip('"')
+            if name.endswith('.swift'):
+                resolved.append(directory / name)
+        elif 'isa = PBXGroup;' in object_body(project, child):
+            resolved.extend(resolved_group_files(project, references, child, directory))
+    return resolved
+
+
 def main():
     project = (ROOT / 'Mio.xcodeproj/project.pbxproj').read_text()
     declarations = re.findall(r'^\t\t([A-F0-9]{24})(?: /\*[^*]+\*/)? = \{', project, re.M)
     check(len(declarations) == len(set(declarations)), 'Unika Xcode-objektidentiteter')
     references = dict(re.findall(r'([A-F0-9]{24}) /\*[^*]+\*/ = \{isa = PBXFileReference;[^\n]*?path = ([^;]+);', project))
+    for path in resolved_group_files(project, references, '710000000000000000000001'):
+        check((ROOT / path).is_file(), f'Xcode-gruppens källsökväg finns: {path}')
     builds = dict(re.findall(r'([A-F0-9]{24}) /\*[^*]+\*/ = \{isa = PBXBuildFile; fileRef = ([A-F0-9]{24})', project))
     for folder, phase in [('Mio', '910000000000000000000001'), ('MioTests', '910000000000000000000002')]:
         sources = sorted((ROOT / folder).rglob('*.swift'))
