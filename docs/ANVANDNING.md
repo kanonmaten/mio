@@ -4,15 +4,17 @@ Detta är guiden för helhetsbygget 0.9.0. Koden behöver först byggas och inst
 
 ## Första gången
 
-Öppna de fem flikarna. Du kan skriva manuella poster direkt, utan mikrofon, notiser eller AI. **Mio → Så använder du Mio** innehåller en kort guide i appen.
+Öppna de fem flikarna. Du kan skriva manuella poster direkt, utan mikrofon, notiser eller AI. **Inställningar → Så använder du Mio** innehåller en kort guide i appen.
 
-Under **Telefonens stöd och integritet** kan du kontrollera svensk transkription och vid behov installera SpeechTranscriber-modellen med wifi. Build 5 försöker även installera en stödd men saknad svensk modell när du startar Mio. Under hämtningen visas ett förberedelseläge och mikrofonen har inte startat. Avbryt håller Mio avstängd. Dictation används vid saknat stöd eller installations-/startfel; orsaken finns i händelseloggen. Build 4 har fortfarande separat installation.
+Öppna kugghjulet på valfri flik → **Transkription**. Spara din privata `https://…ts.net`-adress och token, se sparbekräftelsen och testa anslutningen. Datorn måste vara igång med Pianissimo och Tailscale; iPhone ska vara ansluten till samma tailnet. Följ [driftguiden](../transcription-server/README.md). Det finns ingen Apple-talmodell att installera i det nya bygget.
+
+**Ansluten** visar senast lyckade kontakt. **Ansluter** visas under anslutningskontroll. Vid **Offline** försöker en aktiv session igen automatiskt; högst 60 s ljud kan vänta i RAM. Äldre ljud tappas med synlig lucka. Efter stopp kan du behöva Testa anslutning för en färsk kontroll. iOS-ljudavbrott kan kräva Fortsätt; efter appens tvångsavslutning startas aldrig mikrofonen automatiskt.
 
 ## Fånga och ordna
 
 1. Tryck **Starta Mio** och tillåt mikrofonen. Paus/stopp stänger mikrofonen.
 2. Öppna **AI-assistent** och aktivera löpande AI-tolkning när servern är konfigurerad. Säg exempelvis ”Vi ses på biblioteket på tisdag klockan 15”. Mio-tilltal behövs inte i detta läge. Utdrag samlas ungefär en minut; granska förslagen i inkorgen.
-3. Tryck **Starta lektion**, ange ämne och starta. Vardags-Mio pausas. Lektionens text fångas lokalt utan sparat ljud.
+3. Tryck **Starta lektion**, ange ämne och starta. Vardags-Mio pausas. Ljudet transkriberas privat på din dator; texten sparas lokalt utan ljudfil.
 4. Välj **Avsluta lektionen**. Med AI aktiverad bearbetas texten i delar till huvudpunkter, exempel och läxförslag. Läs dem i **Lektioner**, öppna Textunderlag för att kontrollera citatet. AI kan missa eller misstolka viktigt innehåll.
 5. Tryck **Fortsätt Mio** för att återuppta den pausade vardagslyssningen. Mikrofonen startar inte automatiskt efter lektionen.
 6. **Lektioner → Historik och råtext** innehåller tidigare sessioner, manuella poster, texträttningar och äldre manuell lektionsindelning. Inga tidigare data är borttagna.
@@ -54,7 +56,7 @@ Skapa först en plan i **Kalender** eller en uppgift i **Anteckningar**. Öppna 
 
 Ändringar av Mio-posten uppdaterar inte automatiskt systemtider eller kalenderkopian. Öppna motsvarande kontroll för att ändra dem. Om du raderar en Mio-post avbryts dess Mio-alarm/notis; kalenderkopior tas bort i Kalender.
 
-Under **Mio → Alarm och påminnelser** kan du skapa fristående alarm, välja veckodagar, se kommande notiser och ta bort dem. Låsskärmen visar generell Mio-text. Prova ett alarm ett par minuter framåt innan du förlitar dig på det.
+Under **Inställningar → Alarm, notiser och behörigheter** kan du skapa fristående alarm, välja veckodagar, se kommande notiser och ta bort dem. Låsskärmen visar generell Mio-text. Prova ett alarm ett par minuter framåt innan du förlitar dig på det.
 
 ## Morgon och kväll
 
@@ -68,11 +70,11 @@ Det finns två separata flöden. **AI-assistent → Aktivera AI-tolkning** ger s
 
 För **enskilda frågor** följer du stegen nedan:
 
-Hela lokalflödet fungerar utan server. Om du vill aktivera AI:
+Manuellt innehåll fungerar utan server. Transkription använder din Pianissimo-server. Om du vill aktivera AI:
 
 1. Sätt upp den medföljande servern enligt [Cloudflare-guiden](../server/cloudflare/README.md) utan påslagen egen dator, eller [serverguiden](../server/README.md) för egen värd, med leverantörens API-nyckel enbart på servern.
-2. Öppna **Mio → Fråga Mio med AI**. Ange din HTTPS-adress och åtkomsttoken: exakt samma hemliga värde som Workerns `MIO_GATEWAY_TOKEN`, utan `Bearer`. Efter rotation ska det nya värdet sparas även här. Spara anslutningen och slå på **Tillåt molnfrågor**.
-3. Skriv frågan. Välj vid behov enstaka poster eller ett kort sessionsutdrag. Korta och rensa texten som ska skickas.
+2. Öppna **Inställningar → AI-assistent → Anslutning för text-AI**. Ange din HTTPS-adress och åtkomsttoken: exakt samma hemliga värde som Workerns `MIO_GATEWAY_TOKEN`, utan `Bearer`. Efter rotation ska det nya värdet sparas även här. Spara anslutningen och slå på **Tillåt molnfrågor**.
+3. Öppna **Mio → Fråga Mio med AI** och skriv frågan. Välj vid behov enstaka poster eller ett kort sessionsutdrag. Korta och rensa texten som ska skickas.
 4. Tryck **Granska innan du skickar**. Läs mottagare, exakt fråga och exakt kontext.
 5. Välj **Ja, skicka denna fråga till molnet**. Först då görs nätanropet. Avbryt i stället om du inte vill dela texten.
 
@@ -80,9 +82,9 @@ Svaret kan innehålla fel, utför inga åtgärder och sparas inte som historik i
 
 ## Exportera och radera
 
-Stoppa sessionen och gå till **Mio → Export och radering → Skapa lokal export**. Dela/spara JSON-filen privat. Exporten innehåller innehåll, sessioner, förslag, lektioner, AI-anteckningar och diagnostik; aldrig råljud eller åtkomsttoken. Det finns ingen importknapp i detta bygge.
+Stoppa sessionen och gå till **Inställningar → Integritet, export och radering → Skapa lokal export**. Dela/spara JSON-filen privat. Exporten innehåller innehåll, sessioner, förslag, lektioner, AI-anteckningar och diagnostik; aldrig råljud eller åtkomsttoken. Det finns ingen importknapp i detta bygge.
 
-**Radera all lokal data** tar efter bekräftelse bort alla tre lokala datalager, egna alarm/notiser och AI-konfiguration. Redan delade filer, skickade molnfrågor och kalenderkopior kan inte återkallas av detta. Om en systemåtgärd inte kan avbrytas visas ett fel så att du kan hantera den före fortsatt radering.
+**Radera all lokal data** tar efter bekräftelse bort alla tre lokala datalager, egna alarm/notiser och båda serveranslutningarna. Redan delade filer, skickade molnfrågor och kalenderkopior kan inte återkallas av detta. Om en systemåtgärd inte kan avbrytas visas ett fel så att du kan hantera den före fortsatt radering.
 
 ## Nya AI-val och detaljerade lektionsanteckningar
 

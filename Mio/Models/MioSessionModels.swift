@@ -18,8 +18,8 @@ enum MioRunState: String, Codable, Sendable {
         case .listening: "Mio lyssnar"
         case .interrupted: "Mio är tillfälligt avbruten"
         case .paused: "Mio är pausad"
-        case .unavailable: "Talstödet saknas"
-        case .failed: "Testet avbröts"
+        case .unavailable: "Servern behöver konfigureras"
+        case .failed: "Mio behöver hjälp"
         }
     }
 }
@@ -40,73 +40,6 @@ enum MicrophonePermission: String, Codable, Sendable {
     }
 }
 
-struct SpeechSupportSnapshot: Sendable {
-    var checkedAt: Date?
-    var microphonePermission: MicrophonePermission = .notDetermined
-    var speechTranscriberAvailable: Bool?
-    var swedishLocaleIdentifier: String?
-    var supportedSwedishLocales: [String] = []
-    var installedSwedishLocales: [String] = []
-
-    var advancedDownloadNeeded: Bool? {
-        guard advancedAssetStatus != nil else { return nil }
-        switch advancedAssetStatus {
-        case .supported, .downloading: return true
-        case .installed: return false
-        case .unsupported, nil: return nil
-        }
-    }
-
-    var diagnosticDescription: String {
-        let available = speechTranscriberAvailable.map { $0 ? "ja" : "nej" } ?? "okänt"
-        let supported = supportedSwedishLocales.isEmpty ? "inga" : supportedSwedishLocales.joined(separator: ", ")
-        let installed = installedSwedishLocales.isEmpty ? "inga" : installedSwedishLocales.joined(separator: ", ")
-        let download = advancedDownloadNeeded.map { $0 ? "ja" : "nej" } ?? "ej fastställt"
-        return "SpeechTranscriber tillgänglig: \(available); sv-SE → \(swedishLocaleIdentifier ?? "ingen stödd locale"); svenska i supportedLocales: \(supported); svenska i installedLocales: \(installed); assetstatus: \(advancedAssetStatus?.title ?? "ej fastställt"); hämtning behövs: \(download)."
-    }
-    var swedishModelInstalled: Bool?
-    var advancedAssetStatus: SpeechAssetState?
-    var advancedLocaleReserved: Bool?
-    var dictationLocaleIdentifier: String?
-    var dictationModelInstalled: Bool?
-    var dictationAssetStatus: SpeechAssetState?
-    var selectedEngine: LocalSpeechEngine?
-    var details = "Kontrollerar telefonens stöd …"
-
-    var swedishSupported: Bool? {
-        guard checkedAt != nil else { return nil }
-        return swedishLocaleIdentifier != nil || dictationLocaleIdentifier != nil
-    }
-}
-
-enum SpeechAssetState: String, Codable, Equatable, Sendable {
-    case supported
-    case downloading
-    case installed
-    case unsupported
-
-    var title: String {
-        switch self {
-        case .supported: "Kan hämtas"
-        case .downloading: "Hämtas av iOS"
-        case .installed: "Installerad"
-        case .unsupported: "Stöds inte"
-        }
-    }
-}
-
-enum LocalSpeechEngine: String, Codable, Sendable {
-    case speechTranscriber
-    case dictationTranscriber
-
-    var title: String {
-        switch self {
-        case .speechTranscriber: "SpeechTranscriber (nyare modul)"
-        case .dictationTranscriber: "DictationTranscriber (fallback)"
-        }
-    }
-}
-
 struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     let id: UUID
     /// Canonical segment timestamp derived from the source-audio interval, not callback time.
@@ -120,9 +53,11 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     /// True only when usable source audio overlapped an app-background interval.
     /// The time at which the recognition callback arrived is irrelevant.
     let wasObservedInBackground: Bool
-    /// True when Apple's result range was finite and nonnegative. This alone is not
+    /// True when the validated result range was finite and nonnegative. This alone is not
     /// evidence that audio was captured while the app was in the background.
     let audioTimingIsValid: Bool
+    var transcriptionMetadata: TranscriptionMetadata? = nil
+    var sourceChunkID: UUID? = nil
 
     init(
         id: UUID = UUID(),
@@ -245,6 +180,7 @@ struct MioSession: Identifiable, Codable, Hashable, Sendable {
     var title: String?
     var manualNote: String?
     var captureMode: MioCaptureMode?
+    var captureGaps: [CaptureGap]? = nil
 
     var isLesson: Bool { captureMode == .lesson }
 
@@ -341,40 +277,24 @@ enum PauseLength: Sendable {
 }
 
 enum PipelineEvent: Sendable {
-    case speechSupport(SpeechSupportSnapshot)
+    case connection(TranscriptionConnectionState, TranscriptionMetadata?)
+    case captureGap(CaptureGap)
+    case needsResume(String)
     case interruptionBegan
     case interruptionEnded(shouldResume: Bool)
     case routeChanged(String)
-    case audioBuffersDropped(Int)
-    case backendFallback(String)
     case mediaServicesReset
 }
 
 enum MioError: LocalizedError {
     case microphoneDenied
-    case speechTranscriberUnavailable
-    case swedishUnavailable
-    case missingAudioFormat
     case invalidAudioStream
-    case speechAssetUnsupported(String)
-    case speechAssetNotReady(String)
-
     var errorDescription: String? {
         switch self {
         case .microphoneDenied:
-            "Mikrofonen är inte tillåten. Öppna Inställningar > Integritet och säkerhet > Mikrofon och slå på Mio."
-        case .speechTranscriberUnavailable:
-            "Apples SpeechTranscriber finns inte på den här telefonen. Kontrollera telefonens stöd för svensk transkription."
-        case .swedishUnavailable:
-            "Varken SpeechTranscriber eller DictationTranscriber erbjuder svenska på den här telefonen."
-        case .missingAudioFormat:
-            "iOS kunde inte hitta ett ljudformat som den valda svenska transkriptionsmodulen kan använda."
+            "Mikrofonen är inte tillåten. Öppna iPhones inställningar och slå på mikrofonen för Mio."
         case .invalidAudioStream:
-            "Ljudströmmen kunde inte kopplas till SpeechAnalyzer."
-        case let .speechAssetUnsupported(engine):
-            "iOS rapporterar att modellasseten för \(engine) inte stöds på den här telefonen."
-        case let .speechAssetNotReady(details):
-            "Modellasseten blev inte klar: \(details)"
+            "Mikrofonen levererar inte ljud. Kontrollera ljudvägen och tryck Fortsätt."
         }
     }
 }

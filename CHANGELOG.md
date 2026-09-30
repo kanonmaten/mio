@@ -1,5 +1,14 @@
 # Ändringslogg
 
+## Arbetskopia 2026-09-30 — Pianissimo, bakgrund och inställningar
+
+- Apple-transkriptionen ersatt av original Pianissimo på egen CUDA-server. Stabilt autentiserat API v1, modellrevision/hälsa, loopback + privat Tailscale Serve och systemd med automatisk omstart.
+- Mikrofon och nät separerade. 20 s ljuddelar med kontext, högst 60 s RAM-kö, begränsade anrop/retries och tydliga luckor. Stopp stänger mikrofonen och avslutar redan fångad text under högst 15 s med avbrytknapp.
+- Ljudavbrott, route changes, foreground och media reset hanteras utan att serverfel avslutar lektionen. Manuell Fortsätt efter iOS-reset. Kort UIKit-bakgrundstid vid avslut; befintligt audio-background mode används för aktiv fångst.
+- Samlade inställningar från alla flikar, skilda ljud-/text-AI-anslutningar, Keychain, tydlig sparbekräftelse/status, diskreta tryck och haptics. Ofullständigt ljudunderlag syns också i kopierade lektionsanteckningar.
+- Fördröjd text från ljud före AI-aktivering skickas inte som ny vardagsanalys. Original och historiska data bevaras.
+- Ny driftguide, API-kontrakt och acceptansmatris. Python-/gatewaytester och GPU-smoke utförda; se status för exakt evidens. Ingen ny iOS-kompilering, installation, driftinstallation, commit eller publicering.
+
 ## Arbetskopia 2026-09-29 — anslutning och Access, ej publicerad
 
 - Ny sammanhängande Groq/Qwen-guide: engångsuppdatering, egna framtida provider-/modellbyten, gatewaytoken, rotation och Cloudflare Access med Service Auth samt negativa skyddsprov.

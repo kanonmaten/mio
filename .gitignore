@@ -26,3 +26,13 @@ node_modules/
 .dev.vars
 .dev.vars.*
 server/dist/
+
+# Transcription runtime and models
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+*.nemo
+*.safetensors
+*.wav
+*.pcm

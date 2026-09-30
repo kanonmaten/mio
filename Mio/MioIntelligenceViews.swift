@@ -5,6 +5,7 @@ struct AnalysisSettingsView: View {
     @Environment(MioAnalysisCoordinator.self) private var analysis
     let model: MioViewModel
     let content: MioContentViewModel
+    @Environment(\.openMioSettings) private var openSettings
     @State private var confirmEnable = false
     @State private var error: String?
 
@@ -23,15 +24,12 @@ struct AnalysisSettingsView: View {
             }
             Section("Lektioner") {
                 Text("Starta en lektion med den separata knappen. Vardags-Mio pausas medan lektionsunderlaget fångas. När du avslutar kan aktiverad AI välja ut huvudpunkter, exempel och läxor. Långa lektioner bearbetas i flera delar; detta är anteckningar från delarna, inte en garanterat fullständig sammanfattning.")
-                Text("Inget råljud skickas eller sparas. AI kan missförstå feltranskriberad text. Du kan se textunderlaget bakom varje huvudpunkt.")
+                Text("Text-AI får endast text; ljud går till din privata Pianissimo-server. Ingen ljudfil sparas. AI kan missförstå feltranskriberad text. Du kan se textunderlaget bakom varje huvudpunkt.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            Section("Anslutning") {
-                NavigationLink("Konfigurera server och tillåt molnfrågor") {
-                    CloudAssistantView(items: content.items, sessions: model.allSessions)
-                }
-                Text("Serveradress, åtkomsttoken och en aktiverad molnanslutning krävs. Leverantörens API-nyckel hör enbart hemma på servern. Anrop kan kosta pengar och serverns dagsgräns gäller även löpande analys.")
-                    .font(.footnote).foregroundStyle(.secondary)
+            Section("Anslutning för text-AI") {
+                NavigationLink("Server, token och molnfrågor") { CloudConnectionSettingsView() }
+                Text("Ljudtranskription konfigureras separat under Transkription. Denna anslutning skickar endast godkänd text till AI.").font(.footnote)
             }
             if let error = error ?? analysis.errorMessage { Section { Text(error).foregroundStyle(.red) } }
         }
@@ -58,7 +56,7 @@ struct LessonStartButton: View {
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.glass)
-        .disabled(model.isLessonActive || model.isSwitchingCaptureMode || model.isInstallingAdvancedModel
+        .disabled(model.isLessonActive || model.isSwitchingCaptureMode
                   || [.preparing, .stopping].contains(model.runState))
         .alert("Starta lektion", isPresented: $showTitle) {
             TextField("Ämne eller rubrik", text: $title)
@@ -71,6 +69,7 @@ struct LessonStartButton: View {
 }
 
 struct LessonLibraryView: View {
+    @Environment(\.openMioSettings) private var openSettings
     let model: MioViewModel
     let content: MioContentViewModel
     @Environment(MioAnalysisCoordinator.self) private var analysis
@@ -97,7 +96,7 @@ struct LessonLibraryView: View {
                     }
                 }
                 Section {
-                    NavigationLink("AI-inställningar och status") { AnalysisSettingsView(model: model, content: content) }
+                    Button("Inställningar") { openSettings() }
                     Text(analysis.status).font(.footnote).foregroundStyle(.secondary)
                     NavigationLink("Historik och råtext") { TimelineTabView(contentModel: content, sessionModel: model) }
                 } footer: {
@@ -105,6 +104,7 @@ struct LessonLibraryView: View {
                 }
             }
             .navigationTitle("Lektioner")
+            .toolbar { MioSettingsToolbar() }
         }
     }
 }
@@ -125,10 +125,20 @@ struct LessonDetailView: View {
                 if session.endedAt == nil, model.currentSession?.id == sessionID {
                     Section {
                         Text("Vardags-Mio är pausat under lektionen.")
+                        TranscriptionStatusView(model: model)
+                        if model.runState == .paused {
+                            Button("Fortsätt lektionen") { model.beginListening() }
+                        }
+                        if model.runState == .stopping {
+                            ProgressView("Avslutar redan fångad text …")
+                            Button("Avbryt väntan") { model.cancelFinishing() }
+                        }
+                        if let error = model.errorMessage { Text(error).foregroundStyle(.red) }
                         Button("Avsluta lektionen") { Task { await model.stopListening() } }
                             .disabled(![.listening, .paused, .interrupted].contains(model.runState))
                     }
                 }
+                Section { CaptureGapsView(session: session) }
                 let records = assistant.analyses.filter { $0.sessionID == sessionID }
                 let document = MioLessonDocument(session: session, records: records)
                 Section("Detaljerade lektionsanteckningar · AI-utkast") {
@@ -141,6 +151,7 @@ struct LessonDetailView: View {
                         Button(copied ? "Anteckningen kopierad" : "Kopiera hela anteckningen", systemImage: "doc.on.doc") {
                             UIPasteboard.general.string = document.markdown
                             copied = true
+                            MioFeedback.success()
                         }
                     }
                     ForEach(document.orderedRecords) { record in

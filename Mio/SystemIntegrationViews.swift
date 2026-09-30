@@ -304,7 +304,7 @@ private struct MioAlarmEditor: View {
                     Button("Spara alarm") {
                         Task {
                             let days = repeats ? MioAlarmWeekday.allCases.filter { weekdays.contains($0) }.map(\.value) : []
-                            if await service.scheduleAlarm(id: alarmID, date: date, weekdays: days) { dismiss() }
+                            if await service.scheduleAlarm(id: alarmID, date: date, weekdays: days) { MioFeedback.success(); dismiss() }
                         }
                     }
                     .disabled(service.isBusy || (repeats && weekdays.isEmpty))
@@ -346,7 +346,7 @@ private struct MioReminderEditor: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Avbryt") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Spara påminnelse") {
-                        Task { if await service.scheduleReminder(for: item.id, at: date) { dismiss() } }
+                        Task { if await service.scheduleReminder(for: item.id, at: date) { MioFeedback.success(); dismiss() } }
                     }
                 }
             }

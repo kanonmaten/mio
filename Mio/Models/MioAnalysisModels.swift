@@ -185,6 +185,10 @@ struct MioLessonDocument {
     var markdown: String {
         var parts = ["# \(session.title ?? "Lektion")", session.startedAt.formatted(date: .abbreviated, time: .shortened),
                      "AI-utkast. \(progress)"]
+        if let gaps = session.captureGaps, !gaps.isEmpty {
+            parts.append("Ofullständigt ljudunderlag: \(gaps.count) avbrott. Tal under dessa intervall saknas och kan inte återskapas från texten.")
+            parts += gaps.map { "- \($0.startedAt.formatted(date: .omitted, time: .standard))–\($0.endedAt.formatted(date: .omitted, time: .standard)): \($0.reason)" }
+        }
         for record in orderedRecords {
             for section in record.sections ?? [] {
                 parts.append("## \(section.heading)\n\n\(section.body)")

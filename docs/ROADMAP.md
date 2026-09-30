@@ -8,7 +8,7 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 
 | Område | Implementerad omfattning | Verifieringsgräns |
 |---|---|---|
-| Lokal fångst | Svensk SpeechAnalyzer, Mio-detektion, paus/stopp, diagnostik | Fysisk telefon krävs för kvalitet, bakgrund och batteri |
+| Privat fångst | Pianissimo via Tailscale, automatisk återanslutning, Mio-detektion, paus/stopp och luckor | Fysisk telefon krävs för kvalitet, bakgrund och batteri |
 | Innehåll | Fem manuella typer, sökning, redigering, uppgiftsstatus, export/radering | Ren installation och lagring provas på verklig telefon |
 | Assistent | Lokala kommandoförslag och aktiverad AI-tolkning av vanligt samtal; Ja/Nej/Inte nu | Modellkvalitet måste provas; innehåll och datum godkänns manuellt |
 | Lektioner | Separat lektionsläge pausar vardags-Mio; detaljerade kopierbara anteckningar och läxförslag via valfri kompatibel AI | Originaltext och tidsbevis får aldrig skrivas om |
@@ -27,7 +27,7 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 
 Versionsnumret 1.0.0 används först när accepterad vardagsomfattning är verifierad. Inget datum eller löfte om heldagslyssning ges utan mätningar. Appversion, byggnummer och lagringsschema är separata värden. `CURRENT_PROJECT_VERSION` höjs inför nästa distribuerade build; bundle identifier och beständiga lagringsvägar ändras inte.
 
-Råljudslagring, molnöverföring utan aktiverat samtycke, dold profilering och tyst kalenderbokning ingår inte. Konton och serverdrift behövs enbart om användaren aktiverar AI.
+Råljudslagring, molnöverföring utan aktiverat samtycke, dold profilering och tyst kalenderbokning ingår inte. Serverdrift och Tailscale behövs för transkription. Manuella poster och lokal historik fungerar utan server.
 
 ## Identitet och design, 2026-09-26
 
@@ -37,4 +37,10 @@ Förtydligande 2026-09-26: lektionsläge och vanlig samtalstolkning är korriger
 
 ## Arbetskopians utökning 2026-09-28
 
-Leverantörsadaptrar, strikt schema även för frågor och detaljerade lektionsanteckningar med kopiering/fortsättning finns i källkoden. Native ljudmotor och vardagsanalysens aktiveringsregler behålls. Ingen modellväljare, presentation eller frågekortsvy tillkommer. Nästa grindar är Xcode/XCTest för denna ändring, godkänd publicering av gatewayen, ny IPA och syntetiska modell-/telefonprov. Den publicerade äldre gatewayen och build 5 verifierar inte detta arbete.
+Leverantörsadaptrar, strikt schema även för frågor och detaljerade lektionsanteckningar med kopiering/fortsättning finns i källkoden. Detta var planen den 28 september; efterföljande beslut nedan ersätter Apple-transkriptionen. Ingen modellväljare, presentation eller frågekortsvy tillkommer. Nästa grindar är Xcode/XCTest för denna ändring, godkänd publicering av gatewayen, ny IPA och syntetiska modell-/telefonprov. Den publicerade äldre gatewayen och build 5 verifierar inte detta arbete.
+
+## Pianissimo och bakgrund, 2026-09-30
+
+Prioriterad implementation finns i arbetskopian: (1) versionsmärkt ljud-API/originalmodell och driftpaket, (2) mikrofon separerad från nätet och begränsad RAM-kö, (3) sessionsbevarande vid avbrott/luckor och iOS-lifecycle, (4) samlade inställningar/status/återkoppling, (5) dokumentation och tester. Ingen HA, publik ljudport eller lokal Apple-fallback.
+
+Återstående leveransgrindar: nytt Xcode-bygge och XCTest, installera systemd/Tailscale enligt driftguiden, därefter [Pianissimo-acceptansprov](TESTPLAN_PIANISSIMO.md), särskilt svensk precision över chunkgränser, låst skärm, omstart, nätbyte och batteri. GPU-laddning i utvecklingsmiljö ersätter inte dessa prov.

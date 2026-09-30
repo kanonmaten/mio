@@ -23,7 +23,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Mio behöver mikrofonen när du själv startar en lokal session för att skapa svensk text på telefonen.</string>
+	<string>Mio använder mikrofonen när du startar Mio eller en lektion. Ljudet skickas privat via Tailscale till din Pianissimo-server för svensk text. Ingen ljudfil sparas.</string>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Mio använder alarm bara när du själv sparar ett alarm. Du kan granska och ta bort Mios alarm i appen.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

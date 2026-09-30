@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AssistantHubView: View {
+    @Environment(\.openMioSettings) private var openSettings
     @Environment(MioAssistantViewModel.self) private var assistant
     let contentModel: MioContentViewModel
     let sessionModel: MioViewModel
@@ -14,13 +15,13 @@ struct AssistantHubView: View {
                     Label("Förslag att granska (\(assistant.suggestions.count))", systemImage: "tray.full")
                         .font(.headline)
                 }
-                Text("Med AI-tolkning aktiverad kan Mio föreslå planer och uppgifter ur vanliga samtal. Direkta Mio-kommandon fungerar även lokalt. Kontrollera alltid innehåll, datum och tid.")
+                Text("Med AI-tolkning aktiverad kan Mio föreslå planer och uppgifter ur vanliga samtal. Mio-kommandon tolkas lokalt efter transkription via din server. Kontrollera alltid innehåll, datum och tid.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Divider()
-                NavigationLink {
-                    AnalysisSettingsView(model: sessionModel, content: contentModel)
-                } label: { Label("AI-assistent och löpande tolkning", systemImage: "sparkles").frame(minHeight: 44) }
+                Button { openSettings() } label: {
+                    Label("AI-assistent och inställningar", systemImage: "gear").frame(minHeight: 44)
+                }
                 NavigationLink {
                     CloudAssistantView(items: contentModel.items, sessions: sessionModel.allSessions)
                 } label: {
@@ -224,7 +225,7 @@ private struct SuggestedQuestionReviewView: View {
 
     private func finishAnsweredQuestion() async {
         busy = true
-        if await assistant.markAccepted(id: suggestion.id) { dismiss() }
+        if await assistant.markAccepted(id: suggestion.id) { MioFeedback.success(); dismiss() }
         busy = false
     }
 }
@@ -323,7 +324,7 @@ private struct SuggestionReviewView: View {
             guard await contentModel.save(id: suggestion.id, kind: kind, title: title, body: text,
                                           scheduledAt: date, isCompleted: false, sessionID: linkedID) else { return }
         }
-        if await assistant.markAccepted(id: suggestion.id) { dismiss() }
+        if await assistant.markAccepted(id: suggestion.id) { MioFeedback.success(); dismiss() }
     }
 }
 
@@ -504,6 +505,7 @@ struct DailyOverviewView: View {
             }
         }
         .navigationTitle(evening ? "Kväll" : "Morgon")
+        .toolbar { MioSettingsToolbar() }
     }
 
     private var briefing: MioBriefing {
@@ -539,7 +541,7 @@ struct MioGuideView: View {
         List {
             Section("Börja här") {
                 Text("Skapa anteckningar, uppgifter, planer och egna minnen med plusknappen i flikarna. Allt detta fungerar utan mikrofon eller AI.")
-                Text("Starta Mio för vardagslyssning. Starta lektion pausar vardags-Mio och samlar lektionsunderlag separat. Paus och stopp stänger mikrofonen. Historik och rättningar finns under Lektioner → Historik och råtext.")
+                Text("Konfigurera Pianissimo-server och Tailscale under Inställningar → Transkription. Starta Mio skickar ljud till din dator för svensk text. Starta Mio för vardagslyssning. Starta lektion pausar vardags-Mio och samlar lektionsunderlag separat. Paus och stopp stänger mikrofonen. Historik och rättningar finns under Lektioner → Historik och råtext.")
             }
             Section("Tilltala Mio") {
                 Text("Mio, anteckna att vi arbetar med procent.")

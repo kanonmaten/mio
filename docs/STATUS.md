@@ -1,5 +1,23 @@
 # Bygg- och teststatus
 
+## Pianissimo, bakgrund och inställningar — arbetskopia 2026-09-30
+
+**Inte Xcode-kompilerad, inte XCTest-körd, inte installerad på iPhone och inte driftsatt.** Build 5 nedan gäller tidigare Apple-transkription. Kontrollerna nedan gjordes i arbetskopian före commit/push. Ingen ny iOS-byggkörning eller driftsättning har utförts.
+
+- Implementerat: original Pianissimo bakom API v1, separat ljudfångst/uppladdning, privat Tailscale-adress/Keychain, 60 s RAM-gräns och synliga luckor, nätåterförsök, iOS-avbrottshantering och samlade inställningar. Se [beslut](DECISIONS.md), [driftguide](../transcription-server/README.md) och [20 acceptansprov](TESTPLAN_PIANISSIMO.md).
+- **GPU-smoke utförd** på denna CachyOS-värd: RTX 4060 Ti 8 GiB, NVIDIA 615.71.09, Python 3.12.14, torch 2.14.0+cu130, NeMo 2.7.0. Original `KlangAI/pianissimo-sv`, revision `95c85c9b08afff7b48b540984b1e9b693b31ddd4`, laddades på CUDA. Första laddning inklusive hämtning: 41,98 s. 20 s syntetisk tystnad gav tom ordlista, peak allokerat GPU-minne cirka 4788 MiB. Detta verifierar laddning/inference, **inte svensk talprecision, ordalignment eller iPhone-latens**. Ingen privat inspelning användes. Efter rättning av NeMos utfyllnad för korta slutdelar upprepades GPU-provet: cachad laddning 15,87 s, tystnad 0,1/0,5/20 s gav noll ord och 0,05/0,05/0,12 s inference, samma peak 4788 MiB. Dessa tider gäller tystnad, inte svenskt tal.
+- **25/25 Python-API-prov godkända** med falsk modell: auth, format/storlek, tidsstämplar, idempotenta retries/konflikt/cache-expiration, överlast, parallell health, laddning och fastnad inference/omstartssignal. Starlette ger en deprecationsvarning för testklientens httpx; inga testfel. Testerna kördes med localhost-tillgång utanför sandboxen.
+- **40/40 befintliga Node-gatewaytester godkända**, simulerad text-AI. Första sandboxförsöket misslyckades; körning med localhost-tillgång passerade. Gatewaykoden ändrades inte av motorbytet och ingen riktig AI-trafik skickades.
+- **142 portabla projektkontroller godkända**, Python compileall och `git diff --check` godkända. **38 Swift-filer** parserkontrollerade med tree-sitter 0.26.0 / tree-sitter-swift 0.7.3: inga syntaxfel. Detta är inte Swift-typkontroll eller Xcode-kompilering.
+- Nya XCTest-fall för ljuddelarnas gränser/flush, tidsluckor, svaridentitet/ordtider, privata adresser/token, äldre lagring/metadata/luckor, transporthälsa och HTTP-återförsök finns men är **ej körda**. Befintligt samtyckesprov omfattar nu även fördröjd text från äldre ljud. Verklig reconnect/cancellation på telefon återstår.
+- systemd-enheten syntaxkontrollerad med `systemd-analyze verify` på en temporär kopia där endast ExecStart pekade på den befintliga testmiljöns uvicorn. Originalets `/opt`-installation finns inte ännu. Ingen tjänst, autostart, tailnet-policy eller Tailscale Serve installerades/ändrades; dessa måste verifieras på riktigt enligt guiden.
+
+Nästa grindar: begärd commit/push för ny Release/XCTest/IPA, installation av tjänst och Tailscale, T01–T20 samt hela appens regressionsprov. Mät svensk precision vid delgränser, batteri och låst skärm. Äldre export visade `Session activation failed`, men ingen exakt rotorsak eller förbättrad stabilitet på måltelefonen är bevisad.
+
+Kvarvarande funktionsbegränsning, identifierad vid eftergranskning: vardags-AI samlar flera textdelar per anrop men återför inte tidigare textkontext över gränsen till nästa anrop. En mening/plan som korsar den gränsen kan därför missas eller bli ofullständig. Lokal Mio-kommandotolkning arbetar också per textsegment. Ljudets överlappning löser inte detta; begränsad textkontext, deduplicering och regressionstester återstår.
+
+All status längre ned är daterad historisk evidens och verifierar inte denna arbetskopia.
+
 ## Cloudflare livegranskning 2026-09-29
 
 - Worker `mio-private-gateway` har D1-bindningen `MIO_LIMITS` till befintliga `mio-limits`; D1 Studio visar tabellen `mio_budget`. I produktion finns `MIO_AI_PROVIDER=groq`, `MIO_AI_MODEL=qwen/qwen3.8-27b`, `MIO_REQUESTS_PER_DAY=100`, `MIO_REQUESTS_PER_MINUTE=6` och `MIO_LESSON_INTERVAL_SECONDS=60`. `GROQ_API_KEY` och `MIO_GATEWAY_TOKEN` finns som maskerade Secrets; deras innehåll eller giltighet kan inte avläsas i Dashboard. Den äldre textvariabeln `MIO_OPENAI_MODEL` är borttagen.

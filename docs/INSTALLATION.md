@@ -1,8 +1,10 @@
 # Bygga och installera Mio
 
+Det nya bygget kräver även [CachyOS/Pianissimo/Tailscale-installation](../transcription-server/README.md). Återanslut Tailscale efter SideStore/LocalDevVPN och kontrollera servern i Mio. Ingen ny IPA har byggts för arbetskopian.
+
 Första testtelefon: iPhone 16 Pro. iPhone 13 provas senare. Lägsta iOS-version: 26.0; Xcode 27 och iOS 27 SDK används för bygget. Aktuellt helhetsbygge: **0.9.0, ej släppt**. [Status](STATUS.md) visar vad som faktiskt har byggts och provats.
 
-Färdig testfil: **0.9.0 (5)** från [Actions-körning 36382509184](https://github.com/kanonmaten/mio/actions/runs/36382509184). [Hämta Mio-IPA](https://github.com/kanonmaten/mio/actions/runs/36382509184/artifacts/10953378415), packa upp ZIP-filen och installera IPA:n enligt steg 5–8 nedan. Källrevision och SHA-256 finns i [status](STATUS.md).
+**Historisk testfil, saknar Pianissimo-klienten:** **0.9.0 (5)** från [Actions-körning 36382509184](https://github.com/kanonmaten/mio/actions/runs/36382509184). [Hämta Mio-IPA](https://github.com/kanonmaten/mio/actions/runs/36382509184/artifacts/10953378415), packa upp ZIP-filen och installera IPA:n enligt steg 5–8 nedan. Källrevision och SHA-256 finns i [status](STATUS.md).
 
 Huvudvägen är **GitHub Actions → osignerad IPA → SideStore**. Koden kan redigeras på Linux, Windows eller Monterey; iOS-kompilering sker på en Mac med kompatibel Xcode.
 
@@ -48,7 +50,7 @@ Tester finns i `MioTests/`: modeller, innehållslagring, förslag, lektioner, ra
 | Situation | Åtgärd |
 |---|---|
 | Första start | Gå igenom fem flikar, invänta Telefonens stöd och tillåt mikrofonen vid sessionsstart |
-| Svensk modell saknas | Build 5 försöker installera stödd svensk SpeechTranscriber vid Starta Mio. Använd Wi-Fi och håll appen öppen; separat förinstallation finns också. Läs stödfälten och händelseloggens fallbackorsak om hämtning/start misslyckas |
+| Transkription offline | Följ Pianissimo-guiden: dator vaken, systemd redo, Tailscale på båda enheterna, rätt HTTPS-adress/token. Build 5 kan inte använda ljudservern |
 | Mikrofon nekad | Aktivera Mio under **Integritet och säkerhet → Mikrofon** |
 | Texten stannar efter ljudvägsbyte | Stoppa/starta sessionen och spara observationen med händelseloggen |
 | Stabilt Actions-jobb är rött | Spara första tydliga felet, stegets namn, körnings-URL och commit. Senare fel kan vara följdfel |

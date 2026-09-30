@@ -8,17 +8,22 @@ import UIKit
 @Observable
 final class MioViewModel {
     var runState: MioRunState = .off
-    var support = SpeechSupportSnapshot()
+    var microphonePermission = SpeechCapabilityService.microphonePermission
+    var connectionState: TranscriptionConnectionState = .unchecked
+    var serverMetadata: TranscriptionMetadata?
+    var serverVersion: String?
+    var connectionCheckedAt: Date?
+    @ObservationIgnored private var finishingPipeline: LiveTranscriptionPipeline?
+    @ObservationIgnored private var connectionGeneration = UUID()
     var currentSession: MioSession?
     var previousSessions: [MioSession] = []
     var liveTranscript = ""
-    var statusMessage = "Tryck på kontrollen för att starta en lokal session."
+    var statusMessage = "Starta Mio för att skicka ljud privat till din transkriptionsserver."
     var errorMessage: String?
     var pauseUntil: Date?
     var now = Date.now
     var exportURL: URL?
     var isRefreshingSupport = false
-    var isInstallingAdvancedModel = false
     var isPreparingExport = false
     var isSwitchingCaptureMode = false
     private var suspendedEverydaySessionID: UUID?
@@ -67,6 +72,12 @@ final class MioViewModel {
             var sessions = try await repository.loadSessions()
             for unfinishedIndex in sessions.indices where sessions[unfinishedIndex].endedAt == nil {
                 let recoveredAt = Date.now
+                let lastKnownAudio = sessions[unfinishedIndex].transcripts.map(\.audioEndedAt).max()
+                    ?? sessions[unfinishedIndex].startedAt
+                var gaps = sessions[unfinishedIndex].captureGaps ?? []
+                gaps.append(CaptureGap(startedAt: min(lastKnownAudio, recoveredAt), endedAt: recoveredAt,
+                                       reason: "Oväntat appavslut: underlag kan saknas efter senast sparade text. Mikrofonen återstartades inte."))
+                sessions[unfinishedIndex].captureGaps = gaps
                 sessions[unfinishedIndex].endedAt = recoveredAt
                 if let lastIntervalIndex = sessions[unfinishedIndex].backgroundIntervals.indices.last,
                    sessions[unfinishedIndex].backgroundIntervals[lastIntervalIndex].endedAt == nil {
@@ -75,7 +86,7 @@ final class MioViewModel {
                 sessions[unfinishedIndex].events.append(
                     DiagnosticEvent(
                         kind: .warning,
-                        message: "Appen öppnades efter att förra testet avslutats oväntat. Mikrofonen startades inte automatiskt."
+                        message: "Appen öppnades efter att förra sessionen avslutats oväntat. Mikrofonen startades inte automatiskt."
                     )
                 )
                 try await repository.upsert(sessions[unfinishedIndex])
@@ -90,42 +101,69 @@ final class MioViewModel {
     }
 
     func refreshSupport() async {
-        guard !isRefreshingSupport else { return }
-        isRefreshingSupport = true
-        support = await SpeechCapabilityService.inspect()
-        isRefreshingSupport = false
+        microphonePermission = SpeechCapabilityService.microphonePermission
     }
 
-    func installAdvancedModel() async {
-        guard runState == .off || runState == .failed || runState == .unavailable else {
-            errorMessage = "Stoppa den aktiva sessionen innan modellinstallationen startas."
-            return
-        }
-        guard !isInstallingAdvancedModel else { return }
-        isInstallingAdvancedModel = true
-        errorMessage = nil
+    func testTranscriptionConnection() async throws {
+        let generation = connectionGeneration
+        let client = TranscriptionClient(connection: try TranscriptionSettings.connection())
+        defer { client.cancel() }
+        connectionState = .connecting
         do {
-            let downloaded = try await SpeechCapabilityService.installAdvancedSwedishModel {
-                [weak self] message in
-                Task { @MainActor [weak self] in
-                    self?.statusMessage = message
-                }
-            }
-            await refreshSupport()
-            statusMessage = downloaded
-                ? "SpeechTranscribers svenska modell är installerad och provas först i nästa SpeechAnalyzer-session."
-                : "SpeechTranscribers svenska modell var redan installerad och provas först i nästa SpeechAnalyzer-session."
+            let health = try await client.health()
+            guard generation == connectionGeneration else { throw CancellationError() }
+            serverMetadata = health.metadata
+            serverVersion = health.serverVersion
+            connectionState = .connected
+            connectionCheckedAt = .now
         } catch {
-            await refreshSupport()
-            let details = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            errorMessage = "SpeechTranscribers modell kunde inte göras klar. \(details) DictationTranscriber finns kvar som fallback."
-            statusMessage = "SpeechAnalyzer använder DictationTranscriber tills iOS har installerat SpeechTranscribers modell."
+            if generation == connectionGeneration {
+                connectionState = error is URLError ? .offline : .actionRequired
+            }
+            throw error
         }
-        isInstallingAdvancedModel = false
+    }
+
+    func transcriptionConfigurationChanged() async {
+        connectionGeneration = UUID()
+        preparationCancellationRequested = true
+        startupTask?.cancel()
+        // Invalidate callbacks before awaiting teardown; old-origin replies cannot be adopted.
+        activePipelineID = nil
+        if let pipeline { await pipeline.stop(discard: true) }
+        await finishingPipeline?.stop(discard: true)
+        self.pipeline = nil
+        serverMetadata = nil; serverVersion = nil; connectionState = .unchecked; connectionCheckedAt = nil
+        if let currentSession, currentSession.endedAt == nil {
+            runState = .paused
+            statusMessage = "Anslutningen ändrades. Mikrofonen är av; tryck Fortsätt när anslutningen är klar."
+        }
+    }
+
+    @ObservationIgnored private var finishingBackgroundTasks: Set<UIBackgroundTaskIdentifier> = []
+
+    private func beginFinishingBackgroundTask() -> UIBackgroundTaskIdentifier {
+        var identifier = UIBackgroundTaskIdentifier.invalid
+        identifier = UIApplication.shared.beginBackgroundTask(withName: "Save Mio session") { [weak self] in
+            MainActor.assumeIsolated {
+                self?.cancelFinishing()
+                self?.endFinishingBackgroundTask(identifier)
+            }
+        }
+        if identifier != .invalid { finishingBackgroundTasks.insert(identifier) }
+        return identifier
+    }
+
+    private func endFinishingBackgroundTask(_ identifier: UIBackgroundTaskIdentifier) {
+        if finishingBackgroundTasks.remove(identifier) != nil { UIApplication.shared.endBackgroundTask(identifier) }
+    }
+
+    func cancelFinishing() {
+        if let finishingPipeline { Task { await finishingPipeline.stop(discard: true) } }
     }
 
     func beginListening() {
-        guard !isInstallingAdvancedModel, !isSwitchingCaptureMode else { return }
+        guard !isSwitchingCaptureMode else { return }
         if currentSession?.isLesson == true, currentSession?.endedAt != nil { returnToEveryday() }
         guard runState == .off
                 || runState == .paused
@@ -148,7 +186,7 @@ final class MioViewModel {
     }
 
     func beginLesson(title: String) async {
-        guard !isSwitchingCaptureMode, !isInstallingAdvancedModel, !isLessonActive,
+        guard !isSwitchingCaptureMode, !isLessonActive,
               [.off, .paused, .listening, .interrupted, .failed, .unavailable].contains(runState) else { return }
         guard MioMaintenanceState.shared.beginWrite() else { return }
         isSwitchingCaptureMode = true
@@ -212,7 +250,7 @@ final class MioViewModel {
             lastPersistedAt = nil
             appendEvent(
                 kind: .info,
-                message: "En lokal session startades. Råljud sparas inte; bara lokal tidsstämplad text och diagnostik sparas."
+                message: "Sessionen startades av användaren. Ljud skickas privat till Pianissimo-servern; högst 60 sekunder ljud hålls i minnet. Ingen ljudfil sparas."
             )
             sampleBattery(reason: "Startvärde för batteriet")
         } else {
@@ -223,9 +261,17 @@ final class MioViewModel {
         let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "okänd"
         let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "okänt"
         appendEvent(kind: .info, message: "Mio \(version) (\(build)); iOS \(UIDevice.current.systemVersion).")
-        statusMessage = "Kontrollerar mikrofon, SpeechAnalyzer och svensk transkriptionsmodul …"
+        statusMessage = "Ansluter till transkriptionsservern innan mikrofonen startas …"
 
-        let newPipeline = makePipeline()
+        let newPipeline: LiveTranscriptionPipeline
+        do { newPipeline = try makePipeline() }
+        catch {
+            runState = .paused; errorMessage = error.localizedDescription
+            connectionState = .actionRequired
+            statusMessage = "Mikrofonen är av. Kontrollera transkriptionsinställningarna."
+            await forceSave()
+            return
+        }
         pipeline = newPipeline
         do {
             let details = try await newPipeline.start()
@@ -233,18 +279,11 @@ final class MioViewModel {
             guard pipeline === newPipeline else { return }
             runState = .listening
             statusMessage = isLessonActive ? "Lektionsläge: fångar underlag till anteckningar. Vardags-Mio är pausat." : "Mio lyssnar. AI-tolkning kan föreslå planer ur vanliga samtal när du aktiverar den."
-            appendEvent(
-                kind: .info,
-                message: "Mikrofonen och SpeechAnalyzer startade med \(details.engine.title) (\(details.localeIdentifier))."
-            )
-            if details.downloadedModel {
-                appendEvent(kind: .info, message: "Apples svenska språkmodell hämtades till telefonen.")
-            }
+            serverMetadata = details.health.metadata
+            serverVersion = details.health.serverVersion
+            connectionState = .connected; connectionCheckedAt = .now
+            appendEvent(kind: .info, message: "Mikrofonen startade. Privat transkription: \(details.health.metadata.model), revision \(details.health.metadata.revision).")
             await refreshSupport()
-            if support.selectedEngine != details.engine {
-                support.details = "Den aktuella lyssningen använder \(details.engine.title). Se diagnostiken för eventuell fallbackorsak."
-            }
-            support.selectedEngine = details.engine
         } catch {
             if pipeline !== newPipeline {
                 await newPipeline.stop()
@@ -267,8 +306,11 @@ final class MioViewModel {
                 await refreshSupport()
                 return
             }
-            receiveFailure(error)
-            finishCurrentSession(message: "Testet kunde inte starta.")
+            runState = .paused
+            errorMessage = error.localizedDescription
+            connectionState = error is URLError ? .offline : .actionRequired
+            statusMessage = "Mikrofonen är av. Kontrollera anslutningen och tryck Fortsätt."
+            appendEvent(kind: .error, message: statusMessage)
             await forceSave()
             await refreshSupport()
         }
@@ -278,14 +320,18 @@ final class MioViewModel {
         guard runState == .listening || runState == .interrupted || runState == .paused else {
             return
         }
+        let background = beginFinishingBackgroundTask()
+        defer { endFinishingBackgroundTask(background) }
         runState = .stopping
         pauseTask?.cancel()
         pauseTask = nil
         pauseUntil = nil
         let activePipeline = pipeline
         pipeline = nil
-        statusMessage = "Avslutar SpeechAnalyzer och mikrofonen …"
+        statusMessage = "Mikrofonen stängs. Avslutar redan fångad text, högst 15 sekunder …"
+        finishingPipeline = activePipeline
         await activePipeline?.stop()
+        finishingPipeline = nil
         activePipelineID = nil
 
         sampleBattery(reason: "Slutvärde för batteriet")
@@ -302,12 +348,16 @@ final class MioViewModel {
 
     func pause(_ length: PauseLength) async {
         guard runState == .listening || runState == .interrupted else { return }
+        let background = beginFinishingBackgroundTask()
+        defer { endFinishingBackgroundTask(background) }
         pauseTask?.cancel()
         let activePipeline = pipeline
         pipeline = nil
         runState = .stopping
         statusMessage = "Stänger mikrofonen för pausen …"
+        finishingPipeline = activePipeline
         await activePipeline?.stop()
+        finishingPipeline = nil
         activePipelineID = nil
 
         runState = .paused
@@ -315,20 +365,10 @@ final class MioViewModel {
         if let interval = length.interval {
             let resumeDate = Date.now.addingTimeInterval(interval)
             pauseUntil = resumeDate
-            statusMessage = "Mikrofonen är av. Fortsättning är planerad till \(resumeDate.formatted(date: .omitted, time: .shortened)); iOS kan kräva att appen öppnas igen."
+            statusMessage = "Mikrofonen är av. Paus till \(resumeDate.formatted(date: .omitted, time: .shortened)); tryck Fortsätt när du vill lyssna igen."
             appendEvent(kind: .info, message: "Mio pausades i \(length.title). Mikrofonen stängdes av.")
 
-            pauseTask = Task { [weak self] in
-                do {
-                    try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-                    try Task.checkCancellation()
-                    guard let self, self.runState == .paused else { return }
-                    self.pauseTask = nil
-                    self.beginListening()
-                } catch {
-                    // Expected when scheduled resume is replaced or the session ends manually.
-                }
-            }
+
         } else {
             pauseUntil = nil
             statusMessage = "Mikrofonen är av tills du startar Mio igen."
@@ -344,6 +384,7 @@ final class MioViewModel {
         // source-audio time—not callback delivery time—can overlap one as evidence.
         switch phase {
         case .active:
+            Task { await pipeline?.foreground() }
             closeOpenBackgroundInterval(at: .now)
             appendEvent(kind: .lifecycle, message: "Appen blev aktiv på skärmen.")
         case .inactive:
@@ -507,43 +548,49 @@ final class MioViewModel {
         return "Oförändrad"
     }
 
-    private func makePipeline() -> LiveTranscriptionPipeline {
+    private func makePipeline() throws -> LiveTranscriptionPipeline {
+        let connection = try TranscriptionSettings.connection()
         let pipelineID = UUID()
         activePipelineID = pipelineID
-        return LiveTranscriptionPipeline(
+        return LiveTranscriptionPipeline(connection: connection, sessionID: currentSession!.id,
             handlers: .init(
-                result: { [weak self] text, isFinal, audioStartedAt, audioEndedAt, audioTimingIsValid in
-                    await MainActor.run { [weak self] in
-                        guard self?.activePipelineID == pipelineID else { return }
-                        self?.receiveTranscript(
-                            text,
-                            isFinal: isFinal,
-                            audioStartedAt: audioStartedAt,
-                            audioEndedAt: audioEndedAt,
-                            audioTimingIsValid: audioTimingIsValid
-                        )
+                result: { [weak self] chunk, reply, words in
+                    await MainActor.run {
+                        guard let self, self.activePipelineID == pipelineID,
+                              self.currentSession?.id == chunk.sessionID,
+                              !(self.currentSession?.transcripts.contains { $0.sourceChunkID == chunk.id } ?? true)
+                        else { return }
+                        self.receiveRemoteTranscript(chunk: chunk, reply: reply, words: words)
                     }
                 },
                 status: { [weak self] message in
-                    Task { @MainActor [weak self] in
+                    Task { @MainActor in
                         guard self?.activePipelineID == pipelineID else { return }
                         self?.statusMessage = message
                     }
                 },
                 event: { [weak self] event in
-                    Task { @MainActor [weak self] in
+                    await MainActor.run {
                         guard self?.activePipelineID == pipelineID else { return }
                         self?.receivePipelineEvent(event)
                     }
                 },
                 failure: { [weak self] error in
-                    Task { @MainActor [weak self] in
+                    await MainActor.run {
                         guard self?.activePipelineID == pipelineID else { return }
                         self?.receiveFailure(error)
                     }
                 }
-            )
-        )
+            ))
+    }
+
+    private func receiveRemoteTranscript(chunk: AudioChunk, reply: TranscriptionReply, words: [TranscriptionWord]) {
+        guard let first = words.first, let last = words.last else { return }
+        let start = max(chunk.startedAt, chunk.origin.addingTimeInterval(first.start))
+        let end = min(chunk.endedAt, chunk.origin.addingTimeInterval(last.end))
+        receiveTranscript(words.map(\.text).joined(separator: " "), isFinal: true,
+                          audioStartedAt: start, audioEndedAt: end, audioTimingIsValid: true,
+                          chunkID: chunk.id, metadata: reply.metadata)
     }
 
     private func receiveTranscript(
@@ -551,7 +598,8 @@ final class MioViewModel {
         isFinal: Bool,
         audioStartedAt: Date,
         audioEndedAt: Date,
-        audioTimingIsValid: Bool
+        audioTimingIsValid: Bool,
+        chunkID: UUID? = nil, metadata: TranscriptionMetadata? = nil
     ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -563,17 +611,14 @@ final class MioViewModel {
                 && currentSession?.backgroundIntervals.contains(where: {
                     $0.overlaps(audioStart: audioStartedAt, audioEnd: audioEndedAt)
                 }) == true
-            currentSession?.transcripts.append(
-                TranscriptSegment(
-                    createdAt: audioStartedAt,
-                    audioStartedAt: audioStartedAt,
-                    audioEndedAt: audioEndedAt,
-                    text: trimmed,
-                    containsMio: containsMio,
-                    wasObservedInBackground: wasObservedInBackground,
-                    audioTimingIsValid: audioTimingIsValid
-                )
-            )
+            var segment = TranscriptSegment(createdAt: audioStartedAt,
+                audioStartedAt: audioStartedAt, audioEndedAt: audioEndedAt, text: trimmed,
+                containsMio: containsMio, wasObservedInBackground: wasObservedInBackground,
+                audioTimingIsValid: audioTimingIsValid)
+            segment.sourceChunkID = chunkID
+            segment.transcriptionMetadata = metadata
+            currentSession?.transcripts.append(segment)
+
             if !audioTimingIsValid {
                 currentSession?.events.append(
                     DiagnosticEvent(
@@ -594,11 +639,11 @@ final class MioViewModel {
                 currentSession?.events.append(
                     DiagnosticEvent(
                         kind: .wakeWord,
-                        message: "Ordet Mio upptäcktes lokalt i en färdig textdel. Inget skickades till internet."
+                        message: "Ordet Mio upptäcktes lokalt i texten från den privata transkriptionsservern."
                     )
                 )
                 if UIApplication.shared.applicationState == .active {
-                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    MioFeedback.success()
                 }
             }
             persistSoon()
@@ -612,93 +657,54 @@ final class MioViewModel {
 
     private func receivePipelineEvent(_ event: PipelineEvent) {
         switch event {
+        case let .connection(state, metadata):
+            connectionState = state
+            if let metadata { serverMetadata = metadata }
+            if state == .connected { connectionCheckedAt = .now }
+        case let .captureGap(gap):
+            if currentSession?.captureGaps == nil { currentSession?.captureGaps = [] }
+            currentSession?.captureGaps?.append(gap)
+            appendEvent(kind: .warning, message: gap.reason)
+            persistSoon()
         case .interruptionBegan:
-            if runState == .listening {
-                runState = .interrupted
-                statusMessage = "iOS har tillfälligt avbrutit mikrofonen."
-            }
-            appendEvent(kind: .interruption, message: "Ljudet avbröts, exempelvis av ett samtal eller alarm.")
+            if runState == .listening { runState = .interrupted }
+            statusMessage = "iOS har avbrutit mikrofonen. Sessionen finns kvar."
+            appendEvent(kind: .interruption, message: statusMessage)
         case let .interruptionEnded(shouldResume):
-            appendEvent(
-                kind: .interruption,
-                message: shouldResume
-                    ? "Ljudavbrottet slutade och iOS tillät automatisk återstart."
-                    : "Ljudavbrottet slutade, men iOS tillät inte automatisk återstart. Stoppa och starta testet igen."
-            )
-            if shouldResume {
+            if shouldResume, runState == .interrupted || runState == .listening {
                 runState = .listening
-                statusMessage = "Ljudavbrottet är slut. Mio lyssnar igen."
-            } else {
-                runState = .failed
-                errorMessage = "iOS tillät inte återstart efter ljudavbrottet. Mio stänger ljudsessionen; starta ett nytt test."
-                shutDownPipelineAfterRuntimeFailure()
+                statusMessage = "Mikrofonen levererar ljud igen."
+                appendEvent(kind: .interruption, message: statusMessage)
             }
-        case let .routeChanged(description):
-            appendEvent(
-                kind: .routeChange,
-                message: "\(description). Om texten slutar komma: stoppa och starta testet igen."
-            )
-        case let .audioBuffersDropped(count):
-            appendEvent(
-                kind: .warning,
-                message: "Talmotorn hann inte med och totalt \(count) mikrofonbuffertar har tappats."
-            )
-        case let .speechSupport(snapshot):
-            support = snapshot
-            appendEvent(kind: .info, message: snapshot.diagnosticDescription)
-        case let .backendFallback(message):
-            appendEvent(kind: .warning, message: message)
+        case let .routeChanged(message): appendEvent(kind: .routeChange, message: message)
+        case let .needsResume(message): pauseAfterFailure(message)
         case .mediaServicesReset:
-            appendEvent(
-                kind: .error,
-                message: "iOS startade om ljudsystemet. Mio stänger mikrofonen; starta därefter ett nytt test."
-            )
-            runState = .failed
-            errorMessage = "iOS startade om ljudsystemet. Mio har stängt mikrofonen; starta ett nytt test."
-            shutDownPipelineAfterRuntimeFailure()
+            pauseAfterFailure("iOS återställde ljudsystemet. Tryck Fortsätt för att återstarta mikrofonen.")
         }
     }
 
     private func receiveFailure(_ error: Error) {
-        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        let diagnosticError = error as NSError
-        appendEvent(kind: .info, message: "Feldomän: \(diagnosticError.domain); kod: \(diagnosticError.code).")
-        if runtimeFailureTeardownInProgress {
-            appendEvent(kind: .error, message: message)
-            return
-        }
-        errorMessage = message
-        statusMessage = message
-        if let mioError = error as? MioError {
-            switch mioError {
-            case .speechTranscriberUnavailable, .swedishUnavailable:
-                runState = .unavailable
-            default:
-                runState = .failed
-            }
-        } else {
-            runState = .failed
-        }
-        appendEvent(kind: .error, message: message)
-        shutDownPipelineAfterRuntimeFailure()
+        pauseAfterFailure(error.localizedDescription)
     }
 
-    private func shutDownPipelineAfterRuntimeFailure() {
-        guard let failedPipeline = pipeline else { return }
+    private func pauseAfterFailure(_ message: String) {
+        guard !runtimeFailureTeardownInProgress, runState != .stopping else { return }
+        errorMessage = message
+        appendEvent(kind: .error, message: message)
+        guard let failedPipeline = pipeline else { runState = .paused; return }
         pipeline = nil
         runtimeFailureTeardownInProgress = true
         runState = .stopping
-        statusMessage = "Ett tekniskt fel inträffade. Mio stänger mikrofonen säkert …"
+        finishingPipeline = failedPipeline
         Task { [weak self] in
-            await failedPipeline.stop()
+            await failedPipeline.stop(discard: true)
             guard let self else { return }
             self.activePipelineID = nil
-            self.sampleBattery(reason: "Slutvärde efter tekniskt fel")
-            self.finishCurrentSession(message: "Testet avslutades automatiskt efter ett tekniskt fel.")
+            self.finishingPipeline = nil
             await self.forceSave()
             self.runtimeFailureTeardownInProgress = false
-            self.runState = .failed
-            self.statusMessage = self.errorMessage ?? "Testet stoppades efter ett tekniskt fel."
+            self.runState = .paused
+            self.statusMessage = "Mikrofonen är av. \(message)"
         }
     }
 

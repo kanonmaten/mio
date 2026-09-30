@@ -5,7 +5,7 @@ Mio ska hjälpa en användare att fånga och ordna sin dag: lektioner, antecknin
 ## Produktregler
 
 - **Användaren styr:** tydlig lyssningsstatus, På/Av, paus och radering. När Mio är av används inte mikrofonen; manuellt innehåll fungerar fortfarande.
-- **Lokalt först:** transkription och Mio-detektion på telefonen. Inget sparat råljud och ingen ström av heldagsljud till molnet.
+- **Privat och användarstyrt:** svensk transkription på egen Pianissimo-server via Tailscale; Mio-detektion och lagring på telefonen. Ljudöverföring bara under användarstartad session, högst 60 s ljud i RAM vid avbrott och inga ljudfiler. Text-AI kräver separat godkännande.
 - **Bekräfta före åtgärd:** automatiskt föreslagna planer, uppgifter och minnen är förslag tills användaren godkänner dem. Kalenderposter skapas aldrig tyst.
 - **Diskret återkoppling:** vibration och kort fråga; inget oombett tal. Ja godkänner, Nej glömmer och Inte nu sparar en väntande fråga lokalt.
 - **Synliga minnen:** användaren kan granska, ändra och glömma. Ingen dold profilering eller påstådd kunskap om hur användaren känner.
@@ -15,7 +15,7 @@ Mio ska hjälpa en användare att fånga och ordna sin dag: lektioner, antecknin
 
 | Del | Helhetsbyggets omfattning | Kontroll |
 |---|---|---|
-| Mio | Lokal session, text, stödstatus, paus/stopp samt lokala frågor/förslag | Granskning med Ja/Nej/Inte nu; Enskilda AI-frågor kräver sändningsgodkännande; löpande tolkning kräver aktiverat läge |
+| Mio | Lokal session, text, serverstatus, paus/stopp samt lokala frågor/förslag | Granskning med Ja/Nej/Inte nu; Enskilda AI-frågor kräver sändningsgodkännande; löpande tolkning kräver aktiverat läge |
 | Lektioner | Separat läge pausar vardags-Mio; AI skriver detaljerade kopierbara anteckningar samt separata läxförslag | Originaltext och tider bevaras; AI-utkast har textunderlag |
 | Kalender | Lokala planer och bekräftade systemkalenderkopior | Inga tysta åtgärder eller dold synk |
 | Anteckningar | Anteckningar, uppgifter och uttryckliga minnen | Synliga, redigerbara, raderbara |

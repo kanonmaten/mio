@@ -91,9 +91,9 @@ def main():
         print('YAML-kontroll överhoppad: installera PyYAML för full kontroll.')
     result = subprocess.run(['git', 'diff', '--check'], cwd=ROOT, text=True, capture_output=True)
     check(result.returncode == 0, 'git diff --check')
-    for folder in ('Mio', 'MioTests', 'server', 'scripts', 'docs'):
+    for folder in ('Mio', 'MioTests', 'server', 'transcription-server', 'scripts', 'docs'):
         for path in (ROOT / folder).rglob('*'):
-            if {'node_modules', '.wrangler', 'dist'}.intersection(path.relative_to(ROOT).parts):
+            if {'node_modules', '.wrangler', 'dist', '.venv', '__pycache__', '.pytest_cache'}.intersection(path.relative_to(ROOT).parts):
                 continue
             if not path.is_file() or '.git' in path.parts or path.suffix not in ('.swift', '.md', '.mjs', '.py', '.json'):
                 continue

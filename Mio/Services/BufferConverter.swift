@@ -1,6 +1,6 @@
 import AVFoundation
 
-/// Converts the microphone format to the format requested by SpeechAnalyzer.
+/// Converts the microphone format to the private transcription API format.
 /// Priming is disabled so conversion does not insert artificial latency into live buffers.
 final class BufferConverter {
     enum ConversionError: Error {
@@ -10,6 +10,8 @@ final class BufferConverter {
     }
 
     private var converter: AVAudioConverter?
+
+    func reset() { converter = nil }
 
     func convert(_ buffer: AVAudioPCMBuffer, to format: AVAudioFormat) throws -> AVAudioPCMBuffer {
         let inputFormat = buffer.format

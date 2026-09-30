@@ -85,3 +85,11 @@ Detaljerade delar analyserar den visningstext som fanns vid sändningen. Senare 
 ## Molnanslutning med Access, 2026-09-29
 
 Keychain-posten `app.mio.assistant.cloud-gateway` / `gateway-token` innehåller efter nästa sparning ett JSON-objekt med gatewaytoken och valfritt Access-par. Äldre post med enbart tokensträng kan läsas. Alla hemligheter uppdateras i en Keychain-skrivning med `WhenUnlockedThisDeviceOnly`, ingår aldrig i export och raderas tillsammans vid glömd anslutning/fullständig radering. Ändrad server kräver att hemligheter anges igen. Anslutningens jämförelse inkluderar Access-paret vid förhandsgranskning. Sparning/radering skickar samma återställningsnotis som tidigare och stoppar pågående analys. Inga innehållsscheman ändras.
+
+## Privat transkription, 2026-09-30
+
+`TranscriptSegment` har valfria `transcriptionMetadata` (modell/revision/motor) och `sourceChunkID` för proveniens och deduplicering. `MioSession.captureGaps` är en valfri lista med UUID, start/slut och orsak. Äldre JSON utan dessa fält avkodas; originals text/tider och äldre motorfält ändras inte. Sessions- och exportscheman byter inte version för dessa additiva fält. Ofullständigt ljudunderlag märks både i lektionsvy och kopierad anteckning.
+
+Transkriptionsadress ligger i `mio.transcription.server` (UserDefaults); separat token i Keychain (`app.mio.assistant.transcription`, `access-token`, WhenUnlockedThisDeviceOnly). Aktiv session håller sin fasta adress/token i RAM så att låst skärm fungerar efter användarstart. Ny adress kräver ny token. Inställningsbyte är spärrat under fångst och återkallar gammal klient. Token, ljudbuffertar och WAV-delar ingår aldrig i lagring eller export. Hela RAM-kön rensas vid avslut/radering; servern har en kort textcache för retries, se [API](../transcription-server/API.md).
+
+Löpande vardags-AI får bara segment vars **ljudstart** ligger efter aktiveringen. Ett fördröjt transkript från tidigare ljud räknas inte som nytt godkänt underlag. En ljuddel som korsar samtyckesgränsen kan därför hoppas över konservativt.

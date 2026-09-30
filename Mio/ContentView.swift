@@ -3,6 +3,7 @@ import UIKit
 
 struct ContentView: View {
     @Bindable var model: MioViewModel
+    @State private var showSettings = false
     @Bindable var contentModel: MioContentViewModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(MioAssistantViewModel.self) private var assistant
@@ -29,6 +30,13 @@ struct ContentView: View {
                 .tabItem { Label("Morgon", systemImage: "sunrise") }
         }
         .tint(.indigo)
+        .environment(\.openMioSettings, { showSettings = true })
+        .sheet(isPresented: $showSettings) {
+            NavigationStack { MioSettingsView(model: model, contentModel: contentModel) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: TranscriptionSettings.didChange)) { _ in
+            Task { await model.transcriptionConfigurationChanged() }
+        }
         .environment(maintenance)
         .disabled(maintenance.isDeleting)
         .overlay {
@@ -91,8 +99,7 @@ private struct MioTabView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     StatusHeader(model: model)
-                    Text("Transkription: \(model.support.selectedEngine?.title ?? "kontrolleras")")
-                        .font(.footnote).foregroundStyle(.secondary)
+                    TranscriptionStatusView(model: model)
                     ControlsCard(model: model)
                     AssistantHubView(contentModel: contentModel, sessionModel: model)
 
@@ -100,19 +107,15 @@ private struct MioTabView: View {
                         ErrorCard(message: errorMessage, openSettings: model.openAppSettings)
                     }
                     if let errorMessage = contentModel.errorMessage {
-                        ErrorCard(message: errorMessage, openSettings: {})
+                        ErrorCard(message: errorMessage, openSettings: nil)
                     }
                     if let errorMessage = assistant.errorMessage {
-                        ErrorCard(message: errorMessage, openSettings: {})
-                    }
-
-                    DisclosureGroup("Telefonens stöd och integritet") {
-                        CapabilityCard(model: model)
-                        PrivacyCard()
+                        ErrorCard(message: errorMessage, openSettings: nil)
                     }
 
                     if let session = model.currentSession {
                         DisclosureGroup("Transkription och diagnostik") {
+                            CaptureGapsView(session: session)
                             LiveTranscriptCard(model: model, session: session)
                             TranscriptCard(session: session)
                             SessionStatisticsCard(model: model, session: session)
@@ -123,59 +126,19 @@ private struct MioTabView: View {
                         FirstRunCard()
                     }
 
-                    DataCard(
-                        model: model,
-                        contentModel: contentModel,
-                        showDeleteConfirmation: $showDeleteConfirmation
-                    )
+
                 }
                 .frame(maxWidth: 680)
                 .padding()
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("Mio")
+            .toolbar { MioSettingsToolbar() }
             .navigationBarTitleDisplayMode(.large)
-            .confirmationDialog(
-                "Radera all lokal Mio-data?",
-                isPresented: $showDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Radera permanent", role: .destructive) {
-                    Task {
-                        await deleteEverything()
-                    }
-                }
-                Button("Avbryt", role: .cancel) {}
-            } message: {
-                Text("Sessioner, poster, förslag, lektioner och AI-inställningar raderas. Mios alarm och notiser avbryts. Redan delade filer och kopior i Apple Kalender finns kvar där.")
-            }
         }
-    }
-
-    private func deleteEverything() async {
-        guard !maintenance.isDeleting else { return }
-        guard maintenance.activeWrites == 0 else {
-            contentModel.errorMessage = "Vänta tills den pågående ändringen är sparad och försök radera igen."
-            return
-        }
-        maintenance.isDeleting = true
-        analysis.disable()
-        defer { maintenance.isDeleting = false }
-        guard await MioSystemServices.shared.removeAll() else {
-            contentModel.errorMessage = MioSystemServices.shared.errorMessage ?? "Kunde inte avbryta Mios alarm. Försök igen."
-            return
-        }
-        do { try MioCloudSettings.reset() } catch {
-            contentModel.errorMessage = "Kunde inte radera AI-inställningarna: \(error.localizedDescription)"
-            return
-        }
-        await model.deleteAllData()
-        guard model.errorMessage == nil else { return }
-        await contentModel.deleteAllData()
-        guard contentModel.errorMessage == nil else { return }
-        _ = await assistant.deleteAllData()
     }
 }
+
 
 private struct StatusHeader: View {
     let model: MioViewModel
@@ -246,13 +209,11 @@ private struct ControlsCard: View {
                     PrimaryActionButton(title: "Starta Mio", symbol: "mic.fill", color: .indigo) {
                         model.beginListening()
                     }
-                    .disabled(model.isInstallingAdvancedModel)
-                    .opacity(model.isInstallingAdvancedModel ? 0.55 : 1)
 
                 case .preparing:
                     HStack(spacing: 12) {
                         ProgressView()
-                        Text("Förbereder din lokala session …")
+                        Text("Kontrollerar server och mikrofon …")
                             .font(.headline)
                     }
                     .frame(maxWidth: .infinity)
@@ -265,11 +226,13 @@ private struct ControlsCard: View {
                 case .stopping:
                     HStack(spacing: 12) {
                         ProgressView()
-                        Text("Avslutar sessionen säkert …")
+                        Text("Mikrofonen stängs · avslutar fångad text …")
                             .font(.headline)
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
+
+                    Button("Avbryt väntande transkription", role: .cancel) { model.cancelFinishing() }
 
                 case .listening:
                     PrimaryActionButton(title: model.isLessonActive ? "Avsluta lektionen" : "Stäng av Mio", symbol: "stop.fill", color: .red) {
@@ -333,156 +296,14 @@ private struct ControlsCard: View {
     }
 }
 
-private struct CapabilityCard: View {
-    let model: MioViewModel
-
-    var body: some View {
-        Card(title: "Telefonens stöd", symbol: "checklist") {
-            VStack(spacing: 0) {
-                CheckRow(
-                    title: "iOS 26 eller senare",
-                    detail: "Telefonen kör iOS \(UIDevice.current.systemVersion)",
-                    result: isIOS26OrLater
-                )
-                Divider()
-                CheckRow(
-                    title: "Mikrofon",
-                    detail: model.support.microphonePermission.title,
-                    result: microphoneResult
-                )
-                Divider()
-                CheckRow(
-                    title: "SpeechAnalyzer",
-                    detail: "Gemensam lokal analysmotor som kör vald transkriptionsmodul",
-                    result: isIOS26OrLater
-                )
-                Divider()
-                CheckRow(
-                    title: "SpeechTranscriber (nyare modul)",
-                    detail: speechTranscriberDetail,
-                    result: speechTranscriberResult
-                )
-                Divider()
-                CheckRow(
-                    title: "DictationTranscriber (fallback)",
-                    detail: dictationDetail,
-                    result: model.support.dictationLocaleIdentifier != nil
-                )
-                Divider()
-                CheckRow(
-                    title: "Installerad eller aktiv transkriptionsmodul",
-                    detail: model.support.selectedEngine?.title ?? "Ingen svensk modul hittades",
-                    result: model.support.selectedEngine != nil
-                )
-                Divider()
-                CheckRow(
-                    title: "Bakgrundsljud",
-                    detail: "Projektet innehåller Apples audio-bakgrundsläge",
-                    result: true
-                )
-
-                Text(model.support.diagnosticDescription)
-                    .font(.caption)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 12)
-
-                Text(model.support.details)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 12)
-
-                if model.support.swedishLocaleIdentifier != nil,
-                   model.support.advancedAssetStatus != .installed {
-                    Button {
-                        Task { await model.installAdvancedModel() }
-                    } label: {
-                        if model.isInstallingAdvancedModel {
-                            HStack {
-                                ProgressView()
-                                Text("Installerar SpeechTranscriber-modell …")
-                            }
-                            .frame(maxWidth: .infinity)
-                        } else {
-                            Label("Installera SpeechTranscriber-modell", systemImage: "arrow.down.circle")
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.isInstallingAdvancedModel || !canInstallAdvancedModel)
-                    .padding(.top, 12)
-                }
-
-                Button {
-                    Task { await model.refreshSupport() }
-                } label: {
-                    if model.isRefreshingSupport {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                    } else {
-                        Label("Kontrollera igen", systemImage: "arrow.clockwise")
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .padding(.top, 12)
-            }
-        }
-    }
-
-    private var isIOS26OrLater: Bool {
-        ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
-    }
-
-    private var microphoneResult: Bool? {
-        switch model.support.microphonePermission {
-        case .granted: true
-        case .denied, .restricted: false
-        case .notDetermined: nil
-        }
-    }
-
-    private var speechTranscriberDetail: String {
-        if model.support.speechTranscriberAvailable == false {
-            return "SpeechTranscriber saknas på enheten"
-        }
-        if let locale = model.support.swedishLocaleIdentifier {
-            let status = model.support.advancedAssetStatus?.title ?? "Okänd status"
-            let reservation = model.support.advancedLocaleReserved == true ? "reserverad" : "inte reserverad"
-            return "Svenska \(locale) · \(status.lowercased()) · \(reservation)"
-        }
-        return "Finns, men svenska hittades inte"
-    }
-
-    private var speechTranscriberResult: Bool? {
-        switch model.support.advancedAssetStatus {
-        case .installed: true
-        case .unsupported: false
-        case .supported, .downloading, nil: nil
-        }
-    }
-
-    private var canInstallAdvancedModel: Bool {
-        model.runState == .off || model.runState == .failed || model.runState == .unavailable
-    }
-
-    private var dictationDetail: String {
-        if let locale = model.support.dictationLocaleIdentifier {
-            return "Svenska \(locale) · \(model.support.dictationModelInstalled == true ? "installerad" : "hämtas vid start")"
-        }
-        return model.support.checkedAt == nil ? "Kontrollerar …" : "Svenska hittades inte"
-    }
-}
-
-private struct PrivacyCard: View {
+struct PrivacyCard: View {
     var body: some View {
         Card(title: "Integritet", symbol: "hand.raised.fill") {
             VStack(alignment: .leading, spacing: 10) {
-                PrivacyLine(symbol: "iphone", text: "Tal till text sker lokalt i SpeechAnalyzer med SpeechTranscriber eller DictationTranscriber.")
-                PrivacyLine(symbol: "waveform.slash", text: "Mikrofonljud bearbetas tillfälligt i minnet men sparas aldrig som ljudfil.")
-                PrivacyLine(symbol: "cloud", text: "AI är valfri och avstängd från början. Endast den fråga och kontext du granskar och godkänner skickas via din server. Ingen leverantörsnyckel finns i appen.")
-                PrivacyLine(symbol: "mic.slash", text: "Stoppa eller pausa stänger AVAudioEngine och mikrofonens ljudsession.")
+                PrivacyLine(symbol: "iphone", text: "När du startar Mio skickas mikrofonljud privat via Tailscale till din Pianissimo-server. Text och tidsstämplar sparas på telefonen.")
+                PrivacyLine(symbol: "waveform.slash", text: "Ljud finns endast tillfälligt i minnet. Vid serveravbrott behålls högst 60 sekunder; äldre tal markeras som saknat. Inga ljudfiler sparas.")
+                PrivacyLine(symbol: "cloud", text: "Text-AI är valfri och avstängd från början. Enskilda frågor kräver granskning före Skicka. Löpande analys kräver separat aktivering och använder bara nytt godkänt textunderlag.")
+                PrivacyLine(symbol: "mic.slash", text: "Paus och stopp stänger mikrofonen. Redan fångat ljud kan transkriberas under högst 15 sekunder; du kan avbryta väntan.")
                 PrivacyLine(symbol: "person.2.slash", text: "Testa kontrollerat. Spela inte in andra, en lektion eller en arbetsplats utan tydligt tillstånd och enligt lokala regler.")
             }
         }
@@ -702,7 +523,7 @@ private struct DiagnosticCard: View {
     }
 }
 
-private struct DataCard: View {
+struct DataCard: View {
     let model: MioViewModel
     let contentModel: MioContentViewModel
     @Binding var showDeleteConfirmation: Bool
@@ -753,9 +574,9 @@ private struct DataCard: View {
 
 private struct FirstRunCard: View {
     var body: some View {
-        Card(title: "Börja med en lokal session", symbol: "1.circle") {
+        Card(title: "Börja med Mio", symbol: "1.circle") {
             VStack(alignment: .leading, spacing: 9) {
-                Text("1. Tryck Starta Mio och tillåt mikrofonen.")
+                Text("1. Öppna Inställningar och testa din transkriptionsserver. Starta sedan Mio och tillåt mikrofonen.")
                 Text("2. Säg svenska meningar och ordet Mio.")
                 Text("3. Prova ‘Mio, anteckna att vi arbetar med procent’. Se Förslag och välj Ja, Nej eller Inte nu.")
                 Text("4. Använd Starta lektion för lektionsläge. Historik och råtext finns under Lektioner.")
@@ -769,7 +590,7 @@ private struct FirstRunCard: View {
 
 private struct ErrorCard: View {
     let message: String
-    let openSettings: () -> Void
+    let openSettings: (() -> Void)?
 
     var body: some View {
         Card {
@@ -779,8 +600,8 @@ private struct ErrorCard: View {
                     .foregroundStyle(.red)
                 Text(message)
                     .font(.subheadline)
-                if message.localizedCaseInsensitiveContains("mikrofon") {
-                    Button("Öppna Mios inställningar", action: openSettings)
+                if message.localizedCaseInsensitiveContains("mikrofon"), let openSettings {
+                    Button("Öppna iPhones inställningar", action: openSettings)
                         .buttonStyle(.bordered)
                 }
             }

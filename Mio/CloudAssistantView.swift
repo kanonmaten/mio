@@ -6,6 +6,7 @@ struct CloudAssistantView: View {
     var onAnswerReceived: (() -> Void)?
 
     @AppStorage("mio.cloud.enabled") private var isEnabled = false
+    @Environment(\.openMioSettings) private var openSettings
     @State private var serverAddress = ""
     @State private var newToken = ""
     @State private var useAccess = false
@@ -33,42 +34,8 @@ struct CloudAssistantView: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Tillåt molnfrågor", isOn: $isEnabled)
-                Text(isEnabled
-                     ? "Enskilda frågor kräver granskning och Skicka. Löpande textanalys aktiveras separat under AI-assistent."
-                     : "Avstängt. Ingen fråga eller transkription skickas till molnet.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Din privata server") {
-                TextField("https://mio.example.se", text: $serverAddress)
-                    .keyboardType(.URL)
-                    .textContentType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .accessibilityLabel("Serverns HTTPS-adress")
-                SecureField("Ny åtkomsttoken eller tomt för att behålla", text: $newToken)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                Toggle("Använd Cloudflare Access", isOn: $useAccess)
-                if useAccess {
-                    SecureField("Access Client ID", text: $accessClientID)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    SecureField("Access Client Secret", text: $accessClientSecret)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Text("Hämta paret från din service token i Cloudflare Zero Trust. Båda tomma behåller sparade värden på samma server. Stäng av och spara för att ta bort dem från telefonen.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                Button("Spara anslutning") { saveSettings() }
-                    .disabled(isAsking)
-                Button("Glöm anslutning och stäng av", role: .destructive) { forgetConnection() }
-                if let settingsMessage { Text(settingsMessage).font(.footnote) }
-                Text("Åtkomsttoken är samma hemliga värde som MIO_GATEWAY_TOKEN på din Worker. Klistra in värdet utan Bearer eller citattecken. Efter rotation behöver det nya värdet sparas här också. Groq-nyckeln hör bara hemma på servern. Att spara gör inget nätanrop.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if !isEnabled { Text("Tillåt först text-AI under Inställningar → AI-assistent.") }
+                Button("Öppna AI-inställningar") { openSettings() }
             }
 
             Section("Din fråga") {
@@ -117,7 +84,7 @@ struct CloudAssistantView: View {
                     Button("Granska innan du skickar") { preparePreview() }
                         .disabled(!isEnabled || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     if !isEnabled {
-                        Text("Slå på Tillåt molnfrågor högst upp för att kunna granska en fråga. AI-tolkning behöver inte vara på.")
+                        Text("Slå på Tillåt molnfrågor i Inställningar för att kunna granska en fråga. AI-tolkning behöver inte vara på.")
                             .font(.footnote).foregroundStyle(.secondary)
                     } else if question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text("Skriv en fråga i Din fråga för att kunna granska den.")
@@ -225,26 +192,6 @@ struct CloudAssistantView: View {
         newToken = ""
         accessClientID = ""
         accessClientSecret = ""
-    }
-
-    private func saveSettings() {
-        do {
-            try MioCloudSettings.save(serverAddress: serverAddress, newToken: newToken, useAccess: useAccess,
-                                      clientID: accessClientID, clientSecret: accessClientSecret)
-            loadSettings()
-            settingsMessage = "Anslutningen sparades på telefonen. Ingen anslutningskontroll har gjorts."
-            errorMessage = nil
-        } catch {
-            settingsMessage = nil
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func forgetConnection() {
-        do {
-            try MioCloudSettings.reset()
-            settingsMessage = "Molnfrågor är avstängda och anslutningen är glömd."
-        } catch { errorMessage = error.localizedDescription }
     }
 
     private func preparePreview() {

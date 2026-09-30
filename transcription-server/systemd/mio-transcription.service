@@ -1,0 +1,31 @@
+[Unit]
+Description=Mio privat Pianissimo-transkription
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=mio-transcription
+Group=mio-transcription
+WorkingDirectory=/opt/mio-transcription
+EnvironmentFile=/etc/mio-transcription.conf
+Environment=HF_HOME=/var/lib/mio-transcription/models
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=TOKENIZERS_PARALLELISM=false
+ExecStart=/opt/mio-transcription/.venv/bin/uvicorn mio_transcription.app:create_app --factory --host 127.0.0.1 --port 8765 --workers 1 --no-access-log --log-level critical --limit-concurrency 8
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=15
+LimitCORE=0
+MemorySwapMax=0
+Environment=HF_HUB_DISABLE_TELEMETRY=1
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+StateDirectory=mio-transcription
+
+[Install]
+WantedBy=multi-user.target

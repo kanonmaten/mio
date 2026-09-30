@@ -8,6 +8,7 @@ final class MioAnalysisCoordinator {
     private(set) var status = "AI-tolkning är av."
     private(set) var errorMessage: String?
     private(set) var sentBatches = 0
+    @ObservationIgnored private var consentStartedAt = Date.distantFuture
     @ObservationIgnored private var connection: MioCloudConnection?
     @ObservationIgnored private var observed: [UUID: Set<UUID>] = [:]
     @ObservationIgnored private var queue: [Work] = []
@@ -52,6 +53,7 @@ final class MioAnalysisCoordinator {
         disable()
         connection = selected
         for session in existingSessions { observed[session.id] = Set(session.transcripts.map(\.id)) }
+        consentStartedAt = .now
         enabled = true
         status = "AI-tolkning på: nya textutdrag analyseras ungefär en gång per minut."
         errorMessage = nil
@@ -85,7 +87,8 @@ final class MioAnalysisCoordinator {
     func observe(_ session: MioSession, assistant: MioAssistantViewModel) {
         guard enabled, !session.isLesson, !deletedSessionIDs.contains(session.id), !MioMaintenanceState.shared.isDeleting else { return }
         let known = observed[session.id] ?? []
-        let fresh = session.transcripts.filter { !known.contains($0.id) }
+        // Delivery can be delayed by a transcription-server outage. Consent follows capture time.
+        let fresh = session.transcripts.filter { !known.contains($0.id) && $0.audioStartedAt >= consentStartedAt }
         observed[session.id, default: []].formUnion(fresh.map(\.id))
         guard !fresh.isEmpty else { return }
         let processed = assistant.analyzedFragmentIDs(for: session.id)

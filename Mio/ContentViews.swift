@@ -18,7 +18,7 @@ struct TimelineTabView: View {
                         systemImage: searchText.isEmpty ? "clock" : "magnifyingglass",
                         description: Text(
                             searchText.isEmpty
-                                ? "Lägg till något manuellt eller starta en lokal Mio-session."
+                                ? "Lägg till något manuellt eller starta en Mio-session."
                                 : "Prova ett annat sökord. Sökningen omfattar både manuellt innehåll och transkript."
                         )
                     )
@@ -180,6 +180,7 @@ struct CalendarTabView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Kalender")
+            .toolbar { MioSettingsToolbar() }
             .searchable(text: $searchText, prompt: "Sök bland planer")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -366,6 +367,7 @@ struct NotesTabView: View {
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Anteckningar")
+            .toolbar { MioSettingsToolbar() }
             .searchable(text: $searchText, prompt: "Sök i anteckningar och uppgifter")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -715,6 +717,7 @@ private struct ContentEditorView: View {
             sessionID: sessionID
         )
         if didSave {
+            MioFeedback.success()
             dismiss()
         }
     }

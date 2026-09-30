@@ -1,6 +1,6 @@
 # Testa hela Mio
 
-Gäller helhetsbygget 0.9.0. Testerna är instruktioner, inte körresultat. Använd syntetiska uppgifter och röster från personer som samtycker. Registrera resultat i [status](STATUS.md).
+Gäller helhetsbygget 0.9.0. Kör först [Pianissimo och bakgrund](TESTPLAN_PIANISSIMO.md); S01–S07 längre ned är enbart historiska build 5-prov. Testerna är instruktioner, inte körresultat. Använd syntetiska uppgifter och röster från personer som samtycker. Registrera resultat i [status](STATUS.md).
 
 ## Före installation
 
@@ -25,7 +25,7 @@ Gäller helhetsbygget 0.9.0. Testerna är instruktioner, inte körresultat. Anv�
 | H09 | Skapa en postpåminnelse två minuter framåt och lås telefonen. | Tillstånd efterfrågas vid Spara. Notisen har generell text och följer fokus-/ljudinställningar. |
 | H10 | Skapa ett alarm två minuter framåt. Lås telefonen och prova även med Fokus/tyst läge. Stoppa alarmet; skapa och ta bort ett veckoalarm. | Systemalarmet visas/ljuder enligt telefonens AlarmKit-beteende. Stoppa och avbryt fungerar. Inga privata posttexter på låsskärmen. |
 | H11 | Skapa dagens plan, öppen uppgift och avklarad uppgift. Öppna Morgon, byt till Kväll och välj annat datum. Spara och avbryt dagliga påminnelser. | Dagens lokala data visas korrekt, klarstatus ändras och notislistan speglar iOS. Ingen automatisk mikrofonstart. |
-| H12 | Slå på flygplansläge. Skapa, sök, redigera och radera lokal data. | Lokala funktioner fungerar; befintliga modeller krävs för tal. AI misslyckas begripligt utan automatisk retry. |
+| H12 | Slå på flygplansläge. Skapa, sök, redigera och radera lokal data. | Manuella funktioner fungerar; servertranskription visar offline och aktiv session begränsar ljudkön. AI misslyckas begripligt utan automatisk retry. |
 | H13 | Skapa lokal export. Inspektera privat JSON. | `schemaVersion: 2`, `content`, `sessions` och `assistant` finns. Original och correctedText är separata. Inga ljuddata, token eller API-nycklar. |
 | H14 | Radera en post med alarm/notis. Radera en session med lektioner/förslag och kopplad manuell post. | Postens systemåtgärder avbryts. Sessionsdata, dess lektioner och förslag försvinner; manuell post finns kvar utan trasig sessionskoppling. Kalenderkopior finns kvar separat. |
 | H15 | Med enbart testdata: Radera all lokal data och starta om. | Alla tre datalager är tomma, egna alarm/notiser borta, AI avstängd och token glömd. Ingen sen återkoppling återskapar data. Delade filer och kalenderkopior måste tas bort där de finns. |
@@ -84,7 +84,7 @@ Dessa prov gäller den nya koden, inte tidigare build 3. Registrera byggnummer o
 
 Bedöm kvalitetsproven separat: vad sades, vad transkriberades, vad valde modellen, och vad godkände användaren? Spara endast syntetiska eller avidentifierade resultat i repot. Verifiera kostnad och svarstid med den valda modellen innan längre vardagsbruk.
 
-## Svensk SpeechTranscriber — build 5
+## Historisk svensk SpeechTranscriber — endast build 5
 
 Alla nedanstående prov är **ej körda** på fysisk telefon. Ange appbuild, telefonmodell och exakt iOS. Spara exporten privat.
 
@@ -109,7 +109,7 @@ Kör först `npm test --prefix server` och `WRANGLER_SEND_METRICS=false npm run 
 | P01 | Uppdaterad gateway: byt till Groq enligt bytesguiden, fråga 2 + 2 | Samma appadress/token fungerar; korrekt svar. Kontrollera verklig kvot, svarstid och att inga reasoning-tokens används |
 | P02 | Välj en nekad modell, exempelvis Groqs GPT-OSS | Begripligt kompatibilitetsfel före modelltrafik; inget tyst byte av modell/parametrar |
 | P03 | Byt till annan katalogmodell på annan leverantör | Ny hemlighet används, gamla leverantörsnyckeln används inte. Prova fråga, vardagsförslag och lektion separat; registrera vald modell och promptversion |
-| P04 | Utlös 429 med låg testkvot | AI stannar, väntetid visas, lokal transkription fortsätter. Inga automatiska återförsök |
+| P04 | Utlös 429 med låg testkvot | AI stannar, väntetid visas, Pianissimo-transkription fortsätter. Inga automatiska återförsök |
 | L06 | Läs en syntetisk lektion med definition, två exempel, beräkning i flera steg och en uttrycklig läxa | Utförliga källstödda anteckningar bevarar stegen; läxan finns även i separat förslagsinkorg, ingen automatisk kalenderpost |
 | L07 | Kopiera hela anteckningen till en textapp | Läsbar rubrik/datum, avsnitt i lektionsordning och osäkerheter. Inga JSON-fält/käll-ID:n. Inga presentationer eller frågekort |
 | L08 | Avbryt efter första sparade delen, starta om och fortsätt | AI är av efter omstart; nytt godkännande krävs. Framsteg finns kvar och färdiga delar skickas inte igen. Kopiering före avslut märks Ofullständiga |

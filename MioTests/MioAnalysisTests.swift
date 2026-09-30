@@ -82,7 +82,9 @@ final class MioAnalysisTests: XCTestCase {
             sent.fulfill()
             return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
         }, wait: { _ in })
+        let delayed = TranscriptSegment(audioStartedAt: .now.addingTimeInterval(-30), text: "Sent svar från äldre ljud", containsMio: false)
         try coordinator.enable(existingSessions: [everyday, lesson])
+        everyday.transcripts.append(delayed)
         everyday.transcripts.append(TranscriptSegment(text: "Ny plan utan väckningsord", containsMio: false))
         coordinator.observe(everyday, assistant: assistant)
         await fulfillment(of: [sent], timeout: 2)
@@ -95,7 +97,6 @@ final class MioAnalysisTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let assistant = MioAssistantViewModel(repository: MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json")))
         let connection = MioCloudConnection(endpoint: URL(string: "https://example.invalid/v1/ask")!, token: "synthetic")
-        let session = MioSession(transcripts: [TranscriptSegment(text: "Vi ses i morgon", containsMio: false)])
         for action in 0..<3 {
             let waiting = expectation(description: "Batch waits for aggregation")
             let cancelled = expectation(description: "Wait observes cancellation")
@@ -108,6 +109,7 @@ final class MioAnalysisTests: XCTestCase {
                 catch { cancelled.fulfill(); throw error }
             })
             try coordinator.enable(existingSessions: [])
+            let session = MioSession(transcripts: [TranscriptSegment(text: "Vi ses i morgon", containsMio: false)])
             coordinator.observe(session, assistant: assistant)
             await fulfillment(of: [waiting], timeout: 2)
             if action == 0 { coordinator.pauseEveryday(assistant: assistant) }

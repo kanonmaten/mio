@@ -38,44 +38,6 @@ final class MioSessionModelsTests: XCTestCase {
         XCTAssertNil(PauseLength.untilResumed.interval)
     }
 
-    func testSwedishLocaleDiagnosticsNormalizeRegionSeparators() {
-        let locales = [Locale(identifier: "en-SE"), Locale(identifier: "sv_SE"), Locale(identifier: "sv-FI")]
-        XCTAssertEqual(SpeechCapabilityService.swedishIdentifiers(in: locales), ["sv-FI", "sv-SE"])
-        XCTAssertTrue(SpeechCapabilityService.swedishIdentifiers(in: []).isEmpty)
-    }
-
-    func testSupportedButMissingModelIsReportedAsDownloadable() {
-        var snapshot = SpeechSupportSnapshot()
-        snapshot.checkedAt = .now
-        snapshot.speechTranscriberAvailable = true
-        snapshot.swedishLocaleIdentifier = "sv-SE"
-        snapshot.supportedSwedishLocales = ["sv-SE"]
-        snapshot.advancedAssetStatus = .supported
-        XCTAssertEqual(snapshot.swedishSupported, true)
-        XCTAssertEqual(snapshot.advancedDownloadNeeded, true)
-        XCTAssertTrue(snapshot.diagnosticDescription.contains("installedLocales: inga"))
-        snapshot.advancedAssetStatus = .installed
-        XCTAssertEqual(snapshot.advancedDownloadNeeded, false)
-        snapshot.advancedAssetStatus = .unsupported
-        XCTAssertNil(snapshot.advancedDownloadNeeded)
-    }
-
-    // Readiness for immediate use is distinct from attempting installation at start.
-    func testSpeechTranscriberRequiresInstalledAsset() {
-        XCTAssertTrue(
-            SpeechCapabilityService.shouldUseSpeechTranscriber(assetState: .installed)
-        )
-        XCTAssertFalse(
-            SpeechCapabilityService.shouldUseSpeechTranscriber(assetState: .supported)
-        )
-        XCTAssertFalse(
-            SpeechCapabilityService.shouldUseSpeechTranscriber(assetState: .downloading)
-        )
-        XCTAssertFalse(
-            SpeechCapabilityService.shouldUseSpeechTranscriber(assetState: .unsupported)
-        )
-    }
-
     func testBackgroundIntervalRequiresRealAudioOverlap() {
         let start = Date(timeIntervalSince1970: 1_000)
         let interval = BackgroundInterval(
