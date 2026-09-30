@@ -1,5 +1,11 @@
 # Bygg- och teststatus
 
+## Actions-fel och lokal rättning, 2026-09-30
+
+Stegstatus verifierad via GitHub: **Bygg osignerad iPhone-app lyckades** för `a67b0ee`. Testkompileringen misslyckades; XCTest, IPA-paketering och uppladdning hoppades över. Ingen ny IPA producerades av körningen. Detta uppdaterar verifieringsläget från arbetskopians tidigare status nedan.
+
+[Actions 36686984521](https://github.com/kanonmaten/mio/actions/runs/36686984521) för `a67b0ee` misslyckades med exit 65 vid **Kompilera enhetstester**: `TranscriptionTests.swift:47` använde `.1` och `.5`, vilket Swift kräver skrivs `0.1` och `0.5`. Båda är rättade i arbetskopian; rättningen är ännu inte Xcode-verifierad. Loggen innehåller också varningar om infångad svag `self` i samtidiga closures i `MioViewModel`; de var inte de blockerande felen i denna körning. Den tidigare tree-sitter-kontrollen upptäckte inte de ogiltiga decimaltalen och får inte tolkas som kompilatorbevis.
+
 ## Pianissimo, bakgrund och inställningar — arbetskopia 2026-09-30
 
 **Inte Xcode-kompilerad, inte XCTest-körd, inte installerad på iPhone och inte driftsatt.** Build 5 nedan gäller tidigare Apple-transkription. Kontrollerna nedan gjordes i arbetskopian före commit/push. Ingen ny iOS-byggkörning eller driftsättning har utförts.

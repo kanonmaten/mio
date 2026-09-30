@@ -44,7 +44,7 @@ final class TranscriptionTests: XCTestCase {
             TranscriptionReply(apiVersion: 1, sessionID: chunk.sessionID, chunkID: id ?? chunk.id,
                                sequence: 2, startSample: 10, words: words, metadata: metadata)
         }
-        let result = reply([.init(text: "vänster", start: .1, end: .5), .init(text: "kärna", start: 1.1, end: 1.4),
+        let result = reply([.init(text: "vänster", start: 0.1, end: 0.5), .init(text: "kärna", start: 1.1, end: 1.4),
                             .init(text: "höger", start: 2.1, end: 2.5)])
         XCTAssertEqual(try result.validatedWords(for: chunk).map(\.text), ["kärna"])
         XCTAssertThrowsError(try reply([], id: UUID()).validatedWords(for: chunk))

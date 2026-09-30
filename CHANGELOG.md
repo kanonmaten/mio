@@ -1,5 +1,9 @@
 # Ändringslogg
 
+## Arbetskopia 2026-09-30 — rättning av testkompilering
+
+- Rättat ogiltiga Swift-decimaltal `.1`/`.5` till `0.1`/`0.5` i TranscriptionTests. Actions 36686984521 stoppades vid testkompilering med dessa fel. Ny Xcode-körning krävs; parserkontrollen fångade inte felet.
+
 ## Arbetskopia 2026-09-30 — Pianissimo, bakgrund och inställningar
 
 - Apple-transkriptionen ersatt av original Pianissimo på egen CUDA-server. Stabilt autentiserat API v1, modellrevision/hälsa, loopback + privat Tailscale Serve och systemd med automatisk omstart.
