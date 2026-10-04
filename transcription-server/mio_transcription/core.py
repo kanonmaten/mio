@@ -8,6 +8,7 @@ import wave
 
 RATE = 16_000
 MAX_BYTES = 1_048_576
+MAX_RESPONSE_BYTES = 262_144
 MAX_SAMPLES = RATE * 24
 
 
@@ -82,3 +83,30 @@ def normalize_words(words, samples):
         except (KeyError, TypeError, ValueError, AttributeError):
             raise RequestError(502, "invalid_model_result") from None
     return result
+
+
+def validate_backend_words(words, samples):
+    """The API consumes normalized words; backend-specific keys stay in the adapter."""
+    if not isinstance(words, list) or len(words) > 1500:
+        raise RequestError(502, "invalid_model_result")
+    previous = 0.0
+    for word in words:
+        try:
+            text, start, end = word["text"], word["start"], word["end"]
+            if (not isinstance(text, str) or not text.strip() or len(text.encode()) > 400
+                    or isinstance(start, bool) or isinstance(end, bool)
+                    or not math.isfinite(start) or not math.isfinite(end)
+                    or not previous <= start <= end <= samples / RATE + .02):
+                raise ValueError()
+            previous = start
+        except (KeyError, TypeError, ValueError, AttributeError):
+            raise RequestError(502, "invalid_model_result") from None
+    return words
+
+
+def validate_backend_metadata(metadata):
+    if (not isinstance(metadata, dict) or set(metadata) != {"model", "revision", "backend"}
+            or any(not isinstance(value, str) or not value or len(value.encode()) > 200
+                   or any(ord(character) < 32 for character in value) for value in metadata.values())):
+        raise RequestError(502, "invalid_model_metadata")
+    return metadata

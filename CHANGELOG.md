@@ -1,5 +1,14 @@
 # Ändringslogg
 
+## Arbetskopia 2026-10-04 — PLAN-steg 1–5
+
+- Genomfört den aktuella helhetsplanen på grenen `codex/mio-plan-reliability`: förstärkt ljud-/sessionsägarflöde och backend-avbrott, appägd workflow/radering/export, providerneutrala taskprofiler/adaptrar och granskade wire-kontrakt samt färskhet, anslutningskontroll, explicit frågesvarsgodkännande och återhämtning.
+- Tillagt gemensam Linux-verifierare, verifierartester, faktiskt Worker-runtimeprov, fristående complete-concurrencygrind, native Xcode-diagnostik i IPA-workflowen och syntetisk långhistorikmätning. Svenska verifierings-, enhets-, leverantörs- och driftguider uppdaterade.
+- Uppdaterat låsta Wrangler- och Miniflare-utvecklingsverktyg efter npm-granskning; den fullständiga beroendegranskningen rapporterar nu noll kända sårbarheter.
+- Bevarat den byte-identiska ursprungsplanen som `PLAN.md` i repot och lagt till en kort överlämningsguide med verifieringsunderlag, fortsatt testordning och ej utförda externa/evidenskrävande steg.
+- Lokal slutgrind 2026-10-04: 274 strukturella kontroller, 4 verifierarprov, 123 Node-tester, 27 Python fake-backend-tester, 235 portabla XCTest, 8 capture lifecycle-regressioner och complete-concurrencygrind godkända; fullständigt kvitto och Linuxbegränsningar i [status](docs/STATUS.md).
+- Ingen Xcode/iOS-SDK-byggning, native XCTest, IPA, installation, fysisk enhet, verklig providertrafik eller Cloudflare-publicering utförd. Aktuell helhet är fortsatt 0.9.0 och ej släppt; dessa evidenskrävande steg återstår enligt överlämningsguiden.
+
 ## Dokumentationsrättning 2026-09-30 — efter implementation och push
 
 - AI-felsökningsrapporten skiljer nu genomförda ändringar i `e906585` från återstående Cloudflare-publicering, nytt iOS-bygge och telefon-/modellprov. Gamla rekommendationer och testantal ersätts med implementationsstatus.

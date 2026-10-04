@@ -4,6 +4,17 @@ import XCTest
 
 final class MioCloudTests: XCTestCase {
     @MainActor
+    func testKnownProviderKeyPrefixesCannotBecomeAppGatewayCredentials() throws {
+        for prefix in ["sk-", "SK-", "sk_", "SK_", "gsk_", "GSK_", "AIza", "aiza"] {
+            let synthetic = prefix + String(repeating: "x", count: 43)
+            XCTAssertThrowsError(try MioCloudSettings.updatedCredentials(previous: nil,
+                newToken: synthetic, useAccess: false, clientID: "", clientSecret: ""))
+        }
+        XCTAssertNoThrow(try MioCloudSettings.updatedCredentials(previous: nil,
+            newToken: String(repeating: "x", count: 43), useAccess: false, clientID: "", clientSecret: ""))
+    }
+
+    @MainActor
     func testOnlyHTTPSOriginsAreAccepted() throws {
         XCTAssertEqual(try MioCloudSettings.endpoint(for: "https://mio.example.se").absoluteString,
                        "https://mio.example.se/v1/ask")

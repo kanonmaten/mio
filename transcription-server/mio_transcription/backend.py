@@ -1,6 +1,17 @@
 import logging
 import os
 import re
+from typing import Protocol
+
+from .core import normalize_words
+
+
+class TranscriptionBackend(Protocol):
+    """RAM PCM16/16 kHz in; normalized seconds and safe model provenance out."""
+    def load(self) -> None: ...
+    def is_ready(self) -> bool: ...
+    def transcribe(self, pcm: bytes) -> list[dict]: ...
+    def metadata(self) -> dict[str, str]: ...
 
 
 class Pianissimo:
@@ -10,6 +21,7 @@ class Pianissimo:
         if not re.fullmatch(r"[a-f0-9]{40}", self.revision):
             raise ValueError("MIO_MODEL_REVISION must be a commit SHA")
         self.model = None
+        self.ready = False
 
     def load(self):
         # Import lazily so /health remains responsive while the GPU model loads.
@@ -29,6 +41,13 @@ class Pianissimo:
         self.model.freeze()
         # Warm-up is part of readiness. No real microphone material is used.
         self.transcribe(bytes(16_000 * 2))
+        self.ready = True
+
+    def is_ready(self):
+        return self.ready and self.model is not None
+
+    def metadata(self):
+        return {"model": self.model_id, "revision": self.revision, "backend": "nemo-pytorch-cuda"}
 
     def transcribe(self, pcm):
         import numpy as np
@@ -46,4 +65,4 @@ class Pianissimo:
         words = hypothesis.timestamp.get("word", [])
         if hypothesis.text.strip() and not words:
             raise RuntimeError("Model returned text without word timestamps")
-        return words
+        return normalize_words(words, len(pcm) // 2)

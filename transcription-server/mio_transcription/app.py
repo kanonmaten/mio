@@ -8,8 +8,9 @@ import re
 import time
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from .core import Chunk, MAX_BYTES, RATE, RequestError, decode_wave, normalize_words
+from fastapi.responses import JSONResponse, Response
+from .core import (Chunk, MAX_BYTES, MAX_RESPONSE_BYTES, RATE, RequestError, decode_wave,
+                   validate_backend_words, validate_backend_metadata)
 
 
 def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._exit, cache_ttl=90):
@@ -27,7 +28,7 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
     async def load():
         try:
             await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(executor, backend.load), 300)
-            state["status"] = "ready"
+            state["status"] = "ready" if backend.is_ready() else "loading"
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -70,7 +71,13 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
             raise RequestError(401, "unauthorized")
 
     def metadata():
-        return {"model": backend.model_id, "revision": backend.revision, "backend": "nemo-pytorch-cuda"}
+        return validate_backend_metadata(backend.metadata())
+
+    def ready():
+        return state["status"] == "ready" and backend.is_ready()
+
+    def json_response(body):
+        return Response(body, media_type="application/json", headers={"Cache-Control": "no-store"})
 
     @app.get("/health")
     async def health(request: Request):
@@ -78,21 +85,24 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
         return JSONResponse({"apiVersion": 1, "serverVersion": "1.0.0", "status": state["status"],
                              "metadata": metadata(), "sampleRate": RATE, "channels": 1,
                              "encoding": "pcm_s16le_wav", "maxSeconds": 24, "maxBytes": MAX_BYTES},
-                            status_code=200 if state["status"] == "ready" else 503,
+                            status_code=200 if ready() else 503,
                             headers={"Cache-Control": "no-store"})
 
     async def infer(key, fingerprint, chunk, pcm):
         try:
             words = await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(
                 executor, backend.transcribe, pcm), inference_timeout)
-            words = normalize_words(words, len(pcm) // 2)
+            words = validate_backend_words(words, len(pcm) // 2)
             result = {"apiVersion": 1, "sessionID": chunk.session_id, "chunkID": chunk.chunk_id,
                       "sequence": chunk.sequence, "startSample": chunk.start_sample,
                       "words": words, "metadata": metadata()}
-            cache[key] = (time.monotonic(), fingerprint, result)
+            body = JSONResponse(result).body
+            if len(body) > MAX_RESPONSE_BYTES:
+                raise RequestError(502, "model_result_too_large")
+            cache[key] = (time.monotonic(), fingerprint, body)
             while len(cache) > 8:
                 cache.popitem(last=False)
-            return result
+            return body
         except asyncio.TimeoutError:
             state["status"] = "failed"
             fatal_exit(1)
@@ -119,7 +129,7 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
         authenticate(request)
         if request.headers.get("content-type", "").split(";")[0] != "audio/wav" or request.headers.get("content-encoding"):
             raise RequestError(415, "wav_required")
-        if state["status"] != "ready":
+        if not ready():
             raise RequestError(503, "model_not_ready")
         # Admission before body allocation: slow clients cannot build an unbounded queue.
         if state["busy"]:
@@ -142,7 +152,7 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
                 _, previous, result = cache[key]
                 if previous != fingerprint:
                     raise RequestError(409, "chunk_conflict")
-                return JSONResponse(result, headers={"Cache-Control": "no-store"})
+                return json_response(result)
             job = asyncio.create_task(infer(key, fingerprint, chunk, pcm))
             jobs.add(job)
             def finished(task):
@@ -152,7 +162,7 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
             job.add_done_callback(finished)
             handed_off = True
             result = await asyncio.shield(job)
-            return JSONResponse(result, headers={"Cache-Control": "no-store"})
+            return json_response(result)
         finally:
             if not handed_off:
                 state["busy"] = False

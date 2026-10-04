@@ -7,16 +7,27 @@ import UIKit
 @MainActor
 @Observable
 final class MioViewModel {
-    var runState: MioRunState = .off
+    var runState: MioRunState = .off {
+        didSet { if oldValue != runState { onCaptureStateChanged?(runState) } }
+    }
+    private(set) var stateRevision: UInt64 = 0
+    @ObservationIgnored var onCaptureStateChanged: ((MioRunState) -> Void)?
     var microphonePermission = SpeechCapabilityService.microphonePermission
     var connectionState: TranscriptionConnectionState = .unchecked
     var serverMetadata: TranscriptionMetadata?
     var serverVersion: String?
     var connectionCheckedAt: Date?
-    @ObservationIgnored private var finishingPipeline: LiveTranscriptionPipeline?
+    @ObservationIgnored private var finishingPipeline: (any MioCapturePipeline)?
     @ObservationIgnored private var connectionGeneration = UUID()
-    var currentSession: MioSession?
-    var previousSessions: [MioSession] = []
+    private var sessionRegister = MioSessionRegister()
+    var currentSession: MioSession? {
+        get { sessionRegister.current }
+        set { sessionRegister.current = newValue; stateRevision &+= 1 }
+    }
+    var previousSessions: [MioSession] {
+        get { sessionRegister.sessions }
+        set { sessionRegister.sessions = newValue; stateRevision &+= 1 }
+    }
     var liveTranscript = ""
     var statusMessage = "Starta Mio för att skicka ljud privat till din transkriptionsserver."
     var errorMessage: String?
@@ -32,8 +43,13 @@ final class MioViewModel {
     @ObservationIgnored var onFinalizedTranscript: ((MioSession) -> Void)?
     @ObservationIgnored var onLessonFinished: ((MioSession) -> Void)?
 
+    @ObservationIgnored private let diagnostics: MioDiagnosticsRepository
+    @ObservationIgnored private var diagnosticsGeneration: UUID?
     @ObservationIgnored private let repository: SessionRepository
-    @ObservationIgnored private var pipeline: LiveTranscriptionPipeline?
+    @ObservationIgnored private let captureFactory: @MainActor (UUID, MioCaptureHandlers) throws -> any MioCapturePipeline
+    @ObservationIgnored private var pipeline: (any MioCapturePipeline)?
+    @ObservationIgnored private var repositoryGeneration: UUID?
+    @ObservationIgnored private var sessionOperationTokens: [UUID: SessionOperationToken] = [:]
     /// Generation token used to reject callbacks from a pipeline that is no longer active.
     @ObservationIgnored private var activePipelineID: UUID?
     @ObservationIgnored private var pauseTask: Task<Void, Never>?
@@ -48,8 +64,15 @@ final class MioViewModel {
     @ObservationIgnored private var preparationCancellationRequested = false
     @ObservationIgnored private var runtimeFailureTeardownInProgress = false
 
-    init(repository: SessionRepository = SessionRepository()) {
+    init(repository: SessionRepository = SessionRepository(), diagnostics: MioDiagnosticsRepository = .shared,
+         captureFactory: @escaping @MainActor (UUID, MioCaptureHandlers) throws -> any MioCapturePipeline = { id, handlers in
+             LiveTranscriptionPipeline(connection: try TranscriptionSettings.connection(), sessionID: id,
+                 handlers: .init(result: handlers.result, status: handlers.status,
+                                 event: handlers.event, failure: handlers.failure, diagnostic: handlers.diagnostic))
+         }) {
         self.repository = repository
+        self.diagnostics = diagnostics
+        self.captureFactory = captureFactory
         UIDevice.current.isBatteryMonitoringEnabled = true
         registerBatteryObservers()
         startClock()
@@ -69,6 +92,7 @@ final class MioViewModel {
         hasBootstrapped = true
 
         do {
+            repositoryGeneration = await repository.operationGeneration()
             var sessions = try await repository.loadSessions()
             for unfinishedIndex in sessions.indices where sessions[unfinishedIndex].endedAt == nil {
                 let recoveredAt = Date.now
@@ -89,7 +113,8 @@ final class MioViewModel {
                         message: "Appen öppnades efter att förra sessionen avslutats oväntat. Mikrofonen startades inte automatiskt."
                     )
                 )
-                try await repository.upsert(sessions[unfinishedIndex])
+                let token = try await operationToken(for: sessions[unfinishedIndex].id)
+                sessions[unfinishedIndex] = try await repository.saveCaptureCheckpoint(sessions[unfinishedIndex], token: token)
             }
             previousSessions = sessions.sorted { $0.startedAt > $1.startedAt }
             currentSession = previousSessions.first
@@ -163,6 +188,10 @@ final class MioViewModel {
     }
 
     func beginListening() {
+        guard !MioMaintenanceState.shared.blocksWork else {
+            errorMessage = "Slutför dataåtgärden innan du startar mikrofonen."
+            return
+        }
         guard !isSwitchingCaptureMode else { return }
         if currentSession?.isLesson == true, currentSession?.endedAt != nil { returnToEveryday() }
         guard runState == .off
@@ -191,13 +220,18 @@ final class MioViewModel {
         guard MioMaintenanceState.shared.beginWrite() else { return }
         isSwitchingCaptureMode = true
         errorMessage = nil
-        defer { isSwitchingCaptureMode = false; MioMaintenanceState.shared.endWrite() }
-        if runState == .listening || runState == .interrupted { await pause(.untilResumed) }
+        var writeAdmitted = true
+        defer {
+            isSwitchingCaptureMode = false
+            if writeAdmitted { MioMaintenanceState.shared.endWrite() }
+        }
+        if runState == .listening || runState == .interrupted {
+            await pause(.untilResumed, writeAlreadyAdmitted: true)
+        }
         pauseTask?.cancel(); pauseTask = nil; pauseUntil = nil
         if let previous = currentSession, previous.endedAt == nil {
             suspendedEverydaySessionID = previous.id
-            await forceSave()
-            guard errorMessage == nil else { return }
+            guard await forceSave(ignoreMaintenance: true) else { return }
         }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         currentSession = MioSession(title: cleanTitle.isEmpty ? "Lektion" : String(cleanTitle.prefix(120)), captureMode: .lesson)
@@ -205,7 +239,15 @@ final class MioViewModel {
         appendEvent(kind: .info, message: "Lektionsläget startades. Vardags-Mio är pausat. Inget råljud sparas.")
         sampleBattery(reason: "Startvärde för lektionen")
         runState = .off
-        // Use the same tracked startup task as everyday capture so Avbryt can stop preparation.
+        // Release the admitted transition before awaiting an exclusive operation.
+        // Its nested checkpoints belong to this admission and cannot wait on that barrier.
+        let lessonID = currentSession?.id
+        MioMaintenanceState.shared.endWrite()
+        writeAdmitted = false
+        await MioMaintenanceState.shared.waitForExclusive()
+        guard !Task.isCancelled, !MioMaintenanceState.shared.recoveryBlocked,
+              currentSession?.id == lessonID else { return }
+        // Continue the original explicit lesson command through the tracked startup task.
         isSwitchingCaptureMode = false
         beginListening()
     }
@@ -218,6 +260,7 @@ final class MioViewModel {
             runState = .paused
             statusMessage = "Lektionen är avslutad. Vardags-Mio är pausat tills du väljer Fortsätt Mio."
         } else {
+            currentSession = nil
             runState = .off
             statusMessage = "Lektionen är avslutad. Du kan starta Mio igen."
         }
@@ -233,12 +276,15 @@ final class MioViewModel {
     }
 
     private func startListening() async {
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, !MioMaintenanceState.shared.blocksWork else { return }
         guard runState == .off
                 || runState == .paused
                 || runState == .failed
                 || runState == .unavailable
         else { return }
+        if repositoryGeneration == nil { repositoryGeneration = await repository.operationGeneration() }
+        diagnosticsGeneration = await diagnostics.beginRequest()
+        guard !Task.isCancelled, !MioMaintenanceState.shared.blocksWork else { return }
         pauseTask?.cancel()
         pauseTask = nil
         pauseUntil = nil
@@ -263,13 +309,28 @@ final class MioViewModel {
         appendEvent(kind: .info, message: "Mio \(version) (\(build)); iOS \(UIDevice.current.systemVersion).")
         statusMessage = "Ansluter till transkriptionsservern innan mikrofonen startas …"
 
-        let newPipeline: LiveTranscriptionPipeline
+        guard await forceSave() else {
+            runState = .paused
+            statusMessage = "Mikrofonen är av. Sessionen kunde inte sparas."
+            return
+        }
+        if Task.isCancelled || preparationCancellationRequested {
+            await finishCancelledPreparation()
+            return
+        }
+
+        let newPipeline: any MioCapturePipeline
         do { newPipeline = try makePipeline() }
         catch {
             runState = .paused; errorMessage = error.localizedDescription
             connectionState = .actionRequired
             statusMessage = "Mikrofonen är av. Kontrollera transkriptionsinställningarna."
-            await forceSave()
+            activePipelineID = nil
+            if preparationCancellationRequested || error is CancellationError {
+                await finishCancelledPreparation()
+            } else {
+                await finishFailedLessonPreparation()
+            }
             return
         }
         pipeline = newPipeline
@@ -289,21 +350,13 @@ final class MioViewModel {
                 await newPipeline.stop()
                 return
             }
-            if preparationCancellationRequested || error is CancellationError {
-                await newPipeline.stop()
-            }
+            await newPipeline.stop(discard: true)
             if pipeline === newPipeline {
                 pipeline = nil
                 activePipelineID = nil
             }
             if preparationCancellationRequested || error is CancellationError {
-                errorMessage = nil
-                runState = .off
-                liveTranscript = ""
-                statusMessage = "Starten avbröts. Mio är av och mikrofonen används inte."
-                finishCurrentSession(message: "Starten avbröts av användaren.")
-                await forceSave()
-                await refreshSupport()
+                await finishCancelledPreparation()
                 return
             }
             runState = .paused
@@ -311,9 +364,30 @@ final class MioViewModel {
             connectionState = error is URLError ? .offline : .actionRequired
             statusMessage = "Mikrofonen är av. Kontrollera anslutningen och tryck Fortsätt."
             appendEvent(kind: .error, message: statusMessage)
-            await forceSave()
+            await finishFailedLessonPreparation()
             await refreshSupport()
         }
+    }
+
+    private func finishCancelledPreparation() async {
+        errorMessage = nil
+        runState = .off
+        liveTranscript = ""
+        activePipelineID = nil
+        statusMessage = "Starten avbröts. Mio är av och mikrofonen används inte."
+        finishCurrentSession(message: "Starten avbröts av användaren.")
+        if await forceSave(allowCancelledCleanup: true), currentSession?.isLesson == true { returnToEveryday() }
+        await refreshSupport()
+    }
+
+    private func finishFailedLessonPreparation() async {
+        if isLessonActive {
+            finishCurrentSession(message: "Lektionsstarten misslyckades. Mikrofonen är av.")
+            if await forceSave() {
+                returnToEveryday()
+                statusMessage = "Lektionsstarten misslyckades. Mikrofonen är av; vardags-Mio kan fortsätta efter ditt val."
+            }
+        } else { await forceSave() }
     }
 
     func stopListening() async {
@@ -339,14 +413,14 @@ final class MioViewModel {
         runState = .off
         liveTranscript = ""
         statusMessage = "Mio är av. Mikrofonen används inte."
-        await forceSave()
-        if let lesson = currentSession, lesson.isLesson, errorMessage == nil {
+        let didSave = await forceSave()
+        if let lesson = currentSession, lesson.isLesson, didSave {
             onLessonFinished?(lesson)
             returnToEveryday()
         }
     }
 
-    func pause(_ length: PauseLength) async {
+    func pause(_ length: PauseLength, writeAlreadyAdmitted: Bool = false) async {
         guard runState == .listening || runState == .interrupted else { return }
         let background = beginFinishingBackgroundTask()
         defer { endFinishingBackgroundTask(background) }
@@ -375,7 +449,7 @@ final class MioViewModel {
             appendEvent(kind: .info, message: "Mio pausades tills användaren startar igen. Mikrofonen stängdes av.")
         }
         sampleBattery(reason: "Batterivärde vid paus")
-        await forceSave()
+        await forceSave(ignoreMaintenance: writeAlreadyAdmitted)
     }
 
     func handleScenePhase(_ phase: ScenePhase) {
@@ -423,17 +497,16 @@ final class MioViewModel {
     func editSession(id: UUID, title: String, note: String) async -> Bool {
         guard MioMaintenanceState.shared.beginWrite() else { return false }
         defer { MioMaintenanceState.shared.endWrite() }
-        guard var session = session(id: id), session.endedAt != nil else {
+        guard let session = session(id: id), session.endedAt != nil else {
             errorMessage = "Stoppa sessionen innan du redigerar den."
             return false
         }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let cleanNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
-        session.title = cleanTitle.isEmpty ? nil : cleanTitle
-        session.manualNote = cleanNote.isEmpty ? nil : cleanNote
         do {
-            try await repository.upsert(session)
-            replaceSessionInMemory(session)
+            let token = try await operationToken(for: id)
+            let stored = try await repository.updateMetadata(id: id, title: cleanTitle, note: cleanNote, token: token)
+            replaceSessionInMemory(stored)
             exportURL = nil
             errorMessage = nil
             return true
@@ -446,8 +519,8 @@ final class MioViewModel {
     func correctTranscript(sessionID: UUID, segmentID: UUID, text: String) async -> Bool {
         guard MioMaintenanceState.shared.beginWrite() else { return false }
         defer { MioMaintenanceState.shared.endWrite() }
-        guard var session = session(id: sessionID), session.endedAt != nil,
-              let index = session.transcripts.firstIndex(where: { $0.id == segmentID })
+        guard let session = session(id: sessionID), session.endedAt != nil,
+              session.transcripts.contains(where: { $0.id == segmentID })
         else {
             errorMessage = "Texten kan redigeras när sessionen har stoppats."
             return false
@@ -457,12 +530,11 @@ final class MioViewModel {
             errorMessage = "En textdel kan inte vara tom. Radera hela sessionen om den inte ska sparas."
             return false
         }
-        session.transcripts[index].correctedText = correction == session.transcripts[index].text
-            ? nil
-            : correction
         do {
-            try await repository.upsert(session)
-            replaceSessionInMemory(session)
+            let token = try await operationToken(for: sessionID)
+            let stored = try await repository.correctTranscript(sessionID: sessionID, segmentID: segmentID,
+                                                                text: correction, token: token)
+            replaceSessionInMemory(stored)
             exportURL = nil
             errorMessage = nil
             return true
@@ -472,43 +544,68 @@ final class MioViewModel {
         }
     }
 
-    func deleteSession(id: UUID) async -> Bool {
-        guard MioMaintenanceState.shared.beginWrite() else { return false }
-        defer { MioMaintenanceState.shared.endWrite() }
-        if currentSession?.id == id, currentSession?.endedAt == nil {
+    func deleteSession(id: UUID) async -> Bool { await deleteSessionOutcome(id: id).isSuccess }
+
+    func latestSessions() async throws -> [MioSession] { try await repository.loadSessions() }
+
+    func deleteSessionOutcome(id: UUID, ignoreMaintenance: Bool = false) async -> MioOperationOutcome {
+        if !ignoreMaintenance, !MioMaintenanceState.shared.beginWrite() {
+            return .conflict("Vänta tills dataåtgärden är klar.")
+        }
+        defer { if !ignoreMaintenance { MioMaintenanceState.shared.endWrite() } }
+        if session(id: id)?.endedAt == nil, session(id: id) != nil {
             errorMessage = "Stoppa den aktiva sessionen innan du raderar den."
-            return false
+            return .conflict(errorMessage ?? "Stoppa sessionen innan du raderar den.")
         }
         do {
             try await repository.delete(id: id)
-            previousSessions.removeAll { $0.id == id }
-            if currentSession?.id == id {
-                currentSession = previousSessions.first
-            }
+            let wasSelected = currentSession?.id == id
+            sessionRegister.remove(id: id)
+            sessionOperationTokens[id] = nil
+            if wasSelected { currentSession = previousSessions.first }
             exportURL = nil
             errorMessage = nil
-            return true
+            stateRevision &+= 1
+            return .success
         } catch {
             errorMessage = "Kunde inte radera sessionen: \(error.localizedDescription)"
-            return false
+            return .failure("Kunde inte radera sessionen: \(error.localizedDescription)")
         }
     }
 
-    func deleteAllData() async {
+    func deleteAllData() async { _ = await deleteAllDataOutcome() }
+
+    func cancelForDeletion() async {
+        startupTask?.cancel(); saveTask?.cancel(); pauseTask?.cancel()
+        activePipelineID = nil
+        let active = pipeline; let finishing = finishingPipeline
+        pipeline = nil; finishingPipeline = nil
+        await active?.stop(discard: true)
+        await finishing?.stop(discard: true)
+        await startupTask?.value
+        startupTask = nil; saveTask = nil; pauseTask = nil
         suspendedEverydaySessionID = nil
-        guard runState == .off || runState == .failed || runState == .unavailable else { return }
+        runState = .off; liveTranscript = ""; pauseUntil = nil
+    }
+
+    func deleteAllDataOutcome() async -> MioOperationOutcome {
+        suspendedEverydaySessionID = nil
+        guard runState == .off || runState == .failed || runState == .unavailable else { return .conflict("Stoppa mikrofonen innan du raderar all data.") }
         saveTask?.cancel()
         saveTask = nil
         do {
-            try await repository.deleteAll()
+            repositoryGeneration = try await repository.deleteAll()
+            sessionOperationTokens = [:]
             currentSession = nil
             previousSessions = []
             exportURL = nil
             errorMessage = nil
             lastPersistedAt = nil
             statusMessage = "All sparad sessionsdata är raderad."
+            return .success
         } catch {
-            errorMessage = "Kunde inte radera testdata: \(error.localizedDescription)"
+            errorMessage = "Kunde inte radera sessionsdata: \(error.localizedDescription)"
+            return .failure(errorMessage ?? "Kunde inte radera sessionsdata.")
         }
     }
 
@@ -522,9 +619,7 @@ final class MioViewModel {
     }
 
     var allSessions: [MioSession] {
-        var sessions = previousSessions.filter { $0.id != currentSession?.id }
-        if let currentSession { sessions.append(currentSession) }
-        return sessions.sorted { $0.startedAt > $1.startedAt }
+        sessionRegister.sessions.sorted { $0.startedAt > $1.startedAt }
     }
 
     func session(id: UUID) -> MioSession? {
@@ -548,15 +643,16 @@ final class MioViewModel {
         return "Oförändrad"
     }
 
-    private func makePipeline() throws -> LiveTranscriptionPipeline {
-        let connection = try TranscriptionSettings.connection()
+    private func makePipeline() throws -> any MioCapturePipeline {
         let pipelineID = UUID()
         activePipelineID = pipelineID
-        return LiveTranscriptionPipeline(connection: connection, sessionID: currentSession!.id,
-            handlers: .init(
+        let diagnosticToken = diagnosticsGeneration
+        let diagnosticStore = diagnostics
+        return try captureFactory(currentSession!.id, MioCaptureHandlers(
                 result: { [weak self] chunk, reply, words in
+                    guard let self else { return }
                     await MainActor.run {
-                        guard let self, self.activePipelineID == pipelineID,
+                        guard self.activePipelineID == pipelineID,
                               self.currentSession?.id == chunk.sessionID,
                               !(self.currentSession?.transcripts.contains { $0.sourceChunkID == chunk.id } ?? true)
                         else { return }
@@ -570,16 +666,24 @@ final class MioViewModel {
                     }
                 },
                 event: { [weak self] event in
+                    guard let self else { return }
                     await MainActor.run {
-                        guard self?.activePipelineID == pipelineID else { return }
-                        self?.receivePipelineEvent(event)
+                        guard self.activePipelineID == pipelineID else { return }
+                        self.receivePipelineEvent(event)
                     }
                 },
                 failure: { [weak self] error in
+                    guard let self else { return }
                     await MainActor.run {
-                        guard self?.activePipelineID == pipelineID else { return }
-                        self?.receiveFailure(error)
+                        guard self.activePipelineID == pipelineID else { return }
+                        self.receiveFailure(error)
                     }
+                },
+                diagnostic: { diagnostic in
+                    guard let diagnosticToken, diagnostic.isValid else { return }
+                    var event = MioDiagnosticEvent(operation: .transcription)
+                    event.transcription = diagnostic
+                    await diagnosticStore.record(event, generation: diagnosticToken)
                 }
             ))
     }
@@ -589,8 +693,8 @@ final class MioViewModel {
         let start = max(chunk.startedAt, chunk.origin.addingTimeInterval(first.start))
         let end = min(chunk.endedAt, chunk.origin.addingTimeInterval(last.end))
         receiveTranscript(words.map(\.text).joined(separator: " "), isFinal: true,
-                          audioStartedAt: start, audioEndedAt: end, audioTimingIsValid: true,
-                          chunkID: chunk.id, metadata: reply.metadata)
+                          audioStartedAt: start, audioEndedAt: end, audioTimingIsValid: chunk.timingValidity.isReliable,
+                          chunkID: chunk.id, metadata: reply.metadata, timingValidity: chunk.timingValidity)
     }
 
     private func receiveTranscript(
@@ -599,7 +703,7 @@ final class MioViewModel {
         audioStartedAt: Date,
         audioEndedAt: Date,
         audioTimingIsValid: Bool,
-        chunkID: UUID? = nil, metadata: TranscriptionMetadata? = nil
+        chunkID: UUID? = nil, metadata: TranscriptionMetadata? = nil, timingValidity: AudioTimingValidity? = nil
     ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -617,6 +721,7 @@ final class MioViewModel {
                 audioTimingIsValid: audioTimingIsValid)
             segment.sourceChunkID = chunkID
             segment.transcriptionMetadata = metadata
+            segment.timingValidity = timingValidity
             currentSession?.transcripts.append(segment)
 
             if !audioTimingIsValid {
@@ -713,23 +818,13 @@ final class MioViewModel {
         closeOpenBackgroundInterval(at: .now)
         currentSession?.events.append(DiagnosticEvent(kind: .info, message: message))
         currentSession?.endedAt = .now
-        if let currentSession {
-            previousSessions.removeAll { $0.id == currentSession.id }
-            previousSessions.insert(currentSession, at: 0)
-        }
         persistSoon()
     }
 
     private func replaceSessionInMemory(_ session: MioSession) {
-        if currentSession?.id == session.id {
-            currentSession = session
-        }
-        if let index = previousSessions.firstIndex(where: { $0.id == session.id }) {
-            previousSessions[index] = session
-        } else if session.endedAt != nil {
-            previousSessions.append(session)
-        }
-        previousSessions.sort { $0.startedAt > $1.startedAt }
+        // A result may resume on the main actor after a newer operation or deletion.
+        guard sessionRegister.sessions.contains(where: { $0.id == session.id }) else { return }
+        sessionRegister.replace(session)
     }
 
     private func appendEvent(kind: DiagnosticEventKind, message: String) {
@@ -764,7 +859,7 @@ final class MioViewModel {
     }
 
     private func persistSoon() {
-        guard let session = currentSession else { return }
+        guard let session = currentSession, let token = sessionOperationTokens[session.id] else { return }
         saveTask?.cancel()
         let elapsed = lastPersistedAt.map { Date.now.timeIntervalSince($0) } ?? .infinity
         let delay = max(0, 15 - elapsed)
@@ -776,7 +871,10 @@ final class MioViewModel {
                 try Task.checkCancellation()
                 guard MioMaintenanceState.shared.beginWrite() else { return }
                 defer { MioMaintenanceState.shared.endWrite() }
-                try await repository.upsert(session)
+                let stored = try await repository.saveCaptureCheckpoint(session, token: token)
+                if self.currentSession?.id == stored.id {
+                    self.currentSession?.mutationRevision = max(self.currentSession?.mutationRevision ?? 0, stored.mutationRevision ?? 0)
+                }
                 self.lastPersistedAt = .now
                 self.saveTask = nil
             } catch is CancellationError {
@@ -787,18 +885,55 @@ final class MioViewModel {
         }
     }
 
-    private func forceSave() async {
-        guard MioMaintenanceState.shared.beginWrite() else { return }
-        defer { MioMaintenanceState.shared.endWrite() }
+    /// Export owns the barrier, so its final checkpoint explicitly bypasses admission.
+    func checkpointForSnapshot() async -> MioOperationOutcome {
+        guard [.off, .failed, .unavailable].contains(runState) else { return .conflict("Avsluta sessionen innan du exporterar data.") }
+        guard currentSession != nil else { return .success }
+        let saved = await forceSave(ignoreMaintenance: true)
+        return saved ? .success : .failure("Kunde inte spara den senaste sessionen inför export. Försök igen.")
+    }
+
+    @discardableResult
+    private func forceSave(ignoreMaintenance: Bool = false, allowCancelledCleanup: Bool = false) async -> Bool {
         saveTask?.cancel()
-        guard let currentSession else { return }
+        guard let currentSession else { return false }
         do {
-            try await repository.upsert(currentSession)
-            lastPersistedAt = .now
-            saveTask = nil
-        } catch {
-            errorMessage = "Kunde inte spara testdata: \(error.localizedDescription)"
+            if !allowCancelledCleanup { try Task.checkCancellation() }
+            if repositoryGeneration == nil { repositoryGeneration = await repository.operationGeneration() }
+            // Capture the token before waiting: a full/target deletion invalidates it.
+            let token = try await operationToken(for: currentSession.id)
+            if !ignoreMaintenance {
+                // User-cancelled startup still persists its final local checkpoint.
+                // Deletion cleanup must never wait on the exclusive owner awaiting startup.
+                if !allowCancelledCleanup {
+                    await MioMaintenanceState.shared.waitForExclusive()
+                    try Task.checkCancellation()
+                }
+                guard MioMaintenanceState.shared.beginWrite() else {
+                    errorMessage = "Sessionen väntar på att den lokala dataåtgärden slutförs. Försök igen efter återhämtningen."
+                    return false
+                }
+            }
+            defer { if !ignoreMaintenance { MioMaintenanceState.shared.endWrite() } }
+            let stored = try await repository.saveCaptureCheckpoint(currentSession, token: token)
+            if self.currentSession?.id == stored.id {
+                self.currentSession?.mutationRevision = max(self.currentSession?.mutationRevision ?? 0, stored.mutationRevision ?? 0)
+            }
+            lastPersistedAt = .now; saveTask = nil
+            return true
+        } catch is CancellationError { return false }
+        catch {
+            errorMessage = "Kunde inte spara sessionsdata: \(error.localizedDescription)"
+            return false
         }
+    }
+
+    private func operationToken(for id: UUID) async throws -> SessionOperationToken {
+        if let token = sessionOperationTokens[id] { return token }
+        guard let generation = repositoryGeneration else { throw SessionRepositoryError.staleOperation }
+        let token = try await repository.operationToken(for: id, generation: generation)
+        sessionOperationTokens[id] = token
+        return token
     }
 
     private func registerBatteryObservers() {

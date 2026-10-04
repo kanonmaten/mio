@@ -2,7 +2,9 @@
 
 Den här guiden använder **Groq → `qwen/qwen3.8-27b`**. Du kan sedan själv byta till andra modeller i [Mios kompatibilitetskatalog](../PROVIDERS.md#presets-och-tillåtna-modeller), utan Codex. Guiden skiljer engångsuppdatering från vanliga modellbyten.
 
-**Läget 2026-09-29:** källkoden har leverantörsbyte och nu även valfria Access-fält. Cloudflare Access är aktiverat för den befintliga Workern och blockerar anonyma anrop med HTTP 403. Den aktiva tjänstetoken `Mio iPhone` visas ännu som **Not Seen Yet** i Zero Trust. Dashboard visar Groq/Qwen-variablerna, men bara variabel-/Secret-ändringar efter den äldre kodpubliceringen; Groq-koden är inte verifierad som publicerad. iPhone-build 5 saknar Access-fälten. Den nya gatewaykoden behöver publiceras och appkoden byggas och installeras innan anslutningen kan slutprovas.
+**Aktuellt read-only läge 2026-10-03:** Dashboard har Groq/Qwen (6/minut, 100/UTC-dygn, 60 s), samma D1 och provider-/gatewayhemlighetsnamn, men aktiv version `4c22cc43-a625-48d1-86e5-e45638cbcb8e` kör äldre OpenAI-only-kod. Den saknar Groq, taskprofiler, v2-status/v2-analys och detaljerade lektioner. Anonyma `/health` och `/v2/status` gav 403; previews var av. Aktuell All traffic/Service Auth-policy och autentiserad åtkomst är ändå overifierade. Det är ingen bekräftelse på provideråtkomst eller fungerande rollback.
+
+**Historik 2026-09-29:** en tidigare Dashboard-granskning rapporterade Access aktiverat och service-token ännu inte använd. Det är ett daterat underlag, inte bevis för dagens policy eller den nya revisionen. Den gamla iPhone-builden verifierar inte arbetskopian. Publicering, matching Xcode/IPA och telefonprov återstår separat.
 
 ## 1. Vilken token är vilken?
 
@@ -32,46 +34,43 @@ Workerns sparade Secret går inte att läsa tillbaka i klartext. Ersätt det:
 3. Spara strängen privat i din lösenordshanterare. Den blir 43 tecken. Använd inte ett vanligt lösenord eller en Groq-nyckel.
 4. [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages → mio-private-gateway → Settings → Variables and Secrets**. Redigera `MIO_GATEWAY_TOKEN` (eller Add om den saknas), välj **Secret**, klistra in strängen och spara/publicera med **Deploy**.
 5. Klistra in **exakt samma sträng** i Mios fält för ny åtkomsttoken. Tryck **Spara anslutning**. Spara är endast lokal lagring; det testar inte servern.
-6. Aktivera molnfrågor och gör det syntetiska provet i steg 6. Med Access aktiverat behövs även dess par.
+6. Aktivera molnfrågor och gör först modellfri anslutningskontroll i steg 6. Med Access behövs även dess par. Ett modellprov kräver separat sändningsgodkännande.
 
 Mio accepterar 32–256 bokstäver/siffror/bindestreck/understreck. En lösenordshanterares standardlösenord kan innehålla otillåtna symboler som `!`, `+`, `/` eller `=`. Cloudflare kan spara ett sådant värde trots att Mios app/server avvisar det. Blanksteg, radbrytning, `Bearer ` och citattecken gör också värdet ogiltigt. Klistra aldrig in hemligheter i chatten, Git, skärmbilder eller en URL.
 
-## 2. Engångsuppdateringen som behövs nu
+## 2. Publicera exakt granskad kod efter godkännande
 
-**Efter implementation 2026-09-30:** Groq-stödet, diagnostiken, `/v1/status` och `/v2/analyze` finns i pushad commit `e906585`. Molnpublicering och ny appinstallation återstår som separata steg. Se [genomförda rättningar och kvarvarande driftsättning](../../docs/AI_FELSOKNING_2026_09_30.md).
+Arbetskopians release är `2026-10-03.1`; [serverguiden](../README.md) beskriver fyra separata ansvar, taskprofiler och v2-status. Historisk commit/build visar inte att denna kod är publicerad eller iOS-verifierad. Variabeländring installerar inte den nya bundeln.
 
-**Bara variabler räcker inte på den gamla OpenAI-gatewayen.** Publicera den nya gatewaykoden en gång. Bygg/installera den nya appen för detaljerade lektionsanteckningar och Access-fälten. Publicering och nytt iOS-bygge görs separat; inget av detta körs automatiskt av guiden.
+Före publiceringsbegäran ska den avsedda checkouten/revisionen, lokala kontroller, bundeldigest och offentliga vars/taskprofiler vara granskade. Utveckling i en worktree ligger inte automatiskt i huvudkatalogen. Nedanstående exempel använder en uttrycklig källsökväg; ändra den till **exakt den granskade checkouten**. Releasekontrollen vägrar den gamla koden:
 
-På datorn, från repots rot:
-
-```sh
-cd server
-npm ci
-npx wrangler login
+```bash
+mio_server="$HOME/Documents/ChatGPT/Mio/server"
+test -f "$mio_server/src/task-profiles.mjs"
+node --input-type=module -e 'const { RELEASE } = await import(process.argv[1]); if (RELEASE !== "2026-10-03.1") process.exit(1); console.log(RELEASE)' "$mio_server/src/status.mjs"
+npm --prefix "$mio_server" ci
+npm --prefix "$mio_server" test
+WRANGLER_SEND_METRICS=false npm --prefix "$mio_server" run worker:test
+node "$mio_server/node_modules/wrangler/bin/wrangler.js" --cwd "$mio_server" whoami
 ```
 
-Webbinloggningen gäller administration av Cloudflare, inte Mio. Använd kontot som äger `mio-private-gateway` och den befintliga `mio-limits`-databasen. **Skapa inte en ny Worker eller databas vid uppdatering.**
+Kontrollerna gör syntetiska anrop. Befintlig Wrangler-auth återanvänds. Om senare auktoriserad publicering kräver nya OAuth-scopes slutför användaren webbinloggningen; inga Secrets ska klistras in i chatten. Utvecklingsverktygen är låsta och kräver Node >=26.10.0 <27. Repoentry point finns i [serverguiden](../README.md#verifiera-utan-modelltrafik).
 
-Kontrollera `server/wrangler.jsonc`: rätt Worker/databas samt `MIO_AI_PROVIDER=groq` och `MIO_AI_MODEL=qwen/qwen3.8-27b`. Ange inga nycklar i filen. Den nya filen har `keep_vars: true` för att bevara extra Dashboard-variabler, men värden som uttryckligen finns i filen kan fortfarande ersätta motsvarande Dashboard-värden. Synka därför modell/provider före senare kodpubliceringar.
+Jämför `wrangler.jsonc` med Dashboard: Worker `mio-private-gateway`, befintlig D1-binding `MIO_LIMITS`, samma `mio-limits`/database-ID, befintliga Secrets, provider/model/taskprofiler, kvot/intervall samt `preview_urls:false`. `keep_vars:true` skyddar inte uttryckliga motstridiga värden i filen. Skapa ingen ny databas, importera inte om schema och nollställ inga räknare. Behåll fungerande hemligheter/Access; rotation är ett separat beslut.
 
-Behåll befintlig `GROQ_API_KEY` om den finns och fungerar. Bara om den saknas eller behöver ersättas: skapa en nyckel i [Groq Console](https://console.groq.com/keys) och kör från `server/`:
+**Först efter uttrycklig publiceringsbegäran**, från samma granskade källsökväg:
 
-```sh
-npx wrangler secret put GROQ_API_KEY
+```bash
+mio_server="$HOME/Documents/ChatGPT/Mio/server"
+node "$mio_server/node_modules/wrangler/bin/wrangler.js" --cwd "$mio_server" deploy
+node "$mio_server/node_modules/wrangler/bin/wrangler.js" --cwd "$mio_server" deployments list
 ```
 
-Klistra in Groq-nyckeln vid prompten. Behåll din `MIO_GATEWAY_TOKEN` om du känner till värdet; annars följ steg 1. Kör kontroller och publicera den avsedda koden:
+Det första kommandot ändrar livekod. Registrera och read-verifiera aktiv version/release/bundle samt autentiserad `/v2/status`. Verifiera negativa Access/gateway-auth och alternativa adresser enligt steg 6. Publiceringsgodkännande är inte sändningsgodkännande: [tre exakta syntetiska modellprov](../../docs/LEVERANTORSKONTRAKT.md#separat-godkänt-syntetiskt-modellprov) godkänns separat. Följ sedan [iOS-installationen](../../docs/INSTALLATION.md) med samma revision och prova native-/telefonflöden.
 
-```sh
-npm test
-WRANGLER_SEND_METRICS=false npm run worker:test
-npx wrangler deploy
-npx wrangler deployments list
-```
+Om CLI-publicering inte fungerar används samma verifierade bundle/konfiguration genom kontots stödda publiceringsflöde, med samma read-back. Rollback kräver kompatibel kod/konfiguration; äldre OpenAI-kod med Groq-vars är inte en fungerande återgång. [Cloudflares versions-/deploymentmodell](https://developers.cloudflare.com/workers/versions-and-deployments/).
 
-De första två kommandona använder simulerad AI. **`deploy` uppdaterar din live-Worker**; `deployments list` visar aktiva versioner. Kontrollera därefter autentiserad status enligt steg 6. Följ [iOS-installationen](../../docs/INSTALLATION.md) för ett nytt bygge från aktuell källkod. Behåll redan aktiverat Access-skydd med `Service Auth`; den äldre appen behöver uppdateras för att ansluta. Ingen ny D1-databas eller schemaändring behövs för denna uppdatering. [Cloudflares deploymentmodell](https://developers.cloudflare.com/workers/versions-and-deployments/).
-
-För ett helt nytt Cloudflare-konto finns databasstegen i [driftguiden](README.md#en-gång-konton-och-installation).
+Nytt eget konto har separata [engångssteg](README.md#en-gång-för-ett-helt-nytt-eget-konto); de ska aldrig köras för vanlig uppdatering av befintlig Mio.
 
 ## 3. Välj Qwen hos Groq i webbgränssnittet
 
@@ -91,7 +90,7 @@ Efter engångsuppdateringen:
    | `MIO_REQUESTS_PER_MINUTE` | Text | `6` |
    | `MIO_REQUESTS_PER_DAY` | Text | `100` |
 
-4. Spara/publicera ändringen med **Deploy**. Behåll domänen och gatewaytoken vid vanliga modellbyten. Ta bort den äldre textvariabeln `MIO_OPENAI_MODEL` om den finns, för tydlighet.
+4. Efter uttryckligt vald ändring: spara/publicera **Deploy**. Behåll domänen/gatewaytoken och granska eventuell `MIO_AI_TASK_PROFILES`; overrides kan annars välja andra profiler än global Qwen. Inför senare kodpublicering ska explicita Wrangler-vars matcha Dashboard. Ingen automatisk modellfallback finns.
 5. Gör steg 6. Modellen väljs på servern; Groqs Playground-inställningar påverkar inte Mio.
 
 Koden skickar temperatur 0, `reasoning_effort: none` och strikt JSON-schema. Qwen-ID:t finns i Groqs [lista för strikt schema](https://console.groq.com/docs/structured-outputs); `none` stänger av reasoning enligt [Groqs reasoningdokumentation](https://console.groq.com/docs/reasoning). Detta verifierar dokumenterat stöd, inte svensk kvalitet eller åtkomst på ditt konto.
@@ -104,7 +103,7 @@ När den nya gatewaykoden väl körs behöver ett vanligt byte bara detta:
 
 1. Välj en rad i [kompatibilitetskatalogen](../PROVIDERS.md#presets-och-tillåtna-modeller). Kopiera exakt provider och modell-ID, inklusive eventuellt prefix.
 2. I samma **Variables and Secrets**: ändra `MIO_AI_PROVIDER`, ändra `MIO_AI_MODEL`, lägg till rätt leverantörsnyckel som **Secret** enligt tabellen.
-3. Tryck **Deploy** och prova en liten fråga utan privat kontext. Vid problem: återställ tidigare provider/modell/nyckel och publicera igen.
+3. Efter godkänd konfigurationsändring: **Deploy**, modellfri `/v2/status`, ny preview/aktivering och separat godkänt syntetiskt modellprov. Vid problem återställs endast en kompatibel kod/konfigurationskombination; inget automatiskt omförsök eller ny provider väljs.
 
 **Behåll Mios serveradress, gatewaytoken och Access-par.** Ingen ny IPA behövs för katalogbyten. Du behöver inte rotera token vid modellbyte. En gammal leverantörsnyckel används inte när en annan provider valts; den kan tas bort när du inte behöver återgång.
 
@@ -116,7 +115,7 @@ Exempel tillbaka till OpenAI: `MIO_AI_PROVIDER=openai`, `MIO_AI_MODEL=gpt-4.1-mi
 
 ### Vad finns redan?
 
-Källkoden kräver korrekt gatewaytoken för alla fyra AI-rutter (`/v1/ask`, `/v1/analyze`, `/v1/lesson-notes`, `/v2/analyze`) **före** D1-kvot och modelltrafik. Även `/v1/status` kräver gatewaytoken men använder ingen AI-kvot. D1 begränsar godkända modellanrop även över omstarter. Utan Access kan obehöriga ändå skicka anrop som startar Workern och avvisas där; `/health` är också öppen. Anropskvoten för AI skyddar alltså inte Worker-invokationer mot skräptrafik.
+Källkoden kräver korrekt gatewaytoken för alla fyra AI-rutter (`/v1/ask`, `/v1/analyze`, `/v1/lesson-notes`, `/v2/analyze`) **före** D1-kvot och modelltrafik. Även `/v1/status` och `/v2/status` kräver gatewaytoken utan AI-kvotreservation; v2 läser bara aktuell D1-kvot. D1 begränsar godkända modellanrop även över omstarter. Utan Access kan obehöriga ändå skicka anrop som startar Workern och avvisas där; `/health` är också öppen. Anropskvoten för AI skyddar alltså inte Worker-invokationer mot skräptrafik.
 
 Cloudflare Access kontrollerar anrop före Workern. Guidens val är **Access på hela just denna Worker, All traffic**, samt Mios befintliga gatewaytoken. Den som enbart känner till domänen ska stoppas vid Access. Detta eliminerar inte trafik mot Cloudflares nätverk och är ingen garanti mot all överbelastning eller läckta hemligheter. [Cloudflares Worker-skydd](https://developers.cloudflare.com/workers/configuration/cloudflare-access/).
 
@@ -129,7 +128,7 @@ Cloudflare Access kontrollerar anrop före Workern. Guidens val är **Access på
 
 Service-token-paret är en separat maskininloggning. `Allow` kan kräva webbinloggning, som Mio inte genomför. [Cloudflares service tokens](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/) och [Access-policyer](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/).
 
-**Session Duration:** 24 timmar, som nu är valt för Access-applikationen, är ett rimligt standardvärde. Mio skickar Client ID och Client Secret på varje anrop och använder ingen webbläsarsession; det är tjänstetokens **separata utgångsdatum** som avgör när paret måste förnyas eller bytas. Den nuvarande `Mio iPhone`-tokenen löper ut 2027-09-29. [Cloudflares sessionshantering](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) och [service-tokenhantering](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/).
+**Session Duration:** kontrollera aktuellt val i kontot. Mio skickar Client ID/Secret på varje anrop och använder ingen webbläsarsession. Tjänstetokens separata utgångsdatum måste kontrolleras och registreras privat; en historisk giltighetsuppgift är inte bevis för aktuellt par. [Cloudflares sessionshantering](https://developers.cloudflare.com/cloudflare-one/access-controls/access-settings/session-management/) och [service-tokenhantering](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/).
 
 ### B. Koppla policyn till hela Workern
 
@@ -158,83 +157,42 @@ Båda Access-fälten tomma behåller sparat par på samma server. För att byta 
 
 ## 6. Kontrollera anslutning och skydd
 
-### Verifiera den nya releasen med autentiserad status
+### Modellfri status och verifiering av publicerad revision
 
-Efter publicering: kör följande i en interaktiv terminal. Hemligheterna skrivs vid dolda prompter och hamnar inte i kommandoraden. Provet följer inga redirects och gör inget modellanrop eller någon D1-kvotreservation.
+Efter publicering: använd nya appens **Testa text-AI-anslutning** eller en kontrollerad skyddad GET `/v2/status`. Ange aktuellt Access-par och gatewaytoken privat, följ inga redirects och skriv inte ut headers/credentials/URL/rå felkropp. Status gör inget modellanrop och ingen kvotreservation.
 
-```sh
-python3 - <<'PY'
-import getpass
-import json
-import urllib.error
-import urllib.request
+Kontrollera release `2026-10-03.1`, protocolVersion 2, 64 hextecken konfigurationsrevision, taskprofiler (`ask`, `everyday`, `lesson`) med rätt provider/model/capabilities/configurationError och quota högst 100. Kvarvarande kvot/reset kan vara okända. Jämför även aktiv Worker-version/bundeldigest. `configured:true` bevisar lokal konfiguration, inte providercredentials, saldo eller modellkvalitet. Gamla `/v1/status` är kompatibilitetsgränssnitt; v2 behövs för nya profiler/revision/kapacitet.
 
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
+### Negativa skyddsprov utan modelltrafik
 
-headers = {
-    "Authorization": "Bearer " + getpass.getpass("Mios gatewaytoken: "),
-    "CF-Access-Client-Id": getpass.getpass("Access Client ID: "),
-    "CF-Access-Client-Secret": getpass.getpass("Access Client Secret: "),
-    "Accept": "application/json",
-}
-request = urllib.request.Request(
-    "https://mio-private-gateway.mio-private-gateway.workers.dev/v1/status",
-    headers=headers,
-)
-try:
-    with urllib.request.build_opener(NoRedirect()).open(request, timeout=15) as response:
-        data = response.read(4097)
-        if response.headers.get_content_type() != "application/json" or len(data) > 4096:
-            raise ValueError("Unexpected status response")
-        status = json.loads(data)
-        expected = {
-            "protocolVersion", "release", "configured", "provider",
-            "model", "promptVersion", "capabilities",
-        }
-        if not isinstance(status, dict) or set(status) != expected:
-            raise ValueError("Unexpected status schema")
-        print(json.dumps(status, ensure_ascii=False, indent=2))
-except urllib.error.HTTPError as error:
-    print("HTTP", error.code, "– kontrollera version/Access/gatewaytoken; ingen felkropp skrivs ut")
-except (urllib.error.URLError, ValueError):
-    print("Status kunde inte kontrolleras; inget modellanrop gjordes")
-PY
-```
+Kontrollera aktuell Worker-specifik **All traffic**-policy och exakt service token i Zero Trust. Anonym 403/redirect visar bara att det anropet spärrats; det bevisar inte att rätt policy/par/alternativa adress gäller. Med korrekt Access-par men fel gatewaytoken ska Mio ge 401 före kvot. Fel Access-par ska stoppas före Worker. Kör inga kompletta giltiga AI-payloads i negativa prov.
 
-För commit `e906585` ska svaret ange `protocolVersion: 2`, `release: "2026-09-30.1"`, `promptVersion: "2026-09-30.1"`, `configured: true`, `provider: "groq"`, `model: "qwen/qwen3.8-27b"` och capability `analysis-context-v2`. Jämför också aktiv version i Deployments. `configured: true` bekräftar lokal konfiguration, inte nyckelns giltighet, saldo eller modellkvalitet; det kräver det syntetiska modellprovet nedan.
+En anonym kontroll kan köras i Bash med offentlig HTTPS-origin utan credentials. Resultatet skriver endast HTTP-kod och följer ingen redirect:
 
-### Kontrollera att anonyma anrop fortfarande stoppas
-
-Börja med tester som inte gör modellfrågor. Sätt din **offentliga adress**, utan nycklar, i kommandot:
-
-```sh
-curl -i --max-time 15 'https://mio-private-gateway.mio-private-gateway.workers.dev/health'
-```
-
-Utan Access svarar en konfigurerad Worker 200 och `{"status":"ok"}`. **Med Access ska detta anonyma prov blockeras eller hänvisas till inloggning, inte ge gatewayens JSON.** Följ inte redirect med `-L`. Att du redan är inloggad i webbläsaren gör webbläsaren olämplig för det anonyma provet.
-
-Kontrollera även AI-rutterna utan token och med tom syntetisk kropp:
-
-```sh
-for route in v1/ask v1/analyze v1/lesson-notes v2/analyze; do
-  curl -i --max-time 15 -X POST \
-    -H 'Content-Type: application/json' --data '{}' \
-    "https://mio-private-gateway.mio-private-gateway.workers.dev/$route"
+```bash
+read -r -p 'Mios HTTPS-origin utan nycklar eller path: ' mio_origin
+mio_origin="${mio_origin%/}"
+for mio_route in health v1/status v2/status; do
+  curl --silent --show-error --max-time 15 --output /dev/null --write-out '%{http_code}\n' "$mio_origin/$mio_route"
 done
 ```
 
-Efter Access-aktivering ska samtliga stoppas av Access. En JSON-401 från Mio visar endast att gatewaytoken fungerar som spärr; den visar att anropet kom fram till Workern. Prova också eventuella andra domäner/previews i **Domains & Routes**; de får inte ge en öppen bakväg.
+Access ska stoppa dessa före gatewayens JSON. Testa även alla genereringsrutter utan credentials med en **tom** syntetisk kropp:
 
-På telefonen, med syntetiska data:
+```bash
+read -r -p 'Mios HTTPS-origin utan nycklar eller path: ' mio_origin
+mio_origin="${mio_origin%/}"
+for mio_route in v1/ask v1/analyze v1/lesson-notes v2/analyze; do
+  curl --silent --show-error --max-time 15 --output /dev/null --write-out '%{http_code}\n' \
+    -X POST -H 'Content-Type: application/json' --data '{}' "$mio_origin/$mio_route"
+done
+```
 
-1. Rätt Access-par + avsiktligt fel gatewaytoken: ska nekas av Mio, ingen modellfråga.
-2. Rätt gatewaytoken + avsiktligt fel Access Secret: ska stoppas av Access, ingen modellfråga. Ange hela paret vid varje ändring.
-3. Återställ rätt värden. Ställ **”Vad är 2 + 2?”**, utan kontext, granska och tryck Skicka. **Detta använder Groqs API-kvot och kan kosta pengar.** Kontrollera svar samt vald modell/användning i Groq Console.
-4. Prova sedan ett kort vardagsutdrag och en syntetisk lektion. De använder olika rutter. Aktivera AI-tolkning separat; en sparad anslutning räcker inte.
+En JSON-401 från Mio visar att anropet nådde Workern och endast gatewaytoken spärrade det. Kontrollera även övriga Domains & Routes; alternativa adresser får inte skapa bypass. Previews hålls av. Bevara skyddet vid publicering, och dokumentera policy/read-back samt negativa/positiva authprov utan hemligheter.
 
-`/health` visar endast att gatewayens lokala konfigurationskontroll passerar. Den provar inte Groq-nyckel, saldo eller modellåtkomst. Bekräfta skydd i Access-loggen och provresultaten; ett sparat formulär är inte ett godkänt anslutningsprov. Slå inte på request-bodyloggning med privat text.
+### Separat sändningsgodkännande
+
+Efter skyddad status/read-back godkänns [exakt syntetisk fråga/vardag/lektion](../../docs/LEVERANTORSKONTRAKT.md#separat-godkänt-syntetiskt-modellprov), profiler och anropsantal separat. Först därefter Skicka/aktivera läget; det kan förbruka kvot och kosta pengar. Requestparametrar, reported reasoning-usage, grundning, datum och metadata kontrolleras enligt matrisen. Aktiverings-/frågesamtycke i appen bevaras; statuskontroll aktiverar inte mikrofon eller analys.
 
 ## 7. Felsökning och rotation
 
@@ -242,14 +200,15 @@ På telefonen, med syntetiska data:
 |---|---|
 | Granska innan du skickar är grå | Slå på **Tillåt molnfrågor** och skriv text under **Din fråga**. Knappen kontrollerar inte token mot servern; AI-tolkning behöver inte vara på |
 | Mio säger ogiltig token innan anrop | 32–256 tillåtna tecken. Bara hemliga värdet; inga blanksteg, `Bearer` eller citattecken |
-| ”Anslutningen sparades” men inget fungerar | Spara är lokal lagring. Gör ett riktigt syntetiskt prov |
+| ”Anslutningen sparades” men inget fungerar | Spara är lokal lagring. Testa först modellfri text-AI-anslutning, därefter separat godkänt syntetiskt modellprov |
 | JSON 401 `unauthorized` | Worker körs men `MIO_GATEWAY_TOKEN` skiljer sig från telefonens värde. Kontrollera rätt Worker och att rotationen publicerats |
 | 403, HTML eller inloggningsredirect | Access-par, giltighet och policyn `Service Auth`; Mio följer inte webbinloggning |
 | 422 | Provider/modell saknas i Mios katalog eller leverantören avvisade anropets parametrar |
-| 503 `gateway_not_configured` | Saknad/felaktig serverkonfiguration eller hemlighet för vald provider |
+| 422 `task_configuration_invalid` | Läs taskens fasta configurationError i v2-status; provider/model/options/Secret är lokalt ogiltigt, inget modellanrop ska startas |
+| 503 `budget_store_failed` | D1-reservation kunde inte genomföras; gör inga antagna refunds eller sena modellförsök |
 | 502 efter providerbyte | Bland annat fel leverantörsnyckel, saknad modellåtkomst eller ett ogiltigt modellsvar. Gatewayen döljer detaljer för att skydda data |
-| 429 | Mios eller leverantörens kvot. Vänta; höj inte blint. Dagskvoten återställs vid UTC-dygn, inte svensk midnatt |
-| 404 på `/v1/status`, `/v2/analyze` eller `/v1/lesson-notes` | Kontrollera att den nya gatewaykoden är publicerad och aktiv på adressen |
+| 429 | Lokal minut/dag/concurrency eller providerkvot. Följ väntetid/manuell fortsättning; högst100/dag. UTC-dygn gäller |
+| 404 på `/v2/status`, `/v2/analyze` eller `/v1/lesson-notes` | Kontrollera att den nya gatewaykoden är publicerad och aktiv på adressen |
 | Modellen återställs efter kodpublicering | Värdet fanns även i `wrangler.jsonc`. Uppdatera filen till ditt Dashboard-val före nästa deploy |
 
 **Gatewayrotation:** nytt slumpvärde i Workerns `MIO_GATEWAY_TOKEN` → Deploy → samma värde i Mio → Spara → prov. Övriga nycklar behålls.
@@ -258,7 +217,7 @@ På telefonen, med syntetiska data:
 
 **Access-rotation:** hantera service token under Zero Trust, spara aktuellt Client ID/Client Secret och uppdatera båda i Mio. Kontrollera utgångsdatum; spärrad eller utgången token släpper inte igenom appen. Radera/spärra den gamla service tokenen när den inte ska fungera längre. [Cloudflares tokenhantering](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/).
 
-Lokala frågor, transkription och sparade poster fungerar utan molnanslutning. Inga riktiga hemligheter ingår i exemplen.
+Manuella poster och historik fungerar utan text-AI. Transkription kräver egen privat Pianissimo/Tailscale-anslutning. Inga riktiga hemligheter ingår i exemplen.
 
 ## 8. Vad skickas löpande till AI?
 
@@ -276,7 +235,7 @@ Lokala frågor, transkription och sparade poster fungerar utan molnanslutning. I
 
 Varje anrop innehåller instruktioner, schema och textunderlag och förbrukar leverantörskvot även om inget planförslag hittas. Med kontinuerligt tal kan standardens 100 anrop per UTC-dygn motsvara ungefär 100 minuters vardagsanalys; frågor och lektionsdelar tar ur samma pott. Detta är inte en heldagsbudget.
 
-AI-tolkning är av vid ny appstart. Spara anslutning eller Tillåt molnfrågor aktiverar inte automatiskt löpande tolkning. Förslag kräver alltid Ja. Om du inte vill skicka vardagssamtal löpande: lämna AI-tolkning av och använd enskilda godkända frågor. Arbetskopian kan också bearbeta en avslutad historisk lektion efter ett separat val. Denna guide ändrar inte analysbeteendet.
+AI-tolkning är av vid ny appstart. Spara anslutning eller Tillåt molnfrågor aktiverar inte automatiskt löpande tolkning. Förslag kräver alltid Ja. Om du inte vill skicka vardagssamtal löpande: lämna AI-tolkning av och använd enskilda godkända frågor. Arbetskopian kan också bearbeta en avslutad historisk lektion efter ett separat val. Manuell fortsatt lektionsbearbetning från avstängt läge visar uttryckligt samtycke även till nya vardagsutdrag och senare avslutade lektioner. Sparade delar bevaras, rättningar märker äldre/okänd källa och inget korrigerat material skickas automatiskt igen.
 
 ### Varning efter ändrade Runtime variables and secrets
 
@@ -290,4 +249,4 @@ Cloudflare återger variablerna du matat in; den kontrollerar inte att Mio anvä
 
 Om du fortfarande kör den äldre OpenAI-gatewayen måste även koden uppdateras enligt steg 2. Att korrigera variabelnamnet installerar inte Groq-adaptern. Den lokala Wrangler-filen i arbetskopian innehåller redan de rätta Groq-variablerna, men har inte publicerats genom guidearbetet.
 
-**Proton Pass fungerar som generator:** välj ett slumpat lösenord med exempelvis 48 tecken, bokstäver och siffror, utan specialtecken. Spara exakt samma värde i Workerns Secret `MIO_GATEWAY_TOKEN` och i Mios åtkomsttokenfält. Välj inte lösenfras. En grå granskningsknapp säger inget om huruvida tokenen är rätt; se tabellen ovan innan du roterar igen.
+**Proton Pass fungerar som generator:** välj ett slumpat lösenord med exempelvis 48 tecken, bokstäver och siffror, utan specialtecken. Spara exakt samma värde i Workerns Secret `MIO_GATEWAY_TOKEN` och i Mios åtkomsttokenfält. Välj inte lösenfras. En grå granskningsknapp bevisar inte att tokenen är rätt; se tabellen ovan innan du roterar igen.

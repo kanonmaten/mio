@@ -1,8 +1,20 @@
 # Bygg- och teststatus
 
+## Helhetsbygge 0.9.0 — överlämnad gren, 2026-10-04
+
+PLAN-steg 1–5 är implementerade och de lokala Linux-grindarna är godkända. Ändringarna är committade och pushade på `codex/mio-plan-reliability`, baserad på `3f99f4072b0ddbe51529c84bfdb9f947855f6e64`. Helheten är fortfarande **ej släppt och inte iOS-verifierad**. Fullständiga post-commit-loggar och kvitto finns i `/tmp/mio-mio-handoff-20261004-final/` på värden där verifieringen kördes; `verification.json` anger commit och arbetskopians digest.
+
+- **274/274 strukturella kontroller**, **4 verifierarprov**, **123/123 Node-tester**, lokala Worker-runtimeprov för faktisk bundle, autentisering, revision, kvot, uppgifter och avbrott, samt **27/27 Pianissimo-API-prov** med fake-backend är godkända. Inga verkliga modell- eller transkriptionsanrop gjordes. Python 3.12.15/uv 0.12.23 gav en Starlette-deprecationsvarning; Python-proven passerade.
+- Wrangler och Miniflare utvecklingsverktyg är uppdaterade till `4.147.0` respektive `5.20261001.0-alpha`. En tidigare fullständig npm-granskning visade tre sårbarheter i enbart verktygens utvecklingsberoenden; efter uppdateringen rapporterar `npm audit` noll sårbarheter. Produktionsberoendegranskningen var också ren.
+- **235/235 portabla XCTest** godkända med Swift 6.3.3 på Linux. Mikrofonens åtta lifecycle-/notifikationsprov passerar med ersatt AVFoundation-gräns. Den separata complete-concurrencygrinden fann inga relevanta varningar efter att notiser omvandlades till `Sendable`-värden före kööverföring. Dessa resultat bygger inte Mio mot iOS-SDK eller verklig AVFoundation.
+- Syntetisk session-store-mätning i R4 på CachyOS: 50/500/2 000 sessioner gav cirka 0,79/7,93/31,71 MB; vid 2 000 sessioner var medianavkodning 439 ms, JSON-kodning 444 ms och metadata-patch med atomisk skrivning 474 ms, med 259 526 656 byte (cirka 248 MiB) processens peak-RSS. Detta är en Linux-baslinje, inte ett iPhone-, batteri- eller databasbytesbeslut.
+- Ändringarna innehåller fångst-/sessionstillförlitlighet, appägd workflow- och raderingssamordning, providerneutrala AI-kontrakt/adaptrar, färskhets-/anslutnings-/godkännandeflöden, Linux-/native-verifieringsflöden och svenska drift-/testguider. Tre UI-smokeprov är registrerade i target men inte körda i Xcode.
+
+**Återstår före helheten kan kallas verifierad:** efter separat godkännande, publicera den avsedda Cloudflare-kod-/konfigurationskombinationen och verifiera skyddad status/Access; kör sedan godkända syntetiska providerprov; kör den pushade revisionen genom `xcode-27` för Release, iOS-XCTest, native concurrency och osignerad IPA; granska IPA och installera/prova på iPhone 16 Pro och iPhone 13. Wrangler-kontrollen 2026-10-04 visar fortfarande aktiv Worker-version `4c22cc43-a625-48d1-86e5-e45638cbcb8e` på 100 %. GitHub har ännu ingen lyckad iOS-workflow för denna gren; senaste lyckade körning var för tidigare commit `7901644`. Access-policy, positiv autentisering och deploymentbehörighet är inte fullständigt verifierade. Ingen Cloudflare-publicering, modelltrafik, Xcode-körning, IPA-installation eller fysisk telefonverifiering har gjorts.
+
 ## AI-kontext och diagnostik implementerade i arbetskopian, 2026-09-30
 
-Användarens godkända plan är implementerad: skyddad status/v2-kontrakt, begränsad bakåtkontext och nya källor, stabila öppna/stängda beslut, mjuka meningsgränser/sluttext samt textfri diagnostik/export/radering. **Kontrollerna nedan utfördes före commit/push. Ingen publicering, Xcode-körning, installation eller telefonverifiering av denna revision.** Den gamla aktiva Workern nedan är fortfarande inkompatibel med Groq-inställningarna.
+AI-kontextplanen från 2026-09-30 implementerades i den dåvarande arbetskopian: skyddad status/v2-kontrakt, begränsad bakåtkontext och nya källor, stabila öppna/stängda beslut, mjuka meningsgränser/sluttext samt textfri diagnostik/export/radering. **Kontrollerna nedan utfördes före commit/push. Ingen publicering, Xcode-körning, installation eller telefonverifiering av denna revision.** Den gamla aktiva Workern nedan är fortfarande inkompatibel med Groq-inställningarna.
 
 - **47/47 Node-tester godkända**, mockade modeller. **Worker dry-run och verklig lokal workerd/Miniflare godkända**: v1/OpenAI, Groq/fråga/lektion/v2, skyddad status, metadata, D1-kvot och status vid felaktig provider/modell/saknad nyckel. Ingen extern modelltrafik.
 - **53/53 portabla XCTest godkända med Swift 6.3 på Linux** via `scripts/verify_swift_core.py`: 7 kontext-/beslutsprov, 9 diagnostik-/exportprov, 6 koordinatorprov samt 31 befintliga analys-/assistent-/lagringsprov. Produktionsmodeller, lager, assistent-vymodell och koordinator kompileras. Endast plattformsgränser ersätts: Keychain-konfigurationsladdning och Apples URLSession.bytes; nätstubben kan inte skicka trafik. Ett UIKit-beroende snapshotprov undantas uttryckligen. Dessa är **inte iOS-XCTest eller appkompilering**.
@@ -86,7 +98,7 @@ Senast uppdaterad: **2026-09-28**. Helhetsbygge **0.9.0, ej släppt**. **Build 5
 
 Detta är den gemensamma statuskällan. [Ändringsloggen](../CHANGELOG.md) beskriver innehållet och [helhetstestet](TESTPLAN_HELHET.md) beskriver återstående acceptansprov.
 
-## Aktuellt verifieringsläge
+## Historiskt verifieringsläge — build 5, 2026-09-28
 
 | Område | Resultat och begränsning |
 |---|---|
@@ -117,7 +129,7 @@ Appidentiteten är nu `app.mio.assistant`. De tre lokala lagren ligger under `Mi
 
 Historiskt: build 4 (`595e4a8`, Actions 36278717100) klarade 46 XCTest. Build 3 (`f53aaa1`, Actions 36228684153) klarade 39 XCTest. Build 2 (`3d4b041`, Actions 36204571782) klarade också 39 men hade en kalenderdelegatvarning som rättades i build 3. De resultaten verifierar inte nya funktioner i build 5.
 
-## Nästa kontroller
+## Historisk provordning — 2026-09-28
 
 1. Installera IPA:n enligt [installationsguiden](INSTALLATION.md), först på iPhone 16 Pro.
 2. Kör först S01–S07 för svensk talmodell, därefter H01–H15 i [helhetstestet](TESTPLAN_HELHET.md). Börja med syntetiska data och håll AI avstängt.
@@ -132,7 +144,7 @@ Historiskt: build 4 (`595e4a8`, Actions 36278717100) klarade 46 XCTest. Build 3 
 
 Tidigare statiska kontroller av v0.2.0 och byggflödet finns i projekthistoriken. Den äldre [testplanen v0.2](TESTPLAN_V0_2.md) är historiskt underlag; nya installationer följer helhetstestet.
 
-`SpeechTranscriber`-installation, stabil bakgrundsdrift och ljudavbrott kräver fysisk telefon. Ett ljudvägsbyte kan kräva stopp/start. iOS återstartar inte lyssning efter tvångsavslutning; tidsstyrd paus kan kräva att appen öppnas igen.
+I den historiska Apple-implementationen krävde `SpeechTranscriber`-installation, bakgrundsdrift och ljudavbrott fysisk telefon. Den aktuella appen använder original Pianissimo utan Apple-/CPU-fallback; paus och avbrott kräver manuell fortsättning. Följ den aktuella [enhetsprovningen](ENHETSPROV.md).
 
 ## Registrera nya resultat
 

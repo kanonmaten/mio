@@ -1,4 +1,5 @@
 import AVFoundation
+import Foundation
 
 /// Converts the microphone format to the private transcription API format.
 /// Priming is disabled so conversion does not insert artificial latency into live buffers.
@@ -12,6 +13,39 @@ final class BufferConverter {
     private var converter: AVAudioConverter?
 
     func reset() { converter = nil }
+
+    func transcriptionPCM(_ buffer: AVAudioPCMBuffer) throws -> Data {
+        guard let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000,
+                                        channels: 1, interleaved: true) else {
+            throw ConversionError.failedToCreateConverter
+        }
+        return try pcm(convert(buffer, to: format))
+    }
+
+    /// Signal end-of-stream only at a real epoch boundary, preserving the converter's short tail.
+    func finishTranscriptionPCM() throws -> Data {
+        guard let converter else { return Data() }
+        defer { reset() }
+        var bytes = Data()
+        for _ in 0..<16 {
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: converter.outputFormat, frameCapacity: 4_096) else {
+                throw ConversionError.failedToCreateBuffer
+            }
+            var error: NSError?
+            let status = converter.convert(to: buffer, error: &error) { _, inputStatus in
+                inputStatus.pointee = .endOfStream; return nil
+            }
+            guard status != .error else { throw ConversionError.conversionFailed(error) }
+            bytes.append(try pcm(buffer))
+            if status == .endOfStream || buffer.frameLength == 0 { return bytes }
+        }
+        throw ConversionError.conversionFailed(nil)
+    }
+
+    private func pcm(_ buffer: AVAudioPCMBuffer) throws -> Data {
+        guard let channel = buffer.int16ChannelData else { throw ConversionError.failedToCreateBuffer }
+        return Data(bytes: channel[0], count: Int(buffer.frameLength) * 2)
+    }
 
     func convert(_ buffer: AVAudioPCMBuffer, to format: AVAudioFormat) throws -> AVAudioPCMBuffer {
         let inputFormat = buffer.format
@@ -27,7 +61,7 @@ final class BufferConverter {
         }
 
         let ratio = converter.outputFormat.sampleRate / converter.inputFormat.sampleRate
-        let frameCapacity = AVAudioFrameCount((Double(buffer.frameLength) * ratio).rounded(.up))
+        let frameCapacity = AVAudioFrameCount((Double(buffer.frameLength) * ratio).rounded(.up)) + 32
         guard let convertedBuffer = AVAudioPCMBuffer(
             pcmFormat: converter.outputFormat,
             frameCapacity: frameCapacity

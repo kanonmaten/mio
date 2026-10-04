@@ -9,10 +9,10 @@ import FoundationNetworking
 
 enum MioDiagnosticRoute: String, Codable, Sendable {
     case ask = "/v1/ask", analyze = "/v1/analyze", analyzeContext = "/v2/analyze"
-    case lessonNotes = "/v1/lesson-notes", status = "/v1/status"
+    case lessonNotes = "/v1/lesson-notes", status = "/v1/status", statusV2 = "/v2/status", transcription = "/v1/transcribe"
 }
 
-enum MioDiagnosticOperation: String, Codable, Sendable { case ask, analyze, analyzeContext, lessonNotes, status }
+enum MioDiagnosticOperation: String, Codable, Sendable { case ask, analyze, analyzeContext, lessonNotes, status, statusV2, transcription }
 enum MioDiagnosticOutcome: String, Codable, Sendable { case success, cancelled, httpError, networkError, validationFailed }
 enum MioDiagnosticsStorageStatus: String, Codable, Sendable { case available, writeFailed, readFailed, unsupportedSchema }
 enum MioGatewayErrorCode: String, Codable, Sendable {
@@ -31,26 +31,46 @@ enum MioGatewayErrorCode: String, Codable, Sendable {
     case rateLimited = "rate_limited"
     case dailyLimitReached = "daily_limit_reached"
     case requestFailed = "request_failed"
+    case configurationChanged = "configuration_changed", taskConfigurationInvalid = "task_configuration_invalid"
+    case providerAuthentication = "provider_authentication", providerAccount = "provider_account"
+    case providerModelUnavailable = "provider_model_unavailable", providerParameters = "provider_parameters"
+    case providerRefusal = "provider_refusal", providerTruncated = "provider_truncated"
+    case providerQuota = "provider_quota", providerInfrastructure = "provider_infrastructure"
+    case providerTransport = "provider_transport"
+    case providerInvalidResponse = "provider_invalid_response"
+    case localMinuteLimit = "local_minute_limit", localDayLimit = "local_day_limit"
+    case localRequestLimit = "local_request_limit"
+    case localConcurrencyLimit = "local_concurrency_limit", budgetStoreFailed = "budget_store_failed"
 }
 
 /// Only bounded protocol identifiers are accepted; never arbitrary headers or descriptions.
 struct MioGatewayMetadata: Codable, Sendable {
-    static let providers = ["openai", "groq", "vercel", "gemini", "anthropic", "openrouter", "mistral", "deepseek", "custom"]
     private(set) var requestID: String?
     private(set) var cfRay: String?
     private(set) var release: String?
     private(set) var provider: String?
     private(set) var model: String?
     private(set) var promptVersion: String?
+    private(set) var configurationRevision: String?
+    private(set) var returnedModel: String?
+    private(set) var upstreamRequestID: String?
+    private(set) var inputTokens: Int?
+    private(set) var outputTokens: Int?
+    private(set) var reasoningTokens: Int?
 
     init(response: HTTPURLResponse) {
         requestID = response.value(forHTTPHeaderField: "X-Mio-Request-Id").flatMap { UUID(uuidString: $0)?.uuidString }
         cfRay = response.value(forHTTPHeaderField: "CF-Ray").flatMap(Self.validRay)
         release = Self.identifier(response.value(forHTTPHeaderField: "X-Mio-Release"))
-        let candidate = response.value(forHTTPHeaderField: "X-Mio-Provider")
-        provider = Self.providers.contains(candidate ?? "") ? candidate : nil
+        provider = Self.protocolIdentifier(response.value(forHTTPHeaderField: "X-Mio-Provider"))
         model = Self.identifier(response.value(forHTTPHeaderField: "X-Mio-Model"))
         promptVersion = Self.identifier(response.value(forHTTPHeaderField: "X-Mio-Prompt-Version"))
+        configurationRevision = Self.revision(response.value(forHTTPHeaderField: "X-Mio-Configuration-Revision"))
+        returnedModel = Self.identifier(response.value(forHTTPHeaderField: "X-Mio-Returned-Model"))
+        upstreamRequestID = Self.validUpstreamRequestID(response.value(forHTTPHeaderField: "X-Mio-Upstream-Request-ID"))
+        inputTokens = Self.tokenHeader(response.value(forHTTPHeaderField: "X-Mio-Usage-Input-Tokens"))
+        outputTokens = Self.tokenHeader(response.value(forHTTPHeaderField: "X-Mio-Usage-Output-Tokens"))
+        reasoningTokens = Self.tokenHeader(response.value(forHTTPHeaderField: "X-Mio-Usage-Reasoning-Tokens"))
     }
 
     func sanitized() -> Self {
@@ -58,17 +78,62 @@ struct MioGatewayMetadata: Codable, Sendable {
         result.requestID = requestID.flatMap { UUID(uuidString: $0)?.uuidString }
         result.cfRay = cfRay.flatMap(Self.validRay)
         result.release = Self.identifier(release)
-        result.provider = Self.providers.contains(provider ?? "") ? provider : nil
+        result.provider = Self.protocolIdentifier(provider)
         result.model = Self.identifier(model)
         result.promptVersion = Self.identifier(promptVersion)
+        result.configurationRevision = Self.revision(configurationRevision)
+        result.returnedModel = Self.identifier(returnedModel)
+        result.upstreamRequestID = Self.validUpstreamRequestID(upstreamRequestID)
+        result.inputTokens = Self.validTokenCount(inputTokens)
+        result.outputTokens = Self.validTokenCount(outputTokens)
+        result.reasoningTokens = Self.validTokenCount(reasoningTokens)
         return result
     }
 
     static func identifier(_ value: String?) -> String? {
         guard let value, (1...150).contains(value.utf8.count),
-              !value.hasPrefix("sk-"), !value.hasPrefix("gsk_"),
+              !credentialPrefix(value), !value.contains("://"),
               value.utf8.allSatisfy({ (65...90).contains($0) || (97...122).contains($0)
                   || (48...57).contains($0) || [45, 46, 47, 58, 95].contains($0) }) else { return nil }
+        return value
+    }
+
+    private static func validUpstreamRequestID(_ value: String?) -> String? {
+        guard let value, (1...128).contains(value.utf8.count),
+              !credentialPrefix(value),
+              value.utf8.allSatisfy({ (65...90).contains($0) || (97...122).contains($0)
+                  || (48...57).contains($0) || [45, 46, 58, 95].contains($0) }) else { return nil }
+        return value
+    }
+
+    private static func credentialPrefix(_ value: String) -> Bool {
+        let prefix = value.lowercased()
+        return ["sk-", "sk_", "gsk_", "aiza"].contains { prefix.hasPrefix($0) }
+    }
+
+    private static func validTokenCount(_ value: Int?) -> Int? {
+        guard let value, (0...1_000_000_000).contains(value) else { return nil }
+        return value
+    }
+
+    private static func tokenHeader(_ value: String?) -> Int? {
+        guard let value, (1...10).contains(value.utf8.count),
+              value.utf8.allSatisfy({ (48...57).contains($0) }) else { return nil }
+        return validTokenCount(Int(value))
+    }
+
+    /// Extensible wire names remain bounded and cannot contain URLs, headers or key syntax.
+    static func protocolIdentifier(_ value: String?) -> String? {
+        guard let value, (1...64).contains(value.utf8.count),
+              identifier(value) != nil,
+              value.utf8.allSatisfy({ (65...90).contains($0) || (97...122).contains($0)
+                  || (48...57).contains($0) || [45, 46, 95].contains($0) }) else { return nil }
+        return value
+    }
+
+    static func revision(_ value: String?) -> String? {
+        guard let value, value.utf8.count == 64,
+              value.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else { return nil }
         return value
     }
 
@@ -106,6 +171,7 @@ struct MioDiagnosticEvent: Codable, Sendable {
     var sourceEnd: Date?
     var queueSize: Int?
     var contextLimited: Bool?
+    var transcription: STTDiagnostic?
 
     init(operation: MioDiagnosticOperation, startedAt: Date = .now, requestBytes: Int = 0) {
         id = UUID(); self.operation = operation; self.startedAt = startedAt; self.requestBytes = max(0, requestBytes)
@@ -120,6 +186,8 @@ struct MioDiagnosticEvent: Codable, Sendable {
         case .analyzeContext: .analyzeContext
         case .lessonNotes: .lessonNotes
         case .status: .status
+        case .statusV2: .statusV2
+        case .transcription: .transcription
         }
     }
 
@@ -133,6 +201,7 @@ struct MioDiagnosticEvent: Codable, Sendable {
             && (networkCode == nil || (networkDomain != nil && (-10_000...10_000).contains(networkCode!)))
             && [newFragmentCount, contextFragmentCount].allSatisfy { $0 == nil || (0...1_000_000).contains($0!) }
             && (queueSize == nil || (0...1_000_000).contains(queueSize!))
+            && (transcription == nil || (operation == .transcription && transcription!.isValid))
     }
 }
 
@@ -194,12 +263,12 @@ struct MioGatewayStatus: Decodable, Sendable {
               Set(object.keys) == ["protocolVersion", "release", "configured", "provider", "model", "promptVersion", "capabilities"],
               let value = try? JSONDecoder().decode(Self.self, from: data), value.protocolVersion == 2,
               MioGatewayMetadata.identifier(value.release) != nil,
-              (value.provider.isEmpty || MioGatewayMetadata.providers.contains(value.provider)),
+              (value.provider.isEmpty || MioGatewayMetadata.protocolIdentifier(value.provider) != nil),
               (value.model.isEmpty || MioGatewayMetadata.identifier(value.model) != nil),
               MioGatewayMetadata.identifier(value.promptVersion) != nil,
               (!value.configured || (!value.provider.isEmpty && !value.model.isEmpty)),
-              value.capabilities.count <= 8, Set(value.capabilities).count == value.capabilities.count,
-              value.capabilities.allSatisfy({ ["ask-v1", "analysis-v1", "lesson-notes-v1", "analysis-context-v2"].contains($0) })
+              value.capabilities.count <= 32, Set(value.capabilities).count == value.capabilities.count,
+              value.capabilities.allSatisfy({ MioGatewayMetadata.protocolIdentifier($0) != nil })
         else { throw MioCloudError.incompatibleGateway }
         return value
     }
@@ -207,5 +276,106 @@ struct MioGatewayStatus: Decodable, Sendable {
     func requireContextAnalysis() throws {
         guard configured else { throw MioCloudError.gateway(503, .gatewayNotConfigured) }
         guard capabilities.contains("analysis-context-v2") else { throw MioCloudError.incompatibleGateway }
+    }
+}
+
+
+enum MioAITaskID: String, Codable, CaseIterable, Sendable {
+    case ask, everyday, lesson
+
+    var requiredCapabilities: Set<String> {
+        let taskContract: String
+        switch self {
+        case .ask: taskContract = "ask-v1"
+        case .everyday: taskContract = "analysis-context-v2"
+        case .lesson: taskContract = "lesson-notes-v1"
+        }
+        return ["reasoning-off", "temperature-zero", "strict-json", taskContract]
+    }
+}
+enum MioTaskConfigurationError: String, Codable, Sendable {
+    case gatewayConfigurationInvalid = "gateway_configuration_invalid"
+    case taskProfilesInvalid = "task_profiles_invalid", taskProfileInvalid = "task_profile_invalid"
+    case providerSecretMissing = "provider_secret_missing", providerModelIncompatible = "provider_model_incompatible"
+    case providerOptionsIncompatible = "provider_options_incompatible"
+}
+struct MioGatewayTaskStatus: Decodable, Sendable {
+    let configured: Bool
+    let provider: String
+    let model: String
+    let promptVersion: String
+    let capabilities: [String]
+    let configurationError: MioTaskConfigurationError?
+
+    var isValid: Bool {
+        (provider.isEmpty || MioGatewayMetadata.protocolIdentifier(provider) != nil)
+            && (model.isEmpty || MioGatewayMetadata.identifier(model) != nil)
+            && (promptVersion.isEmpty || MioGatewayMetadata.identifier(promptVersion) != nil)
+            && (!configured || (!provider.isEmpty && !model.isEmpty && !promptVersion.isEmpty && configurationError == nil))
+            && (configured || configurationError != nil)
+            && capabilities.count <= 32 && Set(capabilities).count == capabilities.count
+            && capabilities.allSatisfy { MioGatewayMetadata.protocolIdentifier($0) != nil }
+    }
+}
+struct MioGatewayTasksStatus: Decodable, Sendable {
+    let ask: MioGatewayTaskStatus
+    let everyday: MioGatewayTaskStatus
+    let lesson: MioGatewayTaskStatus
+
+    subscript(task: MioAITaskID) -> MioGatewayTaskStatus {
+        switch task {
+        case .ask: ask
+        case .everyday: everyday
+        case .lesson: lesson
+        }
+    }
+}
+struct MioGatewayQuota: Decodable, Sendable {
+    let limit: Int
+    let remaining: Int?
+    let resetAt: String?
+
+    var isValid: Bool {
+        (1...100).contains(limit) && (remaining == nil || (0...limit).contains(remaining!))
+            && (resetAt == nil || (resetAt!.utf8.count <= 30 && resetAt!.hasSuffix("Z")
+                && MioAnalysisResult.parseDate(resetAt!) != nil))
+    }
+}
+struct MioGatewayStatusV2: Decodable, Sendable {
+    let protocolVersion: Int
+    let release: String
+    let configurationRevision: String
+    let tasks: MioGatewayTasksStatus
+    let quota: MioGatewayQuota?
+    static let maxResponseBytes = 16_384
+
+    static func decode(_ data: Data) throws -> Self {
+        func exact(_ value: Any?, _ keys: Set<String>) -> Bool {
+            guard let object = value as? [String: Any] else { return false }
+            return Set(object.keys) == keys
+        }
+        guard data.count <= maxResponseBytes,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              exact(root, ["protocolVersion", "release", "configurationRevision", "tasks", "quota"]),
+              let tasks = root["tasks"] as? [String: Any], exact(tasks, ["ask", "everyday", "lesson"]),
+              tasks.values.allSatisfy({ exact($0, ["configured", "provider", "model", "promptVersion", "capabilities", "configurationError"]) }),
+              root["quota"] is NSNull || exact(root["quota"], ["limit", "remaining", "resetAt"]),
+              let value = try? JSONDecoder().decode(Self.self, from: data), value.protocolVersion == 2,
+              MioGatewayMetadata.identifier(value.release) != nil,
+              MioGatewayMetadata.revision(value.configurationRevision) != nil,
+              MioAITaskID.allCases.allSatisfy({ value.tasks[$0].isValid }),
+              value.quota == nil || value.quota!.isValid
+        else { throw MioCloudError.incompatibleGateway }
+        return value
+    }
+
+    /// Unknown bounded capability/provider names are metadata, not proof that a
+    /// selected task supports Mio's immutable policy or wire contract.
+    @discardableResult
+    func requireTask(_ task: MioAITaskID) throws -> MioGatewayTaskStatus {
+        let profile = tasks[task]
+        guard profile.configured else { throw MioCloudError.gateway(422, .taskConfigurationInvalid) }
+        guard Set(profile.capabilities).isSuperset(of: task.requiredCapabilities) else { throw MioCloudError.incompatibleGateway }
+        return profile
     }
 }

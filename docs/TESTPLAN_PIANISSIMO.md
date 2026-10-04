@@ -14,7 +14,7 @@ Gäller nya arbetskopian efter motorbytet, inte build 5. Alla telefonprov nedan 
 | T08 | Server överlastad/429, långsamt svar, tappat svar, ogiltiga ordtider, fel token mitt i session | Tidsgränser/backoff, inga UI-lås; samma chunk-ID vid retry; ogiltigt svar/åtkomstfel pausar mikrofon och bevarar lektion |
 | T09 | Paus/stopp under upload och offline, avbryt väntan, starta/stoppa snabbt | Mikrofon släcks först; högst 15 s dränering, ingen sen text efter avslut; saknad sluttext blir lucka |
 | T10 | Låst skärm 10 min och annan app, vardag respektive lektion | Faktisk bakgrundstext med riktiga ljudtider; session kvar. Om iOS avbryter ska lucka och Fortsätt visas |
-| T11 | Telefonsamtal, Siri, alarm, ljudvägsbyte, hörlurar ur/in och foreground | Bara återupptagning när iOS tillåter, annars manuell Fortsätt i samma session; inga dolda mikrofonstarter |
+| T11 | Telefonsamtal, Siri, alarm, ljudvägsbyte, hörlurar ur/in och foreground | Mikrofonen startar inte automatiskt. Välj själv Fortsätt när iOS tillåter; samma session/lektion bevaras och avbrott märks |
 | T12 | Media services reset där det kan återskapas, tvångsavsluta app, telefonreboot | Mikrofon startas endast på nytt användartryck; gamla data kvar, ofullständighet tydlig. Markera Blockerad om reset inte kan återskapas |
 | T13 | Wi-Fi → mobilnät, flygplansläge av/på, Tailscale av/på | Aktiv session återansluter, offline-/luckstatus korrekt; ingen överföring till publik eller ändrad server |
 | T14 | Datorreboot, processkrasch, sömn/uppvaknande | systemd och Serve återkommer efter reboot/uppvaknande; telefonen återansluter. Sömn/avstängning ger väntad downtime |
@@ -26,5 +26,7 @@ Gäller nya arbetskopian efter motorbytet, inte build 5. Alla telefonprov nedan 
 | T20 | Modelluppdatering/rollback med samma API; negativt tailnet-grantprov | Appen behöver inte byggas om; metadata ändras, rätt identitet/token krävs, serverport endast loopback |
 
 Kör även H01–H15 och relevanta AI-/lektions-/Access-prov i [helhetsplanen](TESTPLAN_HELHET.md). Gröna Python-/Node-tester eller en lyckad GPU-laddning ersätter inte Xcode-kompilering, XCTest, svenskt tal eller enhetsprov.
+
+Använd [enhets- och mätprotokollet](ENHETSPROV.md) för känt svenskt facit, delgränser, sample-/requestantal, nät-/datoromstart samt jämförbara batteri-/värme-/latensvärden. Resultat är separata för iPhone 16 Pro/iPhone 13 och varje exakt iOS-/app-/modellrevision; ingen förbättring tillskrivs koden utan jämförbart mätunderlag.
 
 Bakgrundsavbrott i äldre export visade `Session activation failed`, men exakt orsak är inte bevisad. Förbättringen separerar nät/fångst, serialiserar AVAudioSession/engine-ändringar, hanterar interruptions/routes/media reset, kontrollerar verkliga buffertar och bevarar sessionen. `UIBackgroundModes=audio` fanns redan; det räcker inte ensamt för stabilitet. Ingen tyst ljuduppspelning eller periodisk bakgrundsväckning används.

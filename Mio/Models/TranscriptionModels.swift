@@ -84,6 +84,128 @@ struct TranscriptionReply: Decodable, Sendable {
     }
 }
 
+struct CaptureStartDetails: Sendable { let health: TranscriptionHealth }
+
+enum AudioTimingValidity: String, Codable, Hashable, Sendable {
+    case hostTime, sampleTime, estimated
+    var isReliable: Bool { self != .estimated }
+}
+
+/// Native capture facts. Callback arrival alone never establishes an audio-time anchor.
+struct AudioCaptureStamp: Sendable {
+    let epoch: UUID
+    let sequence: UInt64
+    let hostUptime: TimeInterval?
+    let sampleTime: Int64?
+    let sampleRate: Double
+    let frames: Int
+    let callbackUptime: TimeInterval
+    var channels: Int = 1
+    var format: UInt = 0
+}
+
+struct ResolvedAudioTiming: Sendable {
+    let uptime: TimeInterval
+    let validity: AudioTimingValidity
+    let missingDuration: TimeInterval
+    let discontinuity: Bool
+    let droppedBuffers: Int
+}
+
+struct AudioCaptureTimeline: Sendable {
+    private var previous: AudioCaptureStamp?
+    private var previousTime: TimeInterval?
+    private var anchorSample: Int64?
+    private var anchorUptime: TimeInterval?
+
+    mutating func reset() {
+        previous = nil; previousTime = nil; anchorSample = nil; anchorUptime = nil
+    }
+
+    mutating func resolve(_ stamp: AudioCaptureStamp) -> ResolvedAudioTiming {
+        let compatible = previous?.epoch == stamp.epoch && previous?.sampleRate == stamp.sampleRate
+            && previous?.channels == stamp.channels && previous?.format == stamp.format
+        if !compatible { anchorSample = nil; anchorUptime = nil }
+        let duration = Double(stamp.frames) / stamp.sampleRate
+        let validHost = stamp.hostUptime.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        let dropped = compatible && stamp.sequence > (previous?.sequence ?? 0)
+            ? Int(min(stamp.sequence - (previous?.sequence ?? 0) - 1, UInt64(Int.max))) : 0
+        var missing = 0.0
+        var discontinuity = previous != nil && !compatible
+        var sampleDelta: Double?
+        if compatible, let previous, let old = previous.sampleTime, let current = stamp.sampleTime {
+            sampleDelta = Double(current) - Double(old) - Double(previous.frames)
+            if let delta = sampleDelta, delta != 0 {
+                discontinuity = true
+                missing = max(0, delta / stamp.sampleRate)
+                if delta < 0 { anchorSample = nil; anchorUptime = nil }
+            }
+        } else if dropped > 0, let previous {
+            discontinuity = true
+            missing = Double(dropped) * Double(previous.frames) / previous.sampleRate
+        }
+        // A paired host/sample anchor remains valid when later taps carry sample time only.
+        if let host = validHost, let sample = stamp.sampleTime, anchorUptime == nil {
+            anchorUptime = host; anchorSample = sample
+        }
+        var validity: AudioTimingValidity = .estimated
+        var time = max(0, stamp.callbackUptime - duration)
+        if let sample = stamp.sampleTime, let anchorSample, let anchorUptime {
+            time = anchorUptime + (Double(sample) - Double(anchorSample)) / stamp.sampleRate
+            validity = validHost == nil ? .sampleTime : .hostTime
+        } else if let host = validHost {
+            time = host; validity = .hostTime
+            // Contiguous delivery/sample facts distinguish small host-clock jitter from lost frames.
+            if compatible, dropped == 0, sampleDelta == nil, let previous, let previousTime,
+               abs(host - previousTime - Double(previous.frames) / previous.sampleRate) < 0.25 {
+                time = previousTime + Double(previous.frames) / previous.sampleRate
+            }
+        } else if compatible, !discontinuity, let previous, let previousTime {
+            time = previousTime + Double(previous.frames) / previous.sampleRate
+            validity = .estimated
+            // No sample time means the continuation is estimated even after an old valid host tap.
+            if stamp.sampleTime == nil { validity = .estimated }
+        }
+        if dropped > 0 { discontinuity = true }
+        previous = stamp; previousTime = time
+        return .init(uptime: time, validity: validity, missingDuration: missing,
+                     discontinuity: discontinuity, droppedBuffers: dropped)
+    }
+}
+
+struct STTDiagnostic: Codable, Sendable {
+    enum Kind: String, Codable, Sendable { case capture, conversion, droppedBuffer, retry, expired, result, failure }
+    let kind: Kind
+    var chunkID: UUID? = nil
+    var sequence: Int? = nil
+    var sampleRate: Double? = nil
+    var channels: Int? = nil
+    var frames: Int? = nil
+    var duration: Double? = nil
+    var timingValidity: AudioTimingValidity? = nil
+    var count: Int? = nil
+    var category: String? = nil
+
+    var isValid: Bool {
+        (sequence == nil || (0...1_000_000_000).contains(sequence!))
+            && (sampleRate == nil || (sampleRate!.isFinite && (8_000...192_000).contains(sampleRate!)))
+            && (channels == nil || (1...32).contains(channels!))
+            && (frames == nil || (0...20_000_000).contains(frames!))
+            && (duration == nil || (duration!.isFinite && (0...86_400).contains(duration!)))
+            && (count == nil || (0...1_000_000).contains(count!))
+            && (category == nil || ["tap_buffering_newest", "stream_drop", "audio_expired", "audio_conversion",
+                "transport_retry", "response_rejected"].contains(category!))
+    }
+}
+
+struct AudioPipelineClock: Sendable {
+    var uptime: @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    var date: @Sendable () -> Date = { .now }
+    var sleep: @Sendable (TimeInterval) async throws -> Void = { seconds in
+        try await Task.sleep(for: .seconds(max(0, seconds)))
+    }
+}
+
 struct AudioChunk: Sendable, Identifiable {
     let id: UUID
     let sessionID: UUID
@@ -94,6 +216,8 @@ struct AudioChunk: Sendable, Identifiable {
     let coreStart: Int
     let coreEnd: Int
     let pcm: Data
+    var timingValidity: AudioTimingValidity = .hostTime
+    var captureEpoch: UUID = UUID()
 
     var startedAt: Date { origin.addingTimeInterval(Double(coreStart) / 16_000) }
     var endedAt: Date { origin.addingTimeInterval(Double(coreEnd) / 16_000) }
@@ -121,13 +245,36 @@ struct AudioChunkAssembler: Sendable {
     private var coreStart = 0
     private var origin: Date?
     private var uptime: TimeInterval = 0
+    private var validity: AudioTimingValidity = .hostTime
+    private var epoch = UUID()
     private(set) var sequence = 0
     let sessionID: UUID
 
-    mutating func append(_ pcm: Data, at date: Date, uptime: TimeInterval) -> [AudioChunk] {
-        if origin == nil { origin = date; self.uptime = uptime }
-        bytes.append(pcm)
+    init(sessionID: UUID) { self.sessionID = sessionID }
+
+    var expiresAt: TimeInterval? { bytes.isEmpty ? nil : uptime + 60 }
+    var retainedSamples: Int { bytes.count / 2 }
+    var retainedGap: CaptureGap? {
+        guard let origin, bytes.count / 2 > coreStart else { return nil }
+        return CaptureGap(startedAt: origin.addingTimeInterval(Double(coreStart) / 16_000),
+                          endedAt: origin.addingTimeInterval(Double(bytes.count / 2) / 16_000),
+                          reason: "Ljudets 60 sekunder i minnet löpte ut.")
+    }
+    mutating func discard() { reset() }
+
+    mutating func append(_ pcm: Data, at date: Date, uptime: TimeInterval,
+                         timingValidity: AudioTimingValidity = .hostTime, captureEpoch: UUID? = nil) -> [AudioChunk] {
         var chunks: [AudioChunk] = []
+        if origin != nil, (!bytes.isEmpty),
+           (abs(uptime - self.uptime - Double(bytes.count / 2) / 16_000) > 1.0 / 16_000
+            || timingValidity != validity || (captureEpoch != nil && captureEpoch != epoch)) {
+            if let tail = finish() { chunks.append(tail) }
+        }
+        if origin == nil {
+            origin = date; self.uptime = uptime; validity = timingValidity
+            if let captureEpoch { epoch = captureEpoch }
+        }
+        bytes.append(pcm)
         while bytes.count / 2 >= coreStart + 21 * 16_000 {
             chunks.append(take(coreEnd: coreStart + 20 * 16_000, end: coreStart + 21 * 16_000))
         }
@@ -144,7 +291,8 @@ struct AudioChunkAssembler: Sendable {
     private mutating func take(coreEnd: Int, end: Int) -> AudioChunk {
         let chunk = AudioChunk(id: UUID(), sessionID: sessionID, sequence: sequence,
                                startSample: offset, origin: origin!, capturedUptime: uptime,
-                               coreStart: coreStart, coreEnd: coreEnd, pcm: Data(bytes.prefix(end * 2)))
+                               coreStart: coreStart, coreEnd: coreEnd, pcm: Data(bytes.prefix(end * 2)),
+                               timingValidity: validity, captureEpoch: epoch)
         sequence += 1
         let discard = max(0, coreEnd - 16_000)
         bytes.removeFirst(discard * 2)

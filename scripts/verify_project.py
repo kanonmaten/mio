@@ -49,6 +49,50 @@ def resolved_group_files(project, references, group, parent=Path('.')):
     return resolved
 
 
+def workflow_contract_issues(name, workflow):
+    """Return missing safety-critical fields for Mio's two required workflows."""
+    if not isinstance(workflow, dict) or not isinstance(workflow.get('jobs'), dict):
+        return ['YAML-roten måste innehålla en jobs-mappning']
+    jobs = workflow['jobs']
+    if name == 'build-unsigned-ipa.yml':
+        job = jobs.get('build', {})
+        job = job if isinstance(job, dict) else {}
+        steps = job.get('steps', [])
+        if not isinstance(steps, list):
+            return ['jobbets steps måste vara en lista']
+        commands = '\n'.join(step.get('run', '') for step in steps
+                              if isinstance(step, dict) and isinstance(step.get('run', ''), str))
+        checks = [
+            (len(jobs) == 1 and job.get('runs-on') == 'xcode-27', 'ett sammanhållet jobb på xcode-27'),
+            ('scripts/verify_concurrency.py' in commands and '--native' in commands,
+             'native strict-concurrencydiagnostik'),
+            ('-configuration Release' in commands and 'test-without-building' in commands,
+             'Release och XCTest'),
+            ('Mio-unsigned.ipa' in commands and 'Mio-buildinfo.txt' in commands,
+             'IPA-validering och byggproveniens'),
+        ]
+    elif name == 'verify-linux.yml':
+        job = jobs.get('verify', {})
+        job = job if isinstance(job, dict) else {}
+        steps = job.get('steps', [])
+        if not isinstance(steps, list):
+            return ['jobbets steps måste vara en lista']
+        commands = '\n'.join(step.get('run', '') for step in steps
+                              if isinstance(step, dict) and isinstance(step.get('run', ''), str))
+        actions = [step.get('uses', '') for step in steps if isinstance(step, dict)]
+        checks = [
+            (job.get('runs-on') == 'ubuntu-24.04' and job.get('container') == 'swift:6.3.3-noble',
+             'Ubuntu 24.04 och Swift 6.3.3 Noble'),
+            ('scripts/verify.py' in commands and '--logs-dir' in commands,
+             'den gemensamma verifieraren med sparad loggplats'),
+            (any(action.startswith('actions/upload-artifact@') for action in actions),
+             'uppladdning av verifieringsbevis'),
+        ]
+    else:
+        return []
+    return [description for present, description in checks if not present]
+
+
 def main():
     project = (ROOT / 'Mio.xcodeproj/project.pbxproj').read_text()
     declarations = re.findall(r'^\t\t([A-F0-9]{24})(?: /\*[^*]+\*/)? = \{', project, re.M)
@@ -57,7 +101,7 @@ def main():
     for path in resolved_group_files(project, references, '710000000000000000000001'):
         check((ROOT / path).is_file(), f'Xcode-gruppens källsökväg finns: {path}')
     builds = dict(re.findall(r'([A-F0-9]{24}) /\*[^*]+\*/ = \{isa = PBXBuildFile; fileRef = ([A-F0-9]{24})', project))
-    for folder, phase in [('Mio', '910000000000000000000001'), ('MioTests', '910000000000000000000002')]:
+    for folder, phase in [('Mio', '910000000000000000000001'), ('MioTests', '910000000000000000000002'), ('MioUITests', '920000000000000000000001')]:
         sources = sorted((ROOT / folder).rglob('*.swift'))
         body = object_body(project, phase)
         target_files = [references.get(builds.get(b, ''), '').strip('"') for b in re.findall(r'([A-F0-9]{24}) /\*[^*]+in Sources \*/', body)]
@@ -100,17 +144,29 @@ def main():
             check((path.parent / target).exists(), f'Länk {path.relative_to(ROOT)} → {target}')
     try:
         import yaml
-        workflow = yaml.safe_load((ROOT / '.github/workflows/build-unsigned-ipa.yml').read_text())
-        check(len(workflow['jobs']) == 1 and workflow['jobs']['build']['runs-on'] == 'xcode-27', 'Ett sammanhållet Xcode 27-jobb')
-        for step in workflow['jobs']['build']['steps']:
-            if 'run' in step:
-                result = subprocess.run(['bash', '-n'], input=step['run'], text=True, capture_output=True)
-                check(result.returncode == 0, f'Bash-syntax: {step["name"]}')
     except ImportError:
-        print('YAML-kontroll överhoppad: installera PyYAML för full kontroll.')
+        errors.append('PyYAML behövs för att validera båda GitHub-workflowfilerna')
+    else:
+        for name in ('build-unsigned-ipa.yml', 'verify-linux.yml'):
+            try:
+                workflow = yaml.safe_load((ROOT / '.github/workflows' / name).read_text())
+            except yaml.YAMLError as error:
+                errors.append(f'Ogiltig YAML i .github/workflows/{name}: {error}')
+                continue
+            check(isinstance(workflow, dict), f'.github/workflows/{name}: giltig YAML-mappning')
+            issues = workflow_contract_issues(name, workflow)
+            if issues:
+                errors.extend(f'.github/workflows/{name}: {issue}' for issue in issues)
+            else:
+                check(True, f'.github/workflows/{name}: säkerhetskritiska jobbinställningar')
+            for job in workflow.get('jobs', {}).values() if isinstance(workflow, dict) else []:
+                for step in job.get('steps', []) if isinstance(job, dict) else []:
+                    if isinstance(step, dict) and 'run' in step:
+                        result = subprocess.run(['bash', '-n'], input=step['run'], text=True, capture_output=True)
+                        check(result.returncode == 0, f'Bash-syntax: {name}: {step.get("name", "namnlöst steg")}')
     result = subprocess.run(['git', 'diff', '--check'], cwd=ROOT, text=True, capture_output=True)
     check(result.returncode == 0, 'git diff --check')
-    for folder in ('Mio', 'MioTests', 'server', 'transcription-server', 'scripts', 'docs'):
+    for folder in ('Mio', 'MioTests', 'MioUITests', 'server', 'transcription-server', 'scripts', 'docs'):
         for path in (ROOT / folder).rglob('*'):
             if {'node_modules', '.wrangler', 'dist', '.venv', '__pycache__', '.pytest_cache'}.intersection(path.relative_to(ROOT).parts):
                 continue

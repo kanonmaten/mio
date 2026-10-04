@@ -6,6 +6,33 @@ import FoundationNetworking
 @testable import Mio
 
 final class MioDiagnosticsTests: XCTestCase {
+    func testPrivacyFailureAfterAtomicCommitRemainsVisibleInSnapshot() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("diagnostics-v1.json")
+        let repository = MioDiagnosticsRepository(storageURL: url, fileManager: DiagnosticPrivacyFailureFileManager())
+        let generation = await repository.beginRequest()
+        await repository.record(MioDiagnosticEvent(operation: .status), generation: generation)
+        let snapshot = await repository.snapshot()
+        XCTAssertEqual(snapshot.storageStatus, .writeFailed)
+        XCTAssertEqual(snapshot.events.count, 1)
+    }
+
+    func testLoadedJournalCannotOverwriteExternallyReplacedUnknownSchema() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("diagnostics-v1.json")
+        let repository = MioDiagnosticsRepository(storageURL: url)
+        let generation = await repository.beginRequest()
+        await repository.record(MioDiagnosticEvent(operation: .status), generation: generation)
+        let unknown = Data(#"{"schemaVersion":99,"futureEvents":[],"privateFixture":"must remain"}"#.utf8)
+        try unknown.write(to: url, options: .atomic)
+        await repository.record(MioDiagnosticEvent(operation: .ask), generation: generation)
+        let snapshot = await repository.snapshot()
+        XCTAssertEqual(snapshot.storageStatus, .unsupportedSchema)
+        XCTAssertEqual(try Data(contentsOf: url), unknown)
+    }
+
     func testJournalSurvivesRestartBoundsHistoryAndRejectsLateCompletionAfterDeletion() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -145,6 +172,36 @@ final class MioDiagnosticsTests: XCTestCase {
         }
     }
 
+    func testHTTPDateRetryAfterUsesResponseDeadlineAndBoundsPastDates() throws {
+        let response = try XCTUnwrap(HTTPURLResponse(url: URL(string: "https://example.invalid")!, statusCode: 429,
+            httpVersion: nil, headerFields: ["Retry-After": "Thu, 01 Jan 1970 00:00:30 GMT"]))
+        // A date response must give a useful retry delay, not the generic 60-second value.
+        XCTAssertEqual(MioCloudService.httpFailure(response: response, body: Data()).retryAfterSeconds, 1)
+        XCTAssertEqual(MioCloudService.httpFailure(response: response, body: Data(), now: Date(timeIntervalSince1970: 0)).retryAfterSeconds, 30)
+    }
+
+    func testDiscoveryAcceptsBoundedFutureProvidersAndCapabilitiesButRequiresTaskSupport() throws {
+        let object: [String: Any] = ["protocolVersion": 2, "release": "fixture-v3", "configured": true,
+            "provider": "future_provider-2", "model": "reviewed:model", "promptVersion": "mio-v3",
+            "capabilities": ["analysis-context-v2", "future-feature-v9"]]
+        let status = try MioGatewayStatus.decode(JSONSerialization.data(withJSONObject: object))
+        XCTAssertEqual(status.provider, "future_provider-2")
+        XCTAssertNoThrow(try status.requireContextAnalysis())
+        var unsupported = object; unsupported["capabilities"] = ["future-feature-v9"]
+        XCTAssertThrowsError(try MioGatewayStatus.decode(JSONSerialization.data(withJSONObject: unsupported)).requireContextAnalysis())
+        for provider in ["https://private.invalid", "Bearer secret", String(repeating: "x", count: 65), "sk-secret"] {
+            var invalid = object; invalid["provider"] = provider
+            XCTAssertThrowsError(try MioGatewayStatus.decode(JSONSerialization.data(withJSONObject: invalid)))
+        }
+        for capabilities in [["future feature"], ["analysis-context-v2", "analysis-context-v2"], Array(repeating: "feature", count: 33)] {
+            var invalid = object; invalid["capabilities"] = capabilities
+            XCTAssertThrowsError(try MioGatewayStatus.decode(JSONSerialization.data(withJSONObject: invalid)))
+        }
+        let response = try XCTUnwrap(HTTPURLResponse(url: URL(string: "https://example.invalid")!, statusCode: 200,
+            httpVersion: nil, headerFields: ["X-Mio-Provider": "future_provider-2"]))
+        XCTAssertEqual(MioGatewayMetadata(response: response).provider, "future_provider-2")
+    }
+
     func testCustomModelIdentifiersMatchGatewayColonContract() throws {
         let data = Data("{\"protocolVersion\":2,\"release\":\"2026-09-30.1\",\"configured\":true,\"provider\":\"custom\",\"model\":\"fixture:model-v1\",\"promptVersion\":\"2026-09-30.1\",\"capabilities\":[\"analysis-context-v2\"]}".utf8)
         let status = try MioGatewayStatus.decode(data)
@@ -164,5 +221,12 @@ final class MioDiagnosticsTests: XCTestCase {
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: valid) as? [String: Any])
         object["secret"] = "private"
         XCTAssertThrowsError(try MioGatewayStatus.decode(JSONSerialization.data(withJSONObject: object)))
+    }
+}
+
+private final class DiagnosticPrivacyFailureFileManager: FileManager, @unchecked Sendable {
+    override func setAttributes(_ attributes: [FileAttributeKey: Any], ofItemAtPath path: String) throws {
+        if path.hasSuffix("diagnostics-v1.json") { throw CocoaError(.fileWriteNoPermission) }
+        try super.setAttributes(attributes, ofItemAtPath: path)
     }
 }

@@ -58,6 +58,8 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     let audioTimingIsValid: Bool
     var transcriptionMetadata: TranscriptionMetadata? = nil
     var sourceChunkID: UUID? = nil
+    var timingValidity: AudioTimingValidity? = nil
+    var correctionRevision: Int? = nil
 
     init(
         id: UUID = UUID(),
@@ -181,6 +183,8 @@ struct MioSession: Identifiable, Codable, Hashable, Sendable {
     var manualNote: String?
     var captureMode: MioCaptureMode?
     var captureGaps: [CaptureGap]? = nil
+    /// Ordering for repository mutations; absent in older sessions.
+    var mutationRevision: UInt64? = nil
 
     var isLesson: Bool { captureMode == .lesson }
 
@@ -252,6 +256,51 @@ struct MioSession: Identifiable, Codable, Hashable, Sendable {
             )
             .lowercased(with: Locale(identifier: "sv-SE"))
     }
+}
+
+/// One register retains active, suspended and ended sessions when selection changes.
+struct MioSessionRegister {
+    var sessions: [MioSession] = []
+    private var selectedID: UUID?
+
+    var current: MioSession? {
+        get { sessions.first { $0.id == selectedID } }
+        set {
+            selectedID = newValue?.id
+            if let newValue { replace(newValue) }
+        }
+    }
+
+    mutating func replace(_ session: MioSession) {
+        if let index = sessions.firstIndex(where: { $0.id == session.id }) {
+            guard (session.mutationRevision ?? 0) >= (sessions[index].mutationRevision ?? 0) else { return }
+            sessions[index] = session
+        } else { sessions.append(session) }
+        sessions.sort { $0.startedAt > $1.startedAt }
+    }
+
+    mutating func remove(id: UUID) {
+        sessions.removeAll { $0.id == id }
+        if selectedID == id { selectedID = nil }
+    }
+}
+
+protocol MioCapturePipeline: AnyObject, Sendable {
+    func start() async throws -> CaptureStartDetails
+    func foreground() async
+    func stop(discard: Bool) async
+}
+
+extension MioCapturePipeline {
+    func stop() async { await stop(discard: false) }
+}
+
+struct MioCaptureHandlers: Sendable {
+    let result: @Sendable (AudioChunk, TranscriptionReply, [TranscriptionWord]) async -> Void
+    let status: @Sendable (String) -> Void
+    let event: @Sendable (PipelineEvent) async -> Void
+    let failure: @Sendable (Error) async -> Void
+    var diagnostic: @Sendable (STTDiagnostic) async -> Void = { _ in }
 }
 
 enum PauseLength: Sendable {

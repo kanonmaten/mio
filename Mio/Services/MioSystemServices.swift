@@ -37,10 +37,17 @@ final class MioSystemServices {
     var statusMessage: String?
 
     @ObservationIgnored private let notificationCenter = UNUserNotificationCenter.current()
+    @ObservationIgnored private var notificationDelegate: MioNotificationDelegate?
     @ObservationIgnored private let alarmManager = AlarmManager.shared
     @ObservationIgnored private var knownAlarmIDs: Set<UUID> = Set(
         (UserDefaults.standard.stringArray(forKey: "mio.alarm.identities") ?? []).compactMap(UUID.init(uuidString:))
     )
+
+    func configureNotificationRouting(_ receive: @escaping @MainActor @Sendable (MioNotificationRoute) -> Void) {
+        let delegate = MioNotificationDelegate(receive: receive)
+        notificationDelegate = delegate
+        notificationCenter.delegate = delegate
+    }
 
     var notificationStatusText: String {
         switch notificationStatus {
@@ -200,7 +207,7 @@ final class MioSystemServices {
         components.timeZone = .current
         return await saveReminder(
             id: Self.reminderID(for: itemID),
-            body: "Du har en påminnelse i Mio. Öppna appen för att se dina poster.",
+            route: .post(itemID),
             components: components,
             repeats: false
         )
@@ -210,10 +217,8 @@ final class MioSystemServices {
     func scheduleDailyReminder(_ kind: MioDailyReminder, time: Date) async -> Bool {
         // Hour/minute without a fixed timezone follows the device's local day.
         let components = Calendar.current.dateComponents([.hour, .minute], from: time)
-        let body = kind == .morning
-            ? "Din morgonöversikt finns i Mio. Öppna appen när det passar."
-            : "Din kvällsöversikt finns i Mio. Öppna appen när det passar."
-        return await saveReminder(id: kind.id, body: body, components: components, repeats: true)
+        let route = kind == .morning ? MioNotificationRoute.morning : .evening
+        return await saveReminder(id: kind.id, route: route, components: components, repeats: true)
     }
 
     func cancelReminder(id: String) async {
@@ -319,7 +324,7 @@ final class MioSystemServices {
         }
     }
 
-    private func saveReminder(id: String, body: String, components: DateComponents, repeats: Bool) async -> Bool {
+    private func saveReminder(id: String, route: MioNotificationRoute, components: DateComponents, repeats: Bool) async -> Bool {
         guard !isBusy else { return false }
         isBusy = true
         errorMessage = nil
@@ -338,7 +343,8 @@ final class MioSystemServices {
             // Only generic text leaves the private app UI for notification surfaces.
             let content = UNMutableNotificationContent()
             content.title = "Mio"
-            content.body = body
+            content.body = route.notificationBody
+            content.userInfo = route.userInfo
             content.sound = .default
             let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: repeats)
             guard trigger.nextTriggerDate() != nil else {
@@ -358,6 +364,27 @@ final class MioSystemServices {
         } catch {
             errorMessage = "Kunde inte spara påminnelsen: \(error.localizedDescription)"
             return false
+        }
+    }
+}
+
+private final class MioNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    private let receive: @MainActor @Sendable (MioNotificationRoute) -> Void
+
+    init(receive: @escaping @MainActor @Sendable (MioNotificationRoute) -> Void) { self.receive = receive }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                           withCompletionHandler completionHandler: @escaping @Sendable () -> Void) {
+        // Dismissal and unknown payloads only finish the native callback. Copy a
+        // Sendable ID-only route before crossing to the main actor.
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+              let route = MioNotificationRoute(userInfo: response.notification.request.content.userInfo) else {
+            completionHandler()
+            return
+        }
+        Task { @MainActor [receive] in
+            receive(route)
+            completionHandler()
         }
     }
 }

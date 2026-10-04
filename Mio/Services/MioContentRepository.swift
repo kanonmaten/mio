@@ -2,9 +2,12 @@ import Foundation
 
 enum MioContentRepositoryError: LocalizedError {
     case unsupportedSchemaVersion(Int)
+    case duplicateIdentity
 
     var errorDescription: String? {
         switch self {
+        case .duplicateIdentity:
+            "Innehållsfilen innehåller dubbla identifierare och har inte ändrats."
         case let .unsupportedSchemaVersion(version):
             "Den lokala innehållsfilen använder okänd schemaversion \(version) och har inte skrivits över."
         }
@@ -17,6 +20,7 @@ actor MioContentRepository {
     private let storageURL: URL
     private let exportDirectoryURL: URL
     private var cachedItems: [MioContentItem]?
+    private var cachedStamp: MioFileStamp?
 
     init(
         fileManager: FileManager = .default,
@@ -33,12 +37,16 @@ actor MioContentRepository {
             .appendingPathComponent("Mio", isDirectory: true)
             .appendingPathComponent("content-v1.json", isDirectory: false)
         self.exportDirectoryURL = exportDirectoryURL ?? fileManager.temporaryDirectory
+            .appendingPathComponent("Mio-exports", isDirectory: true)
     }
 
     func loadItems() throws -> [MioContentItem] {
-        if let cachedItems {
+        let currentStamp = try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
+        if let cachedItems, currentStamp == cachedStamp {
             return cachedItems
         }
+
+        cachedItems = nil; cachedStamp = nil
 
         guard fileManager.fileExists(atPath: storageURL.path) else {
             cachedItems = []
@@ -50,8 +58,12 @@ actor MioContentRepository {
         guard document.schemaVersion == MioContentStoreDocument.currentSchemaVersion else {
             throw MioContentRepositoryError.unsupportedSchemaVersion(document.schemaVersion)
         }
+        guard Set(document.items.map(\.id)).count == document.items.count else {
+            throw MioContentRepositoryError.duplicateIdentity
+        }
         let sortedItems = MioContentItem.timelineSorted(document.items)
         cachedItems = sortedItems
+        cachedStamp = currentStamp
         return sortedItems
     }
 
@@ -74,20 +86,35 @@ actor MioContentRepository {
         return items
     }
 
+    /// Reconcile a retry after partial approval without overwriting later user edits.
+    func saveApprovedIfAbsent(_ item: MioContentItem) throws -> [MioContentItem] {
+        let items = try loadItems()
+        guard !items.contains(where: { $0.id == item.id }) else { return items }
+        return try upsert(item)
+    }
+
+    func unlinkSession(id: UUID) throws -> [MioContentItem] {
+        var items = try loadItems()
+        var changed = false
+        for index in items.indices where items[index].sessionID == id {
+            items[index].sessionID = nil
+            changed = true
+        }
+        if changed { try write(items) }
+        return items
+    }
+
     func deleteAll() throws {
         if fileManager.fileExists(atPath: storageURL.path) {
             try fileManager.removeItem(at: storageURL)
         }
-        let temporaryExports = try fileManager.contentsOfDirectory(
-            at: exportDirectoryURL,
-            includingPropertiesForKeys: nil
-        ).filter {
-            $0.lastPathComponent.hasPrefix("Mio-lokal-export-") && $0.pathExtension == "json"
+        for directory in Set([exportDirectoryURL, fileManager.temporaryDirectory]) {
+            guard fileManager.fileExists(atPath: directory.path) else { continue }
+            let temporaryExports = try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+                .filter { $0.lastPathComponent.hasPrefix("Mio-lokal-export-") && $0.pathExtension == "json" }
+            for export in temporaryExports { try fileManager.removeItem(at: export) }
         }
-        for export in temporaryExports {
-            try? fileManager.removeItem(at: export)
-        }
-        cachedItems = []
+        cachedItems = []; cachedStamp = nil
     }
 
     func makeExportFile(
@@ -100,9 +127,8 @@ actor MioContentRepository {
         formatter.locale = Locale(identifier: "sv-SE")
         formatter.dateFormat = "yyyy-MM-dd-HHmm"
 
-        try fileManager.createDirectory(at: exportDirectoryURL, withIntermediateDirectories: true)
         let exportURL = exportDirectoryURL.appendingPathComponent(
-            "Mio-lokal-export-\(formatter.string(from: .now)).json"
+            "Mio-lokal-export-\(formatter.string(from: .now))-\(UUID().uuidString).json"
         )
         let export = MioLocalExport(
             content: MioContentItem.timelineSorted(content),
@@ -111,29 +137,16 @@ actor MioContentRepository {
             diagnostics: diagnostics
         )
         let data = try Self.exportEncoder.encode(export)
-        try data.write(to: exportURL, options: .atomic)
-        try? fileManager.setAttributes(
-            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
-            ofItemAtPath: exportURL.path
-        )
+        try MioProtectedFileWriter.write(data, to: exportURL, fileManager: fileManager)
         return exportURL
     }
 
     private func write(_ items: [MioContentItem]) throws {
-        let directory = storageURL.deletingLastPathComponent()
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         let document = MioContentStoreDocument(items: items)
         let data = try Self.encoder.encode(document)
-        try data.write(to: storageURL, options: .atomic)
-        try? fileManager.setAttributes(
-            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
-            ofItemAtPath: storageURL.path
-        )
-        var resourceValues = URLResourceValues()
-        resourceValues.isExcludedFromBackup = true
-        var mutableDirectory = directory
-        try? mutableDirectory.setResourceValues(resourceValues)
+        try MioProtectedFileWriter.write(data, to: storageURL, fileManager: fileManager)
         cachedItems = items
+        cachedStamp = try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
     }
 
     private static let encoder: JSONEncoder = {

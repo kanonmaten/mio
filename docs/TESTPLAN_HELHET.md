@@ -1,10 +1,10 @@
 # Testa hela Mio
 
-Gäller helhetsbygget 0.9.0. Kör först [Pianissimo och bakgrund](TESTPLAN_PIANISSIMO.md); S01–S07 längre ned är enbart historiska build 5-prov. Testerna är instruktioner, inte körresultat. Använd syntetiska uppgifter och röster från personer som samtycker. Registrera resultat i [status](STATUS.md).
+Gäller helhetsbygget 0.9.0 och den aktuella sammanhängande arbetskopian. Kör först [verifieringen](VERIFIERING.md), därefter [Pianissimo och bakgrund](TESTPLAN_PIANISSIMO.md) och [enhets-/mätprotokollet](ENHETSPROV.md). S01–S07 längre ned är enbart historiska build 5-prov och gäller inte nya byggets privata Pianissimo-kedja. Testerna är instruktioner, inte körresultat. Använd syntetiska uppgifter och röster från personer som samtycker. Registrera resultat i [status](STATUS.md) för exakt revision.
 
 ## Före installation
 
-1. Kör `python3 scripts/verify_project.py` och `npm test --prefix server` i arbetskopian.
+1. Kör den gemensamma Linuxgrinden med uttrycklig källsökväg enligt [verifiering](VERIFIERING.md). I den isolerade arbetskopian: `python3 /home/kanonmaten/.codex/worktrees/mio-plan-reliability/Mio/scripts/verify.py`. Efter integration används samma script under `/home/kanonmaten/Documents/ChatGPT/Mio`. Ett resultat med hoppad Swift-grind är ofullständigt.
 2. Bygg exakt avsedd commit i GitHub Actions: Release, XCTest och IPA-validering ska lyckas. Dokumentera faktisk runner, körnings-URL och commit. En gammal grön körning räcker inte.
 3. Spara IPA:ns SHA-256 och versions-/byggnummer från artifactens `Mio-buildinfo.txt`.
 4. Installera rent med `app.mio.assistant` på iPhone 16 Pro. Ingen gammal prototypdata förväntas. Prova senare också på iPhone 13.
@@ -22,23 +22,23 @@ Gäller helhetsbygget 0.9.0. Kör först [Pianissimo och bakgrund](TESTPLAN_PIAN
 | H06 | Pausa, fortsätt och stoppa. Kontrollera mikrofonindikatorn. | Paus/stopp släcker mikrofonen. Ingen text tillkommer från nytt ljud när Mio är av. |
 | H07 | Öppna stoppad session, rätta en textdel, skapa två lektioner med angränsande intervall. Prova en överlappning och ett intervall utanför sessionen. | Giltiga indelningar sparas; felaktiga avvisas. Sekundkontroller fungerar i ett kort prov. Originaltext och ljudtider bevaras i exporten. |
 | H08 | Öppna sparad plan → Lägg en kopia i Kalender. Avbryt första gången; spara andra gången. | Bara den sparade kopian finns i vald kalender. Mio läser inte hela kalendern. Ändrad lokal plan ändrar inte kalenderkopian. |
-| H09 | Skapa en postpåminnelse två minuter framåt och lås telefonen. | Tillstånd efterfrågas vid Spara. Notisen har generell text och följer fokus-/ljudinställningar. |
+| H09 | Skapa en postpåminnelse två minuter framåt och lås telefonen. Öppna notisen vid kall och varm appstart; prova även en raderad post. | Tillstånd efterfrågas vid Spara. Generell text, endast opakt ID i rutten. Befintlig post öppnas; raderad post ger säker fallback. Ingen mikrofon-/AI-/systemåtgärd startas. |
 | H10 | Skapa ett alarm två minuter framåt. Lås telefonen och prova även med Fokus/tyst läge. Stoppa alarmet; skapa och ta bort ett veckoalarm. | Systemalarmet visas/ljuder enligt telefonens AlarmKit-beteende. Stoppa och avbryt fungerar. Inga privata posttexter på låsskärmen. |
-| H11 | Skapa dagens plan, öppen uppgift och avklarad uppgift. Öppna Morgon, byt till Kväll och välj annat datum. Spara och avbryt dagliga påminnelser. | Dagens lokala data visas korrekt, klarstatus ändras och notislistan speglar iOS. Ingen automatisk mikrofonstart. |
+| H11 | Skapa dagens plan, öppen uppgift och avklarad uppgift. Öppna Morgon/Kväll och välj historiskt datum. Prova foreground över midnatt, flera dagars uppehåll och tidszonsbyte, samt öppna daglig notis. | Dagens listor uppdateras; historiskt datum bevaras vid vanlig uppdatering. Daglig notis öppnar dagens rätta period. Klarstatus/notislista stämmer; inga automatiska mikrofonstarter. |
 | H12 | Slå på flygplansläge. Skapa, sök, redigera och radera lokal data. | Manuella funktioner fungerar; servertranskription visar offline och aktiv session begränsar ljudkön. AI misslyckas begripligt utan automatisk retry. |
 | H13 | Skapa lokal export. Inspektera privat JSON. | `schemaVersion: 2`, `content`, `sessions`, `assistant` och `diagnostics` finns. Original och correctedText är separata. Inga ljuddata, token eller API-nycklar. |
 | H14 | Radera en post med alarm/notis. Radera en session med lektioner/förslag och kopplad manuell post. | Postens systemåtgärder avbryts. Sessionsdata, dess lektioner och förslag försvinner; manuell post finns kvar utan trasig sessionskoppling. Kalenderkopior finns kvar separat. |
-| H15 | Med enbart testdata: Radera all lokal data och starta om. | Alla fyra datalager är tomma, egna alarm/notiser borta, AI avstängd och token glömd. Ingen sen återkoppling återskapar data. Delade filer och kalenderkopior måste tas bort där de finns. |
+| H15 | Med enbart testdata: Radera all lokal data och starta om. | Tre domänlager och diagnostik är borta/tomma, egna alarm/notiser borta, båda anslutningarna glömda och AI av. Raderingsjournalen tas bort först när stegen är klara. Ingen sen återkoppling återskapar data. Delade filer/kalenderkopior hanteras där de finns. |
 
 ## AI-prov efter egen serverkonfiguration
 
-Använd [serverguiden](../server/README.md). Verkliga OpenAI-anrop kan kosta pengar och kräver din konfiguration. Kör först serverns mockade testsvit, sedan dessa telefonprov med en ofarlig fråga.
+Använd [serverguiden](../server/README.md) och den granskade [leverantörsmatrisen](../server/PROVIDERS.md). Verkliga modellanrop kan kosta pengar och kräver separat godkänd syntetisk sändning med uttryckligt vald profil. Kör först den modellfria lokala sviten. Ett statusanrop eller godkänt wire-fixtureprov bevisar inte providerbehörighet, interna modellparametrar eller svensk kvalitet.
 
 | ID | Prov | Förväntat |
 |---|---|---|
 | AI01 | Ny installation eller glömd anslutning. Öppna AI-vyn utan att aktivera. | Molnet är av. Inga nätanrop sker vid visning eller konfigurationssparning. |
-| AI02 | Ange HTTPS-server och separat gatewaytoken; aldrig OpenAI-nyckeln i appen. Slå på, skriv fråga och välj ett litet syntetiskt utdrag. | Urval börjar tomt. Preview visar exakt fråga, etiketter, utdrag och mottagare. Redigering av kopian ändrar inte originalet. |
-| AI03 | Avbryt preview, öppna igen och skicka uttryckligen. | Avbryt skickar inget. Skicka ger ett svar utan att skapa eller ändra någon lokal post/systemåtgärd. |
+| AI02 | Ange HTTPS-server och separat gatewaytoken; aldrig leverantörsnyckeln i appen. Testa text-AI-anslutningen, slå på, skriv fråga och välj litet syntetiskt utdrag. | Modellfri status visar autentisering, protokoll/release och profiler. Urval börjar tomt; preview visar exakt fråga, etiketter, utdrag, mottagare och fryst profil/revision. Originalet ändras inte. |
+| AI03 | Avbryt preview, öppna igen och skicka uttryckligen. | Status-GET kan ha utförts, men Avbryt skickar ingen fråga/källtext till modell. Skicka ger ett tillfälligt svar utan automatisk lokal post, historik eller systemåtgärd. |
 | AI04 | Säg ”Mio, fråga varför himlen är blå”. Välj Inte nu, öppna senare och gå vidare till AI-granskning. | Röstfrågan stannar lokalt i inkorgen tills du väljer att skicka. Ingen kontext följer med automatiskt. Fel/avbryt lämnar frågan väntande; lyckat svar avför den. |
 | AI05 | Prova fel token, frånkopplat nät, för långt utdrag och en server som svarar med redirect. Avbryt även medan svar inväntas. | Begripliga fel; ingen credential/privat text skickas till redirectmål; ingen automatisk retry eller sent svar efter avbryt. |
 | AI06 | Glöm anslutningen och försök igen. Radera all lokal data medan andra vyer tidigare varit öppna. | Molnet är avstängt. Inga gamla frågor/utdrag eller svar ligger kvar i öppen AI-vy; token ingår aldrig i export. |
@@ -55,7 +55,7 @@ Använd [serverguiden](../server/README.md). Verkliga OpenAI-anrop kan kosta pen
 
 Kör [transkriptions- och långtestet](TESTPLAN_V0_1.md): låst skärm minst 10 minuter, batteri minst 60 minuter utan laddare, ljudavbrott och ljudvägsbyte. Först därefter ett 3–4-timmarsprov. Gamla mätningar i [historiken](TESTRESULTAT_V0_1.md) bevaras.
 
-Anteckna **Godkänd / Underkänd / Blockerad / Ej körd** per test med commit, Actions-URL, IPA-hash, version/build, telefon och iOS. En installerad app är inte automatiskt telefonverifierad, och gröna mocktester verifierar inte en verklig OpenAI-server. Börja vardagsanvändning först efter godkända kärnflöden och dokumenterade accepterade begränsningar.
+Anteckna **Godkänd / Underkänd / Blockerad / Ej körd** per test med commit, Actions-URL, IPA-hash, version/build, telefon och iOS samt separat gatewayrelease/revision/modell. En installerad app är inte automatiskt telefonverifierad, och gröna mocktester verifierar inte en verklig leverantör. Börja vardagsanvändning först efter godkända kärnflöden och dokumenterade accepterade begränsningar. Använd mallen i [enhetsprotokollet](ENHETSPROV.md); spara privata exporter utanför repot och låt [historiska resultat](TESTRESULTAT_V0_1.md) ligga kvar.
 
 ## Lektionsläge efter telefonprovet
 
@@ -98,11 +98,11 @@ Alla nedanstående prov är **ej körda** på fysisk telefon. Ange appbuild, tel
 | S06 | Exportera efter start och eventuellt fallback | Händelser visar före/efter-status, använd motor och eventuell felorsak/domän/kod; inga ljuddata eller hemligheter |
 | S07 | Läs samma svenska facit på nära håll och lektionsavstånd, och kör långproven ovan | Mät precision, latens, batteri och avbrott separat. Ingen automatisk kvalitetsbedömning utifrån motorns namn |
 
-Slutrapport för måltelefonen ska besvara: stöds sv-SE, är modellen installerad, lyckas automatisk installation, varför inträffar fallback och vilken motor fungerade bäst i dessa prov?
+En rapport för den historiska S-serien ska besvara: stöds sv-SE, är modellen installerad, lyckas automatisk installation, varför inträffar fallback och vilken motor fungerade bäst i dessa prov? Detta är inte den nya produktens acceptance; den har ingen Apple-/CPU-fallback.
 
 ## Utbytbar AI och detaljerade anteckningar — nya prov, ej körda på iPhone
 
-Kör först `npm test --prefix server` och `WRANGLER_SEND_METRICS=false npm run worker:test --prefix server`. De använder mockad AI och gör inga betalda anrop. Verkliga modellprov nedan kräver uttryckligt vald leverantör och tillgänglig kvot/saldo.
+Kör först den gemensamma [verifieringen](VERIFIERING.md). Node och det faktiska Worker-paketet använder syntetiska leverantörssvar; Python använder fake-backend. Inga betalda modellanrop görs. Verkliga modellprov nedan kräver separat godkänd sändning, uttryckligt vald kompatibel profil och tillgänglig kvot/saldo.
 
 | ID | Prov | Förväntat |
 |---|---|---|
@@ -143,3 +143,27 @@ Kör med syntetisk text efter publicering av rätt gateway och nytt Xcode-bygge.
 | D06 | Stoppa/pausa medan transkriptionens sista del avslutas; även låst skärm | Sluttext kan analyseras när appen får köra; ingen förlorad lokal text och ingen gammal kontext efter Fortsätt. Avstängning/radering ska fortfarande avbryta. Dokumentera iOS-avbrott och kvarstående arbete |
 | D07 | Stor Unicode-text/flera planer och mer än en minuts backlog | Nya fragment kapas/numreras inte om. Äldre kontext begränsas inom byte-/antalstak och `contextLimited` märks. Ingen tvetydig sammanslagning |
 | D08 | Gammal gateway, Access 403/HTML, nätfel, 429; full radering under anrop | V2 vägrar inkompatibel server. Felkod/HTTP/nätdata är säkra och exporteras utan felkropp. Inga automatiska retries. Sena svar/journalhändelser återställer inte raderad data |
+
+## Sammanhängande reliability-/workflowprov
+
+Dessa prov gäller den aktuella arbetskopian. Förena verkliga repositories/workflow med kontrollerade transport-/systemfel i XCTest, och prova de märkta native flödena på exakt installerad revision. Ingen omfattande snapshotserie behövs.
+
+| ID | Prov | Acceptans och bevis |
+|---|---|---|
+| R01 | Capture-checkpoint anländer efter titel-/rättningspatch, efter slutmarkering och efter radering | Sen metadata bevaras; original/evidens är oförändrat; avslutad session öppnas inte; raderad session återskapas inte. XCTest plus native exportkontroll |
+| R02 | Vardag → lektion → vardag, avbruten/felad lektionsstart, dubbla avslut och tidigare mikrofonfel | Ett register behåller rätt session; faktisk lagringsframgång styr avslut; registrering köas och kan provas igen; aldrig oavsiktlig mikrofonstart |
+| R03 | Export under sen sista capture-text och konkurrerande förslags-/anteckningsskrivning | Sammanhängande actor-snapshot, senaste checkpoint, skyddade unika exportfiler; inga hemligheter/ljud. Sen UI-refresh tappar inte exporten |
+| R04 | Stoppa processen efter varje raderingssteg; fel i systemavbrytning, credential-/fil-/journalstädning | ID-avsikt finns först, restart/retry fortsätter idempotent; delvis fel syns och blockerar nytt arbete. Sena svar/checkpoint kan inte återuppliva data |
+| R05 | Okända scheman, skadade/dubbla identiteter och utbytt fil medan cache finns | Ingen okänd eller ogiltig store skrivs över. Diagnostik-/operationsfel visas. Aktuell fil ersätter stale cache i läsningen |
+| R06 | AI kompletterar ett granskat förslag; ändra rubrik/typ/text/tid och godkänn två gånger | Versionskonflikt kräver explicit ny granskning; redigerade fält behålls. Datumkontroll återställs; saknad tid kräver användarval. En post, senare redigering bevaras |
+| R07 | Modellfri v2-status med fel auth, inkompatibel uppgift och okänd kvot | Ingen modelltrafik eller kvotreservation. Auth/protokoll/profiler/release skiljs från oprövad provideråtkomst. Okänd kvot är inte noll; uppgifter delar dagsgränsen |
+| R08 | Fråge-/vardags-/lektionsprofiler har olika leverantörer; credentials roteras eller serverrevision byts efter preview/aktivering | Rätt task och separat hemlighet används. Inget tyst byte/fallback. 409 stoppar sändning/analys före modell/kvot och kräver ny granskning/manuell aktivering |
+| R09 | Refusal/truncation, fel datum/källa/schema, stor/chunkad felkropp, hängande kvotläsning/reservation och klientavbrott | Säkra särskiljbara fel, strikt validering och hel tidsgräns inklusive body/läsning; slot/timer/listener/body städas. Ingen sen inference efter deadline eller kvotrefund |
+| R10 | Vänta offline längre än 60 s under upload/retry/stopp; tappa ett/två taps, formatbyte och kort slutdel | Äldsta sample bestämmer expiry; förlust blir verklig lucka, nytt ljud/tider korsar inte gap. Samples/tail hanteras enligt konverteringsgränsen. XCTest och fysisk svensk referens |
+| R11 | Frågesvar → lämna vyn; explicit redigera/Spara anteckning, dubbelspara efter senare redigering och framkalla filfel | Ingen automatisk post/historik. Explicit `.note` använder stabilt ID, inget extra AI-anrop/systemåtgärd. Fel behåller manuellt utkast; senare redigering skrivs inte över |
+| R12 | Ändra/glöm konfiguration eller radera medan preview/svar/draft är öppet; svar efter ändring utan resetnotis | Default-workflow kontrollerar aktuell konfiguration före/efter transport. Ogiltigt draft/late answer används inte och startar inget nytt anrop |
+| R13 | Rätta källtext efter sparad lektionsdel; äldre post utan revisionsmetadata; avbryt efter första del/starta om/kopiera | Aktuell/äldre/okänd aktualitet är ärlig. Delar/citat/redigeringar/ordning bevaras. Kopia varnar för saknade delar/luckor/källa; ingen automatisk rättningssändning |
+| R14 | Native fem flikar, tre separata tillstånd, morgon/kväll/inställningar och namngiven uppgiftsknapp | Tre UI-smokeprov + fysisk VoiceOver/stor text/mörkt/Minska rörelse/genomskinlighet; minst 44-punkters tryckyta även i iPhone 13-layout |
+| R15 | Flera längre syntetiska historier och ett jämförbart fysiskt ljud-/batteriprov | Mät verklig JSON-avkodning/kodning/atomisk patchskrivning/RAM separat från converter/requestantal/GPU/telefonlatens/värme/batteri. Ingen databas- eller kvalitetsvinst påstås från green tests |
+
+För aktuella Linux-/native-kommandon och loggkrav, se [VERIFIERING](VERIFIERING.md). Följ [ENHETSPROV](ENHETSPROV.md) för acceptance och mätning. Modellverktyg, genererad streaming, automatisk handling, råljudsfiler, cloud STT, Apple-/CPU-fallback och tyst mikrofonåterstart ingår inte och ska inte markeras som implementerade funktioner.

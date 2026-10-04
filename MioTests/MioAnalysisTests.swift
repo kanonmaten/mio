@@ -3,6 +3,15 @@ import XCTest
 @testable import Mio
 
 final class MioAnalysisTests: XCTestCase {
+    func testAnalysisDatesRejectNormalizedImpossibleCalendarComponents() throws {
+        for date in ["2026-02-29T12:00:00Z", "2026-04-31T12:00:00Z", "2026-10-01T24:00:00Z",
+                     "2026-10-01T12:00:00+24:00", "2026-10-01T12:00:00+01:60"] {
+            XCTAssertNil(MioAnalysisResult.parseDate(date), date)
+        }
+        XCTAssertNotNil(MioAnalysisResult.parseDate("2024-02-29T12:00:00+01:30"))
+        XCTAssertNotNil(MioAnalysisResult.parseDate("2026-10-01T12:00:00.123Z"))
+    }
+
     func testFragmentationPreservesEveryCharacterAndBoundsUnicodePayloads() throws {
         let text = String(repeating: "Åäö 👩🏽‍🏫 Vi övar procent. ", count: 800)
         let segment = TranscriptSegment(text: text, containsMio: false)
@@ -75,7 +84,7 @@ final class MioAnalysisTests: XCTestCase {
         let lesson = MioSession(captureMode: .lesson)
         let sent = expectation(description: "New everyday text is sent")
         let connection = MioCloudConnection(endpoint: URL(string: "https://example.invalid/v1/ask")!, token: "synthetic")
-        let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true }, send: { request, _ in
+        let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true }, prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { request, _ in
             XCTAssertEqual(request.fragments.count, 1)
             XCTAssertNotEqual(request.fragments.first?.segmentID, oldID)
             XCTAssertEqual(request.fragments.first?.text, "Ny plan utan väckningsord")
@@ -83,7 +92,7 @@ final class MioAnalysisTests: XCTestCase {
             return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
         }, wait: { _ in })
         let delayed = TranscriptSegment(audioStartedAt: .now.addingTimeInterval(-30), text: "Sent svar från äldre ljud", containsMio: false)
-        try coordinator.enable(existingSessions: [everyday, lesson])
+        try await coordinator.enable(existingSessions: [everyday, lesson])
         everyday.transcripts.append(delayed)
         everyday.transcripts.append(TranscriptSegment(text: "Ny plan utan väckningsord", containsMio: false))
         coordinator.observe(everyday, assistant: assistant)
@@ -100,7 +109,7 @@ final class MioAnalysisTests: XCTestCase {
         for action in 0..<3 {
             let waiting = expectation(description: "Batch waits for aggregation")
             let cancelled = expectation(description: "Wait observes cancellation")
-            let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true }, send: { _, _ in
+            let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true }, prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { _, _ in
                 XCTFail("Cancelled text must never reach the transport")
                 return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
             }, wait: { _ in
@@ -108,7 +117,7 @@ final class MioAnalysisTests: XCTestCase {
                 do { try await Task.sleep(for: .seconds(60)) }
                 catch { cancelled.fulfill(); throw error }
             })
-            try coordinator.enable(existingSessions: [])
+            try await coordinator.enable(existingSessions: [])
             let session = MioSession(transcripts: [TranscriptSegment(text: "Vi ses i morgon", containsMio: false)])
             coordinator.observe(session, assistant: assistant)
             await fulfillment(of: [waiting], timeout: 2)
@@ -233,12 +242,12 @@ extension MioAnalysisTests {
         let sent = expectation(description: "Only unfinished part sent")
         let connection = MioCloudConnection(endpoint: URL(string: "https://example.invalid/v1/ask")!, token: "synthetic")
         let metadata = lessonMetadata
-        let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true }, send: { request, _ in
+        let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true }, prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { request, _ in
             XCTAssertEqual(request.fragments.map(\.id), [fragments[1].id])
             sent.fulfill()
             return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [], sections: [], metadata: metadata)
         }, wait: { seconds in XCTAssertGreaterThan(seconds, 0) })
-        try coordinator.enable(existingSessions: [session])
+        try await coordinator.enable(existingSessions: [session])
         coordinator.summarizeLesson(session, assistant: assistant)
         await fulfillment(of: [sent], timeout: 2)
         coordinator.disable()
@@ -257,7 +266,7 @@ extension MioAnalysisTests {
         let cancelled = expectation(description: "Pending part cancelled")
         var calls = 0
         let connection = MioCloudConnection(endpoint: URL(string: "https://example.invalid/v1/ask")!, token: "synthetic")
-        let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true }, send: { _, _ in
+        let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true }, prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { _, _ in
             calls += 1
             return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [], sections: [], metadata:
                 MioAnalysisMetadata(provider: "groq", model: "qwen/qwen3.8-27b", promptVersion: "test", lessonIntervalSeconds: 120))
@@ -268,7 +277,7 @@ extension MioAnalysisTests {
             do { try await Task.sleep(for: .seconds(60)) }
             catch { cancelled.fulfill(); throw error }
         })
-        try coordinator.enable(existingSessions: [session])
+        try await coordinator.enable(existingSessions: [session])
         coordinator.summarizeLesson(session, assistant: assistant)
         await fulfillment(of: [waiting], timeout: 2)
         coordinator.disable()

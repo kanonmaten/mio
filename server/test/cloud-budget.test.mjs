@@ -52,6 +52,34 @@ test('failed or exhausted cloud budget cannot make a provider call; auth runs fi
   assert.equal((await send(config.gatewayToken)).status, 429);
   fail = true;
   const response = await send(config.gatewayToken);
-  assert.equal(response.status, 502);
-  assert.deepEqual(await response.json(), { error: 'upstream_unavailable' });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'budget_store_failed' });
+});
+
+test('late D1 reservation remains consumed after timeout and never starts inference', async t => {
+  const db = database(t);
+  const entered = Promise.withResolvers();
+  const release = Promise.withResolvers();
+  let calls = 0;
+  let reservations = 0;
+  const config = { apiKey: 'fixture-key', gatewayToken: 'fixture_gateway_token_01234567890123456789', model: 'gpt-6-luna',
+    requestsPerMinute: 60, requestsPerDay: 1, upstreamTimeoutMs: 30, bodyTimeoutMs: 1000 };
+  const server = createMioServer({ config, reserveBudget: async () => {
+    reservations++;
+    if (reservations === 1) { entered.resolve(); await release.promise; }
+    return reserveCloudBudget(db, config, 0);
+  }, fetchImpl: async () => { calls++; assert.fail('Late quota must never start a provider call'); } });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
+  const send = () => fetch(`http://127.0.0.1:${server.address().port}/v1/ask`, {
+    method: 'POST', headers: { Authorization: `Bearer ${config.gatewayToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: 'Syntetiskt prov', context: [] }), signal: AbortSignal.timeout(500)
+  });
+  const pending = send(); await entered.promise;
+  const response = await pending;
+  assert.equal(response.status, 504);
+  release.resolve();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(await reserveCloudBudget(db, config, 0), false, 'The completed late D1 reservation must remain charged');
+  assert.equal(calls, 0);
 });

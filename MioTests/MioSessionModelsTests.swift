@@ -70,5 +70,36 @@ final class MioSessionModelsTests: XCTestCase {
         XCTAssertNil(session.manualNote)
         XCTAssertEqual(session.transcripts.first?.text, "Hej Mio")
         XCTAssertNil(session.transcripts.first?.correctedText)
+        XCTAssertNil(session.transcripts.first?.correctionRevision)
+        XCTAssertNil(session.mutationRevision)
+    }
+
+    func testSessionRegisterRetainsSuspendedEverydayWhenLessonIsSelected() {
+        var register = MioSessionRegister()
+        let everyday = MioSession(startedAt: Date(timeIntervalSince1970: 1_000), title: "Vardag")
+        register.current = everyday
+        var lesson = MioSession(startedAt: Date(timeIntervalSince1970: 2_000), title: "Lektion", captureMode: .lesson)
+        register.current = lesson
+        lesson.endedAt = Date(timeIntervalSince1970: 2_010)
+        register.current = lesson
+        register.current = register.sessions.first { $0.id == everyday.id }
+        XCTAssertEqual(register.current?.id, everyday.id)
+        XCTAssertNil(register.current?.endedAt)
+        XCTAssertEqual(Set(register.sessions.map(\.id)), Set([everyday.id, lesson.id]))
+        XCTAssertEqual(register.sessions.first { $0.id == lesson.id }?.endedAt, Date(timeIntervalSince1970: 2_010))
+    }
+
+    func testSessionRegisterRejectsOlderMutationResults() {
+        var register = MioSessionRegister()
+        var original = MioSession(title: "Äldre")
+        original.mutationRevision = 1
+        register.current = original
+        var latest = original; latest.title = "Nyare"; latest.mutationRevision = 2
+        register.replace(latest)
+        register.replace(original)
+        XCTAssertEqual(register.current?.title, "Nyare")
+        register.remove(id: original.id)
+        XCTAssertNil(register.current)
+        XCTAssertTrue(register.sessions.isEmpty)
     }
 }

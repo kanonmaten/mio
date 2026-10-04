@@ -24,11 +24,15 @@ class Backend:
         self.words = [{"word": "Hej", "start": 0.1, "end": 0.5}]
     def load(self):
         pass
+    def is_ready(self):
+        return True
+    def metadata(self):
+        return {"model": self.model_id, "revision": self.revision, "backend": "synthetic"}
     def transcribe(self, pcm):
         self.calls += 1
         if self.block:
             self.block.wait(2)
-        return self.words
+        return normalize_words(self.words, len(pcm) // 2)
 
 
 def audio(samples=16_000, rate=16_000, channels=1):
@@ -203,3 +207,30 @@ def test_frame_quantized_end_is_clipped_without_shifting_start():
         {"text": "Hej", "start": .2, "end": 1.0}]
     with pytest.raises(RequestError):
         normalize_words([{"word": "Hej", "start": 1.01, "end": 1.08}], 16000)
+
+
+def test_oversized_serialized_result_is_rejected_before_retry_cache(service):
+    client, backend, _ = service
+    # Each word is independently valid. Together their JSON exceeds the iPhone cap.
+    backend.words = [{"word": "å" * 200, "start": .1, "end": .5}] * 1500
+    h = headers()
+    first = client.post("/v1/transcribe", headers=h, content=audio())
+    assert first.status_code == 502
+    assert first.json() == {"error": "model_result_too_large"}
+    backend.words = [{"word": "Hej", "start": .1, "end": .5}]
+    second = client.post("/v1/transcribe", headers=h, content=audio())
+    assert second.status_code == 200
+    assert backend.calls == 2
+
+
+def test_api_uses_backend_metadata_and_readiness_contract():
+    backend = Backend()
+    backend.metadata = lambda: {"model": "synthetic/adapter", "revision": "b" * 40, "backend": "synthetic"}
+    backend.is_ready = lambda: False
+    with TestClient(create_app(backend, TOKEN, fatal_exit=lambda _: None)) as client:
+        time.sleep(.01)
+        response = client.get("/health", headers=headers())
+        assert response.status_code == 503
+        assert response.json()["metadata"]["backend"] == "synthetic"
+        assert client.post("/v1/transcribe", headers=headers(), content=audio()).status_code == 503
+        assert backend.calls == 0

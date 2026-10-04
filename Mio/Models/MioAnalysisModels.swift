@@ -8,6 +8,10 @@ struct MioAnalysisFragment: Codable, Hashable, Sendable {
     let id: String
     let text: String
     let occurredAt: String
+    /// Captured with the approved text; excluded from the established server wire.
+    var sourceRevision: Int? = nil
+
+    private enum CodingKeys: String, CodingKey { case id, text, occurredAt }
 
     var segmentID: UUID? {
         let parts = id.split(separator: ":", omittingEmptySubsequences: false)
@@ -31,7 +35,8 @@ struct MioAnalysisFragment: Codable, Hashable, Sendable {
         return parts.enumerated().compactMap { index, text in
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
             return Self(id: "\(segment.id.uuidString):\(index)", text: text,
-                        occurredAt: ISO8601DateFormatter().string(from: segment.audioStartedAt))
+                        occurredAt: ISO8601DateFormatter().string(from: segment.audioStartedAt),
+                        sourceRevision: MioSourceRevision.currentRevision(of: segment))
         }
     }
 }
@@ -54,6 +59,17 @@ struct MioAnalysisRequest: Codable, Sendable {
     var queueSize: Int? = nil
 
     var allFragments: [MioAnalysisFragment] { contextFragments + fragments }
+
+    var sourceRevisions: [MioSourceRevision]? {
+        var revisions: [UUID: Int] = [:]
+        for fragment in fragments {
+            guard let segmentID = fragment.segmentID, let revision = fragment.sourceRevision, revision >= 0,
+                  revisions[segmentID] == nil || revisions[segmentID] == revision else { return nil }
+            revisions[segmentID] = revision
+        }
+        return revisions.sorted { $0.key.uuidString < $1.key.uuidString }
+            .map { MioSourceRevision(segmentID: $0.key, correctionRevision: $0.value) }
+    }
 
     private enum CodingKeys: String, CodingKey {
         case mode, timeZone, fragments, contextFragments, priorDecisions, contextLimited
@@ -197,6 +213,20 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
     }
 
     static func parseDate(_ value: String) -> Date? {
+        // Foundation normalizes impossible dates and offsets; validate the original components first.
+        guard value.utf8.count <= 64,
+              let pattern = try? NSRegularExpression(pattern: #"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?(?:Z|[+-]([0-9]{2}):([0-9]{2}))$"#),
+              let match = pattern.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) else { return nil }
+        let components = (1...8).map { index -> Int in
+            guard let range = Range(match.range(at: index), in: value) else { return 0 }
+            return Int(value[range]) ?? -1
+        }
+        let year = components[0], month = components[1], day = components[2]
+        let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+        let days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        guard (1...12).contains(month), (1...days[month - 1]).contains(day),
+              components[3] <= 23, components[4] <= 59, components[5] <= 59,
+              components[6] <= 23, components[7] <= 59 else { return nil }
         let formatter = ISO8601DateFormatter()
         if let date = formatter.date(from: value) { return date }
         formatter.formatOptions.insert(.withFractionalSeconds)
@@ -214,6 +244,20 @@ struct MioAnalysisRecord: Identifiable, Codable, Hashable, Sendable {
     let createdAt: Date
     var sections: [MioLessonSection]? = nil
     var metadata: MioAnalysisMetadata? = nil
+    var sourceRevisions: [MioSourceRevision]? = nil
+
+    var sourceRevisionsAreValid: Bool {
+        guard sourceRevisions != nil else { return true }
+        let sourceIDs = fragmentIDs.compactMap { MioAnalysisFragment(id: $0, text: "", occurredAt: "").segmentID }
+        return sourceIDs.count == fragmentIDs.count
+            && MioSourceRevision.areValid(sourceRevisions, expectedIDs: Set(sourceIDs))
+    }
+
+    func freshness(in session: MioSession) -> MioSourceFreshness {
+        guard session.id == sessionID, sourceRevisionsAreValid else { return .unknown }
+        let sourceIDs = Set(fragmentIDs.compactMap { MioAnalysisFragment(id: $0, text: "", occurredAt: "").segmentID })
+        return MioSourceFreshness.compare(sourceRevisions, with: session.transcripts, expectedIDs: sourceIDs)
+    }
 }
 
 struct MioLessonSection: Codable, Hashable, Sendable {
@@ -242,15 +286,37 @@ struct MioLessonDocument {
 
     var fragments: [MioAnalysisFragment] { session.transcripts.flatMap(MioAnalysisFragment.make) }
     var orderedRecords: [MioAnalysisRecord] {
-        let order = Dictionary(uniqueKeysWithValues: fragments.enumerated().map { ($0.element.id, $0.offset) })
-        return records.filter { $0.sessionID == session.id && $0.sections != nil }.sorted {
-            ($0.fragmentIDs.compactMap { order[$0] }.min() ?? Int.max)
-                < ($1.fragmentIDs.compactMap { order[$0] }.min() ?? Int.max)
+        let segmentOrder = Dictionary(session.transcripts.enumerated().map { ($0.element.id, $0.offset) },
+                                      uniquingKeysWith: min)
+        func position(_ record: MioAnalysisRecord) -> (Int, Int) {
+            record.fragmentIDs.compactMap { id -> (Int, Int)? in
+                let fragment = MioAnalysisFragment(id: id, text: "", occurredAt: "")
+                guard let segmentID = fragment.segmentID, let segment = segmentOrder[segmentID],
+                      let part = Int(id.split(separator: ":").last ?? "") else { return nil }
+                return (segment, part)
+            }.min(by: { $0 < $1 }) ?? (Int.max, Int.max)
         }
+        // Corrections can remove current fragment suffixes. Sort persisted parts
+        // by their stable segment/part identity, never the corrected text length.
+        return records.enumerated().filter { $0.element.sessionID == session.id && $0.element.sections != nil }
+            .sorted {
+                let left = position($0.element), right = position($1.element)
+                return left == right ? $0.offset < $1.offset : left < right
+            }.map(\.element)
     }
     var completedCount: Int {
         let completed = Set(orderedRecords.flatMap(\.fragmentIDs))
         return fragments.filter { completed.contains($0.id) }.count
+    }
+    var remainingCount: Int { max(0, fragments.count - completedCount) }
+    var remainingRequestCount: Int {
+        let completed = Set(orderedRecords.flatMap(\.fragmentIDs))
+        return MioAnalysisRequest.batches(mode: .lesson, fragments: fragments.filter { !completed.contains($0.id) }).count
+    }
+    var freshness: MioSourceFreshness {
+        let values = orderedRecords.map { $0.freshness(in: session) }
+        if values.contains(.older) { return .older }
+        return values.isEmpty || values.contains(.unknown) ? .unknown : .current
     }
     var isComplete: Bool { session.endedAt != nil && !fragments.isEmpty && completedCount == fragments.count }
     var progress: String {
@@ -260,6 +326,7 @@ struct MioLessonDocument {
     var markdown: String {
         var parts = ["# \(session.title ?? "Lektion")", session.startedAt.formatted(date: .abbreviated, time: .shortened),
                      "AI-utkast. \(progress)"]
+        if !orderedRecords.isEmpty { parts.append(freshness.message) }
         if let gaps = session.captureGaps, !gaps.isEmpty {
             parts.append("Ofullständigt ljudunderlag: \(gaps.count) avbrott. Tal under dessa intervall saknas och kan inte återskapas från texten.")
             parts += gaps.map { "- \($0.startedAt.formatted(date: .omitted, time: .standard))–\($0.endedAt.formatted(date: .omitted, time: .standard)): \($0.reason)" }

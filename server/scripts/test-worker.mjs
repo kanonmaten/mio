@@ -32,9 +32,9 @@ const options = convertV4MiniflareOptions({
 options.telemetry = { enabled: false };
 options.cf = false;
 const runtime = new Miniflare(options);
-const send = (path, body, auth = token) => runtime.dispatchFetch(`https://mio.example${path}`, {
+const send = (path, body, auth = token, extraHeaders = {}) => runtime.dispatchFetch(`https://mio.example${path}`, {
   method: 'POST', headers: { Authorization: `Bearer ${auth}`, 'Content-Type': 'application/json',
-    'CF-Access-Client-Id': 'fixture.access', 'CF-Access-Client-Secret': 'fixture-secret' }, body: JSON.stringify(body)
+    'CF-Access-Client-Id': 'fixture.access', 'CF-Access-Client-Secret': 'fixture-secret', ...extraHeaders }, body: JSON.stringify(body)
 });
 try {
   const db = await runtime.getD1Database('MIO_LIMITS');
@@ -48,13 +48,31 @@ try {
   const status = await runtime.dispatchFetch('https://mio.example/v1/status', { headers: { Authorization: `Bearer ${token}` } });
   assert.equal(status.status, 200); assert.equal((await status.json()).configured, true);
   assert.equal((await runtime.dispatchFetch('https://mio.example/v1/status')).status, 401);
-  const question = await send('/v1/ask', { question: 'Syntetiskt prov', context: [] });
+  assert.equal((await runtime.dispatchFetch('https://mio.example/v2/status')).status, 401);
+  const discover = async () => {
+    const response = await runtime.dispatchFetch('https://mio.example/v2/status', { headers: { Authorization: `Bearer ${token}` } });
+    assert.equal(response.status, 200); return response.json();
+  };
+  const discovered = await discover();
+  assert.match(discovered.configurationRevision, /^[a-f0-9]{64}$/u);
+  assert.equal(discovered.tasks.ask.configured, true);
+  assert.equal(discovered.tasks.lesson.provider, 'openai');
+  assert.deepEqual(discovered.quota, { limit: 2, remaining: 2, resetAt: discovered.quota.resetAt });
+  const stale = await send('/v1/ask', { question: 'Syntetiskt prov', context: [] }, token,
+    { 'X-Mio-Configuration-Revision': '0'.repeat(64) });
+  assert.equal(stale.status, 409); assert.deepEqual(await stale.json(), { error: 'configuration_changed' });
+  assert.equal((await discover()).quota.remaining, 2);
+  assert.equal(modelCalls, 0);
+  const question = await send('/v1/ask', { question: 'Syntetiskt prov', context: [] }, token,
+    { 'X-Mio-Configuration-Revision': discovered.configurationRevision });
   assert.equal(question.status, 200); assert.deepEqual(await question.json(), { answer: 'Ett syntetiskt svar.' });
+  assert.equal((await discover()).quota.remaining, 1);
+  assert.equal(modelCalls, 1);
   const analysis = await send('/v1/analyze', payload);
   assert.equal(analysis.status, 200); assert.deepEqual(await analysis.json(), result);
   assert.equal((await send('/v1/ask', { question: 'Över dagsgränsen', context: [] })).status, 429);
   assert.equal(modelCalls, 2);
-  console.log('Worker runtime: health, auth, validation, ask, analyze and persistent budget PASS. No external requests.');
+  console.log('Worker runtime: health, auth, v2 discovery, revision conflict, read-only capacity, ask, analyze and persistent budget PASS. No external requests.');
 } finally { await runtime.dispose(); }
 
 // A separate isolate verifies the Groq Chat Completions adapter and new lesson route.
@@ -63,10 +81,18 @@ const groqOptions = convertV4MiniflareOptions({
   modules: true, scriptPath: fileURLToPath(new URL('../dist/worker.js', import.meta.url)),
   compatibilityDate: '2025-09-01', compatibilityFlags: ['nodejs_compat'],
   bindings: { MIO_AI_PROVIDER: 'groq', MIO_AI_MODEL: 'qwen/qwen3.8-27b', GROQ_API_KEY: 'fixture-groq',
+    OPENAI_API_KEY: 'fixture-openai-task', MIO_AI_TASK_PROFILES: JSON.stringify({ ask: { provider: 'openai', model: 'gpt-6-luna' } }),
     MIO_GATEWAY_TOKEN: token, MIO_REQUESTS_PER_MINUTE: '6', MIO_REQUESTS_PER_DAY: '3', MIO_LESSON_INTERVAL_SECONDS: '120' },
   d1Databases: { MIO_LIMITS: 'test-groq-limits' },
   outboundService: async request => {
     groqCalls++;
+    if (request.url === 'https://api.openai.com/v1/responses') {
+      assert.equal(request.headers.get('authorization'), 'Bearer fixture-openai-task');
+      const body = await request.json();
+      assert.equal(body.reasoning.effort, 'none'); assert.equal(body.temperature, 0);
+      assert.equal(body.text.format.strict, true);
+      return Response.json({ status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify({ answer: 'Syntetiskt OpenAI-svar.' }) }] }] });
+    }
     assert.equal(request.url, 'https://api.groq.com/openai/v1/chat/completions');
     assert.equal(request.headers.get('authorization'), 'Bearer fixture-groq');
     const body = await request.json();
@@ -94,13 +120,14 @@ try {
   assert.equal(value.sections[0].heading, 'Plan');
   assert.equal(value.metadata.provider, 'groq'); assert.equal(value.metadata.lessonIntervalSeconds, 120);
   const ask = await sendGroq('/v1/ask', { question: 'Syntetiskt prov', context: [] });
-  assert.equal(ask.status, 200); assert.deepEqual(await ask.json(), { answer: 'Syntetiskt Groq-svar.' });
+  assert.equal(ask.status, 200); assert.deepEqual(await ask.json(), { answer: 'Syntetiskt OpenAI-svar.' });
+  assert.equal(ask.headers.get('x-mio-provider'), 'openai');
   const v2 = await sendGroq('/v2/analyze', { ...payload, contextFragments: [], priorDecisions: [], contextLimited: false });
   assert.equal(v2.status, 200); assert.equal((await v2.json()).candidates[0].replacesID, null);
   assert.equal(v2.headers.get('x-mio-prompt-version'), '2026-09-30.1');
   assert.equal((await sendGroq('/v1/lesson-notes', { ...payload, mode: 'lesson' })).status, 429);
   assert.equal(groqCalls, 3);
-  console.log('Groq Worker runtime: strict ask, detailed lessons, metadata, pacing and shared D1 quota PASS. No external requests.');
+  console.log('Mixed-profile Worker runtime: OpenAI ask, strict Groq detailed lessons, metadata, pacing and shared D1 quota PASS. No external requests.');
 } finally { await groqRuntime.dispose(); }
 
 // Status must remain authenticated and readable even when model initialization fails.
@@ -130,7 +157,7 @@ for (const bindings of [
     assert.equal(metadata.configured, false); assert.equal(metadata.protocolVersion, 2);
     assert.deepEqual(metadata.capabilities, ['analysis-context-v2', 'ask-v1', 'analysis-v1', 'lesson-notes-v1']);
     assert.equal(status.headers.get('cache-control'), 'no-store');
-    assert.equal(status.headers.get('x-mio-release'), '2026-09-30.1');
+    assert.equal(status.headers.get('x-mio-release'), '2026-10-03.1');
     assert.match(status.headers.get('x-mio-request-id'), /^[a-f0-9-]{36}$/u);
     assert.equal(calls, 0);
   } finally { await invalidRuntime.dispose(); }

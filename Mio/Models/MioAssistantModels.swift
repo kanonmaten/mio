@@ -24,6 +24,9 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
     var purpose: MioSuggestionPurpose
     var evidence: String?
     var needsDateConfirmation: Bool?
+    /// Optional for legacy documents; changes to the reviewed proposal advance it.
+    var revision: Int?
+    var reviewRevision: Int { revision ?? 0 }
 
     init(
         id: UUID = UUID(),
@@ -38,7 +41,8 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         deferredAt: Date? = nil,
         purpose: MioSuggestionPurpose = .content,
         evidence: String? = nil,
-        needsDateConfirmation: Bool? = nil
+        needsDateConfirmation: Bool? = nil,
+        revision: Int? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -53,10 +57,11 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         self.purpose = purpose
         self.evidence = evidence
         self.needsDateConfirmation = needsDateConfirmation
+        self.revision = revision
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, title, body, createdAt, scheduledAt, sessionID, sourceSegmentID, state, deferredAt, purpose, evidence, needsDateConfirmation
+        case id, kind, title, body, createdAt, scheduledAt, sessionID, sourceSegmentID, state, deferredAt, purpose, evidence, needsDateConfirmation, revision
     }
 
     init(from decoder: Decoder) throws {
@@ -73,6 +78,7 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         deferredAt = try values.decodeIfPresent(Date.self, forKey: .deferredAt)
         evidence = try values.decodeIfPresent(String.self, forKey: .evidence)
         needsDateConfirmation = try values.decodeIfPresent(Bool.self, forKey: .needsDateConfirmation)
+        revision = try values.decodeIfPresent(Int.self, forKey: .revision)
         // Older assistant documents contain only proposed content items.
         purpose = try values.decodeIfPresent(MioSuggestionPurpose.self, forKey: .purpose) ?? .content
     }
@@ -98,10 +104,83 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+/// Ephemeral identity reservation. Existing proposal text is never duplicated in a claim.
+struct MioSuggestionApprovalClaim: Equatable, Sendable {
+    let suggestionID: UUID
+    let revision: Int
+    fileprivate let token: UUID
+
+    init(suggestionID: UUID, revision: Int) {
+        self.suggestionID = suggestionID
+        self.revision = revision
+        token = UUID()
+    }
+}
+
 /// Only identifiers are retained after rejection, never the rejected proposal text.
 struct MioProcessedSource: Codable, Hashable, Sendable {
     let sessionID: UUID
     let segmentID: UUID
+}
+
+/// Local source identities only. These revisions never add fields to AI requests.
+struct MioSourceRevision: Codable, Hashable, Sendable {
+    let segmentID: UUID
+    let correctionRevision: Int
+
+    static func currentRevision(of segment: TranscriptSegment) -> Int? {
+        if let revision = segment.correctionRevision { return revision >= 0 ? revision : nil }
+        // An old correction without revision evidence cannot be declared original.
+        guard segment.correctedText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false else { return nil }
+        return 0
+    }
+
+    static func capture(_ segments: [TranscriptSegment]) -> [Self]? {
+        guard Set(segments.map(\.id)).count == segments.count else { return nil }
+        var revisions: [Self] = []
+        for segment in segments {
+            guard let revision = currentRevision(of: segment) else { return nil }
+            revisions.append(Self(segmentID: segment.id, correctionRevision: revision))
+        }
+        return revisions
+    }
+
+    static func areValid(_ revisions: [Self]?, expectedIDs: Set<UUID>? = nil) -> Bool {
+        guard let revisions else { return true }
+        let ids = Set(revisions.map(\.segmentID))
+        return ids.count == revisions.count && revisions.allSatisfy { $0.correctionRevision >= 0 }
+            && (expectedIDs == nil || ids == expectedIDs)
+    }
+}
+
+enum MioSourceFreshness: String, Sendable {
+    case current, older, unknown
+
+    var message: String {
+        switch self {
+        case .current: "Källan är aktuell för dessa anteckningar. Granska ändå innehållet."
+        case .older: "Underlaget har rättats efter bearbetningen. Anteckningarna bygger på äldre text; sparade delar och källcitat är bevarade."
+        case .unknown: "Källans aktualitet är okänd. Revisionsunderlag saknas eller går inte att jämföra; granska anteckningarna mot texten."
+        }
+    }
+
+    static func compare(_ revisions: [MioSourceRevision]?, with segments: [TranscriptSegment],
+                        expectedIDs: Set<UUID>) -> Self {
+        guard let revisions, !revisions.isEmpty, !expectedIDs.isEmpty,
+              MioSourceRevision.areValid(revisions, expectedIDs: expectedIDs),
+              Set(segments.map(\.id)).count == segments.count else { return .unknown }
+        let sources = Dictionary(uniqueKeysWithValues: segments.map { ($0.id, $0) })
+        var missingEvidence = false
+        for submitted in revisions {
+            guard let segment = sources[submitted.segmentID],
+                  let current = MioSourceRevision.currentRevision(of: segment) else {
+                missingEvidence = true
+                continue
+            }
+            if current != submitted.correctionRevision { return .older }
+        }
+        return missingEvidence ? .unknown : .current
+    }
 }
 
 struct MioLesson: Identifiable, Codable, Hashable, Sendable {
@@ -113,6 +192,7 @@ struct MioLesson: Identifiable, Codable, Hashable, Sendable {
     var endedAt: Date
     let createdAt: Date
     var updatedAt: Date
+    var sourceRevisions: [MioSourceRevision]? = nil
 
     init(
         id: UUID = UUID(),
@@ -122,7 +202,8 @@ struct MioLesson: Identifiable, Codable, Hashable, Sendable {
         startedAt: Date,
         endedAt: Date,
         createdAt: Date = .now,
-        updatedAt: Date? = nil
+        updatedAt: Date? = nil,
+        sourceRevisions: [MioSourceRevision]? = nil
     ) {
         self.id = id
         self.sessionID = sessionID
@@ -132,6 +213,7 @@ struct MioLesson: Identifiable, Codable, Hashable, Sendable {
         self.endedAt = endedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
+        self.sourceRevisions = sourceRevisions
     }
 
     /// Lesson boundaries filter the display only; no transcript segment is split,
@@ -144,6 +226,12 @@ struct MioLesson: Identifiable, Codable, Hashable, Sendable {
             }
             return segment.audioStartedAt < endedAt && segment.audioEndedAt > startedAt
         }
+    }
+
+    func freshness(in session: MioSession) -> MioSourceFreshness {
+        guard session.id == sessionID else { return .unknown }
+        let sources = transcripts(in: session)
+        return MioSourceFreshness.compare(sourceRevisions, with: sources, expectedIDs: Set(sources.map(\.id)))
     }
 }
 

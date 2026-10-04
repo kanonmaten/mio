@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
 import { createMioServer, loadConfig, validatePayload } from '../src/server.mjs';
+import { resolveTaskProfile } from '../src/task-profiles.mjs';
 
 const token = 'fixture_gateway_token_01234567890123456789';
 const defaults = { apiKey: 'fixture-upstream-credential', gatewayToken: token, model: 'gpt-6-luna',
@@ -26,9 +27,9 @@ async function fixture(t, options = {}) {
   return { ask, base, calls, server };
 }
 
-test('configuration requires three separate valid settings and bounded limits', () => {
+test('transport settings stay bounded while invalid generation configuration remains discoverable', () => {
   assert.throws(() => loadConfig({}));
-  assert.throws(() => loadConfig({ OPENAI_API_KEY: token, MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'example' }));
+  assert.equal(resolveTaskProfile(loadConfig({ OPENAI_API_KEY: token, MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'gpt-6-luna' }), 'ask').configured, false);
   assert.throws(() => loadConfig({ OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'example', MIO_REQUESTS_PER_DAY: '999999' }));
   assert.equal(loadConfig({ OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'example' }).requestsPerDay, 100);
 });
@@ -95,7 +96,7 @@ test('upstream errors expose only fixed error codes and never retry', async t =>
   const f = await fixture(t, { fetchImpl: async () => { calls++; return new Response('private upstream details', { status: 500 }); } });
   const r = await f.ask();
   assert.equal(r.status, 502);
-  assert.deepEqual(await r.json(), { error: 'upstream_unavailable' });
+  assert.deepEqual(await r.json(), { error: 'provider_infrastructure' });
   assert.equal(calls, 1);
 });
 
@@ -103,7 +104,7 @@ test('incomplete answers are not shown as complete', async t => {
   const f = await fixture(t, { fetchImpl: async () => new Response(JSON.stringify({ status: 'incomplete', output: [] }), { headers: { 'Content-Type': 'application/json' } }) });
   const r = await f.ask();
   assert.equal(r.status, 502);
-  assert.deepEqual(await r.json(), { error: 'incomplete_upstream_response' });
+  assert.deepEqual(await r.json(), { error: 'provider_invalid_response' });
 });
 
 test('upstream response size is bounded even without content length', async t => {
@@ -154,5 +155,11 @@ test('invalid upstream JSON and redirects never become answers', async t => {
   const f = await fixture(t, { fetchImpl: async () => new Response('', { status: 302, headers: { Location: 'https://elsewhere.invalid' } }) });
   const r = await f.ask();
   assert.equal(r.status, 502);
-  assert.deepEqual(await r.json(), { error: 'upstream_unavailable' });
+  assert.deepEqual(await r.json(), { error: 'provider_infrastructure' });
+});
+
+test('the shared daily cap cannot be raised through environment or direct configuration', () => {
+  const env = { OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'gpt-6-luna' };
+  assert.throws(() => loadConfig({ ...env, MIO_REQUESTS_PER_DAY: '101' }));
+  assert.throws(() => createMioServer({ config: { ...defaults, requestsPerDay: 101 } }));
 });

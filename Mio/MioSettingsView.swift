@@ -50,7 +50,7 @@ struct TranscriptionStatusView: View {
                     if model.connectionState == .offline, model.runState == .listening {
                         Text("Mikrofonen är aktiv. Återansluter automatiskt. Ljud väntar högst 60 sekunder i minnet.").font(.caption)
                     } else {
-                        Text("Privat via Tailscale · text normalt efter 15–30 sekunder").font(.caption)
+                        Text("Privat via Tailscale · mål: text efter 15–30 sekunder, ännu inte telefonmätt").font(.caption)
                     }
                 }
                 Spacer(minLength: 0)
@@ -62,6 +62,7 @@ struct TranscriptionStatusView: View {
         }
         .buttonStyle(MioPressStyle())
         .accessibilityHint("Öppnar inställningar för anslutningen")
+        .accessibilityIdentifier("mio.transcription-state")
     }
 }
 
@@ -96,6 +97,9 @@ struct MioSettingsView: View {
                 }
                 NavigationLink { AnalysisSettingsView(model: model, content: contentModel) } label: {
                     Label("AI-assistent", systemImage: "sparkles")
+                }
+                NavigationLink { MioAIConnectionStatusView(model: model) } label: {
+                    Label("AI-anslutning och kapacitet", systemImage: "checkmark.shield")
                 }
             } header: { Text("Anslutningar") } footer: {
                 Text("Ljud går till din Pianissimo-server. Valfri text-AI använder en separat anslutning och ett separat godkännande.")
@@ -206,7 +210,6 @@ struct CloudConnectionSettingsView: View {
     @State private var accessClientSecret = ""
     @State private var settingsMessage: String?
     @State private var errorMessage: String?
-    private let isAsking = false
     var body: some View {
         Form {
             Section {
@@ -240,10 +243,9 @@ struct CloudConnectionSettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Button("Spara anslutning") { saveSettings() }
-                    .disabled(isAsking)
                 Button("Glöm anslutning och stäng av", role: .destructive) { forgetConnection() }
                 if let settingsMessage { Text(settingsMessage).font(.footnote) }
-                Text("Åtkomsttoken är samma hemliga värde som MIO_GATEWAY_TOKEN på din Worker. Klistra in värdet utan Bearer eller citattecken. Efter rotation behöver det nya värdet sparas här också. Groq-nyckeln hör bara hemma på servern. Att spara gör inget nätanrop.")
+                Text("Åtkomsttoken är samma hemliga värde som MIO_GATEWAY_TOKEN på din Worker. Klistra in värdet utan Bearer eller citattecken. Efter rotation behöver det nya värdet sparas här också. Leverantörens API-nyckel hör bara hemma på servern. Att spara gör inget nätanrop.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -251,6 +253,7 @@ struct CloudConnectionSettingsView: View {
             if let errorMessage { Section { Label(errorMessage, systemImage: "exclamationmark.triangle").foregroundStyle(.red) } }
         }
         .navigationTitle("Anslutning för text-AI")
+        .onChange(of: isEnabled) { _, _ in MioConnectionDiscovery.shared.invalidate() }
         .onDisappear { newToken = ""; accessClientID = ""; accessClientSecret = "" }
     }
     private func saveSettings() {
@@ -272,12 +275,111 @@ struct CloudConnectionSettingsView: View {
     }
 }
 
+struct MioAIConnectionStatusView: View {
+    let model: MioViewModel
+    @Environment(MioAnalysisCoordinator.self) private var analysis
+    @Environment(MioAssistantViewModel.self) private var assistant
+    @AppStorage(MioCloudSettings.enabledKey) private var cloudEnabled = false
+    @State private var discovery = MioConnectionDiscovery.shared
+    @State private var checkTask: Task<Void, Never>?
+    @State private var localError: String?
+
+    var body: some View {
+        Form {
+            Section("Separata tillstånd") {
+                LabeledContent("Mikrofon", value: model.runState.title)
+                LabeledContent("Pianissimo", value: model.connectionState.title)
+                LabeledContent("Text-AI", value: analysis.enabled ? "Aktiverad" : "Av eller pausad")
+                Text(analysis.status).font(.footnote)
+                if let pausedUntil = analysis.pausedUntil {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        if context.date < pausedUntil {
+                            HStack { Text("Vänta minst"); Text(pausedUntil, style: .timer) }
+                        } else { Text("Väntan är över. Aktivera AI manuellt när du vill fortsätta.") }
+                    }
+                    .font(.footnote)
+                }
+            }
+            Section {
+                Button {
+                    localError = nil
+                    checkTask = Task {
+                        do {
+                            let connection = try MioCloudSettings.connection()
+                            _ = try await discovery.inspect(connection: connection, forceRefresh: true)
+                        } catch {
+                            if !Task.isCancelled { localError = error.localizedDescription }
+                        }
+                    }
+                } label: {
+                    if discovery.isChecking { ProgressView("Kontrollerar gatewayen …") }
+                    else { Label("Testa text-AI-anslutning", systemImage: "network") }
+                }
+                .disabled(!cloudEnabled || discovery.isChecking)
+                .accessibilityIdentifier("mio.text-ai.connection-test")
+                if let date = discovery.lastCheckedAt { LabeledContent("Senast kontrollerad", value: date.formatted()) }
+                if let error = localError ?? discovery.errorMessage {
+                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                }
+            } header: { Text("Skyddad anslutningskontroll") } footer: {
+                Text("Kontrollen skickar ingen fråga och använder ingen AI-kvot. Den visar gatewayens konfiguration. Leverantörens inloggning, modellåtkomst och svarskvalitet provas först vid ett separat godkänt anrop.")
+            }
+            if let status = discovery.lastStatus {
+                Section("Gatewayåtkomst") {
+                    LabeledContent("Autentisering", value: "Godkänd")
+                    LabeledContent("Protokoll", value: "Mio \(status.protocolVersion)")
+                    LabeledContent("Gatewayversion", value: status.release)
+                    Text("Leverantörens inloggning, modellåtkomst och svarskvalitet är inte verifierade av denna kontroll.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                Section("AI-uppgifter") {
+                    ForEach(MioAITaskID.allCases, id: \.self) { task in
+                        let profile = status.tasks[task]
+                        VStack(alignment: .leading, spacing: 4) {
+                            LabeledContent(taskTitle(task), value: (try? status.requireTask(task)) != nil ? "Konfigurerad" : "Inte tillgänglig")
+                            if !profile.provider.isEmpty { Text("\(profile.provider) · \(profile.model)").font(.footnote).foregroundStyle(.secondary) }
+                            if profile.configurationError != nil { Text("Kontrollera uppgiftens profil på servern.").font(.footnote) }
+                        }
+                    }
+                }
+                Section("Gemensam kapacitet") {
+                    if let remaining = status.quota?.remaining {
+                        LabeledContent("Kvar i delad dagskvot", value: "\(remaining) av \(status.quota?.limit ?? 100)")
+                    } else { Text("Återstående dagskvot är okänd.") }
+                    if let reset = status.quota?.resetAt.flatMap(MioAnalysisResult.parseDate) {
+                        LabeledContent("Nästa återställning", value: reset.formatted())
+                    }
+                    Text("Högst 100 gemensamma AI-anrop per dag räcker inte till minutanalys hela dagen. Kapaciteten är en observation och reserveras inte av denna kontroll.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            let lessons = model.allSessions.filter(\.isLesson)
+            if !lessons.isEmpty {
+                Section("Förväntat återstående lektionsarbete") {
+                    ForEach(lessons) { session in
+                        let document = MioLessonDocument(session: session, records: assistant.analyses)
+                        LabeledContent(session.title ?? "Lektion", value: "\(document.remainingRequestCount) AI-delar")
+                    }
+                    Text("Beräknat från sparat underlag och redan färdiga delar. Ingen kvot är reserverad. Nya lektionsdelar skickas normalt tidigast efter 60 sekunder och kräver aktivt AI-läge.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("AI-anslutning och kapacitet")
+        .onDisappear { checkTask?.cancel() }
+    }
+
+    private func taskTitle(_ task: MioAITaskID) -> String {
+        switch task { case .ask: "Enskilda frågor"; case .everyday: "Vardagsanalys"; case .lesson: "Lektionsanteckningar" }
+    }
+}
+
 struct MioPrivacySettingsView: View {
     let model: MioViewModel
     let contentModel: MioContentViewModel
     @Environment(MioAssistantViewModel.self) private var assistant
-    @Environment(MioAnalysisCoordinator.self) private var analysis
-    @Environment(MioMaintenanceState.self) private var maintenance
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @State private var outcome: MioOperationOutcome?
     @State private var showDeleteConfirmation = false
     var body: some View {
         ScrollView {
@@ -288,7 +390,7 @@ struct MioPrivacySettingsView: View {
                 if ![.off, .failed, .unavailable].contains(model.runState) {
                     Text("Avsluta sessionen innan du exporterar eller raderar all data.").font(.footnote)
                 }
-                if let error = contentModel.errorMessage ?? model.errorMessage ?? assistant.errorMessage {
+                if let error = outcome?.message ?? contentModel.errorMessage ?? model.errorMessage ?? assistant.errorMessage {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 }
             }.padding().frame(maxWidth: 680)
@@ -303,29 +405,6 @@ struct MioPrivacySettingsView: View {
         }
     }
     private func deleteEverything() async {
-        guard !maintenance.isDeleting else { return }
-        guard maintenance.activeWrites == 0 else {
-            contentModel.errorMessage = "Vänta tills den pågående ändringen är sparad och försök radera igen."
-            return
-        }
-        maintenance.isDeleting = true
-        await MioDiagnosticsRepository.shared.invalidateForDeletion()
-        analysis.disable()
-        defer { maintenance.isDeleting = false }
-        guard await MioSystemServices.shared.removeAll() else {
-            contentModel.errorMessage = MioSystemServices.shared.errorMessage ?? "Kunde inte avbryta Mios alarm. Försök igen."
-            return
-        }
-        do { try MioCloudSettings.reset(); try TranscriptionSettings.reset() } catch {
-            contentModel.errorMessage = "Kunde inte radera AI-inställningarna: \(error.localizedDescription)"
-            return
-        }
-        await model.deleteAllData()
-        guard model.errorMessage == nil else { return }
-        await contentModel.deleteAllData()
-        guard contentModel.errorMessage == nil else { return }
-        guard await assistant.deleteAllData() else { return }
-        do { try await MioDiagnosticsRepository.shared.deleteAll() }
-        catch { contentModel.errorMessage = "Kunde inte radera diagnostikjournalen: \(error.localizedDescription)" }
+        outcome = await workflow.deleteAll()
     }
 }

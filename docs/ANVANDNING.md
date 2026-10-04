@@ -10,6 +10,8 @@ Detta är guiden för helhetsbygget 0.9.0. Koden behöver först byggas och inst
 
 **Ansluten** visar senast lyckade kontakt. **Ansluter** visas under anslutningskontroll. Vid **Offline** försöker en aktiv session igen automatiskt; högst 60 s ljud kan vänta i RAM. Äldre ljud tappas med synlig lucka. Efter stopp kan du behöva Testa anslutning för en färsk kontroll. iOS-ljudavbrott kan kräva Fortsätt; efter appens tvångsavslutning startas aldrig mikrofonen automatiskt.
 
+Mikrofon, transkriptionsanslutning och text-AI visas separat. En aktiv mikrofon kan alltså fånga ljud medan servern är offline. Vid paus/stopp stängs mikrofonen först; redan fångad sluttext kan avslutas under högst 15 sekunder, fortfarande inom ljudets ursprungliga 60-sekundsgräns. Du kan avbryta väntan. Efter ljudavbrott, ljudvägsbyte eller reset väljer du själv Fortsätt när iOS tillåter; inte heller en tidsvald paus startar mikrofonen automatiskt.
+
 ## Fånga och ordna
 
 1. Tryck **Starta Mio** och tillåt mikrofonen. Paus/stopp stänger mikrofonen.
@@ -33,6 +35,8 @@ Säg till exempel:
 Tydliga Mio-kommandon blir lokala frågor i **Mio → Förslag att granska**. Vanlig konversation blir inte automatiskt ett minne. Du kan även använda plusknappen i inkorgen för att skriva ett förslag själv, eller **Hitta lokala Mio-förslag** inne i en sparad session.
 
 Öppna frågan och kontrollera **typ, rubrik, text, datum och tid**. Lokala kommandon tolkar inte datum. AI kan föreslå en tid, men du måste markera att datum och tid är kontrollerade före Ja för AI-planer/uppgifter. Om klockslag saknas ber Mio dig välja det.
+
+Om underlaget kompletteras medan du granskar kan Mio be dig granska den nya versionen. Dina redigerade utkastfält behålls. Ändring av relevanta fält återställer datumkontrollen; en saknad tid ska väljas uttryckligen och får inte råka bli ”nu”.
 
 - **Ja, spara:** skapar posten i Mio. Alarm, notiser och kalenderkopior aktiveras separat.
 - **Nej, glöm förslaget:** tar bort frågan. Originaltexten i sessionen finns kvar tills du raderar sessionen.
@@ -62,11 +66,13 @@ Under **Inställningar → Alarm, notiser och behörigheter** kan du skapa frist
 
 **Morgon** visar dagens planer, uppgifter och sådant som ligger kvar sedan tidigare. Byt till **Kväll** för avklarade uppgifter, anteckningar och dagens sessions-/lektionstal. Välj datum för en annan dag.
 
-Översikten räknar och visar sparat innehåll lokalt. Dagliga påminnelser för morgon och kväll ställs in i **Alarm och dagliga påminnelser**; de skickar generell text och öppnar inte mikrofonen.
+Översikten räknar och visar sparat innehåll lokalt och uppdateras när du återvänder till appen, vid dagbyte och ändrad tidszon. En uttryckligen vald historisk dag behålls vid vanlig uppdatering. Dagliga påminnelser för morgon och kväll ställs in i **Alarm och dagliga påminnelser**; de visar generell text och öppnar dagens motsvarande översikt. En postnotis öppnar den lokala posten; om den är raderad går du säkert tillbaka till dagsfliken. Ingen notisöppning startar mikrofon, AI eller en systemåtgärd.
 
 ## Valfri AI
 
-Det finns två separata flöden. **AI-assistent → Aktivera AI-tolkning** ger samtycke till löpande nya vardagsutdrag och lektioner du avslutar medan läget är på. Läget återställs till av när app-processen startar om. Paus/stopp slänger väntande vardagsanalys; Stäng av AI-tolkning stoppar även lektionskön. Redan skickad text kan inte återkallas. Vid nät-/gränsfel stoppas läget och behöver aktiveras igen. En sparad lektion som inte analyserats kan skickas med ett separat godkännande från dess detaljvy.
+Det finns två separata flöden. **AI-assistent → Aktivera AI-tolkning** ger samtycke till löpande nya vardagsutdrag och lektioner du avslutar medan läget är på. Läget återställs till av när app-processen startar om. Paus/stopp kan slutföra redan godkänd vardagssluttext och bryter kontexten inför Fortsätt; text före aktiveringen eller över en ljudlucka tas inte med som bakåtkontext. Stäng av AI-tolkning stoppar väntande analys, inklusive lektionskön. Redan skickad text kan inte återkallas. Vid nät-/gräns-/konfigurationsfel stoppas läget och behöver aktiveras igen manuellt. En sparad lektion som inte analyserats kan skickas med ett separat godkännande från dess detaljvy.
+
+**Testa text-AI-anslutning** under anslutningsinställningarna gör ett modellfritt statusanrop. Det visar autentisering, protokoll, gatewayrelease, serverns profiler för fråga/vardag/lektion och delad dagskvot när den går att läsa. Giltig konfiguration bevisar inte leverantörens API-behörighet, modellåtkomst eller svensk kvalitet. Okänd återstående kvot betyder just okänd, inte noll. Högst 100 AI-anrop per dygn delas mellan uppgifterna; visat återstående lektionsarbete är en uppskattning, inte reserverad kapacitet.
 
 För **enskilda frågor** följer du stegen nedan:
 
@@ -75,16 +81,16 @@ Manuellt innehåll fungerar utan server. Transkription använder din Pianissimo-
 1. Sätt upp den medföljande servern enligt [Cloudflare-guiden](../server/cloudflare/README.md) utan påslagen egen dator, eller [serverguiden](../server/README.md) för egen värd, med leverantörens API-nyckel enbart på servern.
 2. Öppna **Inställningar → AI-assistent → Anslutning för text-AI**. Ange din HTTPS-adress och åtkomsttoken: exakt samma hemliga värde som Workerns `MIO_GATEWAY_TOKEN`, utan `Bearer`. Efter rotation ska det nya värdet sparas även här. Spara anslutningen och slå på **Tillåt molnfrågor**.
 3. Öppna **Mio → Fråga Mio med AI** och skriv frågan. Välj vid behov enstaka poster eller ett kort sessionsutdrag. Korta och rensa texten som ska skickas.
-4. Tryck **Granska innan du skickar**. Läs mottagare, exakt fråga och exakt kontext.
-5. Välj **Ja, skicka denna fråga till molnet**. Först då görs nätanropet. Avbryt i stället om du inte vill dela texten.
+4. Tryck **Granska innan du skickar**. Mio kan kontrollera anslutningen utan att skicka fråga eller källtext. Läs mottagare, vald serverprofil/release, exakt fråga och exakt kontext.
+5. Välj **Ja, skicka denna fråga till molnet**. Först då skickas den granskade texten till modellen. Avbryt i stället om du inte vill dela texten. Om serverns konfiguration ändrats behöver du granska på nytt; Mio skickar inte om frågan automatiskt.
 
-Svaret kan innehålla fel, utför inga åtgärder och sparas inte som historik i appen. En skickad fråga kan inte återkallas. Mios server skriver inga textloggar och begär `store: false`; leverantörens datavillkor gäller ändå. Du stänger av och tar bort anslutningen med **Glöm anslutning och stäng av**.
+Svaret kan innehålla fel och utför inga åtgärder. Det är tillfälligt och försvinner när du lämnar frågevyn. Vill du behålla det väljer du **Granska och spara som anteckning**, redigerar rubrik/text och trycker **Spara anteckning lokalt**. Det skapar en vanlig lokal anteckning utan nytt AI-anrop eller frågehistorik; upprepat Spara skriver inte över senare redigeringar. En skickad fråga kan inte återkallas. Mios gateway skriver inga fråge-/svarstextloggar; leverantörens och eventuell mellanliggande gateways datavillkor gäller. Du stänger av och tar bort anslutningen med **Glöm anslutning och stäng av**.
 
 ## Exportera och radera
 
 Stoppa sessionen och gå till **Inställningar → Integritet, export och radering → Skapa lokal export**. Dela/spara JSON-filen privat. Exporten innehåller innehåll, sessioner, förslag, lektioner, AI-anteckningar och diagnostik; aldrig råljud eller åtkomsttoken. Det finns ingen importknapp i detta bygge.
 
-**Radera all lokal data** tar efter bekräftelse bort alla tre lokala datalager, egna alarm/notiser och båda serveranslutningarna. Redan delade filer, skickade molnfrågor och kalenderkopior kan inte återkallas av detta. Om en systemåtgärd inte kan avbrytas visas ett fel så att du kan hantera den före fortsatt radering.
+**Radera all lokal data** tar efter bekräftelse bort de tre domänlagren, diagnostik, interna exportkopior, egna alarm/notiser och båda serveranslutningarna. En liten journal med bara ID:n och avslutade steg gör att en avbruten radering kan fortsätta efter omstart. Ett fel kan innebära att vissa steg redan är utförda. Följ bannertexten och välj **Försök slutföra raderingen igen**; andra ändringar och AI-sändningar väntar tills raderingen är klar. Redan delade filer, skickade molnfrågor och kalenderkopior kan inte återkallas av detta. Kvarvarande systemåtgärder ska hanteras innan raderingen kan slutföras.
 
 ## Nya AI-val och detaljerade lektionsanteckningar
 
@@ -92,10 +98,14 @@ Detta gäller arbetskopians nya kod; befintlig build 5 behöver ersättas med en
 
 **Byta till Groq:** följ [Cloudflare-bytesguiden](../server/PROVIDERS.md). Modell och API-nyckel ändras på servern; appens adress och gatewaytoken behålls. Reasoning är av, temperatur 0 och strikt JSON används automatiskt. Modellens JSON visas som vanliga anteckningar och förslag i appen.
 
+Servern kan ha olika kompatibla profiler för enskild fråga, vardag och lektion. Gör det modellfria anslutningsprovet efter ett byte och aktivera/granska på nytt. Det finns ingen modellväljare i appen eller tyst reservmodell.
+
 **Lektion:** tryck Starta lektion, avsluta när undervisningen är slut och öppna lektionen i Lektioner. Med godkänd AI-tolkning kan bearbetningen starta efter avslut; annars aktiverar du AI och väljer **Skapa eller fortsätt detaljerade anteckningar …** samt godkänner sändningen. Låt appen vara öppen medan den bearbetar textdelarna. Du ser antal bearbetade textdelar, detaljerade rubriker/anteckningar och öppningsbara källcitat. Läxor granskas separat med Ja/Nej/Inte nu.
 
 Tryck **Kopiera hela anteckningen** och klistra in den hos valfri AI för att exempelvis få en förklaring eller skapa frågekort. Mio skapar inga sådana läromedel själv. Kopieringen är vanlig läsbar text med rubriker; den innehåller också osäkerheter och tydlig markering om delar återstår. Även när alla delar är bearbetade måste AI-utkastet granskas mot underlaget.
 
 Efter nätfel, kvotfel eller omstart: färdiga detaljerade delar finns kvar. Vänta vid kvotfel, aktivera AI igen och fortsätt från samma lektionsknapp. Redan färdiga delar skickas inte om. Äldre korta huvudpunkter finns kvar separat men räknas inte som detaljerade anteckningar. Mycket långa lektioner kan kräva flera godkända omgångar (högst 100 delar i kön per omgång).
+
+Om du rättar textunderlaget senare visas att anteckningarna bygger på **äldre text**; när revisionsunderlag saknas anges **okänd aktualitet**. Sparade delar/citat bevaras och rättningen skickas inte automatiskt igen. Kopierad anteckning behåller dessa varningar, ofullständiga delar och eventuella ljudluckor. Granska underlaget även när alla delar är bearbetade.
 
 För [Groq, tokenåterställning och Cloudflare Access](../server/cloudflare/GROQ_ACCESS.md) finns en sammanhängande steg-för-steg-guide. Access kräver den nya appens separata Client ID-/Client Secret-fält; de finns inte i build 5.

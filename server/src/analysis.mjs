@@ -24,9 +24,18 @@ const keys = (value, names) => value && typeof value === 'object' && !Array.isAr
   && Object.keys(value).length === names.length && names.every(key => Object.hasOwn(value, key));
 const text = (value, max, empty = false) => typeof value === 'string'
   && (empty || value.trim().length > 0) && Buffer.byteLength(value, 'utf8') <= max;
-const date = value => typeof value === 'string'
-  && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(value)
-  && Number.isFinite(Date.parse(value));
+function date(value) {
+  if (typeof value !== 'string') return false;
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/u.exec(value);
+  if (!parts) return false;
+  const [year, month, day, hour, minute, second, offsetHour, offsetMinute] = parts.slice(1).map(part => Number(part ?? 0));
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  // Date.parse normalizes impossible days and 24:00; original calendar components must be valid.
+  return month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1]
+    && hour <= 23 && minute <= 59 && second <= 59 && offsetHour <= 23 && offsetMinute <= 59
+    && Number.isFinite(Date.parse(value));
+}
 export function validateAnalysisPayload(value) {
   if (!keys(value, ['mode', 'timeZone', 'fragments']) || !['everyday', 'lesson'].includes(value.mode)
       || !text(value.timeZone, 100) || !Array.isArray(value.fragments)
@@ -85,7 +94,10 @@ export function validateAskResult(value) {
 export const LESSON_FORMAT = {
   type: 'json_schema', name: 'mio_lesson_notes_v1', strict: true,
   schema: object({
-    candidates: ANALYSIS_FORMAT.schema.properties.candidates,
+    candidates: { type: 'array', items: object({
+      ...ANALYSIS_FORMAT.schema.properties.candidates.items.properties,
+      kind: { type: 'string', enum: ['plan', 'task'] }
+    }) },
     sections: { type: 'array', items: object({
       heading: { type: 'string' }, body: { type: 'string' }, ...sourceFields
     }) },

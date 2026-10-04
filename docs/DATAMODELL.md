@@ -12,8 +12,13 @@ Filerna ligger under appens Application Support:
 | `Mio/content-v1.json` | Tidslinjeposter, anteckningar, uppgifter, planer och uttryckliga minnen | `schemaVersion: 1`, `items` |
 | `Mio/diagnostics-v1.json` | Begränsad textfri AI-anropsjournal | `schemaVersion: 1`, `events` |
 | `Mio/assistant-v1.json` | Väntande frågor/förslag, lektioner och bearbetade källidentiteter | `schemaVersion: 1`, `suggestions`, `lessons`, `processedSources`, valfritt `analyses`, `analysisDecisions` |
+| `Mio/operations-v1.json` | Påbörjad radering: operations-ID, scope, valfritt mål-ID och avslutade fasta steg | `schemaVersion: 1`, `operations`; inga innehållstexter eller hemligheter |
 
-Lagringen är atomisk och mappar undantas från enhetsbackup. Filskyddet tillåter en pågående ljudsession efter första upplåsning. Inget råljud lagras. Okända innehålls-/assistentscheman får inte skrivas över; explicit total radering är en separat användaråtgärd.
+Det finns **tre domänlager**, plus en begränsad diagnostikjournal och en liten raderingsjournal. Raderingsjournalen tas bort när alla dess steg är slutförda; den är ingen allmän databas eller meddelandekö.
+
+Alla lager och interna exportkopior använder gemensam atomisk skrivning i ägda privata undermappar. På iOS sätts `completeUntilFirstUserAuthentication` under den atomiska filskapningen, före synliga bytes; mappar undantas från enhetsbackup. Privata mappar/filer har även POSIX-mode `0700`/`0600`; en gemensam system-/tempkatalog ändras aldrig till privat katalog. Skydds-/backupfel rapporteras som operationsfel, även om bytes redan hunnit ersättas. **Apple-filskydd och backupbeteende behöver native enhetsprov; Linux bevisar bara sina filsystemgränser.** Inget råljud lagras. Okända innehålls-, assistent-, diagnostik- eller operationsscheman får inte skrivas över.
+
+Varje repository är actorägt och läser senaste validerade tillstånd för ändringar. Filstämpel med ändringstid, storlek och inode används för att upptäcka ersatta filer. Identiteter/relationer valideras; en stale helarray från UI får inte ersätta nya ändringar. Appens workflow håller skrivningar och sammanhängande export/radering åtskilda och returnerar uttryckligen success/failure/cancelled/conflict.
 
 ## Innehållspost
 
@@ -25,6 +30,8 @@ Ordning är fallande vald tid, skapandetid och slutligen UUID. Sökning normalis
 
 En avslutad session får titel, manuell anteckning och separata `correctedText`-fält. Originalets `text`, `createdAt`, `audioStartedAt`, `audioEndedAt`, Mio-detektion, bakgrundsmarkering och tidsgiltighet ändras inte. En aktiv session måste stoppas före redigering.
 
+Ett enda sessionsregister innehåller aktiva, pausade och avslutade sessioner. Separata actor-kommandon uppdaterar capture-checkpoint, slutmarkering, titel/anteckning och rättning. Generationsbundna operations-token avvisar sena skrivningar efter radering; en avslutad session öppnas inte på nytt av ett sent checkpoint. Valfri `mutationRevision` markerar lagrad sessionsändring, och varje segment kan ha valfri `correctionRevision`. Äldre JSON utan fälten avkodas fortfarande.
+
 Lektioner har UUID, sessionID, rubrik, anteckning, start/slut och skapande-/ändringstid. Intervall måste ligga inom avslutad session och får inte överlappa. Visningen väljer originalsegment som överlappar intervallet. Segment delas aldrig; ett gränsöverskridande segment kan därför visas i två lektioner.
 
 ## Förslag och frågor
@@ -33,17 +40,23 @@ Lektioner har UUID, sessionID, rubrik, anteckning, start/slut och skapande-/änd
 
 Ja sparar en innehållspost med förslagets UUID och avför sedan frågan. Ett omförsök efter delvis misslyckad lagring skapar inte dubbletter eller skriver över senare ändringar. Nej tar bort förslagstexten; `processedSources` behåller endast UUID:n för deduplicering. Originaltranskriptet förblir synligt tills sessionen raderas. Inte nu behåller utkastet lokalt.
 
+Förslagets additiva valfria `revision` blir `reviewRevision` (saknat fält = 0). Godkännande kräver samma revision som användaren granskade. En senare AI-komplettering gör granskningen föråldrad; användarens redigerade utkast bevaras och måste granskas igen. Actorägd godkännandeclaim stänger analysbeslut före innehållssparning. Vid relevant utkaständring återställs datumkontrollen. Saknat AI-datum/klockslag kräver ett uttryckligt användarval; ett internt standarddatum är inte ett godkänt datum.
+
 En AI-fråga stannar lokalt tills användaren går vidare till AI-vyn, väljer eventuell kontext och godkänner den exakta sändningen. Efter lyckat svar avförs inkorgsfrågan när användaren lämnar svaret. Vid fel eller avbryt finns frågan kvar.
+
+Frågesvaret och `MioAnswerNoteDraft` finns endast tillfälligt i RAM. Draftets UUID/generation hör till det aktuella svaret. **Granska och spara som anteckning** öppnar ett redigerbart utkast; ett explicit lokalt Spara skapar en `.note` med samma UUID via `saveApprovedIfAbsent`. Om samma ID redan finns bevaras den lagrade posten och senare redigeringar. Detta anropar ingen extra AI, bygger ingen frågehistorik och skapar inga systemåtgärder. Konfigurationsändring/radering ogiltigförklarar osparat svar och draft. Redan uttryckligen sparad anteckning följer vanlig lokal lagring/radering.
 
 ## Systemdata och konfiguration
 
 iOS är källa för AlarmKit-alarm och lokala notiser. Postalarm använder postens UUID; notiser `mio.reminder.<UUID>`; dagliga notiser fasta Mio-ID:n. En lista med enbart kända alarm-UUID:n finns i egna UserDefaults så att nekad behörighet inte döljer ett kvarvarande alarm vid radering. Kalenderkopior finns i den kalender användaren väljer och är fristående.
 
+Notisens `userInfo` innehåller endast `mioRoute` (`post`, `morning`, `evening`) och, för post, ett opakt `mioPostID`-UUID. Låsskärmtexten är generell. Extra nycklar/ogiltiga rutter avvisas. En pending rutt hålls till lokala lager har lästs; borttagen post ger säker fallback till dagsfliken. Rutt, flikval och vald översiktsdag är tillfälligt presentationstillstånd och startar aldrig mikrofon eller AI.
+
 AI-aktivering och HTTPS-adress finns i egna UserDefaults. Separat gatewaytoken lagras i Keychain under `app.mio.assistant.cloud-gateway`, endast tillgänglig på upplåst aktuell enhet. Leverantörens API-nyckel finns enbart på servern. Frågeutkast/svar i AI-vyn är tillfälliga och sparas inte som historik. Uppskjutna inkorgsfrågor finns i assistentlagret.
 
 ## Export och radering
 
-Gemensam export heter `Mio-lokal-export-ÅÅÅÅ-MM-DD-HHmm.json`:
+Gemensam export heter `Mio-lokal-export-ÅÅÅÅ-MM-DD-HHmm-UUID.json` och skrivs under appens ägda temporära `Mio-exports/`. Även enskilda sessionsexporter har unika filnamn. Varje fil skapas skyddad; samma minuts export ersätter inte en äldre fil. Workflowen spärrar nya skrivningar, flushar senaste capture-checkpoint och läser de senaste actorägda lagren för samma lokala snapshot:
 
 ```json
 {
@@ -63,7 +76,9 @@ Gemensam export heter `Mio-lokal-export-ÅÅÅÅ-MM-DD-HHmm.json`:
 
 Exporten har ett additivt valfritt `diagnostics`-fält; äldre export utan fältet kan fortfarande avkodas. Exporten har inga ljuddata, token, API-nycklar eller systemkalenderkopior. Avkodning stöder även export utan assistantfält, men appen erbjuder ingen importknapp. Filernas egna schemaVersion är fortfarande 1.
 
-Sessionens enskilda radering tar bort dess lektioner/förslag och lossar manuella poster. Radering av en post avbryter dess Mio-alarm/notis. Fullständig radering avbryter alla egna alarm/notiser, glömmer AI-konfiguration, raderar fyra lokala lager och interna exportkopior. En gemensam skrivspärr och tombstones hindrar sena callbacks från att återskapa data. Systemfel ska visas, inte döljas som lyckad radering.
+Sessionens enskilda radering tar bort dess lektioner/förslag/analysbeslut och lossar manuella poster. Radering av en post avbryter dess Mio-alarm/notis. Fullständig radering avbryter alla egna alarm/notiser, glömmer båda serveranslutningarna och avstänger AI, raderar de tre domänlagren, diagnostiken och interna exportkopior. Kända gamla interna exportnamn städas också; delade systemkataloger raderas inte.
+
+Raderingsavsikten lagras först i `operations-v1.json`. Fasta steg avslutas i rätt ordning och journalen skrivs efter varje lyckat steg. Avbruten/partiell radering återupptas idempotent från journalen; ett fel kan därför betyda att vissa steg redan är gjorda. Återhämtningen försöks vid bootstrap före vanligt arbete. Kvarstående fel spärrar nya ändringar/sändningar och visar **Försök slutföra raderingen igen**. Okänd eller skadad journal skrivs inte över. ID-journalen exporteras inte som innehåll och tas bort först efter fullgjorda steg. Generationsspärrar/tombstones avvisar sena callbacks även om städningen misslyckas. Inga behörigheter, modellfrågor eller mikrofonstarter återförsöks automatiskt av återhämtningen.
 
 Redan delade exporter, skickade molnfrågor och kalenderkopior ligger utanför appens lokala radering. De behöver hanteras där de sparats.
 
@@ -83,6 +98,8 @@ En färdig detaljerad del registreras även när dess sectionlista är tom. Fram
 
 Detaljerade delar analyserar den visningstext som fanns vid sändningen. Senare manuella rättningar ger ingen automatisk omanalys av redan bearbetade fragment. Källcitatet bevaras som bevis för vilket underlag som användes.
 
+Nya `MioLesson` och detaljerade `MioAnalysisRecord` kan ha valfria `sourceRevisions`: segment-ID och den `correctionRevision` som hörde till underlaget. Revisionsmetadata stannar lokalt och ändrar inte serverns källtextkontrakt. Original utan rättning har källrevision 0; en äldre rättning utan revisionsbevis är okänd. Källjämförelse visar **aktuell**, **äldre** eller **okänd**. Äldre poster utan metadata anges aldrig som verifierat aktuella. Sparade delar, användarredigeringar, citat och ordning bevaras även om en rättning ändrar antal textfragment. Kopiering märker ofullständigt arbete, ljudluckor och äldre/okänt källunderlag. Rättning ger ingen automatisk omanalys eller ny molnsändning.
+
 ## Molnanslutning med Access, 2026-09-29
 
 Keychain-posten `app.mio.assistant.cloud-gateway` / `gateway-token` innehåller efter nästa sparning ett JSON-objekt med gatewaytoken och valfritt Access-par. Äldre post med enbart tokensträng kan läsas. Alla hemligheter uppdateras i en Keychain-skrivning med `WhenUnlockedThisDeviceOnly`, ingår aldrig i export och raderas tillsammans vid glömd anslutning/fullständig radering. Ändrad server kräver att hemligheter anges igen. Anslutningens jämförelse inkluderar Access-paret vid förhandsgranskning. Sparning/radering skickar samma återställningsnotis som tidigare och stoppar pågående analys. Inga innehållsscheman ändras.
@@ -91,7 +108,7 @@ Keychain-posten `app.mio.assistant.cloud-gateway` / `gateway-token` innehåller 
 
 `TranscriptSegment` har valfria `transcriptionMetadata` (modell/revision/motor) och `sourceChunkID` för proveniens och deduplicering. `MioSession.captureGaps` är en valfri lista med UUID, start/slut och orsak. Äldre JSON utan dessa fält avkodas; originals text/tider och äldre motorfält ändras inte. Sessions- och exportscheman byter inte version för dessa additiva fält. Ofullständigt ljudunderlag märks både i lektionsvy och kopierad anteckning.
 
-Transkriptionsadress ligger i `mio.transcription.server` (UserDefaults); separat token i Keychain (`app.mio.assistant.transcription`, `access-token`, WhenUnlockedThisDeviceOnly). Aktiv session håller sin fasta adress/token i RAM så att låst skärm fungerar efter användarstart. Ny adress kräver ny token. Inställningsbyte är spärrat under fångst och återkallar gammal klient. Token, ljudbuffertar och WAV-delar ingår aldrig i lagring eller export. Hela RAM-kön rensas vid avslut/radering; servern har en kort textcache för retries, se [API](../transcription-server/API.md).
+Transkriptionsadress ligger i `mio.transcription.server` (UserDefaults); separat token i Keychain (`app.mio.assistant.transcription`, `access-token`, WhenUnlockedThisDeviceOnly). Aktiv session håller sin fasta adress/token i RAM för användarstartad fångst med låst skärm. Detta kräver ändå telefonprov. Ny adress kräver ny token. Inställningsbyte är spärrat under fångst och återkallar gammal klient. Token, ljudbuffertar och WAV-delar ingår aldrig i lagring eller export. Högst 60 s från äldsta samples ursprungliga tid behålls i RAM, även under retry/stopp. Paus/stopp släcker mikrofonen först; redan fångad slutdel kan dräneras högst 15 s och inom den ursprungliga 60-sekundsgränsen. Därefter rensas egna ljudreferenser; bortfall markeras som lucka. Radering rensar/avbryter väntande arbete. Servern har en kort textcache för identiska retries, se [API](../transcription-server/API.md).
 
 Löpande vardags-AI får bara segment vars **ljudstart** ligger efter aktiveringen. Ett fördröjt transkript från tidigare ljud räknas inte som nytt godkänt underlag. En ljuddel som korsar samtyckesgränsen kan därför hoppas över konservativt.
 
@@ -102,3 +119,7 @@ Vardagsanalys använder `/v2/analyze`: `fragments` är enbart nya källor, `cont
 `analysisDecisions` i assistentlagret är additivt valfritt. Varje beslut har förslags-ID, sessionID, typ, källfragment-ID:n och `isClosed`. `priorDecisions` skickar bara beslut kopplade till vald kontext, med `isOpen`, aldrig tidigare förslagstext. En v2-kandidat har nullable `replacesID` och minst en ny källa. En komplettering uppdaterar samma öppna förslags-ID och behåller skapandetid/uppskjutning. Ja/Nej stänger beslutet och tar bort förslagstext; ett sent svar kontrolleras mot senaste lagrade beslut. V2 slår bara ihop förslag via `replacesID`; även identiska nya fristående kandidater behåller egna beslut/källor. Bearbetningsposter registrerar bara nya fragment. Sessionsradering tar även bort dess beslut.
 
 `diagnostics` i schema 2-exporten innehåller appversion/build, OS, maskinidentifierare, tidszon, fyra konfigurationsbooleans och journalens lagringsstatus/händelser. Den sparar högst 200 händelser i sju dagar oberoende av sessioner. Varje händelse innehåller fast operation/rutt, tid/duration, byteantal, HTTP-status, tillåten gatewayfelkod, Retry-After, tillåten nätfel-domän/-kod och säkra release-/provider-/modell-/prompt-/request-ID-/CF-Ray-fält. Analys kan ha fragmentantal, källtidsintervall, köstorlek och kontextbegränsning. Inga frågor, transkript, svar, felkroppar, fullständiga URL:er, headerdumpningar, hemligheter eller råljud lagras. Okänt journalschema skrivs inte över; lagringsfel märks i exporten. Raderingsgeneration och starttidsgräns avvisar sena händelser efter total radering.
+
+Diagnostik kan additivt innehålla bounded/sanerad konfigurationsrevision, faktiskt returnerad modell, upstream request-ID och rapporterade input-/output-/reasoning-tokenantal. Okända leverantörsnamn får visas endast som säkra protokollidentifierare; de ger inte automatiskt modellstöd. Otillåtna URL-/nyckelliknande eller för stora metadata tas bort. Saknad usage bevisar inte frånvaro av intern reasoning.
+
+Modellfri skyddad `/v2/status` ger aktuell release, offentlig konfigurationsrevision, tre uppgifter (`ask`, `everyday`, `lesson`) och delad kvot. Uppgiftens kompatibilitet och konfigurationsfel visas separat. Revisionen härleds utan publicerade hemligheter eller secret-fingerprints. En kort lyckad discoverycache är anslutnings- och revisionsbunden och ogiltigförklaras vid inställnings-/auth-/409-fel. Fryst revision följer godkänd fråga och aktiverad analys; serverns ändrade konfiguration kräver ny granskning/manuell aktivering, aldrig automatiskt nytt POST. Cache, samtycke och kö sparas inte som innehåll.

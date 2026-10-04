@@ -2,6 +2,8 @@ import Foundation
 import SwiftUI
 
 struct TimelineTabView: View {
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @State private var deletionOutcome: MioOperationOutcome?
     @Bindable var contentModel: MioContentViewModel
     @Bindable var sessionModel: MioViewModel
 
@@ -77,6 +79,14 @@ struct TimelineTabView: View {
                 }
             }
         }
+        .alert("Kunde inte slutföra raderingen", isPresented: Binding(
+            get: { deletionOutcome?.message != nil },
+            set: { if !$0 { deletionOutcome = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deletionOutcome?.message ?? "Försök igen.")
+        }
         .sheet(item: $editorRoute) { route in
             ContentEditorView(
                 contentModel: contentModel,
@@ -93,7 +103,7 @@ struct TimelineTabView: View {
             if let item = pendingDeletion {
                 Button("Radera permanent", role: .destructive) {
                     pendingDeletion = nil
-                    Task { await contentModel.delete(id: item.id) }
+                    Task { deletionOutcome = await workflow.deleteContent(id: item.id) }
                 }
             }
             Button("Avbryt", role: .cancel) {
@@ -139,6 +149,9 @@ struct TimelineTabView: View {
 }
 
 struct CalendarTabView: View {
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @Environment(MioDayContext.self) private var day
+    @State private var deletionOutcome: MioOperationOutcome?
     @Bindable var contentModel: MioContentViewModel
     @Bindable var sessionModel: MioViewModel
 
@@ -192,6 +205,14 @@ struct CalendarTabView: View {
                 }
             }
         }
+        .alert("Kunde inte slutföra raderingen", isPresented: Binding(
+            get: { deletionOutcome?.message != nil },
+            set: { if !$0 { deletionOutcome = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deletionOutcome?.message ?? "Försök igen.")
+        }
         .sheet(item: $editorRoute) { route in
             ContentEditorView(
                 contentModel: contentModel,
@@ -208,7 +229,7 @@ struct CalendarTabView: View {
             if let item = pendingDeletion {
                 Button("Radera permanent", role: .destructive) {
                     pendingDeletion = nil
-                    Task { await contentModel.delete(id: item.id) }
+                    Task { deletionOutcome = await workflow.deleteContent(id: item.id) }
                 }
             }
             Button("Avbryt", role: .cancel) {
@@ -226,7 +247,7 @@ struct CalendarTabView: View {
     }
 
     private var upcomingPlans: [MioContentItem] {
-        let startOfToday = Calendar.current.startOfDay(for: .now)
+        let startOfToday = day.startOfToday
         return matchingPlans
             .filter { $0.scheduledAt >= startOfToday }
             .sorted {
@@ -238,7 +259,7 @@ struct CalendarTabView: View {
     }
 
     private var earlierPlans: [MioContentItem] {
-        let startOfToday = Calendar.current.startOfDay(for: .now)
+        let startOfToday = day.startOfToday
         return matchingPlans
             .filter { $0.scheduledAt < startOfToday }
             .sorted {
@@ -289,6 +310,8 @@ struct CalendarTabView: View {
 }
 
 struct NotesTabView: View {
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @State private var deletionOutcome: MioOperationOutcome?
     @Bindable var contentModel: MioContentViewModel
     @Bindable var sessionModel: MioViewModel
 
@@ -337,11 +360,14 @@ struct NotesTabView: View {
                                         Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
                                             .font(.title3)
                                             .foregroundStyle(item.isCompleted ? .green : .secondary)
+                                            .frame(minWidth: 44, minHeight: 44)
+                                            .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel(
-                                        item.isCompleted ? "Markera som öppen" : "Markera som klar"
+                                        item.isCompleted ? "Markera \(item.title) som inte klar" : "Markera \(item.title) som klar"
                                     )
+                                    .accessibilityIdentifier("mio.task-completion.\(item.id.uuidString)")
                                 }
 
                                 Button {
@@ -385,6 +411,14 @@ struct NotesTabView: View {
                 }
             }
         }
+        .alert("Kunde inte slutföra raderingen", isPresented: Binding(
+            get: { deletionOutcome?.message != nil },
+            set: { if !$0 { deletionOutcome = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deletionOutcome?.message ?? "Försök igen.")
+        }
         .sheet(item: $editorRoute) { route in
             ContentEditorView(
                 contentModel: contentModel,
@@ -401,7 +435,7 @@ struct NotesTabView: View {
             if let item = pendingDeletion {
                 Button("Radera permanent", role: .destructive) {
                     pendingDeletion = nil
-                    Task { await contentModel.delete(id: item.id) }
+                    Task { deletionOutcome = await workflow.deleteContent(id: item.id) }
                 }
             }
             Button("Avbryt", role: .cancel) {
@@ -446,6 +480,24 @@ struct MorningTabView: View {
     var body: some View {
         NavigationStack {
             DailyOverviewView(contentModel: contentModel, sessionModel: sessionModel)
+        }
+    }
+}
+
+struct MioNotificationPostView: View {
+    let postID: UUID
+    let contentModel: MioContentViewModel
+    let sessionModel: MioViewModel
+
+    var body: some View {
+        if let item = contentModel.item(id: postID) {
+            ContentEditorView(contentModel: contentModel, sessionModel: sessionModel,
+                              item: item, initialKind: item.kind)
+        } else {
+            NavigationStack {
+                ContentUnavailableView("Posten finns inte kvar", systemImage: "doc.questionmark",
+                                       description: Text("Stäng vyn för att gå tillbaka till din dag."))
+            }
         }
     }
 }
@@ -531,6 +583,8 @@ private enum NotesFilter: String, CaseIterable, Hashable, Identifiable {
 }
 
 private struct ContentEditorView: View {
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @State private var deletionOutcome: MioOperationOutcome?
     @Environment(\.dismiss) private var dismiss
 
     @Bindable var contentModel: MioContentViewModel
@@ -679,7 +733,7 @@ private struct ContentEditorView: View {
         .alert("Kunde inte slutföra ändringen", isPresented: contentErrorIsPresented) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(contentModel.errorMessage ?? "Ett okänt fel inträffade.")
+            Text(deletionOutcome?.message ?? contentModel.errorMessage ?? "Ett okänt fel inträffade.")
         }
     }
 
@@ -695,10 +749,11 @@ private struct ContentEditorView: View {
 
     private var contentErrorIsPresented: Binding<Bool> {
         Binding(
-            get: { contentModel.errorMessage != nil },
+            get: { deletionOutcome?.message != nil || contentModel.errorMessage != nil },
             set: { isPresented in
                 if !isPresented {
                     contentModel.errorMessage = nil
+                    deletionOutcome = nil
                 }
             }
         )
@@ -725,17 +780,17 @@ private struct ContentEditorView: View {
     private func deleteItem() async {
         guard let item else { return }
         isSaving = true
-        await contentModel.delete(id: item.id)
+        let outcome = await workflow.deleteContent(id: item.id)
+        deletionOutcome = outcome
         isSaving = false
-        if contentModel.item(id: item.id) == nil {
-            dismiss()
-        }
+        if outcome.isSuccess { dismiss() }
     }
 }
 
 struct SessionEditorView: View {
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @State private var deletionOutcome: MioOperationOutcome?
     @Environment(MioAssistantViewModel.self) private var assistant
-    @Environment(MioAnalysisCoordinator.self) private var analysis
     @Environment(\.dismiss) private var dismiss
 
     let sessionID: UUID
@@ -801,7 +856,7 @@ struct SessionEditorView: View {
         .alert("Kunde inte slutföra ändringen", isPresented: combinedErrorIsPresented) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(contentModel.errorMessage ?? sessionModel.errorMessage ?? "Ett okänt fel inträffade.")
+            Text(deletionOutcome?.message ?? contentModel.errorMessage ?? sessionModel.errorMessage ?? "Ett okänt fel inträffade.")
         }
     }
 
@@ -951,12 +1006,13 @@ struct SessionEditorView: View {
     private var combinedErrorIsPresented: Binding<Bool> {
         Binding(
             get: {
-                contentModel.errorMessage != nil || sessionModel.errorMessage != nil
+                deletionOutcome?.message != nil || contentModel.errorMessage != nil || sessionModel.errorMessage != nil
             },
             set: { isPresented in
                 if !isPresented {
                     contentModel.errorMessage = nil
                     sessionModel.errorMessage = nil
+                    deletionOutcome = nil
                 }
             }
         )
@@ -1011,24 +1067,11 @@ struct SessionEditorView: View {
     }
 
     private func deleteSession() async {
-        guard MioMaintenanceState.shared.beginWrite() else { return }
-        defer { MioMaintenanceState.shared.endWrite() }
         isDeleting = true
-        analysis.cancel(sessionID: sessionID, assistant: assistant)
-        await contentModel.unlinkSession(id: sessionID)
-        guard !contentModel.items.contains(where: { $0.sessionID == sessionID }) else {
-            isDeleting = false
-            return
-        }
-        guard await assistant.deleteSessionData(sessionID: sessionID) else {
-            isDeleting = false
-            return
-        }
-        let didDelete = await sessionModel.deleteSession(id: sessionID)
+        let outcome = await workflow.deleteSession(id: sessionID)
+        deletionOutcome = outcome
         isDeleting = false
-        if didDelete {
-            dismiss()
-        }
+        if outcome.isSuccess { dismiss() }
     }
 }
 

@@ -32,6 +32,11 @@ struct MioCloudConnection: Equatable, Sendable {
     let endpoint: URL
     let token: String
     var access: MioAccessCredentials? = nil
+    var observedConfigurationRevision: String? = nil
+
+    func hasSameCredentials(as other: Self) -> Bool {
+        endpoint == other.endpoint && token == other.token && access == other.access
+    }
 }
 
 struct MioAccessCredentials: Codable, Equatable, Sendable {
@@ -67,6 +72,7 @@ enum MioCloudError: LocalizedError {
     case gateway(Int, MioGatewayErrorCode)
     case serverStatus(Int)
     case rateLimited(Int)
+    case gatewayRateLimited(MioGatewayErrorCode, Int)
 
     var errorDescription: String? {
         switch self {
@@ -82,15 +88,31 @@ enum MioCloudError: LocalizedError {
         case .oversizedResponse: "Serverns svar var för stort och avbröts."
         case .network: "Kunde inte nå servern. Kontrollera internet, HTTPS-adressen och serverns konfiguration. Inget nytt försök görs automatiskt."
         case .rateLimited(let seconds): "AI-gränsen är nådd. Vänta minst \(seconds) sekunder och fortsätt sedan manuellt. Sparade lektionsdelar finns kvar."
-        case .incompatibleGateway: "Gatewayen saknar Mios nya sammanhangskontrakt. Uppdatera servern innan vardagsanalysen fortsätter."
+        case .gatewayRateLimited(let code, _): MioCloudError.gateway(429, code).errorDescription
+        case .incompatibleGateway: "Gatewayen saknar ett giltigt kontrakt för den valda Mio-uppgiften. Uppdatera eller kontrollera servern innan du fortsätter."
         case .gateway(let status, let code):
             switch code {
             case .gatewayNotConfigured: "AI-gatewayen är inte konfigurerad. Kontrollera att den publicerade serverversionen stöder vald leverantör och modell."
+            case .configurationChanged: "Serverns AI-konfiguration ändrades. Granska frågan igen eller aktivera analysen på nytt innan du fortsätter."
+            case .taskConfigurationInvalid: "Den valda AI-uppgiften är felkonfigurerad. Kontrollera dess leverantör, modell och krav på servern."
+            case .providerAuthentication: "AI-leverantören nekade serverns inloggningsuppgifter. Kontrollera den serverägda nyckeln."
+            case .providerAccount: "AI-kontot saknar åtkomst eller är blockerat. Kontrollera kontot hos leverantören."
+            case .providerModelUnavailable: "Den valda modellen är inte tillgänglig för serverns konto. Kontrollera modellåtkomsten."
+            case .providerParameters: "AI-leverantören accepterade inte serverns modellinställningar. Kontrollera uppgiftens profil."
+            case .providerRefusal: "AI-leverantören avstod från att besvara underlaget. Inget innehåll har godkänts från svaret."
+            case .providerTruncated: "AI-svaret avbröts innan det var fullständigt. Inget innehåll har godkänts från svaret."
+            case .localMinuteLimit: "Mios gemensamma minutgräns är nådd. Vänta och fortsätt manuellt senare."
+            case .localDayLimit: "Mios gemensamma dagsgräns är nådd. Fortsätt manuellt efter nästa återställning."
+            case .localConcurrencyLimit: "Servern behandlar redan så många AI-anrop som tillåts. Vänta och fortsätt manuellt senare."
+            case .localRequestLimit: "Mios gemensamma AI-kvot nekade anropet. Vänta och fortsätt manuellt senare."
+            case .providerQuota: "AI-leverantörens kvot är nådd. Kontrollera kontot och fortsätt manuellt senare."
+            case .budgetStoreFailed: "Servern kunde inte kontrollera den gemensamma AI-kvoten. Inget nytt försök görs automatiskt."
             case .providerModelIncompatible: "Modellen stöder inte Mios krav: reasoning av, temperatur 0 och strikt JSON-schema."
             case .upstreamTimeout, .requestTimeout: "AI-anropet tog för lång tid. Fortsätt manuellt senare; inget nytt försök görs automatiskt."
             case .rateLimited, .dailyLimitReached, .requestLimit: "AI-kvoten är nådd. Vänta och fortsätt manuellt senare."
-            case .invalidUpstreamAnswer, .invalidUpstreamResponse, .incompleteUpstreamResponse, .invalidAnalysisResult, .invalidLessonResult: "AI-leverantören gav ett ogiltigt svar. Inget innehåll har godkänts från svaret."
-            case .upstreamUnavailable: "AI-leverantören kunde inte nås. Kontrollera gatewayens leverantörsinställningar och försök senare."
+            case .invalidUpstreamAnswer, .invalidUpstreamResponse, .incompleteUpstreamResponse, .invalidAnalysisResult, .invalidLessonResult, .providerInvalidResponse: "AI-leverantören gav ett ogiltigt svar. Inget innehåll har godkänts från svaret."
+            case .upstreamUnavailable, .providerInfrastructure: "AI-leverantören kunde inte nås. Kontrollera gatewayens leverantörsinställningar och försök senare."
+            case .providerTransport: "Servern kunde inte upprätta anslutningen till AI-leverantören. Kontrollera anslutningen och fortsätt manuellt senare."
             default: MioCloudError.serverStatus(status).errorDescription
             }
         case .serverStatus(let status):
@@ -157,6 +179,7 @@ enum MioCloudSettings {
                                                  useAccess: useAccess, clientID: clientID, clientSecret: clientSecret)
         try writeCredentials(credentials)
         UserDefaults.standard.set(normalizedOrigin, forKey: serverKey)
+        MioConnectionDiscovery.shared.invalidate()
         NotificationCenter.default.post(name: didResetNotification, object: nil)
     }
 
@@ -173,6 +196,7 @@ enum MioCloudSettings {
     static func reset() throws {
         UserDefaults.standard.removeObject(forKey: enabledKey)
         UserDefaults.standard.removeObject(forKey: serverKey)
+        MioConnectionDiscovery.shared.invalidate()
         NotificationCenter.default.post(name: didResetNotification, object: nil)
         let status = SecItemDelete(keychainQuery as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw MioCloudError.keychain }
@@ -185,7 +209,9 @@ enum MioCloudSettings {
     }
 
     private static func validateToken(_ token: String) throws {
-        guard (32...256).contains(token.utf8.count), !token.hasPrefix("sk-"),
+        let lowercased = token.lowercased()
+        guard (32...256).contains(token.utf8.count),
+              !["sk-", "sk_", "gsk_", "aiza"].contains(where: lowercased.hasPrefix),
               token.utf8.allSatisfy({
                   (65...90).contains($0) || (97...122).contains($0)
                       || (48...57).contains($0) || $0 == 45 || $0 == 95
@@ -219,8 +245,20 @@ enum MioCloudSettings {
 }
 
 enum MioCloudService {
-    static func ask(_ payload: MioCloudRequest, connection: MioCloudConnection) async throws -> String {
-        try await perform(operation: .ask, connection: connection, body: { try payload.validatedData() }) { data in
+    typealias ByteTransport = @Sendable (URLRequest) async throws -> (AsyncThrowingStream<UInt8, Error>, URLResponse)
+
+    static func statusV2(connection: MioCloudConnection, transport: ByteTransport? = nil) async throws -> MioGatewayStatusV2 {
+        let origin = connection.endpoint.deletingLastPathComponent().deletingLastPathComponent()
+        let target = MioCloudConnection(endpoint: origin.appendingPathComponent("v2/status"), token: connection.token, access: connection.access)
+        do {
+            return try await perform(operation: .statusV2, connection: target, body: { Data() }, method: "GET",
+                                     transport: transport) { try MioGatewayStatusV2.decode($0) }
+        } catch MioCloudError.serverStatus(404) { throw MioCloudError.incompatibleGateway }
+        catch MioCloudError.gateway(404, .notFound) { throw MioCloudError.incompatibleGateway }
+    }
+
+    static func ask(_ payload: MioCloudRequest, connection: MioCloudConnection, transport: ByteTransport? = nil) async throws -> String {
+        try await perform(operation: .ask, connection: connection, body: { try payload.validatedData() }, transport: transport) { data in
             struct Answer: Decodable { let answer: String }
             try validateWire(data, lesson: false, ask: true)
             guard let decoded = try? JSONDecoder().decode(Answer.self, from: data),
@@ -230,20 +268,21 @@ enum MioCloudService {
         }
     }
 
-    static func status(connection: MioCloudConnection) async throws -> MioGatewayStatus {
+    static func status(connection: MioCloudConnection, transport: ByteTransport? = nil) async throws -> MioGatewayStatus {
         let origin = connection.endpoint.deletingLastPathComponent().deletingLastPathComponent()
         let target = MioCloudConnection(endpoint: origin.appendingPathComponent("v1/status"), token: connection.token, access: connection.access)
         do {
-            return try await perform(operation: .status, connection: target, body: { Data() }, method: "GET") { try MioGatewayStatus.decode($0) }
+            return try await perform(operation: .status, connection: target, body: { Data() }, method: "GET", transport: transport) { try MioGatewayStatus.decode($0) }
         } catch MioCloudError.serverStatus(404) { throw MioCloudError.incompatibleGateway }
         catch MioCloudError.gateway(404, .notFound) { throw MioCloudError.incompatibleGateway }
     }
 
-    static func analyze(_ payload: MioAnalysisRequest, connection: MioCloudConnection) async throws -> MioAnalysisResult {
+    static func analyze(_ payload: MioAnalysisRequest, connection: MioCloudConnection, transport: ByteTransport? = nil) async throws -> MioAnalysisResult {
         let contextContract = payload.mode == .everyday && payload.usesContextContract
         let origin = connection.endpoint.deletingLastPathComponent().deletingLastPathComponent()
         let route = payload.mode == .lesson ? "v1/lesson-notes" : contextContract ? "v2/analyze" : "v1/analyze"
-        let target = MioCloudConnection(endpoint: origin.appendingPathComponent(route), token: connection.token, access: connection.access)
+        let target = MioCloudConnection(endpoint: origin.appendingPathComponent(route), token: connection.token, access: connection.access,
+            observedConfigurationRevision: connection.observedConfigurationRevision)
         var event = MioDiagnosticEvent(operation: payload.mode == .lesson ? .lessonNotes : contextContract ? .analyzeContext : .analyze)
         event.newFragmentCount = payload.fragments.count
         event.contextFragmentCount = payload.contextFragments.count
@@ -252,7 +291,17 @@ enum MioCloudService {
         let dates = payload.allFragments.compactMap { ISO8601DateFormatter().date(from: $0.occurredAt) }
         event.sourceStart = dates.min(); event.sourceEnd = dates.max()
         return try await perform(operation: event.operation, connection: target, body: { try payload.validatedData() }, event: event,
-                                 beforeSend: contextContract ? { try await status(connection: connection).requireContextAnalysis() } : nil) { data in
+                                 beforeSend: contextContract ? {
+                                     let discovery: MioGatewayStatusV2
+                                     if let transport { discovery = try await statusV2(connection: connection, transport: transport) }
+                                     else { discovery = try await MioConnectionDiscovery.shared.prepare(connection: connection, task: .everyday).status }
+                                     if let observed = connection.observedConfigurationRevision,
+                                        observed != discovery.configurationRevision {
+                                         throw MioCloudError.gateway(409, .configurationChanged)
+                                     }
+                                     try discovery.requireTask(.everyday)
+                                 } : nil,
+                                 transport: transport) { data in
             try validateWire(data, lesson: payload.mode == .lesson, contextContract: contextContract)
             let result: MioAnalysisResult
             if payload.mode == .lesson {
@@ -276,7 +325,7 @@ enum MioCloudService {
 
     private static func perform<T: Sendable>(operation: MioDiagnosticOperation, connection: MioCloudConnection,
         body: () throws -> Data, method: String = "POST", event suppliedEvent: MioDiagnosticEvent? = nil,
-        beforeSend: (() async throws -> Void)? = nil, validate: (Data) throws -> T) async throws -> T {
+        beforeSend: (() async throws -> Void)? = nil, transport: ByteTransport? = nil, validate: (Data) throws -> T) async throws -> T {
         try Task.checkCancellation()
         var event = suppliedEvent ?? MioDiagnosticEvent(operation: operation)
         let started = ContinuousClock.now
@@ -284,8 +333,11 @@ enum MioCloudService {
         do {
             let body = try body(); event.requestBytes = body.count
             try Task.checkCancellation()
+            if method == "POST", MioGatewayMetadata.revision(connection.observedConfigurationRevision) == nil {
+                throw MioCloudError.changedConfiguration
+            }
             try await beforeSend?()
-            let data = try await send(body, connection: connection, method: method, event: &event)
+            let data = try await send(body, connection: connection, method: method, event: &event, transport: transport)
             try Task.checkCancellation()
             let result = try validate(data)
             try Task.checkCancellation()
@@ -296,9 +348,13 @@ enum MioCloudService {
         } catch {
             event.durationMilliseconds = elapsedMilliseconds(since: started)
             if case let MioCloudError.gateway(_, code) = error { event.gatewayCode = code }
+            if case let MioCloudError.gatewayRateLimited(code, seconds) = error {
+                event.gatewayCode = code; event.retryAfterSeconds = seconds
+            }
             if error is CancellationError || Task.isCancelled { event.outcome = .cancelled }
             else if event.outcome == .success { event.outcome = .validationFailed }
             await MioDiagnosticsRepository.shared.record(event, generation: token)
+            await MioConnectionDiscovery.shared.handle(error: error)
             throw error
         }
     }
@@ -340,10 +396,10 @@ enum MioCloudService {
         }
     }
 
-    static func makeRequest(_ body: Data, connection: MioCloudConnection) throws -> URLRequest {
+    static func makeRequest(_ body: Data, connection: MioCloudConnection, method: String = "POST") throws -> URLRequest {
         try connection.access?.validate()
         var request = URLRequest(url: connection.endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
-        request.httpMethod = "POST"
+        request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(connection.token)", forHTTPHeaderField: "Authorization")
@@ -351,7 +407,11 @@ enum MioCloudService {
             request.setValue(access.clientID, forHTTPHeaderField: "CF-Access-Client-Id")
             request.setValue(access.clientSecret, forHTTPHeaderField: "CF-Access-Client-Secret")
         }
-        request.httpBody = body
+        if method == "POST", let revision = connection.observedConfigurationRevision {
+            guard MioGatewayMetadata.revision(revision) != nil else { throw MioCloudError.changedConfiguration }
+            request.setValue(revision, forHTTPHeaderField: "X-Mio-Configuration-Revision")
+        }
+        request.httpBody = method == "GET" ? nil : body
         return request
     }
 
@@ -362,15 +422,33 @@ enum MioCloudService {
         return MioGatewayErrorCode(rawValue: code)
     }
 
-    static func httpFailure(response: HTTPURLResponse, body: Data) -> (error: MioCloudError, code: MioGatewayErrorCode?, retryAfterSeconds: Int?) {
+    static func httpFailure(response: HTTPURLResponse, body: Data, now: Date = .now) -> (error: MioCloudError, code: MioGatewayErrorCode?, retryAfterSeconds: Int?) {
         let code = response.mimeType == "application/json" ? gatewayCode(from: body) : nil
         if response.statusCode == 429 {
             let value = response.value(forHTTPHeaderField: "Retry-After") ?? ""
-            let seconds = value.count <= 10 ? Int(value) ?? 60 : 60
+            let seconds: Int
+            if value.count <= 10, let numeric = Int(value) {
+                seconds = numeric
+            } else if value.utf8.count <= 64 {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.timeZone = TimeZone(secondsFromGMT: 0)
+                formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
+                formatter.isLenient = false
+                if let deadline = formatter.date(from: value) {
+                    seconds = Int(min(86_400, max(1, ceil(deadline.timeIntervalSince(now)))))
+                } else { seconds = 60 }
+            } else { seconds = 60 }
             let bounded = min(86_400, max(1, seconds))
+            if let code, [.localMinuteLimit, .localDayLimit, .localConcurrencyLimit, .localRequestLimit, .providerQuota].contains(code) {
+                return (.gatewayRateLimited(code, bounded), code, bounded)
+            }
             return (.rateLimited(bounded), code, bounded)
         }
-        if [401, 403].contains(response.statusCode) || (300...399).contains(response.statusCode) {
+        if (300...399).contains(response.statusCode) {
+            return (.serverStatus(response.statusCode), code, nil)
+        }
+        if [401, 403].contains(response.statusCode), code != .providerAuthentication, code != .providerAccount {
             return (.serverStatus(response.statusCode), code, nil)
         }
         if let code { return (.gateway(response.statusCode, code), code, nil) }
@@ -378,7 +456,7 @@ enum MioCloudService {
     }
 
     private static func send(_ body: Data, connection: MioCloudConnection, method: String,
-                             event: inout MioDiagnosticEvent) async throws -> Data {
+                             event: inout MioDiagnosticEvent, transport: ByteTransport?) async throws -> Data {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.urlCredentialStorage = nil
@@ -389,52 +467,15 @@ enum MioCloudService {
         configuration.timeoutIntervalForResource = 55
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
-        var request = try makeRequest(body, connection: connection)
-        request.httpMethod = method
-        if method == "GET" { request.httpBody = nil }
+        let request = try makeRequest(body, connection: connection, method: method)
         do {
             try Task.checkCancellation()
+            if let transport {
+                let (bytes, response) = try await transport(request)
+                return try await readResponse(bytes, response: response, event: &event)
+            }
             let (bytes, response) = try await session.bytes(for: request, delegate: MioCloudRedirectGuard())
-            guard let response = response as? HTTPURLResponse else { throw MioCloudError.invalidResponse }
-            event.httpStatus = response.statusCode
-            if (0...1_000_000_000).contains(response.expectedContentLength) {
-                event.expectedResponseBytes = Int(response.expectedContentLength)
-            }
-            event.gateway = MioGatewayMetadata(response: response)
-            let successful = response.statusCode == 200
-            let cap = successful ? (event.operation == .status ? 4096 : 32_768) : 4096
-            var data = Data()
-            if successful {
-                guard response.mimeType == "application/json" else { throw MioCloudError.invalidResponse }
-                guard response.expectedContentLength <= cap else {
-                    event.responseTruncated = true
-                    throw MioCloudError.oversizedResponse
-                }
-            }
-            // Error bodies are read only as bounded JSON; never expose HTML or provider error details.
-            var exceeded = !successful && response.expectedContentLength > cap
-            event.responseTruncated = exceeded
-            if !exceeded {
-                for try await byte in bytes {
-                    try Task.checkCancellation()
-                    event.responseBytes += 1
-                    if data.count == cap {
-                        exceeded = true
-                        event.responseTruncated = true
-                        if successful { throw MioCloudError.oversizedResponse }
-                        break
-                    }
-                    data.append(byte)
-                }
-            }
-            guard successful else {
-                event.outcome = .httpError
-                let failure = httpFailure(response: response, body: exceeded ? Data() : data)
-                event.gatewayCode = failure.code
-                event.retryAfterSeconds = failure.retryAfterSeconds
-                throw failure.error
-            }
-            return data
+            return try await readResponse(bytes, response: response, event: &event)
         } catch is CancellationError { throw CancellationError() }
         catch let error as MioCloudError { throw error }
         catch {
@@ -452,6 +493,51 @@ enum MioCloudService {
             throw MioCloudError.network
         }
     }
+    /// Native AsyncBytes stays demand-driven; injection replaces only the transport.
+    private static func readResponse<Bytes: AsyncSequence>(_ bytes: Bytes, response: URLResponse,
+        event: inout MioDiagnosticEvent) async throws -> Data where Bytes.Element == UInt8 {
+        guard let response = response as? HTTPURLResponse else { throw MioCloudError.invalidResponse }
+        event.httpStatus = response.statusCode
+        if (0...1_000_000_000).contains(response.expectedContentLength) {
+            event.expectedResponseBytes = Int(response.expectedContentLength)
+        }
+        event.gateway = MioGatewayMetadata(response: response)
+        let successful = response.statusCode == 200
+        let cap = successful ? (event.operation == .statusV2 ? MioGatewayStatusV2.maxResponseBytes : event.operation == .status ? 4096 : 32_768) : 4096
+        var data = Data()
+        if successful {
+            guard response.mimeType == "application/json" else { throw MioCloudError.invalidResponse }
+            guard response.expectedContentLength <= cap else {
+                event.responseTruncated = true
+                throw MioCloudError.oversizedResponse
+            }
+        }
+        // Error bodies are read only as bounded JSON; never expose HTML or provider error details.
+        var exceeded = !successful && response.expectedContentLength > cap
+        event.responseTruncated = exceeded
+        if !exceeded {
+            for try await byte in bytes {
+                try Task.checkCancellation()
+                event.responseBytes += 1
+                if data.count == cap {
+                    exceeded = true
+                    event.responseTruncated = true
+                    if successful { throw MioCloudError.oversizedResponse }
+                    break
+                }
+                data.append(byte)
+            }
+        }
+        guard successful else {
+            event.outcome = .httpError
+            let failure = httpFailure(response: response, body: exceeded ? Data() : data)
+            event.gatewayCode = failure.code
+            event.retryAfterSeconds = failure.retryAfterSeconds
+            throw failure.error
+        }
+        return data
+    }
+
 }
 
 /// Never forward the gateway credential or approved text to a redirect target.

@@ -1,19 +1,15 @@
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
-import { validateAnalysisPayload, validateAnalysisResult, validateAnalysisV2Payload, validateAnalysisV2Result, validateLessonPayload, validateLessonResult, validateAskResult } from './analysis.mjs';
-import { providerRequest, providerResponseText, ProviderResponseError, ProviderCompatibilityError, validateProvider, providerProfile, PROVIDERS } from './provider.mjs';
+import { validateAnalysisPayload, validateAnalysisV2Payload, validateLessonPayload } from './analysis.mjs';
+import { PROVIDERS } from './provider.mjs';
+import { RequestError, awaitWithSignal } from './execution-policy.mjs';
+import { executeGeneration, generationMetadataHeaders } from './generation-execution.mjs';
+import { taskConfigurationIdentifiers } from './task-profiles.mjs';
 
 import { PROMPT_VERSION, ANALYSIS_V2_PROMPT_VERSION } from './prompts.mjs';
-import { authenticated, gatewayStatus, metadataHeaders } from './status.mjs';
+import { authenticated, gatewayStatus, gatewayStatusV2, configurationRevision, metadataHeaders } from './status.mjs';
 
 const MAX_BODY_BYTES = 20_000;
-const MAX_UPSTREAM_BYTES = 65_536;
-
-
-class RequestError extends Error {
-  constructor(status, code, retryAfter = 60) { super(code); this.status = status; this.code = code; this.retryAfter = retryAfter; }
-}
-
 function byteLength(value) { return Buffer.byteLength(value, 'utf8'); }
 function exactKeys(value, expected) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -52,10 +48,12 @@ function positiveInteger(value, fallback, maximum) {
 
 export function loadConfig(env = process.env) {
   const provider = env.MIO_AI_PROVIDER ?? 'openai';
-  validateProvider(provider);
+  const providerSecrets = Object.fromEntries(Object.entries(PROVIDERS).map(([id, entry]) => [id, env[entry[1]] ?? ""]));
   const config = {
     provider,
-    apiKey: env[PROVIDERS[provider][1]] ?? '',
+    apiKey: providerSecrets[provider] ?? '',
+    providerSecrets,
+    taskProfiles: env.MIO_AI_TASK_PROFILES,
     baseURL: env.MIO_AI_BASE_URL,
     compatibility: env.MIO_AI_COMPATIBILITY,
     lessonIntervalSeconds: positiveInteger(env.MIO_LESSON_INTERVAL_SECONDS, 60, 3600),
@@ -63,7 +61,7 @@ export function loadConfig(env = process.env) {
     model: env.MIO_AI_MODEL ?? (provider === 'openai' ? env.MIO_OPENAI_MODEL : '') ?? '',
     port: positiveInteger(env.PORT, 8787, 65_535),
     requestsPerMinute: positiveInteger(env.MIO_REQUESTS_PER_MINUTE, provider === 'groq' ? 1 : 6, 60),
-    requestsPerDay: positiveInteger(env.MIO_REQUESTS_PER_DAY, 100, 1_000),
+    requestsPerDay: positiveInteger(env.MIO_REQUESTS_PER_DAY, 100, 100),
     upstreamTimeoutMs: 40_000,
     bodyTimeoutMs: 5_000
   };
@@ -72,18 +70,13 @@ export function loadConfig(env = process.env) {
 }
 
 function validateConfig(config) {
-  validateProvider(config.provider ?? 'openai');
-  if (typeof config.apiKey !== 'string' || !config.apiKey.trim()
-      || /[\r\n]/u.test(config.apiKey)
-      || typeof config.gatewayToken !== 'string'
-      || !/^[A-Za-z0-9_-]{32,256}$/u.test(config.gatewayToken)
-      || config.gatewayToken.startsWith('sk-')
-      || config.gatewayToken === config.apiKey
-      || typeof config.model !== 'string' || !/^[A-Za-z0-9._:/-]{1,150}$/u.test(config.model)) {
-    throw new Error('Konfigurera leverantörens API-nyckel, en separat MIO_GATEWAY_TOKEN och MIO_AI_MODEL.');
-  }
+  // Generation configuration belongs to each task profile. An unavailable task
+  // must not prevent protected model-free discovery or unrelated configured tasks.
+  if (typeof config.gatewayToken !== 'string' || !/^[A-Za-z0-9_-]{32,256}$/u.test(config.gatewayToken)
+      || config.gatewayToken.startsWith('sk-')) throw new Error('Konfigurera en separat MIO_GATEWAY_TOKEN.');
   if (config.lessonIntervalSeconds !== undefined && (!Number.isSafeInteger(config.lessonIntervalSeconds)
       || config.lessonIntervalSeconds < 60 || config.lessonIntervalSeconds > 3600)) throw new Error('Lektionsintervallet måste vara 60–3600 sekunder.');
+  if (config.requestsPerDay > 100 || config.requestsPerMinute > 60 || config.upstreamTimeoutMs > 40_000 || config.bodyTimeoutMs > 5_000) throw new Error('Servergränserna får inte höja Mios kvot eller tidsgränser.');
   for (const field of ['requestsPerMinute', 'requestsPerDay', 'upstreamTimeoutMs', 'bodyTimeoutMs']) {
     if (!Number.isSafeInteger(config[field]) || config[field] < 1) throw new Error('Ogiltig servergräns.');
   }
@@ -101,180 +94,143 @@ function reply(response, status, body, retryAfter = 60) {
   response.end(JSON.stringify(body));
 }
 
-async function readBody(request, timeoutMs, validate = validatePayload) {
+async function readBody(request, timeoutMs, validate = validatePayload, signal) {
   if (Number(request.headers['content-length']) > MAX_BODY_BYTES) {
     throw new RequestError(413, 'request_too_large');
   }
-  let timer;
-  try {
-    return await Promise.race([
-      (async () => {
-        const chunks = [];
-        let size = 0;
-        for await (const chunk of request) {
-          size += chunk.length;
-          if (size > MAX_BODY_BYTES) throw new RequestError(413, 'request_too_large');
-          chunks.push(chunk);
-        }
-        try {
-          const text = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
-          return validate(JSON.parse(text));
-        } catch (error) {
-          if (error instanceof RequestError) throw error;
-          throw new RequestError(400, 'invalid_json');
-        }
-      })(),
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new RequestError(408, 'request_timeout')), timeoutMs);
-        timer.unref?.();
-      })
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function readUpstream(response, profile) {
-  if (!response.ok) {
-    await response.body?.cancel();
-    const seconds = Number(response.headers.get('retry-after'));
-    if ([400, 422].includes(response.status)) throw new RequestError(422, 'provider_model_incompatible');
-    throw new RequestError(response.status === 429 ? 429 : 502, 'upstream_unavailable',
-      Number.isFinite(seconds) && seconds > 0 ? Math.min(Math.ceil(seconds), 86400) : 60);
-  }
-  if (!response.headers.get('content-type')?.toLowerCase().startsWith('application/json')
-      || Number(response.headers.get('content-length')) > MAX_UPSTREAM_BYTES || !response.body) {
-    await response.body?.cancel();
-    throw new RequestError(502, 'invalid_upstream_response');
-  }
-  const reader = response.body.getReader();
-  const chunks = [];
-  let size = 0;
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > MAX_UPSTREAM_BYTES) throw new RequestError(502, 'upstream_response_too_large');
-      chunks.push(value);
-    }
-    let data;
-    try { data = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
-    catch { throw new RequestError(502, 'invalid_upstream_response'); }
-    try { return providerResponseText(data, profile); }
-    catch (error) {
-      if (error instanceof ProviderResponseError) throw new RequestError(error.message === 'provider_model_incompatible' ? 422 : 502, error.message);
-      throw new RequestError(502, 'invalid_upstream_response');
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-    reader.releaseLock();
-  }
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    const finish = (error, value) => {
+      clearTimeout(timer);
+      request.removeListener('data', onData);
+      request.removeListener('end', onEnd);
+      request.removeListener('error', onError);
+      signal?.removeEventListener('abort', onAbort);
+      chunks.length = 0;
+      if (error) { request.pause(); reject(error); }
+      else resolve(value);
+    };
+    const onData = chunk => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) finish(new RequestError(413, 'request_too_large'));
+      else chunks.push(chunk);
+    };
+    const onEnd = () => {
+      try {
+        const text = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
+        finish(undefined, validate(JSON.parse(text)));
+      } catch (error) { finish(error instanceof RequestError ? error : new RequestError(400, 'invalid_json')); }
+    };
+    const onError = () => finish(new RequestError(400, 'invalid_json'));
+    const onAbort = () => finish(signal.reason);
+    const timer = setTimeout(() => finish(new RequestError(408, 'request_timeout')), timeoutMs);
+    timer.unref?.();
+    request.on('data', onData);
+    request.once('end', onEnd);
+    request.once('error', onError);
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 /** Single private user, one process. Counters contain numbers only; no transcripts or IPs are kept. */
-export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now = Date.now, reserveBudget, serverOptions = { maxHeaderSize: 8_192 } } = {}) {
-  validateConfig(config);
-  const status = gatewayStatus(config);
-  let minuteBucket = -1;
-  let dayBucket = -1;
-  let minuteCount = 0;
-  let dayCount = 0;
-  let active = 0;
+export function createMioServer({ config: baseConfig = loadConfig(), fetchImpl = fetch, now = Date.now,
+  reserveBudget, readQuota, requestSignal, configurationForRequest,
+  serverOptions = { maxHeaderSize: 8_192 } } = {}) {
+  validateConfig(baseConfig);
+  let minuteBucket = -1; let dayBucket = -1;
+  let minuteCount = 0; let dayCount = 0; let active = 0;
   const activeControllers = new Set();
 
-  function reserveRequest() {
+  function reserveRequest(config) {
     const time = now();
-    if (minuteBucket !== Math.floor(time / 60_000)) {
-      minuteBucket = Math.floor(time / 60_000); minuteCount = 0;
-    }
-    if (dayBucket !== Math.floor(time / 86_400_000)) {
-      dayBucket = Math.floor(time / 86_400_000); dayCount = 0;
-    }
-    if (minuteCount >= config.requestsPerMinute || dayCount >= config.requestsPerDay || active >= 2) {
-      throw new RequestError(429, 'request_limit');
-    }
-    minuteCount += 1;
-    dayCount += 1;
+    if (minuteBucket !== Math.floor(time / 60_000)) { minuteBucket = Math.floor(time / 60_000); minuteCount = 0; }
+    if (dayBucket !== Math.floor(time / 86_400_000)) { dayBucket = Math.floor(time / 86_400_000); dayCount = 0; }
+    if (active >= 2) throw new RequestError(429, 'local_concurrency_limit');
+    if (dayCount >= config.requestsPerDay) throw new RequestError(429, 'local_day_limit');
+    if (minuteCount >= config.requestsPerMinute) throw new RequestError(429, 'local_minute_limit');
+    minuteCount += 1; dayCount += 1;
   }
 
   const server = createServer(serverOptions, async (request, response) => {
-    const promptVersion = ['/v2/analyze', '/v1/status'].includes(request.url) ? ANALYSIS_V2_PROMPT_VERSION : PROMPT_VERSION;
-    for (const [key, value] of Object.entries(metadataHeaders(status, promptVersion))) response.setHeader(key, value);
+    let controller; let runtimeSignal; let ownsSlot = false;
+    const onCancel = () => controller.abort(new RequestError(499, 'request_cancelled'));
+    const onClose = () => { if (!response.writableEnded) onCancel(); };
     try {
-      if (request.method === 'GET' && request.url === '/v1/status') {
+      const current = configurationForRequest?.(request) ?? baseConfig;
+      // Each request captures its own server configuration, including rotating
+      // credentials. No secret fingerprints are exported in public revisions.
+      const config = { ...current, providerSecrets: { ...current.providerSecrets },
+        taskProfiles: structuredClone(current.taskProfiles), adapterOptions: structuredClone(current.adapterOptions) };
+      validateConfig(config);
+      const revision = configurationRevision(config);
+      const status = gatewayStatus(config);
+      const promptVersion = ['/v2/analyze', '/v1/status', '/v2/status'].includes(request.url) ? ANALYSIS_V2_PROMPT_VERSION : PROMPT_VERSION;
+      const taskID = request.url === '/v1/ask' ? 'ask' : request.url === '/v1/lesson-notes' ? 'lesson'
+        : ['/v1/analyze', '/v2/analyze'].includes(request.url) ? 'everyday' : null;
+      const identifiers = taskID ? taskConfigurationIdentifiers(config, taskID) : status;
+      for (const [key, value] of Object.entries(metadataHeaders({ ...identifiers, configurationRevision: revision }, promptVersion))) response.setHeader(key, value);
+      if (request.method === 'GET' && ['/v1/status', '/v2/status'].includes(request.url)) {
         if (!authenticated(request.headers.authorization, config.gatewayToken)) { reply(response, 401, { error: 'unauthorized' }); return; }
-        reply(response, 200, status); return;
+        if (request.url === '/v1/status') { reply(response, 200, status); return; }
+        let quota = null;
+        if (readQuota) {
+          const guardController = new AbortController();
+          const timer = setTimeout(() => guardController.abort(), Math.min(2_000, config.upstreamTimeoutMs));
+          timer.unref?.();
+          try { quota = await awaitWithSignal(Promise.resolve().then(() => readQuota(config)), guardController.signal); }
+          catch { /* Unknown capacity is explicit; status never reserves or infers. */ }
+          finally { clearTimeout(timer); }
+        } else if (!reserveBudget) {
+          const time = now();
+          const used = dayBucket === Math.floor(time / 86_400_000) ? dayCount : 0;
+          quota = { limit: config.requestsPerDay, remaining: Math.max(0, config.requestsPerDay - used),
+            resetAt: new Date((Math.floor(time / 86_400_000) + 1) * 86_400_000).toISOString() };
+        }
+        reply(response, 200, gatewayStatusV2(config, quota)); return;
       }
-      if (request.method === 'GET' && request.url === '/health') {
-        reply(response, 200, { status: 'ok' }); return;
-      }
+      if (request.method === 'GET' && request.url === '/health') { reply(response, 200, { status: 'ok' }); return; }
       if (request.method !== 'POST' || !['/v1/ask', '/v1/analyze', '/v2/analyze', '/v1/lesson-notes'].includes(request.url)) {
         reply(response, 404, { error: 'not_found' }); return;
       }
       if (!authenticated(request.headers.authorization, config.gatewayToken)) { reply(response, 401, { error: 'unauthorized' }); return; }
-      if (request.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json'
-          || request.headers['content-encoding']) {
+      const observed = request.headers['x-mio-configuration-revision'];
+      if (observed !== undefined && (typeof observed !== 'string' || !/^[a-f0-9]{64}$/u.test(observed))) {
+        reply(response, 400, { error: 'invalid_configuration_revision' }); return;
+      }
+      if (observed !== undefined && observed !== revision) { reply(response, 409, { error: 'configuration_changed' }); return; }
+      if (request.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json' || request.headers['content-encoding']) {
         reply(response, 415, { error: 'json_required' }); return;
       }
       const isLesson = request.url === '/v1/lesson-notes';
       const isV2 = request.url === '/v2/analyze';
       const isAnalysis = isV2 || request.url === '/v1/analyze';
-      const payload = await readBody(request, config.bodyTimeoutMs, isLesson ? validateLessonPayload : isV2 ? validateAnalysisV2Payload : isAnalysis ? validateAnalysisPayload : validatePayload);
+      controller = new AbortController(); activeControllers.add(controller);
+      runtimeSignal = requestSignal?.(request);
+      request.on('aborted', onCancel); response.on('close', onClose);
+      if (runtimeSignal?.aborted) onCancel(); else runtimeSignal?.addEventListener('abort', onCancel, { once: true });
+      const payload = await readBody(request, config.bodyTimeoutMs,
+        isLesson ? validateLessonPayload : isV2 ? validateAnalysisV2Payload : isAnalysis ? validateAnalysisPayload : validatePayload, controller.signal);
       if (response.destroyed) return;
-      providerProfile(config);
-      reserveRequest();
-      active += 1;
-      const controller = new AbortController();
-      activeControllers.add(controller);
-      const timeout = setTimeout(() => controller.abort(), config.upstreamTimeoutMs);
-      timeout.unref?.();
-      const onClose = () => { if (!response.writableEnded) controller.abort(); };
-      response.on('close', onClose);
-      try {
-        if (reserveBudget && !(await reserveBudget())) throw new RequestError(429, 'request_limit');
-        if (controller.signal.aborted || response.destroyed) return;
-        const provider = providerRequest({ config, mode: isLesson ? 'lesson' : isV2 ? 'analyze-v2' : isAnalysis ? 'analyze' : 'ask', payload });
-        const upstream = await fetchImpl(provider.url, {
-          method: 'POST',
-          headers: provider.headers,
-          redirect: 'manual',
-          signal: controller.signal,
-          body: JSON.stringify(provider.body)
-        });
-        const answer = await readUpstream(upstream, provider.profile);
-        if (isLesson) {
-          let result;
-          try { result = validateLessonResult(JSON.parse(answer), payload); }
-          catch { throw new RequestError(502, 'invalid_lesson_result'); }
-          reply(response, 200, { ...result, metadata: { provider: config.provider ?? 'openai', model: config.model,
-            promptVersion: PROMPT_VERSION, lessonIntervalSeconds: Math.max(60, config.lessonIntervalSeconds ?? 60) } });
-        } else if (isAnalysis) {
-          let result;
-          try { result = (isV2 ? validateAnalysisV2Result : validateAnalysisResult)(JSON.parse(answer), payload); }
-          catch { throw new RequestError(502, 'invalid_analysis_result'); }
-          reply(response, 200, result);
-        } else {
-          let result;
-          try { result = validateAskResult(JSON.parse(answer)); }
-          catch { throw new RequestError(502, 'invalid_upstream_answer'); }
-          reply(response, 200, result);
-        }
-      } catch (error) {
-        if (controller.signal.aborted) throw new RequestError(504, 'upstream_timeout');
-        if (error instanceof RequestError) throw error;
-        throw new RequestError(502, 'upstream_unavailable');
-      } finally {
-        clearTimeout(timeout);
-        response.removeListener('close', onClose);
-        activeControllers.delete(controller);
-        active -= 1;
-      }
+      const generated = await executeGeneration({ config, mode: isLesson ? 'lesson' : isV2 ? 'analyze-v2' : isAnalysis ? 'analyze' : 'ask',
+        payload, fetchImpl, signal: controller.signal, now, reserveBudget,
+        reserveRequest: () => { reserveRequest(config); active += 1; ownsSlot = true; } });
+      for (const [key, value] of Object.entries({ 'X-Mio-Provider': generated.config.provider ?? 'openai', 'X-Mio-Model': generated.config.model,
+        'X-Mio-Prompt-Version': generated.promptVersion, 'X-Mio-Configuration-Revision': revision,
+        ...generationMetadataHeaders(generated.normalized) })) response.setHeader(key, value);
+      reply(response, 200, isLesson ? { ...generated.result, metadata: { provider: generated.config.provider ?? 'openai',
+        model: generated.config.model, promptVersion: generated.promptVersion,
+        lessonIntervalSeconds: Math.max(60, config.lessonIntervalSeconds ?? 60) } } : generated.result);
     } catch (error) {
-      // Upstream bodies, error messages, credentials and user text must never enter logs or errors.
-      if (error instanceof ProviderCompatibilityError) reply(response, 422, { error: 'provider_model_incompatible' });
-      else if (error instanceof RequestError) reply(response, error.status, { error: error.code }, error.retryAfter);
+      // Arbitrary upstream bodies, credentials, source text and full URLs stay private.
+      if (error instanceof RequestError) reply(response, error.status, { error: error.code }, error.retryAfter);
       else reply(response, 500, { error: 'request_failed' });
+    } finally {
+      if (ownsSlot) active -= 1;
+      request.removeListener('aborted', onCancel); response.removeListener('close', onClose);
+      runtimeSignal?.removeEventListener('abort', onCancel);
+      if (controller) activeControllers.delete(controller);
     }
   });
   server.requestTimeout = 10_000;
@@ -282,7 +238,7 @@ export function createMioServer({ config = loadConfig(), fetchImpl = fetch, now 
   server.keepAliveTimeout = 1_000;
   server.maxRequestsPerSocket = 1;
   server.on('clientError', (_, socket) => socket.destroy());
-  server.on('close', () => { for (const controller of activeControllers) controller.abort(); });
+  server.on('close', () => { for (const controller of activeControllers) controller.abort(new RequestError(499, 'request_cancelled')); });
   return server;
 }
 

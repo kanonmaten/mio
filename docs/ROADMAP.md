@@ -8,18 +8,28 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 
 | Område | Implementerad omfattning | Verifieringsgräns |
 |---|---|---|
-| Privat fångst | Pianissimo via Tailscale, automatisk återanslutning, Mio-detektion, paus/stopp och luckor | Fysisk telefon krävs för kvalitet, bakgrund och batteri |
+| Privat fångst | Privat Pianissimo via Tailscale, begränsade nätomförsök, Mio-detektion, paus/stopp och tidsatta luckor; ingen automatisk mikrofonstart | Fysisk telefon krävs för kvalitet, bakgrund och batteri |
 | Innehåll | Fem manuella typer, sökning, redigering, uppgiftsstatus, export/radering | Ren installation och lagring provas på verklig telefon |
 | Assistent | Lokala kommandoförslag och aktiverad AI-tolkning av vanligt samtal; Ja/Nej/Inte nu | Modellkvalitet måste provas; innehåll och datum godkänns manuellt |
-| Lektioner | Separat lektionsläge pausar vardags-Mio; detaljerade kopierbara anteckningar och läxförslag via valfri kompatibel AI | Originaltext och tidsbevis får aldrig skrivas om |
+| Lektioner | Separat lektionsläge pausar vardags-Mio; detaljerade delar, manuell fortsättning, kopiering och källrevisioner via godkänd AI | Originaltext/tidsbevis bevaras; äldre/okänt underlag märks, rättningar skickas inte automatiskt |
 | Kalender | Användarbekräftad fristående kalenderkopia | Ingen bakgrundssynk eller läsning av hela kalendern |
 | Alarm/notiser | AlarmKit, engångs-/veckoalarm, postpåminnelse, morgon-/kvällsnotis | Behörighet och leverans måste provas på telefon |
-| Dagen | Lokal morgon- och kvällsöversikt av sparat innehåll | Ingen påstådd semantisk sammanfattning av transkript |
-| AI | Enskilda frågor eller aktiverad löpande tolkning → egen HTTPS-server → vald leverantörsadapter | Server/nyckel kräver egen konfiguration; av från början |
+| Dagen | Lokal morgon- och kvällsöversikt; godkända notiser öppnar rätt lokal vy | Notiser har opaka ID:n utan privata rubriker; ingen molnsammanfattning |
+| AI | Godkänd fråga eller aktiverad löpande tolkning via serverprofiler; anslutning/kapacitet; explicit spara ett svar som anteckning | Av från början; modellfri status bevisar inte leverantörsåtkomst eller kvalitet |
+
+## PLAN.md i arbetskopian, 2026-10-03
+
+De fyra första lokala etappernas grindar är passerade: regressioner för ljud/gateway/lagring/discovery; appägd workflow och generationsskydd; åtskilda tasks/modellprofiler/adaptrar/exekvering; samt sammanhängande UI med tre avgränsade funktioner. Etapp 5 förbereder gemensam verifieringsentrypoint, concurrency-kontroll, syntetisk historikmätning, dokumentation och gatewayrelease `2026-10-03.1`. Exakta aktuella resultat och kvarstående kontroller står i [status](STATUS.md). Detta är källarbete och lokala verifieringsgrindar, inte en släppt eller telefonverifierad produkt.
+
+Servern väljer `ask`/`everyday`/`lesson` från validerade profiler och serverägda nycklar. Skyddad `/v2/status` visar konfiguration, revision och gemensam kapacitet. Nya anrop kräver aktuell revision; ändring leder till ny preview eller aktivering. [Leverantörsmatrisen](LEVERANTORSKONTRAKT.md) listar exakta granskade ID:n, spärrade kontrakt och separat syntetiskt prov. Inga verkliga leverantörsprofiler är verifierade för denna revision.
+
+Lektionsdelar och kopiering märker om underlaget är aktuellt, äldre eller okänt, utan att ändra original eller automatiskt sända rättningar. Svar kan uttryckligen sparas som anteckning. Anslutnings-/kapacitetsvyn visar modellfria taskstatusar, delad kvot och återstående arbete; 100 modellförsök per dygn är fortsatt ett gemensamt tak, inte heldagskapacitet. Notisöppning använder ett lokalt mål-ID och godkänner ingen annan åtgärd.
+
+Read-only produktionskontroll den 3 oktober visar att den gamla OpenAI-bundlen fortfarande är aktiv med Groq-konfiguration. D1-bindningen matchar repot; all-traffic Access och service-token-funktion är ännu inte bevisade. Releasearbetet är därför inte färdigt. Efter exakt godkänd publicering ska bundle, release, profiler och D1/Access läsas tillbaka; skyddad modellfri status och negativa authprov körs först. Verkliga fråga-/vardag-/lektionsprov kräver därefter separat godkännande av syntetisk payload. Xcode/XCTest för samma revision, IPA och fysisk acceptans följer som egna grindar. Se [releaseguiden](../server/cloudflare/GROQ_ACCESS.md).
 
 ## Leveransgrindar
 
-1. Kontrollera projektfiler, privata data, lokala tester och dokumentation.
+1. Kontrollera projektfiler, privata data, lokala tester och dokumentation med den gemensamma verifieringsentrypointen. Registrera Linuxvärden separat från native- och telefonresultat.
 2. Efter uttryckligt tillstånd: commit/push och GitHub Actions på faktisk tillgänglig `xcode-27`-runner. Release och XCTest måste bli gröna för samma commit.
 3. Hämta validerad IPA och installera rent på iPhone 16 Pro med `app.mio.assistant`; prova iPhone 13 senare.
 4. Kör [helhetstestet](TESTPLAN_HELHET.md) samt återstående [långtest](TESTPLAN_V0_1.md).

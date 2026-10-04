@@ -67,18 +67,93 @@ enum TranscriptionSettings {
     }
 }
 
-private final class TranscriptionRedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+private final class TranscriptionOperation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: URLSessionDataTask?
+    private var data = Data()
+    private var completed: Result<Data, Error>?
+    private var continuation: CheckedContinuation<Data, Error>?
+
+    func bind(_ task: URLSessionDataTask) { lock.withLock { self.task = task } }
+    func receive(_ part: Data) -> Bool {
+        lock.withLock {
+            guard completed == nil, data.count + part.count <= 262_144 else { return false }
+            data.append(part); return true
+        }
+    }
+    func finish(_ error: Error? = nil) {
+        let callback: (CheckedContinuation<Data, Error>?, Result<Data, Error>)? = lock.withLock {
+            guard completed == nil else { return nil }
+            let result: Result<Data, Error> = error.map { .failure($0) } ?? .success(data)
+            completed = result; data.removeAll(keepingCapacity: false); task = nil
+            let callback = continuation; continuation = nil
+            return (callback, result)
+        }
+        if let (continuation, result) = callback { continuation?.resume(with: result) }
+    }
+    func cancel() {
+        let task = lock.withLock { self.task }
+        task?.cancel(); finish(CancellationError())
+    }
+    func decoded<T: Decodable>(_ type: T.Type) async throws -> T {
+        let bytes = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+                let result: Result<Data, Error>? = lock.withLock {
+                    if let completed { return completed }
+                    self.continuation = continuation; return nil
+                }
+                if let result { continuation.resume(with: result) }
+            }
+        } onCancel: { self.cancel() }
+        guard let reply = try? JSONDecoder().decode(type, from: bytes) else {
+            throw TranscriptionError.invalidResponse
+        }
+        return reply
+    }
+}
+
+private final class TranscriptionRedirectGuard: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private var operations: [Int: TranscriptionOperation] = [:]
+    func register(_ operation: TranscriptionOperation, task: URLSessionDataTask) {
+        lock.withLock { operations[task.taskIdentifier] = operation }
+    }
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
-                    completionHandler: @escaping (URLRequest?) -> Void) {
-        completionHandler(nil)
+                    completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                    completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        guard let operation = lock.withLock({ operations[dataTask.taskIdentifier] }) else {
+            completionHandler(.allow); return
+        }
+        guard let response = response as? HTTPURLResponse else {
+            operation.finish(TranscriptionError.invalidResponse); completionHandler(.cancel); return
+        }
+        guard response.statusCode == 200 else {
+            let raw = response.value(forHTTPHeaderField: "Retry-After") ?? "5"
+            let delay = Double(raw) ?? 5
+            operation.finish(TranscriptionError.http(response.statusCode, retryAfter: delay.isFinite ? delay : 5))
+            completionHandler(.cancel); return
+        }
+        guard response.mimeType == "application/json", response.expectedContentLength <= 262_144 else {
+            operation.finish(TranscriptionError.invalidResponse); completionHandler(.cancel); return
+        }
+        completionHandler(.allow)
+    }
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard let operation = lock.withLock({ operations[dataTask.taskIdentifier] }) else { return }
+        if !operation.receive(data) { operation.finish(TranscriptionError.invalidResponse); dataTask.cancel() }
+    }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        lock.withLock { operations.removeValue(forKey: task.taskIdentifier) }?.finish(error)
     }
 }
 
 /// Credentials belong to one immutable origin. Neither cookies, disk cache nor redirects are used.
-final class TranscriptionClient: @unchecked Sendable {
+final class TranscriptionClient: TranscriptionTransport, @unchecked Sendable {
     private let session: URLSession
     private let connection: TranscriptionConnection
+    private let delegate = TranscriptionRedirectGuard()
     init(connection: TranscriptionConnection, protocolClasses: [AnyClass]? = nil) {
         self.connection = connection
         let config = URLSessionConfiguration.ephemeral
@@ -88,20 +163,23 @@ final class TranscriptionClient: @unchecked Sendable {
         config.timeoutIntervalForRequest = 10
         config.timeoutIntervalForResource = 50
         config.waitsForConnectivity = false
-        session = URLSession(configuration: config, delegate: TranscriptionRedirectGuard(), delegateQueue: nil)
+        session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
     }
     deinit { session.invalidateAndCancel() }
     func cancel() { session.invalidateAndCancel() }
 
     func health() async throws -> TranscriptionHealth {
-        let result: TranscriptionHealth = try await send(path: "health", chunk: nil)
+        let operation = start(path: "health", chunk: nil)
+        let result = try await operation.decoded(TranscriptionHealth.self)
         try result.validate()
         return result
     }
-    func transcribe(_ chunk: AudioChunk) async throws -> TranscriptionReply {
-        try await send(path: "v1/transcribe", chunk: chunk)
+    func startTranscription(_ chunk: AudioChunk) -> Task<TranscriptionReply, Error> {
+        let operation = start(path: "v1/transcribe", chunk: chunk)
+        // URLSession owns transport bytes; no suspended application task captures the chunk/request.
+        return Task { try await operation.decoded(TranscriptionReply.self) }
     }
-    private func send<T: Decodable>(path: String, chunk: AudioChunk?) async throws -> T {
+    private func start(path: String, chunk: AudioChunk?) -> TranscriptionOperation {
         var request = URLRequest(url: connection.origin.appendingPathComponent(path))
         request.setValue("Bearer \(connection.token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -113,21 +191,9 @@ final class TranscriptionClient: @unchecked Sendable {
                            "Core-Start": String(chunk.coreStart), "Core-End": String(chunk.coreEnd)]
             for (key, value) in headers { request.setValue(value, forHTTPHeaderField: "X-Mio-\(key)") }
         }
-        let (bytes, response) = try await session.bytes(for: request)
-        defer { bytes.task.cancel() }
-        guard let response = response as? HTTPURLResponse else { throw TranscriptionError.invalidResponse }
-        guard response.statusCode == 200 else {
-            let retry = Double(response.value(forHTTPHeaderField: "Retry-After") ?? "5") ?? 5
-            throw TranscriptionError.http(response.statusCode, retryAfter: retry.isFinite ? retry : 5)
-        }
-        guard response.mimeType == "application/json", response.expectedContentLength <= 262_144
-        else { throw TranscriptionError.invalidResponse }
-        var data = Data()
-        for try await byte in bytes {
-            guard data.count < 262_144 else { throw TranscriptionError.invalidResponse }
-            data.append(byte)
-        }
-        guard let decoded = try? JSONDecoder().decode(T.self, from: data) else { throw TranscriptionError.invalidResponse }
-        return decoded
+        let operation = TranscriptionOperation()
+        let task = session.dataTask(with: request)
+        operation.bind(task); delegate.register(operation, task: task); task.resume()
+        return operation
     }
 }

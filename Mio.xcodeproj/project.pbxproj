@@ -53,6 +53,30 @@
 		867F68B153C9430EACEBC14B /* MioContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC64BB56B77E17AF2B9FD3E /* MioContextTests.swift */; };
 		00A25152A54ACE2CD1F5817B /* MioDiagnosticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53E1A3C379F46FAAA309BE16 /* MioDiagnosticsTests.swift */; };
 		3E2DCEDB4573BF11B74F5D70 /* MioCoordinatorContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B152EE97327E606E06BAF0D /* MioCoordinatorContextTests.swift */; };
+		4E6C35138E3E995A9476AAAC /* MioSessionRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6B8DACEF0C8BBA46788A5F1 /* MioSessionRepositoryTests.swift */; };
+		84714A50316671868BE869B9 /* MioCaptureLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14F3DADCEB3A2E0DE78D67C1 /* MioCaptureLifecycleTests.swift */; };
+		6996DC1A802C0C7AA7513F08 /* AudioReliabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9E76D63BCF9B7F981D8CDD /* AudioReliabilityTests.swift */; };
+		6B213A829FB7FDC5AE05B36A /* MioWorkflowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51D98E4D669FDBD52C4BE861 /* MioWorkflowCoordinator.swift */; };
+		8B81E9E52688E4EA406AD3DC /* MioOperationOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = B319D3E97C2658B526256C85 /* MioOperationOutcome.swift */; };
+		3811BD819D858D9DD27918D6 /* MioDeletionJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E35F7B9A7AD09365385626A /* MioDeletionJournal.swift */; };
+		F83F95401AB51D11201504C9 /* MioProtectedFileWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A93EFB73120D205AD59D4CCD /* MioProtectedFileWriter.swift */; };
+		AFCA1338FEA831B5E034129A /* MioSystemActionPort.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E84D8E8D4B2A52880078CD3 /* MioSystemActionPort.swift */; };
+		EE4979DC605F26D74C8BCCA1 /* MioDeletionRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 663E3AAD060B9FC15D704356 /* MioDeletionRecoveryTests.swift */; };
+		042D945C53D7CEB8FA1D7ACA /* MioProtectedFileWriterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31C0F7728FCC0E2DD0B55E9B /* MioProtectedFileWriterTests.swift */; };
+		39D5CEF0468FF5FDCA34C445 /* MioWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57AFF01FC19DB6EB9C33D5E8 /* MioWorkflowTests.swift */; };
+		F58A321D693629C81E917EAB /* MioQuestionWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A18B1159BDC8C4D2A4D05B8 /* MioQuestionWorkflow.swift */; };
+		4F9307D2E0B7351ADBD5BB13 /* MioQuestionWorkflowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E765A2AE29B57013BCE18C9F /* MioQuestionWorkflowTests.swift */; };
+		2C6C958B3C68D47C40A77B41 /* MioWorkflowRaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 145776A12AAECAD549F9262C /* MioWorkflowRaceTests.swift */; };
+		F7F9E928328890F7F4198F84 /* MioTaskDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED7F2919C41D8CEEB60B59BB /* MioTaskDiscoveryTests.swift */; };
+		0AF2B0538ABAAFBB1FA854A0 /* MioAnswerNoteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10BECAB802EC614EBF60D94A /* MioAnswerNoteTests.swift */; };
+		38D01045939486BD185502FA /* MioLessonFreshnessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6527737C6BF0A133F69F73F /* MioLessonFreshnessTests.swift */; };
+		6ED73B017ECA26545F29DC7B /* MioConnectionDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6461AE686184A3C58543D736 /* MioConnectionDiscovery.swift */; };
+		B73F74418CD0ACA336491565 /* MioConnectionDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F454690D9B3D7668EF7FEEF /* MioConnectionDiscoveryTests.swift */; };
+		B86B1C7B73C07162CCAE073D /* MioDayContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73B0D0622F74BA3A5FC31614 /* MioDayContext.swift */; };
+		C3CAAB1C7E553AEB6A5AEF8F /* MioNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40CFF9EE23EED3EA9FC31B90 /* MioNavigationCoordinator.swift */; };
+		DE6CAC7E119EEAFC37CBA935 /* MioNavigationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29BF2CD0484E98171C51AF2F /* MioNavigationModels.swift */; };
+		B8F77AD627419B4D668AD0EE /* MioNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BC303EFAC6F5046776374C9 /* MioNavigationTests.swift */; };
+		B20000000000000000000001 /* MioUISmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000010 /* MioUISmokeTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +86,10 @@
 			proxyType = 1;
 			remoteGlobalIDString = A10000000000000000000001;
 			remoteInfo = Mio;
+		};
+		C20000000000000000000001 /* UI container proxy */ = {
+		    isa = PBXContainerItemProxy; containerPortal = 010000000000000000000001; proxyType = 1;
+		    remoteGlobalIDString = A10000000000000000000001; remoteInfo = Mio;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -115,6 +143,31 @@
 		BBC64BB56B77E17AF2B9FD3E /* MioContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioContextTests.swift; sourceTree = "<group>"; };
 		53E1A3C379F46FAAA309BE16 /* MioDiagnosticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioDiagnosticsTests.swift; sourceTree = "<group>"; };
 		6B152EE97327E606E06BAF0D /* MioCoordinatorContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioCoordinatorContextTests.swift; sourceTree = "<group>"; };
+		F6B8DACEF0C8BBA46788A5F1 /* MioSessionRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSessionRepositoryTests.swift; sourceTree = "<group>"; };
+		14F3DADCEB3A2E0DE78D67C1 /* MioCaptureLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioCaptureLifecycleTests.swift; sourceTree = "<group>"; };
+		5A9E76D63BCF9B7F981D8CDD /* AudioReliabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioReliabilityTests.swift; sourceTree = "<group>"; };
+		51D98E4D669FDBD52C4BE861 /* MioWorkflowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWorkflowCoordinator.swift; sourceTree = "<group>"; };
+		B319D3E97C2658B526256C85 /* MioOperationOutcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioOperationOutcome.swift; sourceTree = "<group>"; };
+		0E35F7B9A7AD09365385626A /* MioDeletionJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioDeletionJournal.swift; sourceTree = "<group>"; };
+		A93EFB73120D205AD59D4CCD /* MioProtectedFileWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioProtectedFileWriter.swift; sourceTree = "<group>"; };
+		2E84D8E8D4B2A52880078CD3 /* MioSystemActionPort.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSystemActionPort.swift; sourceTree = "<group>"; };
+		663E3AAD060B9FC15D704356 /* MioDeletionRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioDeletionRecoveryTests.swift; sourceTree = "<group>"; };
+		31C0F7728FCC0E2DD0B55E9B /* MioProtectedFileWriterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioProtectedFileWriterTests.swift; sourceTree = "<group>"; };
+		57AFF01FC19DB6EB9C33D5E8 /* MioWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWorkflowTests.swift; sourceTree = "<group>"; };
+		0A18B1159BDC8C4D2A4D05B8 /* MioQuestionWorkflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioQuestionWorkflow.swift; sourceTree = "<group>"; };
+		E765A2AE29B57013BCE18C9F /* MioQuestionWorkflowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioQuestionWorkflowTests.swift; sourceTree = "<group>"; };
+		145776A12AAECAD549F9262C /* MioWorkflowRaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWorkflowRaceTests.swift; sourceTree = "<group>"; };
+		ED7F2919C41D8CEEB60B59BB /* MioTaskDiscoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioTaskDiscoveryTests.swift; sourceTree = "<group>"; };
+		10BECAB802EC614EBF60D94A /* MioAnswerNoteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioAnswerNoteTests.swift; sourceTree = "<group>"; };
+		C6527737C6BF0A133F69F73F /* MioLessonFreshnessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLessonFreshnessTests.swift; sourceTree = "<group>"; };
+		6461AE686184A3C58543D736 /* MioConnectionDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioConnectionDiscovery.swift; sourceTree = "<group>"; };
+		8F454690D9B3D7668EF7FEEF /* MioConnectionDiscoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioConnectionDiscoveryTests.swift; sourceTree = "<group>"; };
+		73B0D0622F74BA3A5FC31614 /* MioDayContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioDayContext.swift; sourceTree = "<group>"; };
+		40CFF9EE23EED3EA9FC31B90 /* MioNavigationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioNavigationCoordinator.swift; sourceTree = "<group>"; };
+		29BF2CD0484E98171C51AF2F /* MioNavigationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioNavigationModels.swift; sourceTree = "<group>"; };
+		3BC303EFAC6F5046776374C9 /* MioNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioNavigationTests.swift; sourceTree = "<group>"; };
+		F20000000000000000000010 /* MioUISmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioUISmokeTests.swift; sourceTree = "<group>"; };
+		F20000000000000000000011 /* MioUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MioUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -132,12 +185,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F20000000000000000000012 /* UI Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		710000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
+				720000000000000000000001 /* MioUITests */,
 				710000000000000000000002 /* Mio */,
 				710000000000000000000005 /* MioTests */,
 				710000000000000000000006 /* Products */,
@@ -147,6 +202,10 @@
 		710000000000000000000002 /* Mio */ = {
 			isa = PBXGroup;
 			children = (
+				40CFF9EE23EED3EA9FC31B90 /* MioNavigationCoordinator.swift */,
+				73B0D0622F74BA3A5FC31614 /* MioDayContext.swift */,
+				0A18B1159BDC8C4D2A4D05B8 /* MioQuestionWorkflow.swift */,
+				51D98E4D669FDBD52C4BE861 /* MioWorkflowCoordinator.swift */,
 				E608AC3345DCF13A1578AB9F /* MioSettingsView.swift */,
 				ED186F304655079D8F88FE48 /* MioIntelligenceViews.swift */,
 				8176C1E54D96C9B75DA141FB /* MioAnalysisCoordinator.swift */,
@@ -172,6 +231,8 @@
 		710000000000000000000003 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				29BF2CD0484E98171C51AF2F /* MioNavigationModels.swift */,
+				B319D3E97C2658B526256C85 /* MioOperationOutcome.swift */,
 				BB8197B5FDC22A62664EBC6D /* MioEverydayContext.swift */,
 				7506EB51EB2850B38809A00F /* MioDiagnosticsModels.swift */,
 				3A6F2E7E3BCC1BA458CB6DE7 /* TranscriptionModels.swift */,
@@ -186,6 +247,10 @@
 		710000000000000000000004 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				6461AE686184A3C58543D736 /* MioConnectionDiscovery.swift */,
+				2E84D8E8D4B2A52880078CD3 /* MioSystemActionPort.swift */,
+				A93EFB73120D205AD59D4CCD /* MioProtectedFileWriter.swift */,
+				0E35F7B9A7AD09365385626A /* MioDeletionJournal.swift */,
 				7A755BDC203D363DFA5588BC /* MioDiagnosticsRepository.swift */,
 				9089093008C57C04D98E1592 /* MicrophoneCapture.swift */,
 				730AA95BAC0372A8529AA489 /* TranscriptionService.swift */,
@@ -205,6 +270,19 @@
 		710000000000000000000005 /* MioTests */ = {
 			isa = PBXGroup;
 			children = (
+				3BC303EFAC6F5046776374C9 /* MioNavigationTests.swift */,
+				8F454690D9B3D7668EF7FEEF /* MioConnectionDiscoveryTests.swift */,
+				C6527737C6BF0A133F69F73F /* MioLessonFreshnessTests.swift */,
+				10BECAB802EC614EBF60D94A /* MioAnswerNoteTests.swift */,
+				ED7F2919C41D8CEEB60B59BB /* MioTaskDiscoveryTests.swift */,
+				145776A12AAECAD549F9262C /* MioWorkflowRaceTests.swift */,
+				E765A2AE29B57013BCE18C9F /* MioQuestionWorkflowTests.swift */,
+				57AFF01FC19DB6EB9C33D5E8 /* MioWorkflowTests.swift */,
+				31C0F7728FCC0E2DD0B55E9B /* MioProtectedFileWriterTests.swift */,
+				663E3AAD060B9FC15D704356 /* MioDeletionRecoveryTests.swift */,
+				5A9E76D63BCF9B7F981D8CDD /* AudioReliabilityTests.swift */,
+				14F3DADCEB3A2E0DE78D67C1 /* MioCaptureLifecycleTests.swift */,
+				F6B8DACEF0C8BBA46788A5F1 /* MioSessionRepositoryTests.swift */,
 				6B152EE97327E606E06BAF0D /* MioCoordinatorContextTests.swift */,
 				53E1A3C379F46FAAA309BE16 /* MioDiagnosticsTests.swift */,
 				BBC64BB56B77E17AF2B9FD3E /* MioContextTests.swift */,
@@ -224,12 +302,14 @@
 		710000000000000000000006 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				F20000000000000000000011 /* MioUITests.xctest */,
 				F1000000000000000000000D /* Mio.app */,
 				F1000000000000000000000E /* MioTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
+		720000000000000000000001 /* MioUITests */ = {isa = PBXGroup; children = (F20000000000000000000010 /* MioUISmokeTests.swift */,); path = MioUITests; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -268,6 +348,13 @@
 			productReference = F1000000000000000000000E /* MioTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		A20000000000000000000001 /* MioUITests */ = {
+		    isa = PBXNativeTarget; buildConfigurationList = E20000000000000000000003;
+		    buildPhases = (920000000000000000000001, F20000000000000000000012, 820000000000000000000001,);
+		    buildRules = (); dependencies = (D20000000000000000000001,);
+		    name = MioUITests; productName = MioUITests; productReference = F20000000000000000000011;
+		    productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -278,6 +365,7 @@
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+                    A20000000000000000000001 = { CreatedOnToolsVersion = 26.0; TestTargetID = A10000000000000000000001; };
 					A10000000000000000000001 = {
 						CreatedOnToolsVersion = 26.0;
 						SystemCapabilities = {
@@ -306,6 +394,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				A20000000000000000000001 /* MioUITests */,
 				A10000000000000000000001 /* Mio */,
 				A10000000000000000000002 /* MioTests */,
 			);
@@ -329,6 +418,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		820000000000000000000001 /* UI Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -336,6 +426,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DE6CAC7E119EEAFC37CBA935 /* MioNavigationModels.swift in Sources */,
+				C3CAAB1C7E553AEB6A5AEF8F /* MioNavigationCoordinator.swift in Sources */,
+				B86B1C7B73C07162CCAE073D /* MioDayContext.swift in Sources */,
+				6ED73B017ECA26545F29DC7B /* MioConnectionDiscovery.swift in Sources */,
+				F58A321D693629C81E917EAB /* MioQuestionWorkflow.swift in Sources */,
+				AFCA1338FEA831B5E034129A /* MioSystemActionPort.swift in Sources */,
+				F83F95401AB51D11201504C9 /* MioProtectedFileWriter.swift in Sources */,
+				3811BD819D858D9DD27918D6 /* MioDeletionJournal.swift in Sources */,
+				8B81E9E52688E4EA406AD3DC /* MioOperationOutcome.swift in Sources */,
+				6B213A829FB7FDC5AE05B36A /* MioWorkflowCoordinator.swift in Sources */,
 				C37F41B36B343D03FD876B19 /* MioDiagnosticsRepository.swift in Sources */,
 				F9B7D672095CDB00324F8824 /* MioEverydayContext.swift in Sources */,
 				19DA807BA03EB16FD0CDC248 /* MioDiagnosticsModels.swift in Sources */,
@@ -375,6 +475,19 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B8F77AD627419B4D668AD0EE /* MioNavigationTests.swift in Sources */,
+				B73F74418CD0ACA336491565 /* MioConnectionDiscoveryTests.swift in Sources */,
+				38D01045939486BD185502FA /* MioLessonFreshnessTests.swift in Sources */,
+				0AF2B0538ABAAFBB1FA854A0 /* MioAnswerNoteTests.swift in Sources */,
+				F7F9E928328890F7F4198F84 /* MioTaskDiscoveryTests.swift in Sources */,
+				2C6C958B3C68D47C40A77B41 /* MioWorkflowRaceTests.swift in Sources */,
+				4F9307D2E0B7351ADBD5BB13 /* MioQuestionWorkflowTests.swift in Sources */,
+				39D5CEF0468FF5FDCA34C445 /* MioWorkflowTests.swift in Sources */,
+				042D945C53D7CEB8FA1D7ACA /* MioProtectedFileWriterTests.swift in Sources */,
+				EE4979DC605F26D74C8BCCA1 /* MioDeletionRecoveryTests.swift in Sources */,
+				6996DC1A802C0C7AA7513F08 /* AudioReliabilityTests.swift in Sources */,
+				84714A50316671868BE869B9 /* MioCaptureLifecycleTests.swift in Sources */,
+				4E6C35138E3E995A9476AAAC /* MioSessionRepositoryTests.swift in Sources */,
 				3E2DCEDB4573BF11B74F5D70 /* MioCoordinatorContextTests.swift in Sources */,
 				00A25152A54ACE2CD1F5817B /* MioDiagnosticsTests.swift in Sources */,
 				867F68B153C9430EACEBC14B /* MioContextTests.swift in Sources */,
@@ -390,6 +503,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		920000000000000000000001 /* UI Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B20000000000000000000001 /* MioUISmokeTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -398,6 +512,7 @@
 			target = A10000000000000000000001 /* Mio */;
 			targetProxy = C10000000000000000000001 /* PBXContainerItemProxy */;
 		};
+		D20000000000000000000001 /* UI app dependency */ = {isa = PBXTargetDependency; target = A10000000000000000000001; targetProxy = C20000000000000000000001; };
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -603,6 +718,24 @@
 			};
 			name = Release;
 		};
+		E20000000000000000000001 /* Debug UI */ = {
+		    isa = XCBuildConfiguration; buildSettings = {
+		        CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES;
+		        PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant.uitests; PRODUCT_NAME = "$(TARGET_NAME)";
+		        SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 1;
+		        SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TEST_TARGET_NAME = Mio;
+		        LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks",);
+		    }; name = Debug;
+		};
+		E20000000000000000000002 /* Release UI */ = {
+		    isa = XCBuildConfiguration; buildSettings = {
+		        CODE_SIGN_STYLE = Automatic; DEVELOPMENT_TEAM = ""; GENERATE_INFOPLIST_FILE = YES;
+		        PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant.uitests; PRODUCT_NAME = "$(TARGET_NAME)";
+		        SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; TARGETED_DEVICE_FAMILY = 1;
+		        SWIFT_VERSION = 5.0; SWIFT_STRICT_CONCURRENCY = minimal; TEST_TARGET_NAME = Mio;
+		        LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks",);
+		    }; name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -633,6 +766,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		E20000000000000000000003 /* UI configuration list */ = {isa = XCConfigurationList; buildConfigurations = (E20000000000000000000001, E20000000000000000000002,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 	};
 	rootObject = 010000000000000000000001 /* Project object */;

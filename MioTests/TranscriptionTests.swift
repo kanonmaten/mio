@@ -1,5 +1,8 @@
 import Foundation
 import XCTest
+#if canImport(AVFoundation)
+import AVFoundation
+#endif
 @testable import Mio
 
 final class TranscriptionTests: XCTestCase {
@@ -52,6 +55,45 @@ final class TranscriptionTests: XCTestCase {
         XCTAssertThrowsError(try reply([.init(text: "fel", start: 0, end: .infinity)]).validatedWords(for: chunk))
         XCTAssertThrowsError(try reply([.init(text: "fel", start: 0, end: 4)]).validatedWords(for: chunk))
     }
+
+    #if canImport(AVFoundation)
+    func testConverterConservesResampledFramesAndFinalTailAcrossBufferSizes() throws {
+        for rate in [44_100.0, 48_000.0] {
+            let converter = BufferConverter()
+            let format = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate,
+                                                     channels: 1, interleaved: false))
+            var pcm = Data()
+            var remaining = Int(rate)
+            for size in [137, 4_096, 811, 2_003] {
+                guard remaining > 0 else { break }
+                let length = min(size, remaining)
+                let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(length)))
+                buffer.frameLength = AVAudioFrameCount(length)
+                memset(buffer.floatChannelData![0], 0, length * MemoryLayout<Float>.size)
+                pcm.append(try converter.transcriptionPCM(buffer)); remaining -= length
+            }
+            let tail = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(remaining)))
+            tail.frameLength = AVAudioFrameCount(remaining)
+            memset(tail.floatChannelData![0], 0, remaining * MemoryLayout<Float>.size)
+            pcm.append(try converter.transcriptionPCM(tail))
+            pcm.append(try converter.finishTranscriptionPCM())
+            XCTAssertEqual(Double(pcm.count / 2), 16_000, accuracy: 2)
+            XCTAssertEqual(try converter.finishTranscriptionPCM().count, 0)
+        }
+    }
+
+    func testConverterResetAndNativePCMKeepShortTailWithoutOldFormatAudio() throws {
+        let converter = BufferConverter()
+        let format = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000,
+                                                channels: 1, interleaved: true))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 160))
+        buffer.frameLength = 160
+        memset(buffer.int16ChannelData![0], 0, 320)
+        XCTAssertEqual(try converter.transcriptionPCM(buffer).count, 320)
+        converter.reset()
+        XCTAssertEqual(try converter.finishTranscriptionPCM().count, 0)
+    }
+    #endif
 
     @MainActor
     func testPrivateOriginsAndCredentials() throws {
@@ -126,5 +168,48 @@ extension TranscriptionTests {
         catch { XCTAssertEqual((error as? TranscriptionError)?.retryDelay, 30) }
         XCTAssertNil(TranscriptionError.http(401, retryAfter: 5).retryDelay)
         XCTAssertNil(TranscriptionError.http(409, retryAfter: 5).retryDelay)
+    }
+}
+
+private final class SyntheticChunkTranscriptionProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let body: Data
+        if request.value(forHTTPHeaderField: "X-Mio-Sequence") == "999" {
+            body = Data(repeating: 32, count: 262_145)
+        } else {
+            let payload: [String: Any] = ["apiVersion": 1,
+                "sessionID": request.value(forHTTPHeaderField: "X-Mio-Session-ID")!,
+                "chunkID": request.value(forHTTPHeaderField: "X-Mio-Chunk-ID")!,
+                "sequence": Int(request.value(forHTTPHeaderField: "X-Mio-Sequence")!)!,
+                "startSample": Int(request.value(forHTTPHeaderField: "X-Mio-Start-Sample")!)!,
+                "words": [], "metadata": ["model": "synthetic", "revision": "test", "backend": "fixture"]]
+            body = try! JSONSerialization.data(withJSONObject: payload)
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1",
+                                       headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+extension TranscriptionTests {
+    func testTransferredTransportPreservesChunkIdentityAndRejectsOversizedStreamingBody() async throws {
+        let client = TranscriptionClient(connection: .init(origin: URL(string: "https://test.tail.ts.net")!, token: "test-token"),
+                                         protocolClasses: [SyntheticChunkTranscriptionProtocol.self])
+        defer { client.cancel() }
+        let chunk = AudioChunk(id: UUID(), sessionID: UUID(), sequence: 2, startSample: 16_000,
+            origin: .now, capturedUptime: 0, coreStart: 0, coreEnd: 16_000, pcm: Data(count: 32_000))
+        let reply = try await client.startTranscription(chunk).value
+        XCTAssertEqual(reply.chunkID, chunk.id)
+        XCTAssertEqual(reply.startSample, chunk.startSample)
+        XCTAssertEqual(try reply.validatedWords(for: chunk), [])
+        let oversized = AudioChunk(id: UUID(), sessionID: chunk.sessionID, sequence: 999, startSample: 0,
+            origin: .now, capturedUptime: 0, coreStart: 0, coreEnd: 16_000, pcm: Data(count: 32_000))
+        do { _ = try await client.startTranscription(oversized).value; XCTFail("Expected bounded response rejection") }
+        catch { XCTAssertTrue(error is TranscriptionError) }
     }
 }

@@ -3,6 +3,87 @@ import XCTest
 @testable import Mio
 
 final class MioContentRepositoryTests: XCTestCase {
+    func testApprovalRetryPreservesLaterUserEditsAndUnlinkUsesLatestPost() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let repository = MioContentRepository(storageURL: fixture.storageURL)
+        let sessionID = UUID()
+        let suggestion = MioContentItem(kind: .note, title: "Godkänt förslag", sessionID: sessionID)
+        _ = try await repository.saveApprovedIfAbsent(suggestion)
+        var edited = suggestion; edited.title = "Användarens rubrik"; edited.body = "Egen text"
+        _ = try await repository.upsert(edited)
+        let retried = try await repository.saveApprovedIfAbsent(suggestion)
+        XCTAssertEqual(retried, [edited])
+        let unlinked = try await repository.unlinkSession(id: sessionID)
+        XCTAssertEqual(unlinked.first?.title, "Användarens rubrik")
+        XCTAssertEqual(unlinked.first?.body, "Egen text")
+        XCTAssertNil(unlinked.first?.sessionID)
+        XCTAssertEqual(unlinked.first?.id, suggestion.id)
+    }
+
+    func testExportCopiesRemainDistinctWhileFirstCopyIsShared() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let repository = MioContentRepository(storageURL: fixture.storageURL, exportDirectoryURL: fixture.exportURL)
+        let firstItem = MioContentItem(kind: .note, title: "Första kopian")
+        let firstURL = try await repository.makeExportFile(content: [firstItem], sessions: [])
+        let firstBytes = try Data(contentsOf: firstURL)
+        let secondURL = try await repository.makeExportFile(content: [MioContentItem(kind: .note, title: "Senare kopia")], sessions: [])
+        XCTAssertNotEqual(firstURL, secondURL)
+        XCTAssertEqual(try Data(contentsOf: firstURL), firstBytes)
+    }
+
+    func testFailedExportRemovalIsReportedAndCanBeRetried() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let manager = ContentFailureFileManager()
+        let repository = MioContentRepository(fileManager: manager, storageURL: fixture.storageURL, exportDirectoryURL: fixture.exportURL)
+        let exportURL = try await repository.makeExportFile(content: [], sessions: [])
+        manager.refuseExportRemoval = true
+        do { try await repository.deleteAll(); XCTFail("A remaining private export must block successful deletion") }
+        catch { XCTAssertTrue(FileManager.default.fileExists(atPath: exportURL.path)) }
+        manager.refuseExportRemoval = false
+        try await repository.deleteAll()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: exportURL.path))
+    }
+
+    func testPrivacyAttributeFailureDoesNotSilentlySucceed() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let ordinary = MioContentRepository(storageURL: fixture.storageURL)
+        _ = try await ordinary.upsert(MioContentItem(kind: .note, title: "Bevarad"))
+        let original = try Data(contentsOf: fixture.storageURL)
+        let manager = ContentFailureFileManager(); manager.refusePrivacyAttributes = true
+        let repository = MioContentRepository(fileManager: manager, storageURL: fixture.storageURL)
+        do { _ = try await repository.upsert(MioContentItem(kind: .note, title: "Osäker")); XCTFail("Privacy failures must be visible") }
+        catch { }
+        XCTAssertEqual(try Data(contentsOf: fixture.storageURL), original)
+    }
+
+    func testCachedItemsCannotOverwriteExternallyReplacedUnknownSchema() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let repository = MioContentRepository(storageURL: fixture.storageURL)
+        _ = try await repository.upsert(MioContentItem(kind: .note, title: "Sparad"))
+        let unknown = Data(#"{"schemaVersion":99,"items":[],"futureProperty":"protected fixture"}"#.utf8)
+        try unknown.write(to: fixture.storageURL, options: .atomic)
+        do { _ = try await repository.upsert(MioContentItem(kind: .note, title: "Sent")); XCTFail("Unknown external schemas must remain untouched") }
+        catch { }
+        XCTAssertEqual(try Data(contentsOf: fixture.storageURL), unknown)
+    }
+
+    func testDuplicateContentIdentitiesAreRejectedWithoutOverwriting() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        try FileManager.default.createDirectory(at: fixture.storageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let item = MioContentItem(kind: .note, title: "synthetic")
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(MioContentStoreDocument(items: [item, item]))
+        try data.write(to: fixture.storageURL)
+        do { _ = try await MioContentRepository(storageURL: fixture.storageURL).loadItems(); XCTFail("Duplicate IDs must be rejected") }
+        catch { XCTAssertEqual(try Data(contentsOf: fixture.storageURL), data) }
+    }
+
     func testUpsertReloadDeleteAndSessionIsolation() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -50,9 +131,11 @@ final class MioContentRepositoryTests: XCTestCase {
         let repository = SessionRepository(storageURL: currentURL)
         let empty = try await repository.loadSessions()
         XCTAssertTrue(empty.isEmpty)
-        let expected = MioSession(startedAt: Date(timeIntervalSince1970: 2_000),
+        var expected = MioSession(startedAt: Date(timeIntervalSince1970: 2_000),
                                   endedAt: Date(timeIntervalSince1970: 2_010))
-        try await repository.upsert(expected)
+        let generation = await repository.operationGeneration()
+        let token = try await repository.operationToken(for: expected.id, generation: generation)
+        expected = try await repository.saveCaptureCheckpoint(expected, token: token)
         let reloaded = try await SessionRepository(storageURL: currentURL).loadSessions()
         XCTAssertEqual(reloaded, [expected])
         try await repository.deleteAll()
@@ -134,4 +217,19 @@ final class MioContentRepositoryTests: XCTestCase {
         encoder.dateEncodingStrategy = .iso8601
         return encoder
     }()
+}
+
+private final class ContentFailureFileManager: FileManager, @unchecked Sendable {
+    var refuseExportRemoval = false
+    var refusePrivacyAttributes = false
+    override func removeItem(at URL: URL) throws {
+        if refuseExportRemoval, URL.lastPathComponent.hasPrefix("Mio-lokal-export-") {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        try super.removeItem(at: URL)
+    }
+    override func setAttributes(_ attributes: [FileAttributeKey: Any], ofItemAtPath path: String) throws {
+        if refusePrivacyAttributes { throw CocoaError(.fileWriteNoPermission) }
+        try super.setAttributes(attributes, ofItemAtPath: path)
+    }
 }

@@ -40,6 +40,9 @@
                ReferencedContainer = "container:Mio.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference skipped="NO" parallelizable="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A20000000000000000000001" BuildableName="MioUITests.xctest" BlueprintName="MioUITests" ReferencedContainer="container:Mio.xcodeproj" />
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import { providerRequest, providerResponseText, providerProfile } from '../src/provider.mjs';
 import { createMioServer, loadConfig } from '../src/server.mjs';
 import { validateLessonPayload, validateLessonResult, validateAskResult } from '../src/analysis.mjs';
+import { resolveTaskProfile } from '../src/task-profiles.mjs';
 
 const token = 'fixture_gateway_token_01234567890123456789';
 const id = '00000000-0000-0000-0000-000000000001:0';
@@ -18,11 +19,9 @@ const configs = [
   ['openai', 'gpt-6-luna', 'OPENAI_API_KEY', 'https://api.openai.com/v1/responses', 'responses'],
   ['groq', 'qwen/qwen3.8-27b', 'GROQ_API_KEY', 'https://api.groq.com/openai/v1/chat/completions', 'chat'],
   ['vercel', 'openai/gpt-6-luna', 'VERCEL_AI_GATEWAY_API_KEY', 'https://ai-gateway.vercel.sh/v1/responses', 'responses'],
-  ['gemini', 'gemini-2.5-flash', 'GEMINI_API_KEY', 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', 'chat'],
+  ['gemini', 'gemini-2.5-flash', 'GEMINI_API_KEY', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', 'gemini'],
   ['anthropic', 'claude-haiku-4-5', 'ANTHROPIC_API_KEY', 'https://api.anthropic.com/v1/messages', 'anthropic'],
-  ['openrouter', 'openai/gpt-6-luna', 'OPENROUTER_API_KEY', 'https://openrouter.ai/api/v1/chat/completions', 'chat'],
-  ['mistral', 'mistral-small-latest', 'MISTRAL_API_KEY', 'https://api.mistral.ai/v1/chat/completions', 'chat'],
-  ['deepseek', 'deepseek-flash', 'DEEPSEEK_API_KEY', 'https://api.deepseek.com/responses', 'responses'],
+  ['openrouter', 'openai/gpt-4.1', 'OPENROUTER_API_KEY', 'https://openrouter.ai/api/v1/chat/completions', 'chat'],
   ['custom', 'host/model:version', 'MIO_AI_API_KEY', 'https://inference.example/v1/chat/completions', 'chat']
 ];
 function configFor(provider, model, key) {
@@ -32,6 +31,7 @@ function configFor(provider, model, key) {
 }
 function envelope(wire, value) {
   const text = JSON.stringify(value);
+  if (wire === 'gemini') return { candidates: [{ finishReason: 'STOP', content: { role: 'model', parts: [{ text }] } }] };
   if (wire === 'chat') return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: text } }] };
   if (wire === 'anthropic') return { stop_reason: 'end_turn', content: [{ type: 'text', text }] };
   return { status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }] };
@@ -43,17 +43,20 @@ for (const [provider, model, key, url, wire] of configs) {
     for (const mode of ['ask', 'analyze', 'lesson']) {
       const request = providerRequest({ config, mode, payload });
       assert.equal(request.url, url);
-      assert.equal(request.body.temperature, 0);
-      assert.equal(request.body.model, model);
+      assert.equal(wire === 'gemini' ? request.body.generationConfig.temperature : request.body.temperature, 0);
+      if (wire !== 'gemini') assert.equal(request.body.model, model);
       if (provider === 'vercel') assert.deepEqual(request.body.providerOptions.gateway.only, ['openai']);
       assert.ok(!JSON.stringify(request).includes(token));
       assert.ok(!JSON.stringify(request).includes('must-not-use-other-vendor-key'));
-      const format = wire === 'responses' ? request.body.text.format : wire === 'chat'
-        ? request.body.response_format.json_schema : request.body.output_config.format;
+      const format = wire === 'gemini' ? { schema: request.body.generationConfig.responseJsonSchema }
+        : wire === 'responses' ? request.body.text.format : wire === 'chat'
+          ? request.body.response_format.json_schema : request.body.output_config.format;
       assert.equal(format.schema.additionalProperties, false);
+      if (mode === 'lesson') assert.deepEqual(format.schema.properties.candidates.items.properties.kind.enum, ['plan', 'task']);
       assert.deepEqual(format.schema.required, Object.keys(format.schema.properties));
-      if (wire !== 'anthropic') assert.equal(format.strict, true);
-      if (wire === 'responses') assert.deepEqual(request.body.reasoning, { effort: 'none' });
+      if (!['anthropic', 'gemini'].includes(wire)) assert.equal(format.strict, true);
+      if (wire === 'gemini') assert.deepEqual(request.body.generationConfig.thinkingConfig, { thinkingBudget: 0 });
+      else if (wire === 'responses') assert.deepEqual(request.body.reasoning, { effort: 'none' });
       else if (wire === 'anthropic') assert.deepEqual(request.body.thinking, { type: 'disabled' });
       else if (provider === 'openrouter') {
         assert.deepEqual(request.body.reasoning, { enabled: false });
@@ -87,8 +90,12 @@ test('neutral model wins; non-OpenAI presets never reuse legacy OpenAI credentia
   assert.equal(loadConfig({ OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token,
     MIO_OPENAI_MODEL: 'gpt-6-luna' }).model, 'gpt-6-luna');
   const env = { MIO_AI_PROVIDER: 'groq', MIO_GATEWAY_TOKEN: token, OPENAI_API_KEY: 'fixture', MIO_OPENAI_MODEL: 'gpt-6-luna' };
-  assert.throws(() => loadConfig(env));
-  assert.throws(() => loadConfig({ ...env, GROQ_API_KEY: 'fixture' }));
+  const missingKey = loadConfig(env);
+  assert.notEqual(missingKey.apiKey, 'fixture');
+  assert.equal(resolveTaskProfile(missingKey, 'ask').configured, false);
+  const missingModel = loadConfig({ ...env, GROQ_API_KEY: 'fixture' });
+  assert.notEqual(missingModel.model, 'gpt-6-luna');
+  assert.equal(resolveTaskProfile(missingModel, 'ask').configured, false);
   assert.equal(loadConfig({ ...env, GROQ_API_KEY: 'fixture', MIO_AI_MODEL: 'qwen/qwen3.8-27b' }).model, 'qwen/qwen3.8-27b');
 });
 
@@ -154,14 +161,14 @@ test('lesson HTTP contract authenticates, validates and adds server-owned proven
 test('incompatible model fails locally without spending a request', async t => {
   const f = await fixture(t, { model: 'openai/gpt-oss-20b' });
   const response = await f.send(); assert.equal(response.status, 422);
-  assert.deepEqual(await response.json(), { error: 'provider_model_incompatible' });
+  assert.deepEqual(await response.json(), { error: 'task_configuration_invalid' });
   assert.equal(f.calls(), 0);
 });
 
 test('upstream rejection is a compatibility error, not permission to remove strict parameters', async t => {
   const f = await fixture(t, { fetchImpl: () => new Response('private details', { status: 400 }) });
   const response = await f.send(); assert.equal(response.status, 422);
-  assert.deepEqual(await response.json(), { error: 'provider_model_incompatible' });
+  assert.deepEqual(await response.json(), { error: 'provider_parameters' });
   assert.equal(f.calls(), 1);
 });
 
@@ -169,6 +176,6 @@ test('quota Retry-After is bounded, forwarded and never automatically retried', 
   const f = await fixture(t, { fetchImpl: () => new Response('private quota data', { status: 429, headers: { 'Retry-After': '123' } }) });
   const response = await f.send(); assert.equal(response.status, 429);
   assert.equal(response.headers.get('retry-after'), '123');
-  assert.deepEqual(await response.json(), { error: 'upstream_unavailable' });
+  assert.deepEqual(await response.json(), { error: 'provider_quota' });
   assert.equal(f.calls(), 1);
 });

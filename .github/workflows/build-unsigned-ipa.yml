@@ -51,6 +51,12 @@ jobs:
           plutil -lint Mio/Info.plist
           plutil -lint Mio/PrivacyInfo.xcprivacy
 
+      - name: Diagnostisera strikt concurrency i det riktiga iOS-targetet
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/scripts/verify_concurrency.py" \
+            --native --log "$RUNNER_TEMP/Mio-concurrency.log"
+
       - name: Bygg osignerad iPhone-app
         run: |
           set -euo pipefail
@@ -61,12 +67,13 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/Mio-release.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
             COMPILER_INDEX_STORE_ENABLE=NO \
             ONLY_ACTIVE_ARCH=NO \
-            build
+            build 2>&1 | tee "$RUNNER_TEMP/Mio-release.log"
 
       - name: Kompilera enhetstester
         run: |
@@ -82,7 +89,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             ONLY_ACTIVE_ARCH=NO \
-            build-for-testing
+            build-for-testing 2>&1 | tee "$RUNNER_TEMP/Mio-test-build.log"
 
       - name: Kör enhetstester
         run: |
@@ -128,11 +135,12 @@ jobs:
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$RUNNER_TEMP/TestDerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/Mio-tests.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             ONLY_ACTIVE_ARCH=NO \
-            test-without-building
+            test-without-building 2>&1 | tee "$RUNNER_TEMP/Mio-tests.log"
 
       - name: Skapa IPA-filen
         run: |
@@ -163,6 +171,9 @@ jobs:
             /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PATH/Info.plist" | sed 's/^/Minimum iOS: /'
             echo "GitHub run: $GITHUB_RUN_ID"
             echo "Commit: $GITHUB_SHA"
+            echo "Workflow: $GITHUB_WORKFLOW_REF"
+            echo "Runner: $RUNNER_NAME ($RUNNER_OS/$RUNNER_ARCH)"
+            echo "Checkout dirty: $(git status --porcelain | wc -l | tr -d ' ')"
             sw_vers -productVersion | sed 's/^/macOS: /'
             xcodebuild -version | tr '\n' ' '
             echo
@@ -180,3 +191,14 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
+
+      - name: Spara native diagnostik även vid fel
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mio-native-verification
+          path: |
+            ${{ runner.temp }}/Mio-*.log
+            ${{ runner.temp }}/Mio-*.xcresult
+          if-no-files-found: warn
+          retention-days: 14

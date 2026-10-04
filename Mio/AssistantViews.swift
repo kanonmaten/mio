@@ -164,6 +164,8 @@ private struct SuggestionComposerView: View {
 private struct SuggestedQuestionReviewView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(MioAssistantViewModel.self) private var assistant
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @State private var outcome: MioOperationOutcome?
     let suggestion: MioSuggestion
     let contentModel: MioContentViewModel
     let sessionModel: MioViewModel
@@ -199,19 +201,23 @@ private struct SuggestedQuestionReviewView: View {
                 Button("Inte nu") {
                     Task {
                         busy = true
-                        if await assistant.deferSuggestion(id: suggestion.id) { dismiss() }
+                        let result = await workflow.deferSuggestion(id: suggestion.id)
+                        outcome = result
+                        if result.isSuccess { dismiss() }
                         busy = false
                     }
                 }
                 Button("Nej, glöm frågan", role: .destructive) {
                     Task {
                         busy = true
-                        if await assistant.rejectSuggestion(id: suggestion.id) { dismiss() }
+                        let result = await workflow.rejectSuggestion(id: suggestion.id)
+                        outcome = result
+                        if result.isSuccess { dismiss() }
                         busy = false
                     }
                 }
             }
-            if let error = assistant.errorMessage { Section { Text(error).foregroundStyle(.red) } }
+            if let error = outcome?.message { Section { Text(error).foregroundStyle(.red) } }
         }
         .navigationTitle("Vill du fråga Mio?")
         .disabled(busy)
@@ -225,7 +231,9 @@ private struct SuggestedQuestionReviewView: View {
 
     private func finishAnsweredQuestion() async {
         busy = true
-        if await assistant.markAccepted(id: suggestion.id) { MioFeedback.success(); dismiss() }
+        let result = await workflow.finishQuestion(id: suggestion.id)
+        outcome = result
+        if result.isSuccess { MioFeedback.success(); dismiss() }
         busy = false
     }
 }
@@ -233,6 +241,7 @@ private struct SuggestedQuestionReviewView: View {
 private struct SuggestionReviewView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(MioAssistantViewModel.self) private var assistant
+    @Environment(MioWorkflowCoordinator.self) private var workflow
     let suggestion: MioSuggestion
     let contentModel: MioContentViewModel
     let sessionModel: MioViewModel
@@ -241,6 +250,10 @@ private struct SuggestionReviewView: View {
     @State private var text: String
     @State private var date: Date
     @State private var reviewedDate = false
+    @State private var dateChosen = false
+    @State private var reviewedRevision: Int
+    @State private var reviewedSuggestion: MioSuggestion
+    @State private var outcome: MioOperationOutcome?
     @State private var busy = false
 
     init(suggestion: MioSuggestion, contentModel: MioContentViewModel, sessionModel: MioViewModel) {
@@ -251,6 +264,8 @@ private struct SuggestionReviewView: View {
         _title = State(initialValue: suggestion.title)
         _text = State(initialValue: suggestion.body)
         _date = State(initialValue: suggestion.scheduledAt)
+        _reviewedRevision = State(initialValue: suggestion.reviewRevision)
+        _reviewedSuggestion = State(initialValue: suggestion)
     }
 
     var body: some View {
@@ -266,13 +281,29 @@ private struct SuggestionReviewView: View {
                 DatePicker("Datum och tid", selection: $date)
             }
             .disabled(alreadySaved)
-            if let evidence = suggestion.evidence {
+            if let evidence = reviewedSuggestion.evidence {
                 Section("AI-förslagets textunderlag") {
                     Text(evidence).textSelection(.enabled)
                     Text("AI kan misstolka transkriptionen. Jämför förslaget med underlaget.").font(.footnote).foregroundStyle(.secondary)
                     if kind == .plan || kind == .task {
-                        if suggestion.needsDateConfirmation == true { Text("Säker tid saknas i underlaget. Välj datum och tid ovan.") }
+                        if reviewedSuggestion.needsDateConfirmation == true { Text("Säker tid saknas i underlaget. Välj datum och tid ovan.") }
                         Toggle("Jag har kontrollerat datum och tid", isOn: $reviewedDate)
+                    }
+                }
+            }
+            if needsReview, let current = currentSuggestion {
+                Section("Förslaget har uppdaterats") {
+                    Text(current.title).font(.headline)
+                    if !current.body.isEmpty { Text(current.body) }
+                    if let evidence = current.evidence { Text(evidence).font(.footnote).foregroundStyle(.secondary) }
+                    Text("Dina ändringar ovan finns kvar. Granska det uppdaterade underlaget innan du godkänner.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Button("Jag har granskat det uppdaterade förslaget") {
+                        reviewedRevision = current.reviewRevision
+                        reviewedSuggestion = current
+                        reviewedDate = false
+                        dateChosen = false
+                        outcome = nil
                     }
                 }
             }
@@ -283,23 +314,28 @@ private struct SuggestionReviewView: View {
                     .font(.footnote).foregroundStyle(.secondary)
                 Button("Ja, spara") { Task { await accept() } }
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                              || (!alreadySaved && suggestion.evidence != nil && (kind == .plan || kind == .task) && !reviewedDate))
+                              || (!alreadySaved && (needsReview || (reviewedSuggestion.evidence != nil && (kind == .plan || kind == .task)
+                                  && (!reviewedDate || (reviewedSuggestion.needsDateConfirmation == true && !dateChosen))))))
                 Button("Inte nu") {
                     Task {
                         busy = true
-                        if await assistant.deferSuggestion(id: suggestion.id) { dismiss() }
+                        let result = await workflow.deferSuggestion(id: suggestion.id)
+                        outcome = result
+                        if result.isSuccess { dismiss() }
                         busy = false
                     }
                 }.disabled(alreadySaved)
                 Button("Nej, glöm förslaget", role: .destructive) {
                     Task {
                         busy = true
-                        if await assistant.rejectSuggestion(id: suggestion.id) { dismiss() }
+                        let result = await workflow.rejectSuggestion(id: suggestion.id)
+                        outcome = result
+                        if result.isSuccess { dismiss() }
                         busy = false
                     }
                 }.disabled(alreadySaved)
             }
-            if let error = assistant.errorMessage ?? contentModel.errorMessage {
+            if let error = outcome?.message {
                 Section { Text(error).foregroundStyle(.red) }
             }
         }
@@ -307,24 +343,28 @@ private struct SuggestionReviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .disabled(busy)
         .navigationBarBackButtonHidden(busy)
+        .onChange(of: date) { _, _ in dateChosen = true; reviewedDate = false }
+        .onChange(of: title) { _, _ in reviewedDate = false }
+        .onChange(of: text) { _, _ in reviewedDate = false }
+        .onChange(of: kind) { _, _ in reviewedDate = false }
+        .onChange(of: currentSuggestion?.reviewRevision) { _, _ in
+            if needsReview { reviewedDate = false }
+        }
     }
 
     private var alreadySaved: Bool { contentModel.item(id: suggestion.id) != nil }
+    private var currentSuggestion: MioSuggestion? { assistant.suggestions.first { $0.id == suggestion.id } }
+    private var needsReview: Bool { currentSuggestion.map { $0.reviewRevision != reviewedRevision } ?? false }
 
     private func accept() async {
         guard !busy else { return }
-        guard MioMaintenanceState.shared.beginWrite() else { return }
-        defer { MioMaintenanceState.shared.endWrite() }
         busy = true
         defer { busy = false }
-        let linkedID = suggestion.sessionID.flatMap { sessionModel.session(id: $0)?.id }
-        // A retry after a partial disk failure must never create a duplicate or
-        // overwrite a post the user already edited outside the inbox.
-        if !alreadySaved {
-            guard await contentModel.save(id: suggestion.id, kind: kind, title: title, body: text,
-                                          scheduledAt: date, isCompleted: false, sessionID: linkedID) else { return }
-        }
-        if await assistant.markAccepted(id: suggestion.id) { MioFeedback.success(); dismiss() }
+        let result = await workflow.acceptSuggestion(id: suggestion.id, expectedRevision: reviewedRevision,
+            kind: kind, title: title, body: text, scheduledAt: date,
+            dateConfirmed: reviewedDate, dateChosen: dateChosen)
+        outcome = result
+        if result.isSuccess { MioFeedback.success(); dismiss() }
     }
 }
 
@@ -347,6 +387,7 @@ struct LessonManagementView: View {
                             .font(.caption).foregroundStyle(.secondary)
                         if !lesson.note.isEmpty { Text(lesson.note).foregroundStyle(.secondary) }
                         Text("\(lesson.transcripts(in: session).count) textdelar").font(.caption)
+                        Text(lesson.freshness(in: session).message).font(.caption).foregroundStyle(.secondary)
                     }
                 }.buttonStyle(.plain)
             }
@@ -415,6 +456,13 @@ private struct LessonEditorView: View {
                     Text("En textdel som korsar en lektionsgräns kan visas i båda lektionerna.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
+                if let lesson {
+                    Section("Källans aktualitet") {
+                        Text(lesson.freshness(in: session).message).font(.footnote).foregroundStyle(.secondary)
+                        Text("Att ändra rubrik, egen anteckning eller tidsgräns ändrar inte det sparade revisionsunderlaget. Ingen rättad text skickas automatiskt till AI.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
                 if let error = assistant.errorMessage { Section { Text(error).foregroundStyle(.red) } }
                 if lesson != nil {
                     Section { Button("Radera indelningen", role: .destructive) { confirmDelete = true } }
@@ -469,19 +517,20 @@ private struct LessonEditorView: View {
 
 struct DailyOverviewView: View {
     @Environment(MioAssistantViewModel.self) private var assistant
+    @Environment(MioDayContext.self) private var day
+    @Environment(MioNavigationCoordinator.self) private var navigation
     let contentModel: MioContentViewModel
     let sessionModel: MioViewModel
-    @State private var selectedDate = Date.now
-    @State private var evening = false
 
     var body: some View {
+        @Bindable var navigation = navigation
         List {
             Section {
-                Picker("Översikt", selection: $evening) {
-                    Text("Morgon").tag(false)
-                    Text("Kväll").tag(true)
+                Picker("Översikt", selection: $navigation.dailyPeriod) {
+                    Text("Morgon").tag(MioDailyPeriod.morning)
+                    Text("Kväll").tag(MioDailyPeriod.evening)
                 }.pickerStyle(.segmented)
-                DatePicker("Dag", selection: $selectedDate, displayedComponents: .date)
+                DatePicker("Dag", selection: Binding(get: { day.overviewDate }, set: { day.select($0) }), displayedComponents: .date)
                 Text(evening ? "Se tillbaka på det du har sparat och gjort." : "Här är dina sparade planer och uppgifter för dagen.")
                     .foregroundStyle(.secondary)
             }
@@ -509,8 +558,11 @@ struct DailyOverviewView: View {
     }
 
     private var briefing: MioBriefing {
-        MioBriefing.make(content: contentModel.items, sessions: sessionModel.allSessions, lessons: assistant.lessons, date: selectedDate)
+        MioBriefing.make(content: contentModel.items, sessions: sessionModel.allSessions, lessons: assistant.lessons,
+                         date: day.overviewDate, calendar: day.calendar)
     }
+
+    private var evening: Bool { navigation.dailyPeriod == .evening }
 
     private func overviewSection(_ title: String, items: [MioContentItem]) -> some View {
         Section(title) {
@@ -520,9 +572,13 @@ struct DailyOverviewView: View {
                     if item.kind == .task {
                         Button {
                             Task { await contentModel.setTaskCompleted(id: item.id, isCompleted: !item.isCompleted) }
-                        } label: { Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle").font(.title2) }
+                        } label: {
+                            Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle").font(.title2)
+                                .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                        }
                             .buttonStyle(.borderless)
                             .accessibilityLabel(item.isCompleted ? "Markera \(item.title) som inte klar" : "Markera \(item.title) som klar")
+                            .accessibilityIdentifier("mio.task-completion.\(item.id.uuidString)")
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         Text(item.title)

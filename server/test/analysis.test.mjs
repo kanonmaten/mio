@@ -25,6 +25,20 @@ test('analysis input accepts ordinary speech without a wake word and preserves t
     { ...payload, secret: 'must-not-forward' }]) assert.throws(() => validateAnalysisPayload(invalid));
 });
 
+test('source and proposed timestamps reject normalized calendar dates and invalid offsets', () => {
+  const invalid = ['2026-02-29T08:00:00Z', '2026-04-31T08:00:00+02:00',
+    '2026-01-01T24:00:00Z', '2026-01-01T12:60:00Z', '2026-01-01T12:00:60Z',
+    '2026-01-01T12:00:00+24:00', '2026-01-01T12:00:00-12:60'];
+  for (const occurredAt of invalid) {
+    assert.throws(() => validateAnalysisPayload({ ...payload, fragments: [{ ...payload.fragments[0], occurredAt }] }), occurredAt);
+    assert.throws(() => validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], scheduledAt: occurredAt }] }, payload), occurredAt);
+  }
+  for (const occurredAt of ['2024-02-29T23:59:59.123Z', '2000-02-29T00:00:00+05:45', '2026-12-31T23:59:59-03:30']) {
+    assert.doesNotThrow(() => validateAnalysisPayload({ ...payload, fragments: [{ ...payload.fragments[0], occurredAt }] }));
+  }
+  assert.throws(() => validateAnalysisPayload({ ...payload, fragments: [{ ...payload.fragments[0], occurredAt: '1900-02-29T00:00:00Z' }] }));
+});
+
 test('analysis rejects invented citations, personal memories, unsupported dates and everyday lesson notes', () => {
   assert.equal(validateAnalysisResult(result, payload), result);
   for (const patch of [{ evidence: 'Text som aldrig sades' }, { sourceIDs: ['unknown'] },

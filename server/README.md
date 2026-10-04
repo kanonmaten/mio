@@ -1,165 +1,97 @@
-# Mios privata AI-server
+# Mios privata text-AI-gateway
 
-Valfri Node-server för en privat Mio-användare. Appens lokalflöde kräver ingen server. Detta paket är inte driftsatt automatiskt och saknar inbyggd molnprovisionering. Välj den färdiga [Cloudflare-vägen](cloudflare/README.md) för drift utan påslagen egen dator eller köpt domän. Node/Caddy-vägen nedan finns kvar för egen server.
+Valfri server för godkända frågor, vardagsutdrag och detaljerade lektioner. Appens manuella innehåll kräver ingen text-AI. [Pianissimo](../transcription-server/README.md) är en separat privat GPU/Tailscale-tjänst; ljud skickas aldrig till denna gateway och ingen råljudsfil lagras.
 
-För byte till Groq eller annan leverantör, följ [steg-för-steg-guiden för Groq, token och Access](cloudflare/GROQ_ACCESS.md) och [kompatibilitetskatalogen](PROVIDERS.md). Den beskriver exakt vilka modeller som tillåts med reasoning av, temperatur 0 och strikt schema.
+Arbetskopian har gemensam Node/Worker-execution, exakta modellprofiler och task-routing. Ingen publicering, verklig modellåtkomst, Xcode-build eller telefonacceptans följer av lokala tester. Den verifierade äldre produktionsbundeln är ännu inkompatibel med Groq-inställningarna; [releaseguiden](cloudflare/GROQ_ACCESS.md) skiljer förberedelse, uttrycklig publicering, read-back och separat sändningsgodkännande.
 
-## Förutsättningar
+## Verifiera utan modelltrafik
 
-- Node.js 22 eller senare. Node-servern har inga runtime-beroenden. `npm ci` installerar låsta utvecklingsverktyg för Cloudflare-alternativet.
-- Ett konto hos vald AI-leverantör med API-åtkomst och en kostnadsgräns som du själv väljer.
-- En HTTPS-domän och en reverse proxy, exempelvis Caddy, på samma värd som Node-processen.
-- En slumpad privat gatewaytoken. Den är **inte** leverantörens API-nyckel.
+Stödd Node-version är **>=26.10.0 <27**, med 26.10.0 som testad miniminivå. Runtime använder inbyggda Node-moduler; `npm ci` installerar låsta verktyg för Worker-verifiering. Kör från valfri katalog, med rätt uttrycklig källsökväg:
 
-## Prova koden utan OpenAI
-
-Från repots rot:
-
-```sh
-npm test --prefix server
+```bash
+npm --prefix "$HOME/Documents/ChatGPT/Mio/server" ci
+npm --prefix "$HOME/Documents/ChatGPT/Mio/server" test
+WRANGLER_SEND_METRICS=false npm --prefix "$HOME/Documents/ChatGPT/Mio/server" run worker:test
 ```
 
-Tester använder syntetiska data, en lokal HTTP-port och mockad upstream. Ingen API-nyckel behövs och testerna kontaktar inte OpenAI. De verifierar HTTP-kontrakt, autentisering, godkänd kontext, fel, gränser och timeout. De verifierar inte verklig modellåtkomst, HTTPS-driftsättning eller appens nätverk på iPhone.
+Worker-provet bygger med `--dry-run` och kör det faktiska paketet i lokal workerd/Miniflare, inklusive D1, taskprofiler, skyddad v2-status, revisionskontroll, deadline och avbrott. Providertransporten är syntetisk; inga modellnycklar eller inferensanrop används. Repoövergripande entry point:
 
-## Konfigurera på din server
+```bash
+python3 "$HOME/Documents/ChatGPT/Mio/scripts/verify.py"
+```
 
-1. Kopiera katalogen `server/` till en privat katalog på din server.
-2. Kopiera `env.example` till `.env`. Skydda filen med `chmod 600 .env`.
-3. Välj `MIO_AI_PROVIDER`, `MIO_AI_MODEL` och leverantörens API-hemlighet enligt [leverantörsguiden](PROVIDERS.md). För OpenAI används `OPENAI_API_KEY`. Modell väljs uttryckligen; servern gissar inte åt dig.
-4. Skapa en separat slumpad gatewaytoken med följande kommando, lokalt på servern. Spara resultatet i `.env` som `MIO_GATEWAY_TOKEN` och privat i telefonens anslutningsfält. Publicera inte resultatet i en chatt eller Git.
+Se [installation](../docs/INSTALLATION.md) för plattformsförutsättningar och [status](../docs/STATUS.md) för faktiskt utförda kontroller. Linux/portable Swift ersätter native microphone, converter, UIKit/Keychain och Apple-transportgränser; detta är inte Xcode eller iPhone.
 
-```sh
+## Konfiguration och egen Node-drift
+
+[Leverantörsguiden](PROVIDERS.md) och [kontraktsmatrisen](../docs/LEVERANTORSKONTRAKT.md) anger exakt provider/model/Secret och separat verklig verifiering. Reasoning OFF, temperatur 0 och strikt schema är obligatoriskt. Nyckeln ligger serverägd; en separat `MIO_GATEWAY_TOKEN` används av appen. Access- och transkriptionstokens är andra hemligheter.
+
+För egen Node-drift kopieras bara gatewayens `server/src/*.mjs` och `server/package.json` till exempelvis `/opt/mio-gateway`. Skapa privat `.env` där, ägd av tjänsteanvändaren med 0600. Kopiera inte hela Mio-repot, Swift/Xcode, exporter, ljud, Git-historik, utvecklingsmiljö eller befintliga hemligheter. `env.example` beskriver globala värden; taskprofiler beskrivs nedan. Leverantörskonto/kostnadskontroll och betrodd HTTPS behövs.
+
+Generera gatewaytoken lokalt och spara privat; den får inte vara samma värde som providerkey:
+
+```bash
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
 ```
 
-5. Starta från serverkatalogen:
+Starta med explicita paths, även genom systemd/processhanterare:
 
-```sh
-node --env-file=.env src/server.mjs
+```bash
+node --env-file=/opt/mio-gateway/.env /opt/mio-gateway/src/server.mjs
+curl --fail --max-time 5 http://127.0.0.1:8787/health
 ```
 
-Node lyssnar bara på `127.0.0.1:8787`. Kontrollera lokalt:
+Node binder `127.0.0.1:8787`; betrodd HTTPS-proxy på samma värd krävs för telefonen. [Caddy-exemplet](Caddyfile.example) begränsar body och exponerar inte Node-porten. Undvik body/Authorization-/URL-loggning och kör en begränsad tjänsteanvändare. Processens minut/dygnsräknare nollställs vid omstart och delas inte mellan flera Node-processer; leverantörens kostnadsgräns behövs också. [Cloudflare-alternativet](cloudflare/README.md) återanvänder beständiga D1-räknare.
 
-```sh
-curl --fail http://127.0.0.1:8787/health
-```
+Ogiltig gatewaytoken eller numeriska säkerhetsgränser blockerar Node-start. En felaktig modell/provider/options/secret spärrar berörd task men hindrar inte modellfri skyddad discovery för annars giltig gatewaykonfiguration. Worker kan även ge skyddad konfigurationsstatus när globala genereringsinställningar är ogiltiga.
 
-För kontinuerlig drift, låt din processhanterare/systemd starta samma kommando med rätt arbetskatalog och en begränsad användare. Håll miljöfilen läsbar bara för den användaren. Servern stoppar vid saknad/ogiltig konfiguration.
+## Task-profiler och status
 
-6. Anpassa `Caddyfile.example` till din domän, rikta DNS till servern och konfigurera betrodd HTTPS. Exponera endast HTTPS-porten publikt, aldrig Node-port 8787. Caddy måste köras på samma värd för den angivna loopback-adressen. Kontrollera din installation mot [Caddys dokumentation](https://caddyserver.com/docs/quick-starts/https).
-7. Använd inga request-/body-/Authorization-loggar i proxyn. Exempelfilen slår inte på accessloggar. Håll server, certifikat och system uppdaterade.
-8. I Mio: **Mio → AI-assistent → Konfigurera server och tillåt molnfrågor**. Ange endast HTTPS-origin, exempelvis `https://mio.din-domän.se`, och gatewaytoken. Spara och aktivera molnfrågor. Prova en syntetisk fråga utan kontext och kontrollera sändningspreview.
-
-Servern har ingen installation av OpenAI-nyckeln i appen, ingen OAuth och inga användarkonton. Dela inte gatewaytoken mellan oberoende användare. Rotera den genom att ändra `.env`, starta om servern och spara den nya tokenen i appen.
-
-## Kontrakt
-
-`GET /health` svarar med `{"status":"ok"}` utan upstream-anrop. Det bevisar bara att Node-servern svarar.
-
-`POST /v1/ask` kräver `Authorization: Bearer <gatewaytoken>` och `Content-Type: application/json`:
+`MIO_AI_PROVIDER`/`MIO_AI_MODEL` är global default. Valfri `MIO_AI_TASK_PROFILES` är JSON med `ask`, `everyday`, `lesson`, exempelvis:
 
 ```json
-{
-  "question": "Vad betyder procent?",
-  "context": [{"label": "Vald anteckning", "text": "Vi övar procent."}]
-}
+{"ask":{"provider":"openai","model":"gpt-4.1-mini"},"lesson":{"provider":"groq","model":"qwen/qwen3.8-27b"}}
 ```
 
-Ett lyckat svar är `{"answer":"…"}`. Andra statuskoder ger en fast felkod, aldrig upstreamens privata feltext. Okända fält avvisas. Inga redirects följs av appen eller serverns upstream-anrop.
+Saknad override ärver global konfiguration. Skild provider använder sin designated serversecret, aldrig en global nyckel från annan provider. Tillåtna profilfält är provider, model, validerade adapterOptions samt custom-kontraktets baseURL/compatibility. Felaktig task spärras explicit; ingen request-time fallback. Alla aliases/snapshots och schema-dialekter finns i matrisen. Legacy `MIO_OPENAI_MODEL` läses endast för OpenAI-konfiguration när det nya namnet saknas.
 
-- Högst 2 000 UTF-8-byte fråga, sex utdrag, 200 byte etikett och 4 000 byte text per utdrag. All kontext högst 10 000 byte; HTTP-body högst 20 000 byte.
-- Upstream timeout 40 sekunder. Appens timeout är något längre. Klientavbrott försöker avbryta upstream men återkallar inte redan skickad text eller kostnad.
-- Högst två samtidiga upstream-anrop, normalt sex anrop/minut och 100/dygn för alla fyra AI-rutter tillsammans. Gränser kan sänkas i `.env`.
-- Räknarna finns bara i processminnet och nollställs vid omstart. Kör en process; flera instanser delar inte räknare. Detta är ingen hård månadsbudget: använd även leverantörens kostnadskontroller.
-- Enskilda frågesvar begränsas till 1 000 genererade tokens (analys till 3 000) och 16 000 byte text. Ofullständiga svar avvisas.
+`GET /health` provar process/Worker, inte providercredentials. Access ska skydda all extern Worker-trafik. `GET /v1/status` bevarar äldre klientkontrakt. Ny **`GET /v2/status`** kräver gatewaytoken och eventuell Access, gör inget modellanrop och reserverar ingen kvot. Svaret innehåller:
 
-## Datakontroll
+- `protocolVersion:2`, `release` och 64 hextecken `configurationRevision`.
+- `tasks.ask/everyday/lesson`: configured, provider, model, promptVersion, capabilities, fast configurationError eller null.
+- `quota`: limit (högst 100), remaining och resetAt, vilka kan vara null när läsning inte kan bevisas. D1-läsningen är tidsbegränsad och ändrar inga räknare.
 
-Enskilda frågor visar exakt fråga, etiketter och utdrag före godkännande. Löpande analys har ett separat samtycke till nya utdrag och avslutade lektioner tills läget stängs av. Servern skickar bara den godkända payloaden som användarinnehåll samt fasta svenska systeminstruktioner till vald leverantörs API. Det finns inga verktyg, ingen automatiserad kalender-/minnesåtgärd, ingen konversationshistorik och inga automatiska omförsök.
+Configured betyder granskad lokal konfiguration, inte giltiga providercredentials, saldo, modellåtkomst eller kvalitet. Revisionen binds till offentliga profil-/policy-/gränsval och endpointidentitet utan att exponera URL eller secretfingerprint; giltig secretrotation byter inte revision. Discovery accepterar bounded okända provider-/capabilitynamn, men kontrollerar de förmågor vald task kräver.
 
-Servern skriver inga frågor, svar, IP-adresser eller credentials till logg eller databas. Responses-adaptrarna begär `store: false`. Övriga API:er använder sina respektive datavillkor. Detta innebär inte att leverantörerna saknar annan datalagring; för OpenAI, kontrollera [OpenAI:s datakontroller](https://developers.openai.com/api/docs/guides/your-data). [Responses API-kontraktet](https://developers.openai.com/api/reference/resources/responses/methods/create) är källa för anropsformatet.
+Nya klienter skickar den observerade revisionen som `X-Mio-Configuration-Revision` vid varje AI-POST. Ändrad revision ger **409 före body/kvot/providertrafik**, kräver ny preview eller manuell återaktivering och ger ingen automatisk retry. Äldre klienter utan header behåller kontraktet. Appens lyckade discoverycache är 30 sekunder och binds till anslutning/credentials/revision; inställningar, authfel och 409 invalidierar den. Kvarvarande kvot är ett ögonblicksvärde, inte reservation eller modellprov.
 
-Telefonens **Glöm anslutning** tar bort lokal token/URL och stänger av AI. Det raderar inte en redan skickad fråga hos leverantören. Byt/återkalla servernyckel och token vid misstänkt läcka. Använd endast testdata i [AI01–AI06](../docs/TESTPLAN_HELHET.md) tills din egen installation är verifierad.
+## Genereringskontrakt och gränser
 
-## Löpande textanalys och lektionsanteckningar
+Alla genereringsrutter kräver `Authorization: Bearer <gatewaytoken>`, JSON och inga Content-Encoding/redirects. Okända bodyfält avvisas. Servern skickar exakt godkänd payload som användarinnehåll samt fasta taskinstruktioner/schema. Resultatet valideras oberoende efter provider-normalisering; AI kan aldrig utföra systemåtgärder.
 
-`POST /v1/analyze` använder samma autentisering och gränser. JSON innehåller `mode` (`everyday`/`lesson`), IANA-`timeZone` och 1–8 `fragments` med `id` (segment-UUID:delindex), `text`, `occurredAt` (ISO-8601 med offset). Varje fragment får vara 4 000 UTF-8-byte, sammanlagt 10 000. Appen skickar enbart färdig text, aldrig råljud.
+| Rutt | Indata och validerat resultat |
+|---|---|
+| `/v1/ask` | Fråga + explicit valda context-utdrag → endast answer, tillfälligt i appen |
+| `/v1/analyze` | Äldre mode/timeZone/fragments-kontrakt → grundade candidates/highlights/uncertainties |
+| `/v2/analyze` | Endast everyday; nya fragments, högst en minut contextFragments, priorDecisions och contextLimited → candidates med explicit nullable replacesID |
+| `/v1/lesson-notes` | Endast lesson, högst 3500 byte källtext → plan/task-kandidater, detaljerade sections med citat och serverägd metadata |
 
-Svaret har `candidates` (högst sex), `highlights` (högst åtta, bara lektion) och `uncertainties` (högst sex). Kandidater innehåller typ, rubrik, text, nullable `scheduledAt`, käll-ID:n och exakt citat. Server och app avvisar okända källor, citat som inte finns i underlaget, ogiltiga tider och automatiska minnen. Det bevisar inte att modellens tolkning är korrekt; användaren granskar utkastet.
+Fråga är högst 2000 UTF-8-byte, sex context-utdrag, 200 byte etikett/4000 byte text per utdrag och sammanlagt 10000 byte kontext. Analys har 1–8 fragment, högst 4000 byte per fragment och sammanlagt 10000; v2-kontext högst 4000 byte och tolv tidigare beslut. Body är högst 20000 byte och har separat **5 s** deadline. Fråga begär högst 1000 output-tokens; övriga uppgifter 3000. Frågesvaret är högst 16000 byte text. Upstream-envelope är högst 65536 byte, även för fel.
 
-[Systeminstruktionerna](src/prompts.mjs) beskriver svensk vardagsanalys, negation/osäkerhet, undervisning, datum, ingen dold profil och åtskillnad mellan data och instruktioner. [Adaptrarna](src/provider.mjs) använder leverantörens strikta schemaformat utan verktyg. [Kompatibilitetskatalogen](PROVIDERS.md) anger modellbegränsningar. Egna kvalitetsprov krävs vid byte. En ändring av modell i `.env` kräver omstart.
+Hela operationen efter body begränsas till **40 s**, inklusive kvotreservation, fetch, bounded bodyläsning, parsing och domänvalidering. Deadline skiljs från klientavbrott. Sena D1-reservationer kan ha förbrukat kvot men får aldrig starta senare inferens eller osäker refund. Slots/listeners frigörs på alla utgångar. Node och Worker använder samma executionpolicy med separat faktisk Worker-runtimecoverage.
 
-Vardagsanalys gör normalt högst ett anrop per minut; lektionsdelar minst 60 sekunder emellan (konfigurerbart uppåt). iOS bakgrundskörning kan fördröja arbetet. Dagsgränsen 100 kan därför nås efter cirka 100 aktiva analysminuter och tidigare om frågor/lektioner också skickas. Appen stoppar AI-läget vid fel, utan automatisk återförsöksslinga. Ändra gränsen först efter att ha mätt verklig användning/kostnad. Räknarna är inte en beständig månadsbudget.
+Fyra genereringsrutter delar högst **100/UTC-dygn**, med medföljande konfiguration sex/minut och två samtidiga anrop per instans. Gränser kan sänkas; dagsgränsen kan inte höjas över 100. Lektionsintervallet är 60–3600 s, normalt minst 60 s även efter lång status-/modellväntan. Frågor, vardagsanalys och lektioner delar kvot; detta räcker inte för heldags minutanalys. Misstänkt timeout/avbrott får inte automatiskt skickas om eftersom kostnad/kvot kan ha uppstått.
 
-## Detaljerade lektionsanteckningar
+## Diagnostik, samtycke och lektioner
 
-`POST /v1/lesson-notes` har samma indatafält som analys, men endast `mode=lesson` och högst 3500 byte källtext. Svaret har `candidates` (endast läxor/planer), `sections` med `heading`, `body`, `sourceIDs`, `evidence`, samt `uncertainties`. Servern lägger till `metadata` med `provider`, `model`, `promptVersion` och `lessonIntervalSeconds`. Modellen får inte själv ange metadata.
+Fasta felkategorier skiljer gatewayauth, providercredentials/konto, modell/parametrar, refusal/truncation, providerkvot, lokal minut/dag/concurrency, budget-store, timeout och transport. Retry-After normaliseras från bounded sekunder eller HTTP-datum. Inga råa providerfel återges.
 
-Appen sparar färdiga delar och sammanställer ett kopierbart dokument lokalt utan ett extra sammanfattningsanrop. Avbrott kräver aktivering och manuell fortsättning från lektionen; redan sparade detaljerade delar skickas inte igen. Äldre korta huvudpunkter räknas inte som detaljerade anteckningar. Högst 100 delar köas per godkänd omgång; vid längre underlag fortsätter användaren med resterande delar. Ingen bakgrundsbearbetning utlovas när appen stängts.
+Svar kan ha säkra `X-Mio-Release/Provider/Model/Prompt-Version/Request-ID/Configuration-Revision` och valfri returned-model/upstream-request-ID/numerisk usage. Konfigurerad modell och faktiskt returnerad modell hålls isär. Text, credentials, fulla URL:er och råa felobjekt loggas inte; D1 innehåller bara räknare. `store:false` begärs i Responses-adaptrarna, men leverantörens övriga datavillkor gäller ändå.
 
-## Om du börjar utan konto eller server
+Enskild fråga har exakt preview/Ja och tillfälligt svar. Explicit lokal granskning/sparande som anteckning använder befintligt contentlager, stabilt ID och inga extra modellfrågor; ingen implicit svarshistorik. Löpande analys kräver aktivt samtycke, återställs vid ny process och tar endast nya vardagsutdrag samt godkända lektioner. All sändning använder minsta bounded kontext. Mikrofon och privat transkription är egna status-/styrflöden.
 
-1. Välj leverantör enligt [guiden](PROVIDERS.md) och konfigurera API-åtkomst där. Skapa en API-nyckel som bara används i serverns privata `.env`, aldrig i telefonen eller chatten.
-2. Välj en tillgänglig modell ur kompatibilitetskatalogen. Fyll i dess exakta modell-ID. Modellkvalitet, svarstid och verklig kostnad provas med syntetiska exempel innan löpande lyssning aktiveras.
-3. Du kan först köra servern på din dator med stegen ovan och kontrollera `/health` samt mocktesterna. iPhone kräver en betrodd HTTPS-adress som når servern; `localhost` på telefonen är telefonen själv. Vanlig lokal HTTP fungerar inte som appanslutning.
-4. För ständig åtkomst behövs en påslagen värd och HTTPS/domän. Ingen serverplats köps eller skapas av detta repo. När driftplatsen är vald används samma Node-process bakom Caddy enligt ovan.
-5. Kör AI01–AI06 samt A07–A14 och L01–L05 i [testplanen](../docs/TESTPLAN_HELHET.md). Börja med syntetiska meningar och låg dagsgräns. Kontrollera faktiska modellresultat i appen, inte bara att servern svarar 200.
+Detaljerade lektionsdelar sparas atomiskt med källcitat och modell/promptmetadata. Kopiering sammanställer dem lokalt utan extra AI. Äldre highlights räknas inte som färdiga detaljerade anteckningar. Avbrott/omstart behåller färdiga delar; fortsättning kräver manuellt val. Valfria lokala källrevisioner visar aktuell/äldre/okänd efter rättning, bevarar original/citat/egna anteckningar och ändrar inte serverpayloaden. Rättat material skickas aldrig automatiskt igen.
 
-En fungerande `/health` betyder inte att API-nyckel, modell eller betalning fungerar. Det första verkliga modellprovet kräver din konfigurerade server och kan kosta pengar. Installationsstegen lämnar AI avstängt tills du själv aktiverar det.
+## Nästa externa grind
 
-## Kostnadsfri molngateway
-
-[Cloudflare-guiden](cloudflare/README.md) beskriver Workers, inkluderad HTTPS-adress och en beständig D1-kvot som bara lagrar räknare. Dessa räknare ersätter processens dygnsgräns som enda kostnadsskydd i molnet. Ingen privat dator behöver vara på. API-användningen debiteras separat. Ingen tjänst har driftsatts förrän användarens konto och hemligheter konfigurerats.
-
-## Status och vardagskontext v2 — arbetskopia 2026-09-30
-
-`GET /v1/status` kräver samma gatewaytoken och eventuella Cloudflare Access-uppgifter som AI-rutterna.
-Det gör inget modellanrop och använder ingen process-/D1-kvot. Svaret har exakt:
-
-```json
-{
-  "protocolVersion": 2,
-  "release": "2026-09-30.1",
-  "configured": true,
-  "provider": "groq",
-  "model": "qwen/qwen3.8-27b",
-  "promptVersion": "2026-09-30.1",
-  "capabilities": ["analysis-context-v2", "ask-v1", "analysis-v1", "lesson-notes-v1"]
-}
-```
-
-`configured` kräver syntaktiskt giltiga inställningar och stöd i modellkatalogen; det bevisar inte
-nyckelns giltighet, kontoåtkomst, saldo eller modellkvalitet. Worker-status kan svara med `configured=false`
-även om modellkonfigurationen inte kan initieras. Okänd provider eller modell med otillåtna tecken
-återges som tom sträng; inga nycklar, endpointadresser eller råfel lämnas ut. Den vanliga Node-processen
-behåller sin startspärr för saknade/ogiltiga miljöinställningar.
-
-`POST /v2/analyze` använder ett separat strikt vardagskontrakt:
-
-- Exakt `mode: "everyday"`, `timeZone`, `fragments`, `contextFragments`, `priorDecisions`, `contextLimited`.
-- `fragments` är nya källor (minst en), `contextFragments` är tidigare godkända källor. Båda använder
-  v1-fragmentens `id`, `text`, `occurredAt`. ID:n är distinkta även mellan listorna. Totalt högst åtta
-  fragment/10 000 UTF-8-byte text, varav högst 4 000 byte kontext, och 20 000 byte HTTP-body.
-- Högst tolv distinkta `priorDecisions`, med exakt `id` (UUID), `kind` (`plan`/`task`/`note`),
-  `sourceIDs` (icke-tomma, distinkta och enbart från kontexten), `isOpen` (boolesk).
-- `contextLimited` är boolesk; modellen instrueras att markera saknat/ofullständigt underlag och
-  avstå från säkra detaljer. En textgräns är inte bevis för en färdig tanke.
-
-Svaret behåller `candidates`, tomma `highlights` och `uncertainties`, men varje kandidat kräver
-`replacesID` (UUID eller null) utöver v1-fälten. Varje kandidat ska använda minst en ny källa och
-ett exakt citat från en angiven källa inom unionen. En ersättning ska peka på ett öppet beslut av
-samma typ och dela minst en av dess kontextkällor. När en kandidat använder källor knutna till ett
-tidigare beslut måste det beslutet väljas uttryckligen. Stängda, flera möjliga eller felaktiga
-beslutskopplingar och flera ersättningar av samma beslut avvisas. En separat ny händelse med enbart
-nya källor får `replacesID: null`. Servern lagrar ingen samtalshistorik eller beslutslista.
-
-AI-rutternas svar och sanitiserade fel har `X-Mio-Release`, `X-Mio-Provider`, `X-Mio-Model`,
-`X-Mio-Prompt-Version` och ett servergenererat UUID i `X-Mio-Request-ID`; inkommande request-ID används
-inte. Release är `2026-09-30.1`. V2-prompten är `2026-09-30.1`; v1/fråga/lektion behåller
-`2026-09-28.1`. Tidig Worker-503 kan enbart ange release. Svarskropparna i v1 och lektionskontraktet
-är oförändrade. Alla fyra AI-rutter delar samma kvot. V2 kräver en kompatibel gateway;
-klienten ska visa versionsfel om kapabiliteten saknas, utan tyst nedgradering till v1.
-
-Kör Node-proven och `worker:test` ovan före publicering. De använder syntetiska källor och mockad
-modell; verklig tolkning av delade meningar/datumrättningar, tjänstetoken, latens och kostnad måste
-provas separat efter godkänd publicering och sändning. Denna beskrivning betyder inte att koden är publicerad.
+Efter lokala kontroller: jämför exakta kod-/bundle-/releasevärden och produktionsinställningar, få uttrycklig publiceringsbegäran, bevara Worker/D1/Secrets/Access och read-verifiera aktiv version samt autentiserad v2-status. Kontrollera negativa Access/gatewayauth och alternativa adresser. Först efter separat sändningsgodkännande körs [tre syntetiska modellprov](../docs/LEVERANTORSKONTRAKT.md#separat-godkänt-syntetiskt-modellprov). Därefter behövs matching Xcode/XCTest/IPA, installation och iPhone-acceptans. [Groq/Access-guiden](cloudflare/GROQ_ACCESS.md) beskriver den konkreta ordningen.

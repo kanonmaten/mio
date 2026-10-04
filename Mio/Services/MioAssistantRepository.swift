@@ -2,9 +2,19 @@ import Foundation
 
 enum MioAssistantRepositoryError: LocalizedError {
     case unsupportedSchemaVersion(Int)
+    case invalidRelationships
+    case suggestionChanged, approvalInProgress, invalidApproval
 
     var errorDescription: String? {
         switch self {
+        case .suggestionChanged:
+            "Förslaget ändrades. Dina ändringar finns kvar; granska det aktuella förslaget innan du godkänner igen."
+        case .approvalInProgress:
+            "Förslaget håller redan på att godkännas. Vänta tills åtgärden är klar."
+        case .invalidApproval:
+            "Godkännandet är inte längre aktuellt. Granska förslaget igen."
+        case .invalidRelationships:
+            "Assistentdata innehåller dubbla identifierare eller trasiga relationer och har inte ändrats."
         case let .unsupportedSchemaVersion(version):
             "Den lokala assistentfilen använder okänd schemaversion \(version) och har inte skrivits över."
         }
@@ -12,13 +22,16 @@ enum MioAssistantRepositoryError: LocalizedError {
 }
 
 /// Owns only proposals, lesson metadata and source identities, never raw audio.
-/// Each mutation loads the latest document inside this actor to preserve concurrent
-/// detections and to refuse replacement of an unknown schema.
+/// Mutations read this actor's cache after checking the external-file fingerprint,
+/// preserving concurrent work and refusing replacement of an unknown schema.
 actor MioAssistantRepository {
     private let fileManager: FileManager
     private let storageURL: URL
     private var deletedSessionIDs: Set<UUID> = []
     private var ignoreSessionsStartedThrough: Date?
+    private var cachedDocument: MioAssistantStoreDocument?
+    private var cachedFingerprint: MioFileStamp?
+    private var approvalClaims: [UUID: (claim: MioSuggestionApprovalClaim, wasClosed: Bool)] = [:]
 
     init(fileManager: FileManager = .default, storageURL: URL? = nil) {
         self.fileManager = fileManager
@@ -30,8 +43,15 @@ actor MioAssistantRepository {
     }
 
     func loadDocument() throws -> MioAssistantStoreDocument {
-        guard fileManager.fileExists(atPath: storageURL.path) else {
-            return MioAssistantStoreDocument()
+        let fingerprint = try fileFingerprint()
+        if let cachedDocument, fingerprint == cachedFingerprint { return cachedDocument }
+        // A replaced fixture must be validated even if the previous file was valid.
+        cachedDocument = nil
+        cachedFingerprint = nil
+        guard let fingerprint else {
+            let document = MioAssistantStoreDocument()
+            cachedDocument = document
+            return document
         }
         let data = try Data(contentsOf: storageURL)
         struct SchemaHeader: Decodable { let schemaVersion: Int }
@@ -39,7 +59,80 @@ actor MioAssistantRepository {
         guard header.schemaVersion == MioAssistantStoreDocument.currentSchemaVersion else {
             throw MioAssistantRepositoryError.unsupportedSchemaVersion(header.schemaVersion)
         }
-        return try Self.decoder.decode(MioAssistantStoreDocument.self, from: data)
+        let document = try Self.decoder.decode(MioAssistantStoreDocument.self, from: data)
+        try validate(document)
+        cachedDocument = document
+        cachedFingerprint = fingerprint
+        return document
+    }
+
+    func invalidateCache() { cachedDocument = nil; cachedFingerprint = nil }
+
+    func claimSuggestion(id: UUID, expectedRevision: Int) throws -> MioSuggestionApprovalClaim {
+        var document = try loadDocument()
+        guard let suggestion = document.suggestions.first(where: { $0.id == id }) else {
+            throw MioAssistantValidationError.missingSuggestion
+        }
+        guard suggestion.reviewRevision == expectedRevision else { throw MioAssistantRepositoryError.suggestionChanged }
+        guard approvalClaims[id] == nil else { throw MioAssistantRepositoryError.approvalInProgress }
+        let claim = MioSuggestionApprovalClaim(suggestionID: id, revision: expectedRevision)
+        var wasClosed = true
+        if let index = document.analysisDecisions?.firstIndex(where: { $0.id == id }) {
+            wasClosed = document.analysisDecisions![index].isClosed
+            document.analysisDecisions?[index].isClosed = true
+        }
+        // Close before content storage. An analysis already in flight then cannot replace it.
+        try write(document)
+        approvalClaims[id] = (claim, wasClosed)
+        return claim
+    }
+
+    func releaseApproval(_ claim: MioSuggestionApprovalClaim) throws {
+        let reservation = try requireApproval(claim)
+        var document = try loadDocument()
+        guard document.suggestions.contains(where: { $0.id == claim.suggestionID && $0.reviewRevision == claim.revision }) else {
+            throw MioAssistantRepositoryError.suggestionChanged
+        }
+        if let index = document.analysisDecisions?.firstIndex(where: { $0.id == claim.suggestionID }) {
+            document.analysisDecisions?[index].isClosed = reservation.wasClosed
+        }
+        try write(document)
+        approvalClaims[claim.suggestionID] = nil
+    }
+
+    func completeApproval(_ claim: MioSuggestionApprovalClaim) throws {
+        _ = try requireApproval(claim)
+        var document = try loadDocument()
+        guard document.suggestions.contains(where: { $0.id == claim.suggestionID && $0.reviewRevision == claim.revision }) else {
+            throw MioAssistantRepositoryError.suggestionChanged
+        }
+        document.suggestions.removeAll { $0.id == claim.suggestionID }
+        if let index = document.analysisDecisions?.firstIndex(where: { $0.id == claim.suggestionID }) {
+            document.analysisDecisions?[index].isClosed = true
+        }
+        try write(document)
+        approvalClaims[claim.suggestionID] = nil
+    }
+
+    /// Trusted workflow reconciliation only after the content actor confirms this ID
+    /// already exists. It clears a partial acceptance without rewriting the content.
+    func reconcileAcceptedContent(id: UUID) throws {
+        var document = try loadDocument()
+        if document.suggestions.contains(where: { $0.id == id }) {
+            document.suggestions.removeAll { $0.id == id }
+            if let index = document.analysisDecisions?.firstIndex(where: { $0.id == id }) {
+                document.analysisDecisions?[index].isClosed = true
+            }
+            try write(document)
+        }
+        approvalClaims[id] = nil
+    }
+
+    private func requireApproval(_ claim: MioSuggestionApprovalClaim) throws -> (claim: MioSuggestionApprovalClaim, wasClosed: Bool) {
+        guard let reservation = approvalClaims[claim.suggestionID], reservation.claim == claim else {
+            throw MioAssistantRepositoryError.invalidApproval
+        }
+        return reservation
     }
 
     func addSuggestion(_ suggestion: MioSuggestion) throws {
@@ -80,8 +173,14 @@ actor MioAssistantRepository {
         guard !isDeleted(session) else { throw MioAssistantValidationError.deletedSession }
         _ = try request.validatedData()
         try result.validate(against: request)
-        let actualFragments = Dictionary(uniqueKeysWithValues: session.transcripts.flatMap(MioAnalysisFragment.make).map { ($0.id, $0) })
-        guard request.allFragments.allSatisfy({ actualFragments[$0.id] == $0 }) else { throw MioCloudError.invalidContext }
+        let fragments = session.transcripts.flatMap(MioAnalysisFragment.make)
+        guard Set(fragments.map(\.id)).count == fragments.count else { throw MioCloudError.invalidContext }
+        let actualFragments = Dictionary(uniqueKeysWithValues: fragments.map { ($0.id, $0) })
+        guard request.allFragments.allSatisfy({ submitted in
+            guard let actual = actualFragments[submitted.id] else { return false }
+            return actual.id == submitted.id && actual.text == submitted.text && actual.occurredAt == submitted.occurredAt
+                && (submitted.sourceRevision == nil || submitted.sourceRevision == actual.sourceRevision)
+        }) else { throw MioCloudError.invalidContext }
         var document = try loadDocument()
         let alreadyAnalyzed = Set((document.analyses ?? []).filter { $0.sessionID == session.id && (result.sections == nil || $0.sections != nil) }.flatMap(\.fragmentIDs))
         guard alreadyAnalyzed.isDisjoint(with: request.fragments.map(\.id)) else { return 0 }
@@ -107,6 +206,9 @@ actor MioAssistantRepository {
                 document.suggestions[suggestionIndex].scheduledAt = date ?? document.suggestions[suggestionIndex].scheduledAt
                 document.suggestions[suggestionIndex].needsDateConfirmation = date == nil
                 document.suggestions[suggestionIndex].evidence = candidate.evidence
+                let nextRevision = document.suggestions[suggestionIndex].reviewRevision.addingReportingOverflow(1)
+                guard !nextRevision.overflow else { throw MioAssistantRepositoryError.invalidRelationships }
+                document.suggestions[suggestionIndex].revision = nextRevision.partialValue
                 decisions[decisionIndex].sourceIDs = Array(Set(decisions[decisionIndex].sourceIDs + candidate.sourceIDs)).sorted()
                 document.processedSources.insert(source)
                 count += 1
@@ -137,7 +239,8 @@ actor MioAssistantRepository {
         var records = document.analyses ?? []
         records.append(MioAnalysisRecord(id: UUID(), sessionID: session.id, fragmentIDs: request.fragments.map(\.id),
                                          highlights: result.highlights, uncertainties: result.uncertainties, createdAt: .now,
-                                         sections: result.sections, metadata: result.metadata))
+                                         sections: result.sections, metadata: result.metadata,
+                                         sourceRevisions: request.sourceRevisions))
         document.analyses = records
         document.analysisDecisions = decisions
         try write(document)
@@ -145,6 +248,7 @@ actor MioAssistantRepository {
     }
 
     func deferSuggestion(id: UUID, now: Date = .now) throws {
+        guard approvalClaims[id] == nil else { throw MioAssistantRepositoryError.approvalInProgress }
         var document = try loadDocument()
         guard let index = document.suggestions.firstIndex(where: { $0.id == id }) else {
             throw MioAssistantValidationError.missingSuggestion
@@ -155,6 +259,7 @@ actor MioAssistantRepository {
     }
 
     func removeSuggestion(id: UUID) throws {
+        guard approvalClaims[id] == nil else { throw MioAssistantRepositoryError.approvalInProgress }
         var document = try loadDocument()
         guard document.suggestions.contains(where: { $0.id == id }) else { return }
         document.suggestions.removeAll { $0.id == id }
@@ -185,7 +290,12 @@ actor MioAssistantRepository {
     }
 
     func deleteSessionData(sessionID: UUID) throws {
+        // Intent invalidates callbacks even if the protected write commits and
+        // subsequently reports a privacy-attribute failure. Retry is idempotent.
+        deletedSessionIDs.insert(sessionID)
         var document = try loadDocument()
+        let deletedSuggestionIDs = Set(document.suggestions.filter { $0.sessionID == sessionID }.map(\.id))
+        approvalClaims = approvalClaims.filter { !deletedSuggestionIDs.contains($0.key) }
         let before = document
         document.suggestions.removeAll { $0.sessionID == sessionID }
         document.lessons.removeAll { $0.sessionID == sessionID }
@@ -197,16 +307,17 @@ actor MioAssistantRepository {
             || document.analysisDecisions != before.analysisDecisions {
             try write(document)
         }
-        deletedSessionIDs.insert(sessionID)
     }
 
     func deleteAll(now: Date = .now) throws {
+        // Queued callbacks can hold sessions that have never produced a proposal,
+        // so invalidate them at intent, before any destruction or throwing I/O.
+        ignoreSessionsStartedThrough = max(ignoreSessionsStartedThrough ?? now, now)
+        approvalClaims = [:]
+        invalidateCache()
         if fileManager.fileExists(atPath: storageURL.path) {
             try fileManager.removeItem(at: storageURL)
         }
-        // Queued callbacks can hold sessions that have never produced a proposal,
-        // so their UUIDs cannot be recovered from the deleted assistant document.
-        ignoreSessionsStartedThrough = max(ignoreSessionsStartedThrough ?? now, now)
     }
 
     private func isDeleted(_ session: MioSession) -> Bool {
@@ -214,21 +325,38 @@ actor MioAssistantRepository {
             || ignoreSessionsStartedThrough.map { session.startedAt <= $0 } == true
     }
 
+    private func validate(_ document: MioAssistantStoreDocument) throws {
+        let analyses = document.analyses ?? []
+        let decisions = document.analysisDecisions ?? []
+        guard Set(document.suggestions.map(\.id)).count == document.suggestions.count,
+              Set(document.lessons.map(\.id)).count == document.lessons.count,
+              Set(analyses.map(\.id)).count == analyses.count,
+              Set(decisions.map(\.id)).count == decisions.count,
+              document.suggestions.allSatisfy({ $0.sourceSegmentID == nil || $0.sessionID != nil }),
+              document.suggestions.allSatisfy({ ($0.revision ?? 0) >= 0 }),
+              analyses.allSatisfy({ Set($0.fragmentIDs).count == $0.fragmentIDs.count && $0.sourceRevisionsAreValid }),
+              decisions.allSatisfy({ decision in
+                  Set(decision.sourceIDs).count == decision.sourceIDs.count && (decision.isClosed ||
+                      document.suggestions.contains { $0.id == decision.id && $0.sessionID == decision.sessionID && $0.kind == decision.kind })
+              }),
+              document.lessons.allSatisfy({ $0.startedAt.timeIntervalSince1970.isFinite
+                  // Legacy ISO-8601 persistence rounds subsecond intervals to one
+                  // instant. Input validation still requires a positive interval.
+                  && $0.endedAt.timeIntervalSince1970.isFinite && $0.startedAt <= $0.endedAt
+                  && MioSourceRevision.areValid($0.sourceRevisions) })
+        else { throw MioAssistantRepositoryError.invalidRelationships }
+    }
+
     private func write(_ document: MioAssistantStoreDocument) throws {
-        let directory = storageURL.deletingLastPathComponent()
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        #if os(iOS) || os(macOS)
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        var mutableDirectory = directory
-        try mutableDirectory.setResourceValues(values)
-        #endif
+        try validate(document)
         let data = try Self.encoder.encode(document)
-        #if os(iOS)
-        try data.write(to: storageURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        #else
-        try data.write(to: storageURL, options: .atomic)
-        #endif
+        try MioProtectedFileWriter.write(data, to: storageURL, fileManager: fileManager)
+        cachedDocument = document
+        cachedFingerprint = try fileFingerprint()
+    }
+
+    private func fileFingerprint() throws -> MioFileStamp? {
+        try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
     }
 
     private static let encoder: JSONEncoder = {

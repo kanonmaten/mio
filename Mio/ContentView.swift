@@ -4,108 +4,139 @@ import UIKit
 struct ContentView: View {
     @Bindable var model: MioViewModel
     @State private var showSettings = false
-    @State private var endingEverydaySessionID: UUID?
     @Bindable var contentModel: MioContentViewModel
     @Environment(\.scenePhase) private var scenePhase
     @Environment(MioAssistantViewModel.self) private var assistant
     @State private var maintenance = MioMaintenanceState.shared
-    @Environment(MioAnalysisCoordinator.self) private var analysis
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @Environment(MioNavigationCoordinator.self) private var navigation
+    @Environment(MioDayContext.self) private var day
+    @State private var storesLoaded = false
     @AppStorage(MioCloudSettings.enabledKey) private var cloudEnabled = false
     @AppStorage(MioCloudSettings.serverKey) private var cloudServer = ""
 
     var body: some View {
-        TabView {
+        @Bindable var navigation = navigation
+        TabView(selection: $navigation.selectedTab) {
             MioTabView(model: model, contentModel: contentModel)
                 .tabItem { Label("Mio", systemImage: "waveform.and.mic") }
+                .tag(MioAppTab.capture)
 
             LessonLibraryView(model: model, content: contentModel)
                 .tabItem { Label("Lektioner", systemImage: "book") }
+                .tag(MioAppTab.lessons)
 
             CalendarTabView(contentModel: contentModel, sessionModel: model)
                 .tabItem { Label("Kalender", systemImage: "calendar") }
+                .tag(MioAppTab.calendar)
 
             NotesTabView(contentModel: contentModel, sessionModel: model)
                 .tabItem { Label("Anteckningar", systemImage: "note.text") }
+                .tag(MioAppTab.notes)
 
             MorningTabView(contentModel: contentModel, sessionModel: model)
                 .tabItem { Label("Morgon", systemImage: "sunrise") }
+                .tag(MioAppTab.daily)
         }
         .tint(.indigo)
+        .disabled(maintenance.blocksWork)
         .environment(\.openMioSettings, { showSettings = true })
-        .sheet(isPresented: $showSettings) {
+        .sheet(isPresented: $showSettings, onDismiss: resolveNotificationRoute) {
             NavigationStack { MioSettingsView(model: model, contentModel: contentModel) }
+                .disabled(maintenance.blocksWork)
+                .safeAreaInset(edge: .top) {
+                    if maintenance.recoveryBlocked { WorkflowRecoveryBanner(workflow: workflow) }
+                }
+                .overlay {
+                    if maintenance.isDeleting || maintenance.isSnapshotting {
+                        ProgressView(maintenance.isDeleting ? "Raderar lokal data…" : "Förbereder lokal export…")
+                            .padding(24)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                    }
+                }
+        }
+        .sheet(item: $navigation.presentedPost) { post in
+            MioNotificationPostView(postID: post.id, contentModel: contentModel, sessionModel: model)
+                .disabled(maintenance.blocksWork)
         }
         .onReceive(NotificationCenter.default.publisher(for: TranscriptionSettings.didChange)) { _ in
             Task { await model.transcriptionConfigurationChanged() }
         }
         .environment(maintenance)
-        .disabled(maintenance.isDeleting)
+        .safeAreaInset(edge: .top) {
+            if maintenance.recoveryBlocked {
+                WorkflowRecoveryBanner(workflow: workflow)
+            }
+        }
         .overlay {
-            if maintenance.isDeleting {
-                ProgressView("Raderar lokal data…")
+            if maintenance.isDeleting || maintenance.isSnapshotting {
+                ProgressView(maintenance.isDeleting ? "Raderar lokal data…" : "Förbereder lokal export…")
                     .padding(24)
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             }
         }
         .task {
-            await contentModel.bootstrap()
-            await assistant.bootstrap()
-            let assistantModel = assistant
-            let maintenanceState = maintenance
-            model.onFinalizedTranscript = { [weak assistantModel, weak maintenanceState] session in
-                guard maintenanceState?.isDeleting == false else { return }
-                // Capture completion can arrive while stop/pause is draining its RAM queue.
-                // Observe before asynchronous local detection so final text cannot miss the boundary.
-                if let assistantModel, !session.isLesson,
-                   model.currentSession?.id == session.id || endingEverydaySessionID == session.id,
-                   model.runState == .listening || model.runState == .stopping || endingEverydaySessionID == session.id {
-                    analysis.observe(session, assistant: assistantModel)
-                }
-                Task { @MainActor in
-                    guard maintenanceState?.isDeleting == false else { return }
-                    _ = await assistantModel?.detectSuggestions(in: session)
-                }
-            }
-            model.onLessonFinished = { [weak assistantModel, weak maintenanceState] session in
-                Task { @MainActor in
-                    guard let assistantModel, maintenanceState?.isDeleting == false, let endedAt = session.endedAt else { return }
-                    _ = await assistantModel.saveLesson(id: session.id, session: session, title: session.title ?? "Lektion",
-                                                        note: "", startedAt: session.startedAt, endedAt: endedAt)
-                    analysis.summarizeLesson(session, assistant: assistantModel)
-                }
-            }
-            await model.bootstrap()
+            await workflow.bootstrap()
+            storesLoaded = true
+            resolveNotificationRoute()
         }
         .onChange(of: scenePhase) { _, newPhase in
             model.handleScenePhase(newPhase)
+            if newPhase == .active { day.refresh(); resolveNotificationRoute() }
         }
-        .onChange(of: model.runState) { _, state in
-            if state == .stopping, let session = model.currentSession, !session.isLesson {
-                endingEverydaySessionID = session.id
-                analysis.beginEndingEveryday(sessionID: session.id)
-            } else if state == .off || state == .paused {
-                let finalSession = endingEverydaySessionID.flatMap { id in model.allSessions.first { $0.id == id } }
-                    ?? model.currentSession.flatMap { $0.isLesson ? nil : $0 }
-                if let finalSession { analysis.finishEveryday(finalSession, assistant: assistant) }
-                else { analysis.pauseEveryday(assistant: assistant) }
-                endingEverydaySessionID = nil
-            } else if state == .interrupted || state == .failed || state == .unavailable {
-                endingEverydaySessionID = nil
-                analysis.pauseEveryday(assistant: assistant)
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in day.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in day.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in day.refresh() }
+        .onChange(of: navigation.pendingRoute) { _, _ in resolveNotificationRoute() }
+        .onChange(of: maintenance.blocksWork) { _, blocked in if !blocked { resolveNotificationRoute() } }
+        .onChange(of: cloudEnabled) { _, enabled in if !enabled { workflow.cloudConfigurationChanged() } }
+        .onChange(of: cloudServer) { _, _ in workflow.cloudConfigurationChanged() }
+        .onReceive(NotificationCenter.default.publisher(for: MioCloudSettings.didResetNotification)) { _ in workflow.cloudConfigurationChanged() }
+        .onChange(of: assistant.stateRevision) { _, _ in workflow.invalidateExportIfSourcesChanged() }
+        .onChange(of: model.stateRevision) { _, _ in workflow.invalidateExportIfSourcesChanged() }
+        .onChange(of: contentModel.stateRevision) { _, _ in
+            workflow.invalidateExportIfSourcesChanged()
+            navigation.reconcile(using: notificationDestination)
+        }
+    }
+
+    private func notificationDestination(_ id: UUID) -> MioAppTab? {
+        guard let item = contentModel.item(id: id) else { return nil }
+        return item.kind == .plan ? .calendar : .notes
+    }
+
+    private func resolveNotificationRoute() {
+        guard storesLoaded, !maintenance.blocksWork, navigation.pendingRoute != nil else { return }
+        if showSettings { showSettings = false; return }
+        navigation.resolvePending(using: notificationDestination)
+    }
+}
+
+private struct WorkflowRecoveryBanner: View {
+    let workflow: MioWorkflowCoordinator
+    @State private var retrying = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Raderingen behöver slutföras", systemImage: "exclamationmark.triangle")
+                .font(.headline)
+            Text(workflow.deletion.message ?? "En tidigare radering är inte klar. Övriga ändringar väntar tills den är slutförd.")
+                .font(.subheadline)
+            Button("Försök slutföra raderingen igen") {
+                retrying = true
+                Task { _ = await workflow.resumeDeletion(); retrying = false }
             }
+            .buttonStyle(.bordered)
+            .disabled(retrying)
         }
-        .onChange(of: cloudEnabled) { _, enabled in if !enabled { analysis.disable() } }
-        .onChange(of: cloudServer) { _, _ in analysis.disable() }
-        .onReceive(NotificationCenter.default.publisher(for: MioCloudSettings.didResetNotification)) { _ in analysis.disable() }
-        .onChange(of: assistant.analyses) { _, _ in contentModel.exportURL = nil }
-        .onChange(of: assistant.suggestions) { _, _ in contentModel.exportURL = nil }
-        .onChange(of: assistant.lessons) { _, _ in contentModel.exportURL = nil }
-        .onChange(of: model.allSessions) { _, _ in contentModel.exportURL = nil }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(uiColor: .secondarySystemBackground))
+        .accessibilityElement(children: .contain)
     }
 }
 
 private struct MioTabView: View {
-    @Environment(MioAnalysisCoordinator.self) private var analysis
+    @Environment(MioWorkflowCoordinator.self) private var workflow
     @Bindable var model: MioViewModel
     @Bindable var contentModel: MioContentViewModel
     @State private var showDeleteConfirmation = false
@@ -118,8 +149,20 @@ private struct MioTabView: View {
                 LazyVStack(spacing: 16) {
                     StatusHeader(model: model)
                     TranscriptionStatusView(model: model)
+                    TextAIStateCard()
                     ControlsCard(model: model)
                     AssistantHubView(contentModel: contentModel, sessionModel: model)
+                    if !workflow.pendingLessonIDs.isEmpty {
+                        Card(title: "Lektionen behöver sparas färdigt", symbol: "exclamationmark.triangle") {
+                            if let message = workflow.lastOutcome?.message { Text(message).font(.subheadline) }
+                            Text("Underlaget finns kvar lokalt. Försök registrera lektionen igen.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                            Button("Försök spara lektionen igen") {
+                                Task { _ = await workflow.retryLessonFinalization() }
+                            }
+                            .disabled(workflow.queuedCommands > 0)
+                        }
+                    }
 
                     if let errorMessage = model.errorMessage {
                         ErrorCard(message: errorMessage, openSettings: model.openAppSettings)
@@ -172,6 +215,7 @@ private struct StatusHeader: View {
                     .font(.system(size: 38, weight: .semibold))
                     .foregroundStyle(statusColor)
                     .symbolEffect(.pulse, isActive: model.runState == .listening && !reduceMotion)
+                    .accessibilityHidden(true)
             }
 
             Text(model.runState == .off ? "Plats för din dag" : model.runState.title)
@@ -181,16 +225,19 @@ private struct StatusHeader: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            Label("Mikrofon · \(microphoneState)", systemImage: model.runState == .listening ? "mic.fill" : "mic.slash")
+                .font(.subheadline.weight(.medium))
+                .accessibilityIdentifier("mio.microphone-state")
 
             if model.runState == .paused, let remaining = model.pauseRemainingText {
-                Label("Planerad fortsättning om \(remaining)", systemImage: "timer")
+                Label("Pausen når sin valda tid om \(remaining). Fortsätt manuellt.", systemImage: "timer")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.orange)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 
     private var statusColor: Color {
@@ -199,6 +246,18 @@ private struct StatusHeader: View {
         case .paused, .preparing, .stopping, .interrupted: .orange
         case .failed, .unavailable: .red
         case .off: .secondary
+        }
+    }
+
+    private var microphoneState: String {
+        switch model.runState {
+        case .listening: "Aktiv"
+        case .paused: "Pausad, fortsätt manuellt"
+        case .preparing: "Startar"
+        case .stopping: "Stoppar"
+        case .interrupted, .failed: "Stoppad, fortsätt manuellt"
+        case .unavailable: "Inte tillgänglig"
+        case .off: "Avstängd"
         }
     }
 
@@ -213,6 +272,36 @@ private struct StatusHeader: View {
         case .unavailable: "iphone.slash"
         case .off: "mic.slash.fill"
         }
+    }
+}
+
+private struct TextAIStateCard: View {
+    @Environment(MioAnalysisCoordinator.self) private var analysis
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @AppStorage(MioCloudSettings.enabledKey) private var cloudEnabled = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Text-AI · \(state)", systemImage: "text.bubble")
+                .font(.subheadline.weight(.medium))
+            Text(analysis.errorMessage ?? analysis.status)
+                .font(.caption).foregroundStyle(.secondary)
+            Text("Mikrofon och transkription har egna tillstånd. Frågor skickas efter din granskning.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("mio.text-ai-state")
+    }
+
+    private var state: String {
+        if !cloudEnabled { return "Avstängd" }
+        if workflow.questions.isSending { return "Fråga skickad" }
+        if analysis.isWorking { return "Analyserar godkända utdrag" }
+        if analysis.enabled { return "Löpande analys aktiverad" }
+        return "Enskilda godkända frågor"
     }
 }
 
@@ -545,7 +634,8 @@ struct DataCard: View {
     let model: MioViewModel
     let contentModel: MioContentViewModel
     @Binding var showDeleteConfirmation: Bool
-    @Environment(MioAssistantViewModel.self) private var assistant
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @State private var outcome: MioOperationOutcome?
 
     var body: some View {
         Card(title: "Export och radering", symbol: "externaldrive") {
@@ -564,7 +654,7 @@ struct DataCard: View {
                     .disabled(contentModel.isPreparingExport)
                 }
                 Button {
-                    Task { await contentModel.prepareExport(sessions: model.allSessions, assistant: assistant.exportDocument) }
+                    Task { outcome = await workflow.prepareExport() }
                 } label: {
                     if contentModel.isPreparingExport {
                         ProgressView()
@@ -576,6 +666,10 @@ struct DataCard: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(!canManageData || contentModel.isPreparingExport)
+
+                if let message = outcome?.message {
+                    Text(message).font(.footnote).foregroundStyle(.red)
+                }
 
                 Button("Radera all lokal data", role: .destructive) {
                     showDeleteConfirmation = true

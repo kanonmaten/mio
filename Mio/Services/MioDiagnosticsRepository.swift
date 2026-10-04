@@ -7,6 +7,7 @@ actor MioDiagnosticsRepository {
     private let fileManager: FileManager
     private var events: [MioDiagnosticEvent] = []
     private var loaded = false
+    private var cachedStamp: MioFileStamp?
     private var storageStatus: MioDiagnosticsStorageStatus = .available
     private var generation = UUID()
     private var deletionCutoff = Date.distantPast
@@ -34,22 +35,17 @@ actor MioDiagnosticsRepository {
     private func persist() {
         guard storageStatus != .unsupportedSchema, storageStatus != .readFailed else { return }
         do {
-            let directory = storageURL.deletingLastPathComponent()
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            #if os(iOS)
-            var values = URLResourceValues(); values.isExcludedFromBackup = true
-            var directoryURL = directory
-            try directoryURL.setResourceValues(values)
-            #endif
             let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(MioDiagnosticsStoreDocument(events: events))
-            #if os(iOS)
-            try data.write(to: storageURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-            #else
-            try data.write(to: storageURL, options: .atomic)
-            #endif
+            try MioProtectedFileWriter.write(data, to: storageURL, fileManager: fileManager)
+            cachedStamp = try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
             storageStatus = .available
-        } catch { storageStatus = .writeFailed }
+        } catch {
+            // Atomic bytes may already be committed when a privacy attribute fails.
+            // Recognize our own file change without clearing the visible write failure.
+            cachedStamp = try? MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
+            storageStatus = .writeFailed
+        }
     }
 
     func snapshot(now: Date = .now) -> MioDiagnosticsSnapshot {
@@ -65,14 +61,16 @@ actor MioDiagnosticsRepository {
     func deleteAll() throws {
         invalidateForDeletion()
         if fileManager.fileExists(atPath: storageURL.path) { try fileManager.removeItem(at: storageURL) }
-        events = []; loaded = true; storageStatus = .available
+        events = []; loaded = true; cachedStamp = nil; storageStatus = .available
     }
 
     private func load() {
-        guard !loaded else { return }
-        loaded = true
-        guard fileManager.fileExists(atPath: storageURL.path) else { return }
         do {
+            let currentStamp = try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
+            if loaded, cachedStamp == currentStamp { return }
+            loaded = true; cachedStamp = currentStamp
+            events = []; storageStatus = .available
+            guard currentStamp != nil else { return }
             let attributes = try fileManager.attributesOfItem(atPath: storageURL.path)
             guard ((attributes[.size] as? NSNumber)?.intValue ?? 0) <= 1_048_576 else {
                 storageStatus = .readFailed; return

@@ -1,51 +1,52 @@
-# Byta AI-leverantör och modell
+# Byta text-AI-leverantör och modell
 
-Gäller den nya arbetskopian från 2026-09-28. **Gatewaykoden måste publiceras först.** Den redan publicerade äldre gatewayen kan inte byta till Groq genom enbart variabler. Det nya lektionsgränssnittet behöver också en ny appbuild. Därefter kräver vanliga modellbyten ingen ny IPA.
-
-## Börja här: Groq, åtkomsttoken och skydd
-
-Följ [steg-för-steg-guiden för Groq och Cloudflare Access](cloudflare/GROQ_ACCESS.md). Den visar engångspubliceringen, Qwen-konfigurationen, exakt vilken token som ska in i Mio, rotation och skydd mot obehöriga Worker-anrop.
-
-**Framtida byten utan Codex:** Workers & Pages → mio-private-gateway → Settings → Variables and Secrets. Ändra `MIO_AI_PROVIDER` och `MIO_AI_MODEL`, lägg till rätt Secret enligt tabellen nedan och tryck Deploy. Behåll appens domän, `MIO_GATEWAY_TOKEN` och Access-par. Detta fungerar när den nya gatewaykoden redan är publicerad och modellen finns i katalogen; okända modeller kräver kodgranskning.
-
-`MIO_AI_MODEL` har företräde framför äldre `MIO_OPENAI_MODEL`. Den äldre variabeln används endast för OpenAI när den nya saknas. Inför en senare Wrangler-kodpublicering måste även modell/provider i `wrangler.jsonc` motsvara ditt aktuella Dashboard-val. `keep_vars: true` bevarar extra Dashboard-variabler, men skyddar inte värden som också anges i filen mot att ersättas.
+Denna guide gäller arbetskopians serverprofiler och [granskade kontraktsmatris](../docs/LEVERANTORSKONTRAKT.md). **Publicera först kompatibel gatewaykod efter uttrycklig begäran.** Den äldre OpenAI-bundeln blir inte en Groq-gateway genom variabler. Modellbyte i en redan kompatibel katalog kräver därefter ingen klientmodellväljare eller ny IPA; konfigurationsändring kräver ny granskning/aktivering i appen.
 
 ## Presets och tillåtna modeller
 
-Tabellen visar den implementerade kompatibilitetskatalogen, inte godkända riktiga modellprov. Modellåtkomst och leverantörens aktuella utbud måste provas på ditt konto. Okända modeller stoppas lokalt med HTTP 422 före modelltrafik.
-
-| `MIO_AI_PROVIDER` | Hemlighet | Modeller i katalogen |
+| `MIO_AI_PROVIDER` | Leverantörshemlighet | Kataloggräns |
 |---|---|---|
-| `groq` | `GROQ_API_KEY` | `qwen/qwen3.8-27b` |
-| `openai` | `OPENAI_API_KEY` | `gpt-6-luna`, `gpt-6-sol`, `gpt-5.1`, `gpt-5.2`, `gpt-5.4`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`, `gpt-4o`, `gpt-4o-mini`; även datumversioner av dessa |
-| `vercel` | `VERCEL_AI_GATEWAY_API_KEY` | Samma OpenAI-modeller med prefix `openai/`; routning begränsas till OpenAI |
-| `openrouter` | `OPENROUTER_API_KEY` | Samma OpenAI-modeller med prefix `openai/`; kräver parameterstöd, endast OpenAI, utan leverantörsfallback |
-| `gemini` | `GEMINI_API_KEY` | `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
-| `anthropic` | `ANTHROPIC_API_KEY` | `claude-haiku-4-5`, `claude-sonnet-4-5`, `claude-opus-4-5`; även deras datumversioner |
-| `mistral` | `MISTRAL_API_KEY` | `mistral-small-latest`, `mistral-medium-latest`, `mistral-large-latest` |
-| `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-flash`, `deepseek-v4-pro` via Responses |
-| `custom` | `MIO_AI_API_KEY` | Eget modell-ID, med uttryckligt kompatibilitetskontrakt nedan |
+| `groq` | `GROQ_API_KEY` | Endast `qwen/qwen3.8-27b` |
+| `openai` | `OPENAI_API_KEY` | Exakt OpenAI-lista med uttryckliga aliases/snapshots i matrisen |
+| `vercel` | `VERCEL_AI_GATEWAY_API_KEY` | Granskade `openai/`-aliases; enbart OpenAI-routning |
+| `openrouter` | `OPENROUTER_API_KEY` | Granskade OpenAI 4.x-ID:n; ingen providerfallback |
+| `gemini` | `GEMINI_API_KEY` | Native `gemini-2.5-flash` och `gemini-2.5-flash-lite` |
+| `anthropic` | `ANTHROPIC_API_KEY` | Exakta Claude 4.5-aliases/snapshots i matrisen |
+| `mistral`, `deepseek` | `MISTRAL_API_KEY`, `DEEPSEEK_API_KEY` | Samtliga profiler spärrade tills obligatoriska kontrakt etablerats |
+| `custom` | `MIO_AI_API_KEY` | Exakt ID och explicit operatörskontrakt enligt nedan |
 
-Leverantörsstöd betyder inte att varje modell på plattformen är tillåten. Exempelvis nekas GPT-6 Astra, Groqs GPT-OSS och Gemini Pro/3 eftersom katalogen inte kan uppfylla kravet på helt avstängd reasoning. Katalogen kan utökas efter dokumentationsgranskning och modellprov. Ingen fallback till vanligt JSON-läge eller en annan modell finns.
+Modellåtkomst, nyckel, saldo och svensk kvalitet är inte verifierade genom denna tabell. Ingen godtycklig snapshot, nytt familjeprefix eller gatewayprefix är stödbevis. Obligatorisk policy är reasoning OFF, temperatur 0 och strikt schema; okända/incompatible profiler avvisas före kvot/modelltrafik. Det finns ingen tyst fallback.
 
-### Egen kompatibel endpoint
+## Globala värden och task-profiler
 
-Använd `MIO_AI_PROVIDER=custom`, `MIO_AI_MODEL=<exakt ID>`, `MIO_AI_BASE_URL=https://din-vard.example/v1` och hemligheten `MIO_AI_API_KEY`. Sätt dessutom `MIO_AI_COMPATIBILITY=chat-none-strict` **endast när du verifierat** att endpointen verkligen stöder Chat Completions, `reasoning_effort: none`, temperatur 0 och `response_format.json_schema.strict: true` för modellen. Detta är operatörens kompatibilitetsförsäkran, inte automatisk upptäckt av modellförmågor. En server som tyst ignorerar parametrar går inte att upptäcka säkert från ett enda korrekt svar.
+Globala `MIO_AI_PROVIDER` och `MIO_AI_MODEL` gäller när en task saknar override. `MIO_AI_MODEL` har företräde; `MIO_OPENAI_MODEL` läses endast som äldre konfigurationsnamn för OpenAI när det nya saknas. Det är aldrig request-time fallback.
 
-HTTPS krävs, utan URL-lösenord, nycklar i query, fragment eller egen port. Inga redirects följs. Endpointen kan ta emot din text och nyckel; välj bara en betrodd värd. Servern avvisar felaktiga svar och synliga reasoningfält/token, men kan inte granska leverantörens interna implementation.
+Valfri `MIO_AI_TASK_PROFILES` är JSON med enbart `ask`, `everyday`, `lesson`. Ett exempel på explicit skild routing:
 
-## Förbrukning och väntetider
+```json
+{"ask":{"provider":"openai","model":"gpt-4.1-mini"},"everyday":{"provider":"groq","model":"qwen/qwen3.8-27b"},"lesson":{"provider":"gemini","model":"gemini-2.5-flash-lite"}}
+```
 
-Alla anrop delar minut-/dygnskvoten. Cloudflare använder beständiga D1-räknare även efter omstart. Ett misslyckat modellförsök räknas också. `MIO_LESSON_INTERVAL_SECONDS` tillåter 60–3600 sekunder och skickas med lektionssvaret för nästa del; första intervallet i en ny app-process är minst 60 sekunder. Enskilda frågor omfattas av serverkvoten men inte appens lektionskö.
+Exemplet väljer tre konton och är ingen aktiveringsrekommendation. Varje provider behöver sin egen serverägda Secret; global leverantörsnyckel återanvänds inte för annan provider. Saknad override ärver global konfiguration. Ett ogiltigt task-objekt spärrar den tasken, medan ogiltig JSON/okända toppnycklar spärrar hela profiluppsättningen. Status anger en fast `configurationError`, utan credentialvärden. `adapterOptions` måste följa matrisens exakta whitelist; endpoint/compatibility-fält tillåts endast för custom-profiler.
 
-Lektionsanrop innehåller högst 3500 byte källtext och begär högst 3000 output-tokens; enskilda frågor högst 1000 output-tokens. Schema och systemprompt tar också tokens. Detta är inte en exakt tokenbudget eller garanti mot kvotfel. Groqs fria Qwen-kvot är vid dokumentationskontrollen 8000 tokens/minut och 200000/dygn. Andra anrop på kontot delar kvoten. Höj inte takten utan mätning. [Groqs kvoter](https://console.groq.com/docs/rate-limits).
+1. Stäng av AI-tolkning och avsluta/avbryt pågående arbete.
+2. Granska exakt modell och kontrakt i matrisen. Lägg nyckeln i vald providers Secret, aldrig telefon/Git/chatt.
+3. Uppdatera globala värden och eventuell task-JSON i Node-miljön eller Cloudflare Variables and Secrets. Node kräver processomstart; Worker läser requestens aktuella miljö.
+4. Inför Wrangler-publicering: jämför samtliga explicita `vars` i `wrangler.jsonc` med Dashboard. `keep_vars:true` bevarar extra värden men skyddar inte mot explicit motstridiga värden i filen.
+5. Efter godkänd ändring: använd modellfri **Testa text-AI-anslutning**, kontrollera skyddad `/v2/status`, release/task-revision/kvot. Modellstatus kan vara granskad utan fungerande providercredentials.
+6. En fråga måste förhandsgranskas igen; löpande analys återaktiveras manuellt. 409 skickar inte automatiskt om en POST.
+7. Verkligt modellprov kräver separat godkännande av [exakt syntetiskt material](../docs/LEVERANTORSKONTRAKT.md#separat-godkänt-syntetiskt-modellprov).
 
-Vid 429 visar Mio en väntetid från `Retry-After` (annars 60 sekunder), stoppar AI och kräver manuell fortsättning. Dagskvoten kan kräva längre väntan än den generella minutindikeringen. Färdiga lektionsdelar skickas inte igen. Inga automatiska omförsök, betalda reservmodeller eller månatliga kostnadslöften finns. Gratis hosting hos Vercel är inte samma sak som obegränsat gratis modell-API.
+Behåll domän, gatewaytoken, D1 och Access vid vanliga modellbyten. Credentialrotation är separat autentisering; konfigurationsrevisionen innehåller ingen secretfingerprint. Återgå endast till en kompatibel kod/konfigurationskombination. Den gamla OpenAI-koden med Groq-variabler är ingen fungerande rollback.
 
-## API-kontrakt och granskade källor
+## Egen endpoint
 
-Appen använder fortfarande `/v1/ask` och `/v1/analyze`. Nya detaljerade anteckningar använder `/v1/lesson-notes`, samma gatewayauth och kvotpott. Gatewayen använder Responses (OpenAI, Vercel, DeepSeek), Chat Completions (Groq, Gemini, OpenRouter, Mistral, custom) eller Messages (Anthropic). Alla svar valideras lokalt, även när leverantören redan erbjuder schemastyrd generering. Strikt schema garanterar struktur, inte fakta.
+Använd `custom`, eget exakt modell-ID, HTTPS `MIO_AI_BASE_URL` och `MIO_AI_API_KEY`. Sätt `MIO_AI_COMPATIBILITY=chat-none-strict` enbart efter granskning av verkligt Chat Completions-kontrakt med `reasoning_effort:none`, temperatur 0 och `response_format.json_schema.strict:true`. Ett custom task-override behöver motsvarande explicit `baseURL`/`compatibility` för sin modell. Inga godtyckliga headers, credentials i URL, redirects, query/fragment, egen port eller lokala/IP-värdar tillåts. Operatörsförsäkran är inte automatisk modellverifiering.
 
-Granskade format: [Groq reasoning](https://console.groq.com/docs/api-reference), [Groq strikt schema](https://console.groq.com/docs/structured-outputs), [OpenAI Luna](https://developers.openai.com/api/docs/models/gpt-6-luna), [Gemini-kompatibilitet](https://ai.google.dev/gemini-api/docs/openai), [Anthropic strukturerade svar](https://platform.claude.com/docs/en/build-with-claude/structured-outputs), [Mistral Chat](https://docs.mistral.ai/api/endpoint/chat), [DeepSeek Responses](https://api-docs.deepseek.com/api/create-response/), [DeepSeek thinking](https://api-docs.deepseek.com/guides/thinking_mode/), [Vercel Responses](https://vercel.com/docs/ai-gateway/sdks-and-apis/responses), [Vercel routing](https://vercel.com/docs/ai-gateway/models-and-providers/provider-options), [OpenRouter reasoning](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens).
+## Kvot och fel
 
-Varje vald leverantör och eventuell gateway har egna datavillkor och kontokrav. Mio skriver inga transkript till serverlogg/D1. `store: false` används på Responses-anrop; det är inte ett generellt löfte om att leverantören saknar annan lagring.
+Alla fyra genereringsrutter delar högst **100 anrop per UTC-dygn**, normalt sex/minut enligt medföljande driftkonfiguration och två samtidiga anrop per process/Worker-instans. Utan explicit minutinställning använder Groq en/minut. Cloudflare använder befintliga beständiga D1-räknare; Node använder processminne. Misslyckat eller osäkert försök kan ha förbrukat kvot. Ingen unsafe refund, automatisk text-AI-retry eller dagsgränshöjning finns.
+
+Lektionsdelar har högst 3500 byte källtext och 3000 output-tokens; frågor högst 1000 output-tokens. Normalt minst 60 sekunder mellan lektionsanrop (60–3600 kan konfigureras). Frågor och vardagsanalys delar samma pott, så 100/dag räcker inte för kontinuerlig heldagsanalys. Vid 429 visar appen lokal minut/dag/concurrency eller providerkvot, väntetid när känd och manuell återaktivering. Status kan visa okänd kvarvarande kvot; restarbete är aldrig reserverad kapacitet.
+
+Gatewayauth, providercredentials/konto, modell/parametrar, refusal/truncation, kvot, budgetlager, deadline och transport har fasta skilda felkategorier. Upstreamtext, keys, fulla URL:er och råa felobjekt exponeras inte. [Serverkontraktet](README.md) och [Cloudflare-guiden](cloudflare/GROQ_ACCESS.md) beskriver kontroll- och releaseförfarandet.

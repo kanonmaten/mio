@@ -8,6 +8,9 @@ struct AnalysisSettingsView: View {
     @Environment(\.openMioSettings) private var openSettings
     @State private var confirmEnable = false
     @State private var error: String?
+    @State private var activationTask: Task<Void, Never>?
+    @State private var activationID = UUID()
+    @State private var isActivating = false
 
     var body: some View {
         Form {
@@ -18,13 +21,15 @@ struct AnalysisSettingsView: View {
                     Button("Stäng av AI-tolkning", role: .destructive) { analysis.disable() }
                 } else {
                     Button("Aktivera AI-tolkning …") { confirmEnable = true }
+                        .disabled(isActivating)
                 }
+                if isActivating { ProgressView("Kontrollerar text-AI-anslutningen …") }
                 Text("Läget är av vid varje appstart. Under vardagslyssning skickas nya textutdrag med högst en minut tidigare godkänd text från samma obrutna lyssning. Anrop sker tidigast var minut; en oavslutad mening kan vänta upp till två minuter. Paus/stopp bearbetar kvarvarande godkänd text. Avstängning avbryter även pågående lektionsanalys.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Lektioner") {
-                Text("Starta en lektion med den separata knappen. Vardags-Mio pausas medan lektionsunderlaget fångas. När du avslutar kan aktiverad AI välja ut huvudpunkter, exempel och läxor. Långa lektioner bearbetas i flera delar; detta är anteckningar från delarna, inte en garanterat fullständig sammanfattning.")
-                Text("Text-AI får endast text; ljud går till din privata Pianissimo-server. Ingen ljudfil sparas. AI kan missförstå feltranskriberad text. Du kan se textunderlaget bakom varje huvudpunkt.")
+                Text("Starta en lektion med den separata knappen. Vardags-Mio pausas medan lektionsunderlaget fångas. När du avslutar kan aktiverad AI skapa detaljerade anteckningar med förklaringar och exempel samt föreslå läxor. Långa lektioner bearbetas i flera sparade delar; ofullständiga anteckningar märks och kan fortsättas manuellt.")
+                Text("Text-AI får endast text; ljud går till din privata Pianissimo-server. Ingen ljudfil sparas. AI kan missförstå feltranskriberad text. Du kan se textunderlaget bakom varje del.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Anslutning för text-AI") {
@@ -36,11 +41,30 @@ struct AnalysisSettingsView: View {
         .navigationTitle("AI-assistent")
         .confirmationDialog("Aktivera löpande AI-tolkning?", isPresented: $confirmEnable, titleVisibility: .visible) {
             Button("Ja, analysera text via min server") {
-                do { try analysis.enable(existingSessions: model.allSessions); error = nil }
-                catch { self.error = error.localizedDescription }
+                let id = UUID()
+                activationID = id
+                isActivating = true
+                activationTask?.cancel()
+                activationTask = Task { @MainActor in
+                    defer {
+                        if activationID == id { isActivating = false; activationTask = nil }
+                    }
+                    do {
+                        try await analysis.enable(existingSessions: model.allSessions)
+                        try Task.checkCancellation()
+                        if activationID == id { error = nil }
+                    } catch is CancellationError { }
+                    catch { if activationID == id { self.error = error.localizedDescription } }
+                }
             }
         } message: {
             Text("Nya textutdrag från vardagslyssning och text från lektioner du avslutar skickas till \(MioCloudSettings.serverAddress.isEmpty ? "din konfigurerade server" : MioCloudSettings.serverAddress) och vidare till dess AI-leverantör. Vardagsutdrag kan ta med högst en minut tidigare text efter denna aktivering, inom samma obrutna lyssning. Det sker utan godkännande för varje utdrag tills du stänger av läget. Använd läget bara när berörda personer samtycker. Kalender, uppgifter och minnen kräver fortfarande ditt godkännande.")
+        }
+        .onDisappear {
+            activationID = UUID()
+            activationTask?.cancel()
+            activationTask = nil
+            isActivating = false
         }
     }
 }
@@ -81,7 +105,7 @@ struct LessonLibraryView: View {
                 Section("Dina lektioner") {
                     let lessons = model.allSessions.filter(\.isLesson)
                     if lessons.isEmpty {
-                        Text("Starta en lektion för att samla huvudpunkter, exempel och läxor här.").foregroundStyle(.secondary)
+                        Text("Starta en lektion för att samla textunderlag, detaljerade anteckningar och föreslagna läxor här.").foregroundStyle(.secondary)
                     }
                     ForEach(lessons) { session in
                         NavigationLink {
@@ -117,6 +141,10 @@ struct LessonDetailView: View {
     @Environment(MioAnalysisCoordinator.self) private var analysis
     @State private var confirmAnalysis = false
     @State private var copied = false
+    @State private var continuationTask: Task<Void, Never>?
+    @State private var continuationID = UUID()
+    @State private var isPreparingContinuation = false
+    @State private var continuationError: String?
     private var session: MioSession? { model.session(id: sessionID) }
 
     var body: some View {
@@ -147,7 +175,12 @@ struct LessonDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                     Text(document.progress).font(.footnote).foregroundStyle(.secondary)
+                    Text("Återstår: \(document.remainingCount) textdelar och \(document.remainingRequestCount) förväntade AI-anrop. Förbrukningen är delad med frågor och vardagsanalys; inget anrop är reserverat.")
+                        .font(.footnote).foregroundStyle(.secondary)
                     if !document.orderedRecords.isEmpty {
+                        Label(document.freshness.message,
+                              systemImage: document.freshness == .current ? "checkmark.circle" : "exclamationmark.triangle")
+                            .font(.footnote).foregroundStyle(.secondary)
                         Button(copied ? "Anteckningen kopierad" : "Kopiera hela anteckningen", systemImage: "doc.on.doc") {
                             UIPasteboard.general.string = document.markdown
                             copied = true
@@ -155,6 +188,7 @@ struct LessonDetailView: View {
                         }
                     }
                     ForEach(document.orderedRecords) { record in
+                        Text(record.freshness(in: session).message).font(.footnote).foregroundStyle(.secondary)
                         ForEach(Array((record.sections ?? []).enumerated()), id: \.offset) { _, section in
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(section.heading).font(.headline)
@@ -192,10 +226,11 @@ struct LessonDetailView: View {
                 }
                 Section {
                     Text(analysis.status).font(.footnote).foregroundStyle(.secondary)
-                    if let error = analysis.errorMessage { Text(error).foregroundStyle(.red) }
+                    if let error = continuationError ?? analysis.errorMessage { Text(error).foregroundStyle(.red) }
+                    if isPreparingContinuation { ProgressView("Kontrollerar lektionsanslutningen …") }
                     if session.endedAt != nil {
                         Button("Skapa eller fortsätt detaljerade anteckningar …") { confirmAnalysis = true }
-                            .disabled(!analysis.enabled || analysis.isWorking || document.isComplete)
+                            .disabled(isPreparingContinuation || analysis.isWorking || document.isComplete)
                     }
                     NavigationLink("Granska föreslagna läxor och planer") { SuggestionInboxView(contentModel: content, sessionModel: model) }
                     NavigationLink("Originaltext, egen anteckning och radering") {
@@ -207,10 +242,45 @@ struct LessonDetailView: View {
         .navigationTitle(session?.title ?? "Lektion")
         .onChange(of: assistant.analyses) { _, _ in copied = false }
         .onChange(of: session?.title) { _, _ in copied = false }
+        .onChange(of: session?.transcripts) { _, _ in copied = false }
         .confirmationDialog("Skicka lektionsunderlaget till AI?", isPresented: $confirmAnalysis, titleVisibility: .visible) {
-            Button("Ja, analysera denna lektion") {
-                if let session { analysis.summarizeLesson(session, assistant: assistant) }
+            Button(analysis.enabled ? "Ja, analysera denna lektion" : "Ja, aktivera AI-tolkning och fortsätt lektionen") {
+                if let session { continueLesson(session) }
             }
-        } message: { Text("Återstående textdelar skickas till din AI-server för detaljerade anteckningar. Äldre korta huvudpunkter räknas inte som detaljerade anteckningar. Färdiga delar sparas. Håll appen öppen under bearbetningen; efter avbrott kan du fortsätta här. Råljud skickas inte.") }
+        } message: {
+            Text("Återstående textdelar skickas till din AI-server för detaljerade anteckningar. Äldre korta huvudpunkter räknas inte som detaljerade anteckningar. Färdiga delar och deras källcitat bevaras även efter rättningar; rättad text skickas inte automatiskt igen. Håll appen öppen under bearbetningen; efter avbrott kan du fortsätta här. Råljud skickas inte."
+                 + (analysis.enabled ? "" : " AI-tolkningen aktiveras också för nya vardagsutdrag och lektioner du senare avslutar, tills du stänger av läget. Vardagsutdrag kan ta med högst en minut tidigare text efter aktiveringen inom samma obrutna lyssning. Använd läget endast när berörda personer samtycker. Förslag kräver fortfarande ditt godkännande."))
+        }
+        .onDisappear {
+            continuationID = UUID()
+            continuationTask?.cancel()
+            continuationTask = nil
+            isPreparingContinuation = false
+        }
+    }
+
+    private func continueLesson(_ approvedSession: MioSession) {
+        if analysis.enabled {
+            continuationError = nil
+            analysis.summarizeLesson(approvedSession, assistant: assistant)
+            return
+        }
+        let id = UUID()
+        continuationID = id
+        continuationTask?.cancel()
+        isPreparingContinuation = true
+        continuationTask = Task { @MainActor in
+            defer {
+                if continuationID == id { continuationTask = nil; isPreparingContinuation = false }
+            }
+            do {
+                try await analysis.enable(existingSessions: model.allSessions, task: .lesson)
+                try Task.checkCancellation()
+                guard continuationID == id, model.session(id: approvedSession.id) != nil else { return }
+                continuationError = nil
+                analysis.summarizeLesson(approvedSession, assistant: assistant)
+            } catch is CancellationError { }
+            catch { if continuationID == id { continuationError = error.localizedDescription } }
+        }
     }
 }

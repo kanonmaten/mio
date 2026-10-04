@@ -4,16 +4,17 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=26.10.0 <27"
   },
   "scripts": {
     "start": "node src/server.mjs",
     "test": "node --test test/*.test.mjs",
     "worker:check": "wrangler deploy --dry-run --outdir dist",
-    "worker:test": "npm run worker:check && node scripts/test-worker.mjs"
+    "worker:test": "npm run worker:check && node scripts/test-worker.mjs && node scripts/test-worker-cancellation.mjs"
   },
   "devDependencies": {
-    "miniflare": "5.20260925.0-alpha",
-    "wrangler": "4.141.0"
+    "esbuild": "0.28.1",
+    "miniflare": "5.20261001.0-alpha",
+    "wrangler": "4.147.0"
   }
 }
