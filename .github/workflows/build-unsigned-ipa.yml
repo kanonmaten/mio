@@ -158,11 +158,33 @@ jobs:
           test -d "$RUNNER_TEMP/Mio-tests.xcresult" || { echo "Inget xcresult skapades."; exit 0; }
           xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Mio-tests.xcresult" --compact \
             > "$RUNNER_TEMP/Mio-test-summary.json" || exit 0
-          python3 - "$RUNNER_TEMP/Mio-test-summary.json" <<'PY'
-          import json, sys
+          python3 - "$RUNNER_TEMP/Mio-test-summary.json" "$RUNNER_TEMP/Mio-tests.xcresult" <<'PY'
+          import json, subprocess, sys
           summary = json.load(open(sys.argv[1]))
           for failure in summary.get("testFailures", []):
-              print(f"::error::{failure.get('testIdentifierString') or failure.get('testName')}: {failure.get('failureText')}")
+              test_id = failure.get('testIdentifierString') or failure.get('testName')
+              print(f"::error::{test_id}: {failure.get('failureText')}")
+              # The last recorded steps show where a hung or timed-out test was stuck.
+              try:
+                  raw = subprocess.run(["xcrun", "xcresulttool", "get", "test-results", "activities",
+                                        "--test-id", test_id, "--path", sys.argv[2], "--compact"],
+                                       capture_output=True, text=True, timeout=120, check=True).stdout
+                  titles = []
+                  def walk(node):
+                      if isinstance(node, dict):
+                          if isinstance(node.get("title"), str):
+                              titles.append(node["title"])
+                          for value in node.values():
+                              walk(value)
+                      elif isinstance(node, list):
+                          for value in node:
+                              walk(value)
+                  walk(json.loads(raw))
+                  print(f"::group::Sista steg i {test_id}")
+                  print("\n".join(titles[-25:]) or "(inga steg registrerade)")
+                  print("::endgroup::")
+              except Exception as error:
+                  print(f"Kunde inte läsa steg för {test_id}: {type(error).__name__}")
           PY
 
       - name: Skapa IPA-filen

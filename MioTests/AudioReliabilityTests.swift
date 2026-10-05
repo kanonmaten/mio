@@ -175,6 +175,7 @@ final class AudioReliabilityTests: XCTestCase {
         let pipeline = fixture.pipeline()
         _ = try await pipeline.start()
         let stop = Task { await pipeline.stop() }
+        await waitUntil { fixture.transport.requestCount == 1 }
         await settle()
         XCTAssertEqual(fixture.transport.requestCount, 1)
         fixture.time.advance(to: 61)
@@ -282,6 +283,9 @@ final class AudioReliabilityTests: XCTestCase {
         let pipeline = fixture.pipeline()
         _ = try await pipeline.start()
         let stop = Task { await pipeline.stop() }
+        // Conversion runs on real threads; the drain deadline only means something once
+        // the chunk is actually in flight, so wait for that instead of a yield count.
+        await waitUntil { fixture.transport.requestCount == 1 }
         await settle()
         fixture.time.advance(to: 74)
         await settle()
@@ -312,9 +316,14 @@ final class AudioReliabilityTests: XCTestCase {
 
 private func settle() async { for _ in 0..<200 { await Task.yield() } }
 private func waitUntil(_ condition: @escaping @Sendable () -> Bool) async {
-    for _ in 0..<10_000 {
+    // Bounded by wall time, not yields: on a loaded simulator, audio conversion on other
+    // threads can outlast any fixed number of cooperative yields.
+    let deadline = ContinuousClock.now + .seconds(10)
+    var spins = 0
+    while ContinuousClock.now < deadline {
         if condition() { return }
-        await Task.yield()
+        spins += 1
+        if spins % 100 == 0 { try? await Task.sleep(for: .milliseconds(1)) } else { await Task.yield() }
     }
     XCTFail("Expected deterministic pipeline event did not arrive")
 }
