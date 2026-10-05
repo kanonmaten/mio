@@ -130,9 +130,9 @@ private final class TranscriptionRedirectGuard: NSObject, URLSessionDataDelegate
             operation.finish(TranscriptionError.invalidResponse); completionHandler(.cancel); return
         }
         guard response.statusCode == 200 else {
-            let raw = response.value(forHTTPHeaderField: "Retry-After") ?? "5"
-            let delay = Double(raw) ?? 5
-            operation.finish(TranscriptionError.http(response.statusCode, retryAfter: delay.isFinite ? delay : 5))
+            // Numeric and HTTP-date forms share the gateway parser; retryDelay bounds the wait.
+            let delay = MioCloudService.retryAfterSeconds(response.value(forHTTPHeaderField: "Retry-After")) ?? 5
+            operation.finish(TranscriptionError.http(response.statusCode, retryAfter: Double(delay)))
             completionHandler(.cancel); return
         }
         guard response.mimeType == "application/json", response.expectedContentLength <= 262_144 else {

@@ -146,6 +146,38 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
     }
 
     @MainActor
+    func testEstimatedTimingCannotProvePostConsentCapture() async throws {
+        let assistant = assistant(self)
+        var clock = Date.now
+        let consent = clock
+        var sentTexts: [String] = []
+        let connection = syntheticCloudConnection()
+        let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { request, _ in
+                sentTexts += request.fragments.map(\.text)
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            }, wait: { clock.addTimeInterval($0) }, now: { clock })
+        defer { coordinator.disable() }
+        try await coordinator.enable(existingSessions: [])
+        // Queued pre-consent audio can carry a callback estimate just after consent.
+        var queued = TranscriptSegment(createdAt: consent.addingTimeInterval(10), audioStartedAt: consent.addingTimeInterval(10),
+                                       text: "Uppskattad tid nära samtycket.", containsMio: false, audioTimingIsValid: false)
+        queued.timingValidity = .estimated
+        var reliable = TranscriptSegment(createdAt: consent.addingTimeInterval(11), audioStartedAt: consent.addingTimeInterval(11),
+                                         text: "Värdtid efter samtycket.", containsMio: false)
+        reliable.timingValidity = .hostTime
+        var late = TranscriptSegment(createdAt: consent.addingTimeInterval(70), audioStartedAt: consent.addingTimeInterval(70),
+                                     text: "Uppskattad tid efter minnesgränsen.", containsMio: false, audioTimingIsValid: false)
+        late.timingValidity = .estimated
+        coordinator.observe(MioSession(transcripts: [queued, reliable, late]), assistant: assistant)
+        for _ in 0..<20_000 { if sentTexts.count >= 2 { break }; await Task.yield() }
+        for _ in 0..<200 { await Task.yield() }
+        XCTAssertEqual(Set(sentTexts), ["Värdtid efter samtycket.", "Uppskattad tid efter minnesgränsen."])
+        XCTAssertTrue(MioAnalysisCoordinator.captured(reliable, after: consent))
+        XCTAssertFalse(MioAnalysisCoordinator.captured(queued, after: consent))
+    }
+
+    @MainActor
     func testFinalDrainIncludesTextDeliveredWhileStoppingAndSkipsSoftDelay() async throws {
         let assistant = assistant(self)
         var clock = Date.now

@@ -152,13 +152,21 @@ final class MioAnalysisCoordinator {
         let boundary = continuityStarts[session.id] ?? consentStartedAt
         continuityStarts[session.id] = boundary
         let known = observed[session.id] ?? []
-        let fresh = session.transcripts.filter { !known.contains($0.id) && $0.audioStartedAt >= max(consentStartedAt, boundary) }
+        let fresh = session.transcripts.filter { !known.contains($0.id) && Self.captured($0, after: max(consentStartedAt, boundary)) }
         observed[session.id, default: []].formUnion(session.transcripts.map(\.id))
         eligible[session.id, default: []].formUnion(fresh.map(\.id))
         guard !fresh.isEmpty else { return }
         let processed = assistant.analyzedFragmentIDs(for: session.id)
         let fragments = fresh.flatMap(MioAnalysisFragment.make).filter { !processed.contains($0.id) }
         enqueueEveryday(session: session, fragments: fragments, boundary: boundary, assistant: assistant)
+    }
+
+    /// Estimated callback time cannot prove that audio was captured after consent or a
+    /// continuity boundary. Such audio qualifies only beyond the 60 s RAM bound, where it
+    /// cannot predate the boundary; legacy segments keep their stored validity flag.
+    nonisolated static func captured(_ segment: TranscriptSegment, after boundary: Date) -> Bool {
+        let reliable = segment.timingValidity?.isReliable ?? segment.audioTimingIsValid
+        return segment.audioStartedAt >= (reliable ? boundary : boundary.addingTimeInterval(60))
     }
 
     func summarizeLesson(_ session: MioSession, assistant: MioAssistantViewModel) {
@@ -174,7 +182,8 @@ final class MioAnalysisCoordinator {
     private func enqueueEveryday(session: MioSession, fragments: [MioAnalysisFragment], boundary: Date, assistant: MioAssistantViewModel) {
         let waiting = queue.filter { $0.session.id == session.id && $0.request.mode == .everyday }
         queue.removeAll { $0.session.id == session.id && $0.request.mode == .everyday }
-        let segments = Dictionary(uniqueKeysWithValues: session.transcripts.map { ($0.id, $0) })
+        // The live session is not repository-validated; keep the first copy instead of trapping.
+        let segments = Dictionary(session.transcripts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         struct Group {
             var fragments: [MioAnalysisFragment] = []
             var enqueuedAt: Date

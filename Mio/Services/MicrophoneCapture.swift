@@ -115,9 +115,16 @@ final class MicrophoneCapture: AudioCapturing, @unchecked Sendable {
         guard format.sampleRate > 0, format.channelCount > 0 else { throw MioError.invalidAudioStream }
         let epoch = UUID()
         input.installTap(onBus: 0, bufferSize: 4_096, format: format) { [weak self] source, time in
-            guard let self,
-                  let copy = AVAudioPCMBuffer(pcmFormat: source.format, frameCapacity: source.frameLength)
-            else { return }
+            guard let self else { return }
+            let callback = ProcessInfo.processInfo.systemUptime
+            // Claim the sequence before copying: a failed copy must surface downstream
+            // as a sequence gap instead of silently compressing the timeline.
+            let sequence = self.activityLock.withLock {
+                self.lastBuffer = callback
+                self.bufferSequence &+= 1
+                return self.bufferSequence
+            }
+            guard let copy = AVAudioPCMBuffer(pcmFormat: source.format, frameCapacity: source.frameLength) else { return }
             copy.frameLength = source.frameLength
             let sourceList = UnsafeMutableAudioBufferListPointer(source.mutableAudioBufferList)
             let targetList = UnsafeMutableAudioBufferListPointer(copy.mutableAudioBufferList)
@@ -125,12 +132,6 @@ final class MicrophoneCapture: AudioCapturing, @unchecked Sendable {
                 guard let from = sourceList[index].mData, let to = targetList[index].mData else { return }
                 memcpy(to, from, Int(sourceList[index].mDataByteSize))
                 targetList[index].mDataByteSize = sourceList[index].mDataByteSize
-            }
-            let callback = ProcessInfo.processInfo.systemUptime
-            let sequence = self.activityLock.withLock {
-                self.lastBuffer = callback
-                self.bufferSequence &+= 1
-                return self.bufferSequence
             }
             let stamp = AudioCaptureStamp(epoch: epoch, sequence: sequence,
                 hostUptime: time.isHostTimeValid ? AVAudioTime.seconds(forHostTime: time.hostTime) : nil,

@@ -422,24 +422,24 @@ enum MioCloudService {
         return MioGatewayErrorCode(rawValue: code)
     }
 
+    /// Numeric or IMF-fixdate Retry-After, bounded to 1 s ... 1 day. Nil when absent or invalid.
+    static func retryAfterSeconds(_ value: String?, now: Date = .now) -> Int? {
+        guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return nil }
+        if value.count <= 10, let numeric = Int(value) { return min(86_400, max(1, numeric)) }
+        guard value.utf8.count <= 64 else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
+        formatter.isLenient = false
+        guard let deadline = formatter.date(from: value) else { return nil }
+        return Int(min(86_400, max(1, ceil(deadline.timeIntervalSince(now)))))
+    }
+
     static func httpFailure(response: HTTPURLResponse, body: Data, now: Date = .now) -> (error: MioCloudError, code: MioGatewayErrorCode?, retryAfterSeconds: Int?) {
         let code = response.mimeType == "application/json" ? gatewayCode(from: body) : nil
         if response.statusCode == 429 {
-            let value = response.value(forHTTPHeaderField: "Retry-After") ?? ""
-            let seconds: Int
-            if value.count <= 10, let numeric = Int(value) {
-                seconds = numeric
-            } else if value.utf8.count <= 64 {
-                let formatter = DateFormatter()
-                formatter.locale = Locale(identifier: "en_US_POSIX")
-                formatter.timeZone = TimeZone(secondsFromGMT: 0)
-                formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
-                formatter.isLenient = false
-                if let deadline = formatter.date(from: value) {
-                    seconds = Int(min(86_400, max(1, ceil(deadline.timeIntervalSince(now)))))
-                } else { seconds = 60 }
-            } else { seconds = 60 }
-            let bounded = min(86_400, max(1, seconds))
+            let bounded = retryAfterSeconds(response.value(forHTTPHeaderField: "Retry-After"), now: now) ?? 60
             if let code, [.localMinuteLimit, .localDayLimit, .localConcurrencyLimit, .localRequestLimit, .providerQuota].contains(code) {
                 return (.gatewayRateLimited(code, bounded), code, bounded)
             }

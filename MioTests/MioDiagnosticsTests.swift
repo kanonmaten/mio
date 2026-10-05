@@ -180,6 +180,14 @@ final class MioDiagnosticsTests: XCTestCase {
         XCTAssertEqual(MioCloudService.httpFailure(response: response, body: Data(), now: Date(timeIntervalSince1970: 0)).retryAfterSeconds, 30)
     }
 
+    func testSharedRetryAfterParserCoversTranscriptionForms() {
+        let epoch = Date(timeIntervalSince1970: 0)
+        XCTAssertEqual(MioCloudService.retryAfterSeconds("5", now: epoch), 5)
+        XCTAssertEqual(MioCloudService.retryAfterSeconds("Thu, 01 Jan 1970 00:00:12 GMT", now: epoch), 12)
+        XCTAssertNil(MioCloudService.retryAfterSeconds(nil, now: epoch))
+        XCTAssertNil(MioCloudService.retryAfterSeconds("soon", now: epoch))
+    }
+
     func testDiscoveryAcceptsBoundedFutureProvidersAndCapabilitiesButRequiresTaskSupport() throws {
         let object: [String: Any] = ["protocolVersion": 2, "release": "fixture-v3", "configured": true,
             "provider": "future_provider-2", "model": "reviewed:model", "promptVersion": "mio-v3",

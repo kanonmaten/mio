@@ -47,6 +47,9 @@ actor LiveTranscriptionPipeline: MioCapturePipeline {
     private var capture: (any AudioCapturing)?
     private var captureTask: Task<Void, Never>?
     private var worker: Task<Void, Never>?
+    /// Ordered delivery of capture events. stop() awaits it so no gap or event can
+    /// reach the application after the pipeline has reported that it stopped.
+    private var deliveryTail: Task<Void, Never>?
     private var monitorTask: Task<Void, Never>?
     private var expiryTask: Task<Void, Never>?
     private var expiryGeneration = 0
@@ -178,6 +181,8 @@ actor LiveTranscriptionPipeline: MioCapturePipeline {
             }
         }
         draining = false; discardRequested = true
+        // A worker may already own a claimed result whose delivery is suspended.
+        let finishingWorker = worker
         // Release every application-owned PCM reference before diagnostic/UI suspension.
         var gaps = releaseAllAudio(reason: "Ljuddelen hann inte transkriberas före avslut.")
         if let start = interruptionStart {
@@ -185,7 +190,11 @@ actor LiveTranscriptionPipeline: MioCapturePipeline {
             interruptionStart = nil
         }
         stopped = true
-        for gap in gaps { await handlers.event(.captureGap(gap)) }
+        emit(gaps)
+        // Released audio cannot be resent; awaiting only finishes text/gap delivery so
+        // callers never finalize a session before its last result or gap arrives.
+        await finishingWorker?.value
+        await deliveryTail?.value
     }
 
     /// Contains no suspension while native buffers/converted PCM are in scope.
@@ -233,10 +242,18 @@ actor LiveTranscriptionPipeline: MioCapturePipeline {
                 gaps.append(CaptureGap(startedAt: interruption, endedAt: max(interruption, date), reason: "Mikrofonen var avbruten."))
                 interruptionStart = nil
             }
-            if convertedOrigin == nil {
-                convertedOrigin = timing.uptime; convertedSamples = 0
+            // Converted time is counted from the epoch origin. An estimated origin must
+            // never be relabelled as host/sample time: stronger timing starts a new,
+            // re-anchored epoch, and weaker timing downgrades the rest of this epoch.
+            if convertedOrigin != nil, !conversionValidity.isReliable, timing.validity.isReliable {
+                finishEpoch()
             }
-            conversionValidity = timing.validity; conversionEpoch = captured.stamp.epoch
+            if convertedOrigin == nil {
+                convertedOrigin = timing.uptime; convertedSamples = 0; conversionValidity = timing.validity
+            } else if !timing.validity.isReliable {
+                conversionValidity = .estimated
+            }
+            conversionEpoch = captured.stamp.epoch
             let pcm = try converter.transcriptionPCM(captured.buffer)
             appendConverted(pcm)
             lastAudioEnd = timing.uptime + Double(captured.stamp.frames) / captured.stamp.sampleRate
@@ -281,7 +298,7 @@ actor LiveTranscriptionPipeline: MioCapturePipeline {
             interruptionStart = clock.date(); finishEpoch(); timeline.reset(); startWorker()
             scheduleExpiry()
         }
-        Task { await handlers.event(event) }
+        deliver([event])
     }
 
     private func startMonitoring() {
@@ -310,7 +327,7 @@ actor LiveTranscriptionPipeline: MioCapturePipeline {
         }
         if interruptionStart == nil, let capture, capture.lastBufferUptime > 0,
            clock.uptime() - capture.lastBufferUptime > 5 {
-            Task { await handlers.event(.needsResume("Ljudet har stannat. Tryck Fortsätt för att återstarta samma session.")) }
+            deliver([.needsResume("Ljudet har stannat. Tryck Fortsätt för att återstarta samma session.")])
         }
     }
     private var earliestExpiry: TimeInterval? {
@@ -364,7 +381,14 @@ actor LiveTranscriptionPipeline: MioCapturePipeline {
     }
     private func emit(_ gaps: [CaptureGap]) {
         guard !gaps.isEmpty else { return }
-        Task { for gap in gaps { await handlers.event(.captureGap(gap)) } }
+        deliver(gaps.map { PipelineEvent.captureGap($0) })
+    }
+    private func deliver(_ events: [PipelineEvent]) {
+        let previous = deliveryTail
+        deliveryTail = Task { [handlers] in
+            await previous?.value
+            for event in events { await handlers.event(event) }
+        }
     }
     private func diagnose(_ diagnostic: STTDiagnostic) { Task { await handlers.diagnostic(diagnostic) } }
     private func emitFailure(_ error: Error) {

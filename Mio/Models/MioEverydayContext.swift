@@ -30,6 +30,8 @@ enum MioEverydayContext {
         let windowStart = max(continuityStartedAt, start.addingTimeInterval(-60))
         let gaps = (session.captureGaps ?? []).filter { $0.startedAt < start && $0.endedAt > windowStart }
         let floor = max(windowStart, gaps.map(\.endedAt).max() ?? windowStart)
+        // The live session is not repository-validated; duplicates must fail, not trap.
+        guard Set(session.transcripts.map(\.id)).count == session.transcripts.count else { throw MioCloudError.invalidContext }
         let segments = Dictionary(uniqueKeysWithValues: session.transcripts.map { ($0.id, $0) })
         let possible = all.prefix(first).filter { fragment in
             guard let id = fragment.segmentID, let segment = segments[id] else { return false }

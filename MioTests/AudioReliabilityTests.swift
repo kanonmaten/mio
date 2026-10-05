@@ -181,9 +181,88 @@ final class AudioReliabilityTests: XCTestCase {
         await settle()
         XCTAssertEqual(fixture.transport.cancelledCount, 1)
         XCTAssertEqual(fixture.results.count, 0)
+        // Audio was released while the gap callback is still blocked; stop() itself
+        // waits for ordered delivery, so release the callback before awaiting it.
+        fixture.gapGate.open()
         await stop.value
         XCTAssertEqual(fixture.events.gaps.count, 1)
+    }
+
+    func testStopDeliversGapEmittedDuringDrainBeforeReturning() async throws {
+        let fixture = AudioPipelineFixture(now: 59, capturedAt: 1, slowGaps: true)
+        let pipeline = fixture.pipeline()
+        _ = try await pipeline.start()
+        let stop = Task { await pipeline.stop(); fixture.order.append("stopped") }
+        await settle()
+        fixture.time.advance(to: 61)
+        await settle()
+        XCTAssertEqual(fixture.order.values, [], "stop() returned before the expiry gap was delivered")
         fixture.gapGate.open()
+        await stop.value
+        XCTAssertEqual(fixture.order.values, ["gap", "stopped"])
+    }
+
+    func testStopWaitsForClaimedFinalResultDelivery() async throws {
+        let fixture = AudioPipelineFixture(now: 30, capturedAt: 29, replies: true, slowResults: true)
+        let pipeline = fixture.pipeline()
+        _ = try await pipeline.start()
+        let stop = Task { await pipeline.stop(); fixture.order.append("stopped") }
+        await waitUntil { fixture.transport.requestCount == 1 }
+        await settle()
+        // Wake the drain loop after the reply was claimed; only delivery is outstanding.
+        fixture.time.advance(to: 30.2)
+        await settle()
+        XCTAssertEqual(fixture.order.values, [], "stop() returned while the final result was still being delivered")
+        fixture.resultGate.open()
+        await stop.value
+        XCTAssertEqual(fixture.order.values, ["result", "stopped"])
+        XCTAssertEqual(fixture.results.count, 1)
+    }
+
+    func testEstimatedEpochOriginIsNeverRelabelledAsHostTime() async throws {
+        let epoch = UUID()
+        let stamps = [
+            // No host or sample time: the tap is placed at its callback estimate (31 s).
+            AudioCaptureStamp(epoch: epoch, sequence: 1, hostUptime: nil, sampleTime: nil,
+                sampleRate: 16_000, frames: 16_000, callbackUptime: 32),
+            // A valid host/sample anchor 9 s later must start a re-anchored chunk.
+            AudioCaptureStamp(epoch: epoch, sequence: 2, hostUptime: 40, sampleTime: 16_000,
+                sampleRate: 16_000, frames: 16_000, callbackUptime: 41)
+        ]
+        let fixture = AudioPipelineFixture(now: 41, capturedAt: 31, stamps: stamps, replies: true)
+        let pipeline = fixture.pipeline()
+        _ = try await pipeline.start()
+        await waitUntil { fixture.results.count == 1 }
+        let stop = Task { await pipeline.stop() }
+        await waitUntil { fixture.results.count == 2 }
+        fixture.time.advance(to: 41.2)
+        await stop.value
+        let chunks = fixture.results.chunks
+        XCTAssertEqual(chunks.count, 2)
+        for chunk in chunks where chunk.timingValidity.isReliable {
+            XCTAssertEqual(chunk.startedAt, Date(timeIntervalSince1970: 1_040),
+                           "a reliable label must come with its own host-time origin")
+        }
+        XCTAssertEqual(chunks.map(\.timingValidity), [.estimated, .hostTime])
+    }
+
+    func testWeakerTimingDowngradesTheRestOfAnEpoch() async throws {
+        let epoch = UUID()
+        let stamps = [
+            AudioCaptureStamp(epoch: epoch, sequence: 1, hostUptime: 30, sampleTime: nil,
+                sampleRate: 16_000, frames: 16_000, callbackUptime: 31),
+            AudioCaptureStamp(epoch: epoch, sequence: 2, hostUptime: nil, sampleTime: nil,
+                sampleRate: 16_000, frames: 16_000, callbackUptime: 32)
+        ]
+        let fixture = AudioPipelineFixture(now: 32, capturedAt: 30, stamps: stamps, replies: true)
+        let pipeline = fixture.pipeline()
+        _ = try await pipeline.start()
+        await waitUntil { fixture.results.count == 1 }
+        let stop = Task { await pipeline.stop() }
+        await waitUntil { fixture.results.count == 2 }
+        fixture.time.advance(to: 32.2)
+        await stop.value
+        XCTAssertEqual(fixture.results.chunks.map(\.timingValidity), [.hostTime, .estimated])
     }
 
     func testUnchunkedAssemblerExpiresWhileCaptureIsStillActive() async throws {
@@ -312,9 +391,16 @@ private final class AudioTestEvents: @unchecked Sendable {
 }
 private final class AudioTestResults: @unchecked Sendable {
     private let lock = NSLock()
-    private var stored = 0
-    var count: Int { lock.withLock { stored } }
-    func receive() { lock.withLock { stored += 1 } }
+    private var stored: [AudioChunk] = []
+    var count: Int { lock.withLock { stored.count } }
+    var chunks: [AudioChunk] { lock.withLock { stored } }
+    func receive(_ chunk: AudioChunk) { lock.withLock { stored.append(chunk) } }
+}
+private final class AudioTestOrder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [String] = []
+    var values: [String] { lock.withLock { stored } }
+    func append(_ value: String) { lock.withLock { stored.append(value) } }
 }
 
 private final class AudioTestDiagnostics: @unchecked Sendable {
@@ -329,10 +415,13 @@ private final class AudioTestTransport: TranscriptionTransport, @unchecked Senda
     private let lock = NSLock()
     private let time: AudioTestTime
     private let retryOnce: Bool
+    private let replies: Bool
     private var ids: [UUID] = []
     private var deadlines: [Double] = []
     private var cancelled = 0
-    init(time: AudioTestTime, retryOnce: Bool) { self.time = time; self.retryOnce = retryOnce }
+    init(time: AudioTestTime, retryOnce: Bool, replies: Bool) {
+        self.time = time; self.retryOnce = retryOnce; self.replies = replies
+    }
     var requestCount: Int { lock.withLock { ids.count } }
     var cancelledCount: Int { lock.withLock { cancelled } }
     var identities: [UUID] { lock.withLock { ids } }
@@ -347,8 +436,14 @@ private final class AudioTestTransport: TranscriptionTransport, @unchecked Senda
             ids.append(chunk.id); deadlines.append(chunk.expiresAt)
             return retryOnce && ids.count == 1
         }
+        let replies = self.replies
         return Task {
             if retry { throw URLError(.networkConnectionLost) }
+            if replies {
+                return TranscriptionReply(apiVersion: 1, sessionID: chunk.sessionID, chunkID: chunk.id,
+                    sequence: chunk.sequence, startSample: chunk.startSample, words: [],
+                    metadata: .init(model: "synthetic", revision: "test", backend: "fixture"))
+            }
             do { try await time.sleep(1_000) }
             catch { lock.withLock { cancelled += 1 }; throw error }
             throw CancellationError()
@@ -387,23 +482,32 @@ private final class AudioPipelineFixture: @unchecked Sendable {
     let transport: AudioTestTransport
     let events = AudioTestEvents()
     let gapGate = AudioTestGate()
+    let resultGate = AudioTestGate()
     let slowGaps: Bool
+    let slowResults: Bool
     let results = AudioTestResults()
+    let order = AudioTestOrder()
     let diagnostics = AudioTestDiagnostics()
     let stamps: [AudioCaptureStamp]
     init(now: Double, capturedAt: Double, frames: Int = 16_000, retryOnce: Bool = false, slowGaps: Bool = false,
-         callbackAt: Double? = nil, stamps: [AudioCaptureStamp]? = nil) {
-        self.slowGaps = slowGaps
-        time = AudioTestTime(now); transport = AudioTestTransport(time: time, retryOnce: retryOnce)
+         callbackAt: Double? = nil, stamps: [AudioCaptureStamp]? = nil, replies: Bool = false, slowResults: Bool = false) {
+        self.slowGaps = slowGaps; self.slowResults = slowResults
+        time = AudioTestTime(now); transport = AudioTestTransport(time: time, retryOnce: retryOnce, replies: replies)
         self.stamps = stamps ?? [.init(epoch: UUID(), sequence: 1, hostUptime: capturedAt, sampleTime: 0,
                       sampleRate: 16_000, frames: frames, callbackUptime: callbackAt ?? now)]
     }
     func pipeline() -> LiveTranscriptionPipeline {
         LiveTranscriptionPipeline(sessionID: UUID(), handlers: .init(
-            result: { [results] _, _, _ in results.receive() }, status: { _ in },
-            event: { [events, gapGate, slowGaps] event in
+            result: { [results, resultGate, slowResults, order] chunk, _, _ in
+                if slowResults { await resultGate.wait() }
+                results.receive(chunk); order.append("result")
+            }, status: { _ in },
+            event: { [events, gapGate, slowGaps, order] event in
                 events.receive(event)
-                if slowGaps, case .captureGap = event { await gapGate.wait() }
+                if case .captureGap = event {
+                    if slowGaps { await gapGate.wait() }
+                    order.append("gap")
+                }
             }, failure: { _ in }, diagnostic: { [diagnostics] value in diagnostics.receive(value) }),
             transport: transport, clock: time.clock,
             captureFactory: { [stamps] continuation, _ in AudioTestCapture(continuation, stamps: stamps) })
