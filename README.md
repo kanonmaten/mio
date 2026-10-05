@@ -30,15 +30,15 @@ Utan AI används en enkel lokal kommandogrammatik. Med aktiverad AI kan även va
 
 ## Utveckling
 
-Öppna `Mio.xcodeproj`, välj schemat **Mio**. Appkod finns i `Mio/`, XCTest i `MioTests/`, tre native UI-smokeprov i `MioUITests/`, ljudservern i `transcription-server/` och text-AI-gatewayen i `server/`. Den gemensamma säkra Linuxgrinden körs med en uttrycklig sökväg, exempelvis i den isolerade arbetskopian för denna ändring:
+Öppna `Mio.xcodeproj`, välj schemat **Mio**. Appkod finns i `Mio/`, XCTest i `MioTests/`, tre native UI-smokeprov i `MioUITests/`, ljudservern i `transcription-server/` och text-AI-gatewayen i `server/`. Den gemensamma säkra Linuxgrinden körs från repots rot:
 
 ```sh
-python3 /home/kanonmaten/.codex/worktrees/mio-plan-reliability/Mio/scripts/verify.py
+python3 scripts/verify.py
 ```
 
-Efter integration används motsvarande fil under `/home/kanonmaten/Documents/ChatGPT/Mio`. [Verifieringsguiden](docs/VERIFIERING.md) beskriver beroenden, låst Python, loggar, Node-stöd, separat concurrencydiagnostik och begränsningarna när Swift hoppas över. Linux ersätter inte native mikrofon/konvertering, Keychain, URLSession, SwiftUI eller Xcode. Xcode/SDK-/IPA-grinden finns i `.github/workflows/build-unsigned-ipa.yml`; varje körning behöver faktisk runner- och revisionskontroll.
+Samma grind körs automatiskt i GitHub-workflowen **Verifiera Mio på Linux** vid varje push. [Verifieringsguiden](docs/VERIFIERING.md) beskriver beroenden, låst Python, loggar, Node-stöd, separat concurrencydiagnostik och begränsningarna när Swift hoppas över. Linux ersätter inte native mikrofon/konvertering, Keychain, URLSession, SwiftUI eller Xcode. Xcode/SDK-/IPA-grinden finns i `.github/workflows/build-unsigned-ipa.yml`; varje körning behöver faktisk runner- och revisionskontroll.
 
-Läs [AGENTS](AGENTS.md), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMAP.md), [beslut](docs/DECISIONS.md), [datamodell](docs/DATAMODELL.md) och [ändringslogg](CHANGELOG.md). Commit, push och publicering kräver uttrycklig begäran.
+Läs [CLAUDE.md](CLAUDE.md) (instruktioner för Claude Code), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMAP.md), [beslut](docs/DECISIONS.md), [datamodell](docs/DATAMODELL.md) och [ändringslogg](CHANGELOG.md). Commit, push och publicering kräver uttrycklig begäran.
 
 ## Integritet och kompatibilitet
 

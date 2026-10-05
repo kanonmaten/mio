@@ -1,5 +1,14 @@
 # Bygg- och teststatus
 
+## Granskning och rättningar, 2026-10-05
+
+Grenen `codex/mio-plan-reliability` granskades mot `PLAN.md` med Claude Code och rättades i separata commits (se [ändringsloggen](../CHANGELOG.md)). **Fortfarande ej släppt, inte iOS-byggd och inte telefonverifierad.**
+
+- Överlämningens påstående att Linux-grindarna var gröna gällde bara den ursprungliga värden: GitHub-workflowen **Verifiera Mio på Linux** misslyckades för `4fa92a0` innan någon grind kördes ([körning 37227941960](https://github.com/kanonmaten/mio/actions/runs/37227941960)). Efter CI-rättningen passerade samma `verify.py` för `f4ac563` ([körning 37277380844](https://github.com/kanonmaten/mio/actions/runs/37277380844)): strukturkontroller, verifierartester, Node-tester, Worker-runtime, Pianissimo fake-backend, portabla XCTest, capture recovery och portable concurrency. Detta är första oberoende bekräftelsen av de portabla Swift-testerna.
+- Rättningarna i steg 1 passerade samma workflow för `be30bf4` ([körning 37277821957](https://github.com/kanonmaten/mio/actions/runs/37277821957)). Resultatet för senare commits redovisas av samma workflow för respektive commit; ett grönt resultat gäller bara den commit det kördes för.
+- Lokalt i granskningsmiljön (Node 22, ej den pinnade 26.10): 125/125 gateway-tester och Worker dry-run/runtime/avbrott inklusive 40 s hängande D1 godkända efter gatewayrättningarna; 27/27 Pianissimo-API-tester med fake-backend; 296 strukturella kontroller. Ingen Swift-kompilator fanns lokalt.
+- Inte utfört: IPA-workflowen (Xcode Release, iOS-XCTest inklusive tre UI-smokeprov, native concurrency, IPA), Cloudflare-publicering (ska inkludera `enable_request_signal` och verifiera verkligt klientavbrott), verkliga providerprov och fysiska enhetsprov enligt [enhetsprotokollet](ENHETSPROV.md).
+
 ## Helhetsbygge 0.9.0 — överlämnad gren, 2026-10-04
 
 PLAN-steg 1–5 är implementerade och de lokala Linux-grindarna är godkända. Ändringarna är committade och pushade på `codex/mio-plan-reliability`, baserad på `3f99f4072b0ddbe51529c84bfdb9f947855f6e64`. Helheten är fortfarande **ej släppt och inte iOS-verifierad**. Fullständiga post-commit-loggar och kvitto finns i `/tmp/mio-mio-handoff-20261004-final/` på värden där verifieringen kördes; `verification.json` anger commit och arbetskopians digest.

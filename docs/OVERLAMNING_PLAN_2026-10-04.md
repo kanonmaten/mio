@@ -47,4 +47,4 @@ Ingen Cloudflare-publicering, verklig modelltrafik, Xcode-körning, IPA-installa
 - [Beslut och versionsplan](DECISIONS.md) och [roadmap](ROADMAP.md)
 - [Transkriptionsserver och privat drift](../transcription-server/README.md)
 
-Hämta grenen i en annan checkout med `git fetch origin` och `git switch --track origin/codex/mio-plan-reliability`. Följ sedan repots [`AGENTS.md`](../AGENTS.md), håll AI-/ljudintegritetsinvarianterna ovan och uppdatera status endast efter utförda kontroller.
+Hämta grenen i en annan checkout med `git fetch origin` och `git switch --track origin/codex/mio-plan-reliability`. Följ sedan repots [`CLAUDE.md`](../CLAUDE.md) (ersatte `AGENTS.md` 2026-10-05), håll AI-/ljudintegritetsinvarianterna ovan och uppdatera status endast efter utförda kontroller.

@@ -1,12 +1,12 @@
 # Arbetsflöde
 
-En task per tydligt resultat. Varaktig kontext finns i [AGENTS](../AGENTS.md) och dokumentationen; chatthistorik ersätter inte dessa.
+En task per tydligt resultat. Varaktig kontext finns i [CLAUDE.md](../CLAUDE.md) och dokumentationen; chatthistorik ersätter inte dessa.
 
 ## Ändra
 
 1. Kontrollera `git status` och hämta remote-status med `git fetch origin`. Integrera uppströmsändringar utan att skriva över lokalt arbete.
 2. Läs relevanta beslut, datamodell och testfall. Beskriv mål och verifiering.
-3. Ändra lokalt. Använd `main` för små sekventiella arbeten; en `codex/`-branch för riskfyllda eller parallella ändringar.
+3. Ändra lokalt. Använd `main` för små sekventiella arbeten; en separat branch för riskfyllda eller parallella ändringar.
 4. Granska diffen. Uppdatera [ändringsloggen](../CHANGELOG.md); uppdatera [status](STATUS.md) bara med faktiska resultat.
 5. Kontrollera att privata exporter, nycklar, certifikat och IPA-filer inte följer med. Commit och push sker bara på uttrycklig begäran.
 

@@ -1,5 +1,17 @@
 # Ändringslogg
 
+## Granskning och rättningar 2026-10-05 — Claude Code
+
+Planen och implementationen på `codex/mio-plan-reliability` granskades mot `PLAN.md`. Det mesta följde planen; följande fel rättades:
+
+- **CI:** Linux-workflowen kunde aldrig köra (saknat `python3` och git-ägarskap i Swift-containern). Den kör nu `verify.py` vid varje push och är därmed första faktiska kontrollen av de portabla Swift-testerna. Native concurrency i IPA-workflowen är diagnostik som inte stoppar IPA:n.
+- **Ljud/tid:** en fångstepok behåller sin svagaste tidsgiltighet; uppskattad tid kan inte längre märkas som värdtid och bevisa bakgrundsfångst. Stopp/paus väntar på sista textresultat och luckor i ordning. Uppskattad tid bevisar bara fångst efter AI-samtycke bortom 60 s-gränsen. Misslyckad bufferkopiering syns som lucka. HTTP-datum i Retry-After tolkas även för transkription.
+- **Sessioner/lektioner/radering:** en lektion som aldrig startade lämnas inte öppen och vardagssessionen återställs; avbruten återstart avslutar inte en pausad session. Lektionsslutförande sparas som väntande vid sparfel, återhämtningsspärr och omstart. Radering av en session tar även bort tillfälliga exporter; en raderad session kan inte exporteras från gammal kopia.
+- **AI-klient:** fel token i anslutningsprovet visas som behörighetsfel i stället för "inställningarna ändrades". Okända felkoder och extra uppgifter från nyare server kräver inte ny IPA. Ändrat svar som sparats en gång rapporteras som konflikt. Serverns väntetid gäller även efter av/på.
+- **Gateway:** `enable_request_signal` krävs för att klientavbrott ska nå Workern. `insufficient_quota` är ett kontofel, Gemini `API_KEY_INVALID` ett behörighetsfel, stora felsvar behåller kategori och Retry-After, och hängande D1 ger `budget_store_failed`. `/v1/status` speglar vardagsuppgiftens profil. Dagsgräns över 100 startar inte längre (dokumenterat som uppgraderingsändring).
+- **Prestanda:** den aktiva sessionen ändras på plats i stället för att kopiera dess listor och sortera hela historiken för varje textdel.
+- `AGENTS.md` ersattes av `CLAUDE.md` (engelska) och maskinspecifika Codex-sökvägar togs bort ur dokumentationen.
+
 ## Arbetskopia 2026-10-04 — PLAN-steg 1–5
 
 - Genomfört den aktuella helhetsplanen på grenen `codex/mio-plan-reliability`: förstärkt ljud-/sessionsägarflöde och backend-avbrott, appägd workflow/radering/export, providerneutrala taskprofiler/adaptrar och granskade wire-kontrakt samt färskhet, anslutningskontroll, explicit frågesvarsgodkännande och återhämtning.

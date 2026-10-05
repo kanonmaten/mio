@@ -136,7 +136,7 @@ def main():
     sessions_repository = (ROOT / 'Mio/Services/SessionRepository.swift').read_text()
     check('"Mio"' in content_repository and '"content-v1.json"' in content_repository, 'Innehållslagring under Mio')
     check('"Mio"' in sessions_repository and '"sessions.json"' in sessions_repository, 'Sessionslagring under Mio')
-    for path in [ROOT / 'README.md', ROOT / 'AGENTS.md', ROOT / 'CHANGELOG.md', *(ROOT / 'docs').glob('*.md'), *(ROOT / 'server').glob('*.md')]:
+    for path in [ROOT / 'README.md', ROOT / 'CLAUDE.md', ROOT / 'CHANGELOG.md', *(ROOT / 'docs').glob('*.md'), *(ROOT / 'server').glob('*.md')]:
         for target in re.findall(r'\]\(([^)]+)\)', path.read_text()):
             if '://' in target or target.startswith('#'):
                 continue

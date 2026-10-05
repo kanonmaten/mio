@@ -4,7 +4,7 @@ Gäller helhetsbygget 0.9.0 och den aktuella sammanhängande arbetskopian. Kör 
 
 ## Före installation
 
-1. Kör den gemensamma Linuxgrinden med uttrycklig källsökväg enligt [verifiering](VERIFIERING.md). I den isolerade arbetskopian: `python3 /home/kanonmaten/.codex/worktrees/mio-plan-reliability/Mio/scripts/verify.py`. Efter integration används samma script under `/home/kanonmaten/Documents/ChatGPT/Mio`. Ett resultat med hoppad Swift-grind är ofullständigt.
+1. Kör den gemensamma Linuxgrinden enligt [verifiering](VERIFIERING.md): `python3 scripts/verify.py` från repots rot, eller kontrollera att GitHub-workflowen **Verifiera Mio på Linux** är grön för exakt den commit som ska byggas. Ett resultat med hoppad Swift-grind är ofullständigt.
 2. Bygg exakt avsedd commit i GitHub Actions: Release, XCTest och IPA-validering ska lyckas. Dokumentera faktisk runner, körnings-URL och commit. En gammal grön körning räcker inte.
 3. Spara IPA:ns SHA-256 och versions-/byggnummer från artifactens `Mio-buildinfo.txt`.
 4. Installera rent med `app.mio.assistant` på iPhone 16 Pro. Ingen gammal prototypdata förväntas. Prova senare också på iPhone 13.

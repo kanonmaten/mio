@@ -4,7 +4,7 @@ Den gemensamma Linuxgrinden kör säkra lokala och syntetiska kontroller. Den pu
 
 ## Arbetskopia och verktyg
 
-Planarbetet ligger i `/home/kanonmaten/.codex/worktrees/mio-plan-reliability/Mio`. Originalrepot är `/home/kanonmaten/Documents/ChatGPT/Mio`. Kommandot verifierar den arbetskopia där själva skriptet finns. Resultat från den ena kopian bevisar inte innehållet i den andra. Använd originalvägen först när avsedd ändring finns där och kontrollera dess revision/diff.
+Kommandot verifierar den arbetskopia där själva skriptet finns, oavsett aktuell katalog. Resultat från en kopia bevisar inte innehållet i en annan; kontrollera revision/diff. GitHub-workflowen **Verifiera Mio på Linux** (`.github/workflows/verify-linux.yml`) kör samma grind automatiskt vid varje push, i containern `swift:6.3.3-noble`.
 
 Linuxgrinden kräver `python3`, `git`, `node`, `npm`, `uv` och normalt `swiftc`. Testad miniminivå för Node är **26.10.0**, med deklarerat stöd **>=26.10.0 <27**. CI använder Node 26.10.0, Swift 6.3.3, uv 0.12.22 och en låst Python 3.12-miljö utan inferens-/GPU-extra. Pythonmiljön skapas separat i loggkatalogen; den återanvänder inte en gammal trasig interpretersymlänk. Om kompilatorn inte finns i `PATH` kan `SWIFT_EXECUTABLE` ange dess absoluta sökväg. Plattformarnas nativeverktyg och SDK ersätts inte av dessa versioner.
 
@@ -13,14 +13,14 @@ Verifieraren skapar först den låsta Python-testmiljön. Den innehåller även 
 Alla följande kommandon är oberoende av aktuell katalog, även om terminalen råkar stå i `transcription-server`:
 
 ```bash
-mio_repo_directory='/home/kanonmaten/.codex/worktrees/mio-plan-reliability/Mio'
+mio_repo_directory="$(git rev-parse --show-toplevel)"
 python3 "$mio_repo_directory/scripts/verify.py"
 ```
 
 Skriptet väljer då en ny `/tmp/mio-verify-*`-katalog. För en uttrycklig loggplats och det syntetiska långhistorikprovet:
 
 ```bash
-mio_repo_directory='/home/kanonmaten/.codex/worktrees/mio-plan-reliability/Mio'
+mio_repo_directory="$(git rev-parse --show-toplevel)"
 python3 "$mio_repo_directory/scripts/verify.py" \
   --logs-dir /tmp/mio-verification-plan \
   --measure-session-store
@@ -47,7 +47,7 @@ Varje grind får en egen logg. Första fel stoppar körningen och ger `FAIL` sam
 Om Swift saknas kan övriga kontroller köras med följande uttryckliga undantag:
 
 ```bash
-mio_repo_directory='/home/kanonmaten/.codex/worktrees/mio-plan-reliability/Mio'
+mio_repo_directory="$(git rev-parse --show-toplevel)"
 python3 "$mio_repo_directory/scripts/verify.py" --skip-swift
 ```
 
