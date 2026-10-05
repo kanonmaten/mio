@@ -108,8 +108,12 @@ def main() -> int:
         print(f"{'PASS' if code == 0 else 'FAIL'} {name}: {log}", flush=True)
         if code:
             # CI logs are often the only evidence available; show the failing gate's tail.
-            tail = log.read_text(errors="replace").splitlines()[-80:]
-            print("\n".join(f"  | {line}" for line in tail), flush=True)
+            lines = log.read_text(errors="replace").splitlines()
+            # Failures may scroll out of the tail; list assertion/error lines first.
+            markers = ("error:", "failed (", "Fatal error", "Simultaneous accesses")
+            errors = [line for line in lines if any(marker in line for marker in markers)][:60]
+            print("\n".join(f"  ! {line}" for line in errors), flush=True)
+            print("\n".join(f"  | {line}" for line in lines[-40:]), flush=True)
             failed = True
             break
     receipt["finishedAt"] = datetime.now(timezone.utc).isoformat()
