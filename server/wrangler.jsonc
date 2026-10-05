@@ -9,8 +9,8 @@
   "preview_urls": false,
   "observability": { "enabled": false },
   "vars": {
-    "MIO_AI_PROVIDER": "nvidia",
-    "MIO_AI_MODEL": "deepseek-ai/deepseek-v4.1-flash",
+    "MIO_AI_PROVIDER": "groq",
+    "MIO_AI_MODEL": "qwen/qwen3.8-27b",
     "MIO_REQUESTS_PER_MINUTE": "20",
     "MIO_LESSON_INTERVAL_SECONDS": "60"
   },
