@@ -185,6 +185,27 @@ jobs:
                   print("::endgroup::")
               except Exception as error:
                   print(f"Kunde inte läsa steg för {test_id}: {type(error).__name__}")
+              # A hang leaves a spindump attachment; its main-thread stack names the blocking call.
+              try:
+                  import glob, os, re, tempfile
+                  folder = tempfile.mkdtemp()
+                  subprocess.run(["xcrun", "xcresulttool", "export", "attachments", "--path", sys.argv[2],
+                                  "--output-path", folder, "--test-id", test_id],
+                                 capture_output=True, text=True, timeout=300, check=True)
+                  manifest = json.load(open(os.path.join(folder, "manifest.json")))
+                  names = [a.get("exportedFileName") for entry in manifest for a in entry.get("attachments", [])
+                           if "pindump" in (a.get("suggestedHumanReadableName") or a.get("exportedFileName") or "")]
+                  for name in filter(None, names):
+                      text = open(os.path.join(folder, name), errors="replace").read()
+                      start = text.find("Process:  ") if "Process:  Mio" not in text else text.find("Process:  Mio")
+                      section = text[start:] if start >= 0 else text
+                      main = re.search(r"\n\s*Thread 0x[0-9a-f]+[^\n]*main-thread[^\n]*\n", section)
+                      excerpt = section[main.start():] if main else section
+                      print(f"::group::Huvudtråd i spindump för {test_id}")
+                      print("\n".join(excerpt.splitlines()[:80]))
+                      print("::endgroup::")
+              except Exception as error:
+                  print(f"Kunde inte läsa spindump för {test_id}: {type(error).__name__}")
           PY
 
       - name: Skapa IPA-filen

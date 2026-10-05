@@ -2,6 +2,7 @@
 
 ## IPA-workflowens testtid, 2026-10-05
 
+- Körning #23: ljudtestet passerade. UI-testet fastnar direkt efter tryck på "Markera … som klar": appen blir aldrig inaktiv ("App event loop idle notification not received"). Samma appkod passerade i körning #20, så något i den nya simulatorn blockerar troligen huvudtråden när uppgiften avslutas och dess alarm/påminnelse tas bort (AlarmKit/notiser i `MioSystemServices.cancelActions`). Workflowen skriver nu ut huvudtrådens stack ur testets spindump för att visa exakt vilket anrop som blockerar.
 - Körning #22 visade två namngivna fel. `testGracefulDrainCancelsAtFifteenSecondsEvenWhenAudioIsFresh` (och systertestet för långsam lucka) flyttade testklockan innan ljuddelen faktiskt skickats; på en belastad simulator hinner konverteringen inte klart inom 200 yields. Testerna väntar nu på att begäran är igång, och `waitUntil` begränsas av verklig tid (10 s) i stället för antal yields. `MioUISmokeTests.testTaskCompletionHasNamedAccessibleHitArea` överskred 2 min; orsaken syns inte i loggen, så workflowen skriver nu ut de sista stegen i varje misslyckat test.
 - Körning #21 avbröts när jobbet nådde 30 minuter under iOS-testerna (körning #20 behövde 18 min för samma steg). Varje test har nu en tidsgräns (normalt 2 min, högst 5 min), så ett test som hänger misslyckas med sitt namn i stället för att tysta förbruka jobbet. Teststeget får högst 35 min och jobbet 50 min.
 
