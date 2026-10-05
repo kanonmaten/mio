@@ -1,5 +1,10 @@
 # Bygg- och teststatus
 
+## IPA-workflowen grön för `82036a6`, 2026-10-05
+
+- [Körning 37343657715](https://github.com/kanonmaten/mio/actions/runs/37343657715) (Bygg Mio IPA #24, runner `xcode-27`): native strict concurrency, Release, testkompilering, samtliga iOS-simulator-XCTest och tre UI-smokeprov godkända på 11 min; artifact `Mio-IPA` skapad. IPA:ns SHA-256 och byggnummer står i `Mio-buildinfo.txt` i artifacten (granskningsmiljön kunde inte hämta den). **Inte installerad och inte telefonverifierad.**
+- Körning #21–#23 på i stort sett samma appkod föll: #21 avbröts vid jobbgränsen, #22 fick ett tidsberoende ljudtest (rättat i `c363c13`) och #22–#23 fick UI-testet `testTaskCompletionHasNamedAccessibleHitArea` att hänga efter tryck på "Markera … som klar" (appen blev aldrig inaktiv). I #24 passerade samma test. Hänget är alltså intermittent och orsaken obekräftad; misstanken är AlarmKit-/notisanropen i `MioSystemServices.cancelActions` på huvudtråden. Prova att bocka av uppgifter på telefonen; vid nytt hängande skriver workflowen ut huvudtrådens stack.
+
 ## Pianissimo-installation och automatisk uppdatering, 2026-10-05
 
 - Provat i Linux-container utan GPU: `check.sh` mot API-appen med falsk modell (503 under laddning, `--wait` till redo, ingen kontakt). `update-model.sh` med ersatt `python`/`systemctl`: byte till ny revision, redan senaste, samt automatisk återgång när den nya revisionen inte blev redo. 27/27 API-tester och 228 strukturkontroller godkända.
