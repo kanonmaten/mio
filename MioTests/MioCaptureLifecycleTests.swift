@@ -111,9 +111,10 @@ final class MioCaptureLifecycleTests: XCTestCase {
         model.beginListening()
         await waitUntil { model.runState == .listening }
         let everydayID = try XCTUnwrap(model.currentSession?.id)
+        await model.pause(.untilResumed)
+        // The lesson transition is admitted first; an export/deletion barrier then arrives
+        // while it saves the everyday session, so the new lesson waits for that barrier.
         let lesson = Task { await model.beginLesson(title: "Väntar på dataåtgärd") }
-        await waitUntil { model.runState == .stopping }
-        // An export/deletion barrier arrives while the lesson transition is admitted.
         let exclusive = Task { await MioMaintenanceState.shared.beginExclusive(deleting: false) }
         await waitUntil { model.isLessonActive }
         let admitted = await exclusive.value
