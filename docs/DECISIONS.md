@@ -2,6 +2,16 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Pianissimo följer senaste versionen, 2026-10-05
+
+Användarbeslut: transkriptionsservern ska alltid köra senaste `KlangAI/pianissimo-sv`, inte en fast revision.
+
+- `install.sh` installerar allt med ett kommando och används även för att uppdatera. Vid första installationen väljs den senaste revisionen på Hugging Face (`main`).
+- Timern `mio-pianissimo-update.timer` kör `update-model.sh` varje natt runt 04:00. En ny revision laddas ner och tjänsten startas om med den. Den godkänns först när `/health` rapporterar exakt den revisionen inom 5 minuter; annars återställs föregående revision automatiskt. Gamla revisioner tas bort från cachen efter lyckat byte.
+- Konfigurationen och API:t anger fortfarande en exakt 40-teckens revision, så det syns vilken version som körde. Python-beroendena (NeMo 2.7.0 m.fl.) är fortsatt låsta i `uv.lock`; en modellversion som kräver nyare NeMo blir inte redo och rullas tillbaka.
+
+Avvägning: nya modellversioner kommer utan föregående manuellt prov. Återgången skyddar mot en version som inte laddar, men inte mot sämre svensk precision eller ändrade ordtider. Ett byte mitt i användning ger en kort lucka; därför sker det på natten. Ersätter "pinned revision" i beslutet 2026-09-29.
+
 ## Text-AI via NVIDIA NIM utan dagsgräns, 2026-10-05
 
 Användarbeslut: byt textleverantör från Groq/Qwen till **NVIDIA NIM med `deepseek-ai/deepseek-v4.1-flash`**, och ta bort Mios dagsgräns.
@@ -130,7 +140,7 @@ Detta tillför två hemlighetsfält och hantering av giltighet/rotation, men ing
 
 ## 2026-09-30: original Pianissimo via privat Tailscale
 
-Användarens uttryckliga motorbyte ersätter tidigare krav på verifierad Apple-fallback. Apple SpeechAnalyzer/SpeechTranscriber/DictationTranscriber tas ur aktiv kod. Original `KlangAI/pianissimo-sv` körs serverägt via NeMo/PyTorch/CUDA, pinned revision och låst beroendemiljö. Ingen kvantisering, CPU-fallback eller publik port. Appen känner bara [API v1](../transcription-server/API.md); modellbyte bakom kompatibelt kontrakt kräver ingen ny app.
+Användarens uttryckliga motorbyte ersätter tidigare krav på verifierad Apple-fallback. Apple SpeechAnalyzer/SpeechTranscriber/DictationTranscriber tas ur aktiv kod. Original `KlangAI/pianissimo-sv` körs serverägt via NeMo/PyTorch/CUDA och låst beroendemiljö (revisionen följer senaste versionen sedan 2026-10-05). Ingen kvantisering, CPU-fallback eller publik port. Appen känner bara [API v1](../transcription-server/API.md); modellbyte bakom kompatibelt kontrakt kräver ingen ny app.
 
 20 s ägda ljuddelar med 1 s överlappande kontext ger få och enkla HTTP-anrop. Förväntad produktlatens är 15–30 s; riktig svensk precision/latens och ord vid delgränser återstår att mäta. WebSocket/streaming och HA väljs bort för ett personligt enanvändarprojekt. Downtime vid PC-omstart accepteras. Tailscale Serve terminerar HTTPS privat och systemd startar/återstartar en ensam modellprocess. Token och tailnet-behörighet är separata skydd.
 

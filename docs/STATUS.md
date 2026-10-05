@@ -1,5 +1,10 @@
 # Bygg- och teststatus
 
+## Pianissimo-installation och automatisk uppdatering, 2026-10-05
+
+- Provat i Linux-container utan GPU: `check.sh` mot API-appen med falsk modell (503 under laddning, `--wait` till redo, ingen kontakt). `update-model.sh` med ersatt `python`/`systemctl`: byte till ny revision, redan senaste, samt automatisk återgång när den nya revisionen inte blev redo. 27/27 API-tester och 228 strukturkontroller godkända.
+- **Inte provat:** `install.sh` från början till slut (kräver CachyOS, pacman, NVIDIA-GPU och systemd), `systemd-analyze verify` av de nya timer-enheterna, verklig nedladdning från Hugging Face, och om senaste Pianissimo-revisionen laddar med NeMo 2.7.0. Första körningen på datorn är det verkliga provet.
+
 ## NVIDIA NIM och valfri dagsgräns, 2026-10-05
 
 Arbetskopia på `claude/magical-tesla-0eospr`, ej committad vid kontrollen. **Inte publicerad, inte iOS-byggd, inget verkligt modellanrop.**

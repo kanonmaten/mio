@@ -1,0 +1,10 @@
+[Unit]
+Description=Mio: leta efter ny Pianissimo-version varje natt
+
+[Timer]
+OnCalendar=*-*-* 04:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,5 +1,12 @@
 # Ändringslogg
 
+## Enklare Pianissimo-installation med automatisk uppdatering, 2026-10-05
+
+- `transcription-server/install.sh` installerar eller uppdaterar hela tjänsten med ett kommando: verktyg, tjänstekonto, Python och låsta paket, konfiguration med ny token, modellnedladdning, systemd och Tailscale Serve (om Tailscale redan är inloggat). Fungerar från valfri sökväg till arbetskopian.
+- `check.sh` kontrollerar autentiserad `/health` utan att token hamnar i kommandoraden; `--wait` väntar tills modellen är redo.
+- `update-model.sh` och `mio-pianissimo-update.timer` håller Pianissimo på senaste versionen varje natt, med automatisk återgång om den nya inte blir redo inom 5 minuter.
+- `transcription-server/README.md` skrevs om från ~220 rader manuella steg till en kort guide: installera, Tailscale, telefonen, kontroll, uppdatering och avinstallation.
+
 ## NVIDIA NIM, ingen dagsgräns och städad dokumentation, 2026-10-05
 
 - **Gateway:** ny provider `nvidia` med enbart `deepseek-ai/deepseek-v4.1-flash`. Tänkandet stängs av med NIM:s mallflaggor och `reasoning_content` avvisas. GLM 5.3 (Flash) och Kimi K3 är spärrade eftersom de alltid tänker. `nvapi-`-formade värden avvisas som modell-ID.

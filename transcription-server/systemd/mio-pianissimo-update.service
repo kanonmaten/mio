@@ -1,0 +1,8 @@
+[Unit]
+Description=Mio: uppdatera Pianissimo till senaste modellversion
+After=network-online.target mio-transcription.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/mio-transcription/update-model.sh
