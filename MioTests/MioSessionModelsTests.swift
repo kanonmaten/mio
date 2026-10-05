@@ -89,7 +89,7 @@ final class MioSessionModelsTests: XCTestCase {
         XCTAssertEqual(register.sessions.first { $0.id == lesson.id }?.endedAt, Date(timeIntervalSince1970: 2_010))
     }
 
-    func testInPlaceMutationKeepsOrderingSelectionAndOtherSessions() {
+    func testCurrentSessionUpdatesKeepOrderingSelectionAndOtherSessions() {
         var register = MioSessionRegister()
         let older = MioSession(startedAt: Date(timeIntervalSince1970: 1_000), title: "Äldre")
         let newer = MioSession(startedAt: Date(timeIntervalSince1970: 3_000), title: "Nyare")

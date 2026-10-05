@@ -269,27 +269,10 @@ struct MioSessionRegister {
             selectedID = newValue?.id
             if let newValue { replace(newValue) }
         }
-        // Live capture mutates the selected session for every segment, event and battery
-        // sample. Moving it out avoids copying its arrays (copy-on-write) and re-sorting
-        // the whole history on each update.
-        _modify {
-            guard let id = selectedID, let index = sessions.firstIndex(where: { $0.id == id }) else {
-                var none: MioSession?
-                yield &none
-                if let none { self.current = none }
-                return
-            }
-            var value: MioSession? = sessions.remove(at: index)
-            yield &value
-            if let value {
-                selectedID = value.id
-                sessions.insert(value, at: insertionIndex(for: value))
-            } else {
-                selectedID = nil
-            }
-        }
     }
 
+    /// Live capture replaces the selected session for every segment, event and battery
+    /// sample; an unchanged start time keeps its position without re-sorting the history.
     mutating func replace(_ session: MioSession) {
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
             guard (session.mutationRevision ?? 0) >= (sessions[index].mutationRevision ?? 0) else { return }

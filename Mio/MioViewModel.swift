@@ -23,11 +23,6 @@ final class MioViewModel {
     var currentSession: MioSession? {
         get { sessionRegister.current }
         set { sessionRegister.current = newValue; stateRevision &+= 1 }
-        // In-place mutation (`currentSession?.transcripts.append(...)`) without copying.
-        _modify {
-            yield &sessionRegister.current
-            stateRevision &+= 1
-        }
     }
     var previousSessions: [MioSession] {
         get { sessionRegister.sessions }
