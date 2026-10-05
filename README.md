@@ -38,7 +38,7 @@ python3 scripts/verify.py
 
 Samma grind körs automatiskt i GitHub-workflowen **Verifiera Mio på Linux** vid varje push. [Verifieringsavsnittet](docs/INSTALLATION.md#verifiera-före-bygge) beskriver beroenden, grindar och begränsningar. Linux ersätter inte native mikrofon/konvertering, Keychain, URLSession, SwiftUI eller Xcode. Xcode/SDK-/IPA-grinden finns i `.github/workflows/build-unsigned-ipa.yml`; varje körning behöver faktisk runner- och revisionskontroll.
 
-Läs [CLAUDE.md](CLAUDE.md) (instruktioner för Claude Code), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMAP.md), [beslut](docs/DECISIONS.md), [datamodell](docs/DATAMODELL.md) och [ändringslogg](CHANGELOG.md). Commit, push och publicering kräver uttrycklig begäran.
+Läs [CLAUDE.md](CLAUDE.md) (instruktioner för Claude Code), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMAP.md), [beslut](docs/DECISIONS.md), [datamodell](docs/DATAMODELL.md) och [ändringslogg](CHANGELOG.md). Färdiga ändringar committas och pushas direkt till `main`; publicering och verkliga modellanrop kräver uttrycklig begäran.
 
 ## Integritet och kompatibilitet
 

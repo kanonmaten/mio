@@ -42,7 +42,7 @@ Tabellen beskriver den tidigare grundens beslut. Apple-transkription och de hist
 | Ingen råljudslagring | Ljud bara tillfälligt i minnet; text, tider och diagnostik lokalt | 2026-08-20 |
 | Explicit molnsamtycke | Framtida OpenAI-fråga kräver Ja, minsta kontext och API-nyckel på server | 2026-08-20 |
 | Privat installation | Actions bygger osignerad IPA; SideStore signerar. Lokal Mac/Xcode är ett alternativ | 2026-08-20 |
-| Enkel Git-rutin | Lokala ändringar granskas före commit/push; privata exporter lämnar aldrig sin privata lagringsplats för repot | 2026-08-20 |
+| Enkel Git-rutin | Lokala ändringar granskas och verifieras före commit; färdigt arbete pushas direkt till `main` utan grenar eller PR (2026-10-05). Privata exporter lämnar aldrig sin privata lagringsplats för repot | 2026-08-20 |
 | Manuella funktioner kan utvecklas parallellt | v0.2.0 kräver inte att heldagslyssning är godkänd; öppna långtest kvarstår | 2026-08-24 |
 | Separata datalager | Poster, sessioner och assistentdata lagras separat; aktuella kontrakt beskrivs i datamodellen | 2026-08-24 |
 | Bevarade original | Sessionstitel, anteckning och texträttningar läggs ovanpå originaltext, tider och bevis | 2026-08-24 |

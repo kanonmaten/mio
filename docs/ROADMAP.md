@@ -34,7 +34,7 @@ Read-only produktionskontroll den 3 oktober visar att den gamla OpenAI-bundlen f
 ## Leveransgrindar
 
 1. Kontrollera projektfiler, privata data, lokala tester och dokumentation med den gemensamma verifieringsentrypointen. Registrera Linuxvärden separat från native- och telefonresultat.
-2. Efter uttryckligt tillstånd: commit/push och GitHub Actions på faktisk tillgänglig `xcode-27`-runner. Release och XCTest måste bli gröna för samma commit.
+2. Commit/push till `main`, därefter GitHub Actions på faktisk tillgänglig `xcode-27`-runner. Release och XCTest måste bli gröna för samma commit.
 3. Hämta validerad IPA och installera rent på iPhone 16 Pro med `app.mio.assistant`; prova iPhone 13 senare.
 4. Kör [helhetstestet](TESTPLAN_HELHET.md) samt återstående [långtest](TESTPLAN_HELHET.md#långprov-latens-värme-och-batteri).
 5. Registrera exakt revision, build, enhet och resultat i [status](STATUS.md). Åtgärda verkliga fel innan daglig tillit.

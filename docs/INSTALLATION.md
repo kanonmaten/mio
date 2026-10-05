@@ -10,7 +10,7 @@ Huvudvägen är **GitHub Actions → osignerad IPA → SideStore**. Koden kan re
 
 ## Uppdatera via GitHub Actions och SideStore
 
-1. Kör först [verifieringen](#verifiera-före-bygge) i exakt den arbetskopia som ska byggas. Granska diffen. Commit/push görs endast efter uttrycklig begäran (se [CLAUDE.md](../CLAUDE.md)); bevara commit-ID och eventuellt kvarvarande diff-underlag.
+1. Kör först [verifieringen](#verifiera-före-bygge) i exakt den arbetskopia som ska byggas. Granska diffen. Färdiga ändringar committas och pushas direkt till `main` (se [CLAUDE.md](../CLAUDE.md)); bevara commit-ID och eventuellt kvarvarande diff-underlag.
 2. Öppna repots **Actions → Bygg Mio IPA → Run workflow** och välj branch.
 3. Workflowen använder ett jobb med etiketten `xcode-27`: osignerad Release med iOS 27 SDK, separat strikt concurrencydiagnostik, XCTest inklusive tre UI-smokeprov på en tillgänglig iOS 27-simulator och IPA-validering. Kontrollera faktisk tilldelad runner, Xcode-/SDK-version, simulator, diagnostik och slutresultat för samma commit. En runneretikett eller köad körning bevisar inte att miljön är tillgänglig. Bygget kontrollerar att appens lägsta iOS-version är 26.0.
 4. Hämta artifacten **Mio-IPA**. Packa upp artifact-ZIP en gång; behåll själva IPA:n orörd. Innehåll: `Mio-unsigned.ipa` och `Mio-buildinfo.txt`. Artifacts sparas enligt workflowen i 14 dagar.

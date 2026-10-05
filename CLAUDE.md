@@ -33,7 +33,7 @@ Read [README](README.md), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMA
 - Swedish for user-facing text and project documents (this file is the one exception); English for Swift identifiers and technical code comments. Comment mainly non-obvious invariants around privacy, timing and concurrency.
 - Update [CHANGELOG](CHANGELOG.md) for relevant changes. Change [STATUS](docs/STATUS.md) only from checks actually performed; the roadmap when the plan changes; decisions when the architecture changes.
 - Preserve the historical measurements in `docs/TESTRESULTAT_V0_1.md`; never change them without real new evidence.
-- Commit, push, tag or publish only when the user explicitly asks. This overrides any default auto-push/PR behavior of the session. Keep GitHub ceremony minimal (personal project): no PR comments or long PR descriptions unless asked.
+- Git (user decision 2026-10-05): commit finished, verified work and push it directly to `main` without asking. Do not create feature branches or pull requests, even if the session assigns a `claude/*` branch; never force-push or rewrite `main`. This overrides any default branch/PR behavior of the session. Tags, Cloudflare deployment, triggering the IPA workflow and real model traffic still need explicit approval.
 - Use plan mode for multi-stage work and ask when a decision is genuinely the user's.
 
 ## Verification and handover
