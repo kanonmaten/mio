@@ -76,6 +76,24 @@ final class MioTaskDiscoveryTests: XCTestCase {
         XCTAssertThrowsError(try MioGatewayStatusV2.decode(Data(repeating: 32, count: 16_385)))
     }
 
+    func testNewerServerAdditionsDoNotRequireAnIPAUpdate() throws {
+        let extended = try MioGatewayStatusV2.decode(fixture { root in
+            var tasks = root["tasks"] as! [String: [String: Any]]
+            tasks["ask"]!["configured"] = false
+            tasks["ask"]!["configurationError"] = "provider_region_unavailable"
+            tasks["summary"] = ["configured": true, "provider": "future", "model": "future-model",
+                                "promptVersion": "summary-v1", "capabilities": [], "configurationError": NSNull()]
+            root["tasks"] = tasks
+        })
+        XCTAssertEqual(extended.tasks.ask.configurationError, .unknown)
+        XCTAssertThrowsError(try extended.requireTask(.ask), "an unknown server error still disables the task")
+        XCTAssertNoThrow(try extended.requireTask(.lesson))
+        XCTAssertThrowsError(try MioGatewayStatusV2.decode(fixture { root in
+            var tasks = root["tasks"] as! [String: [String: Any]]
+            tasks.removeValue(forKey: "lesson"); root["tasks"] = tasks
+        }), "Mio's own tasks remain required")
+    }
+
     func testQuotaSupportsUnknownValuesAndRejectsImpossibleCountersAndDates() throws {
         let unknown = try MioGatewayStatusV2.decode(fixture { $0["quota"] = ["limit": 100, "remaining": NSNull(), "resetAt": NSNull()] })
         XCTAssertNil(unknown.quota?.remaining); XCTAssertNil(unknown.quota?.resetAt)

@@ -298,6 +298,16 @@ enum MioTaskConfigurationError: String, Codable, Sendable {
     case taskProfilesInvalid = "task_profiles_invalid", taskProfileInvalid = "task_profile_invalid"
     case providerSecretMissing = "provider_secret_missing", providerModelIncompatible = "provider_model_incompatible"
     case providerOptionsIncompatible = "provider_options_incompatible"
+    /// A newer server's bounded code. The task stays unavailable; no IPA update is required.
+    case unknown
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        guard MioGatewayMetadata.protocolIdentifier(value) != nil else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unbounded configuration error"))
+        }
+        self = Self(rawValue: value) ?? .unknown
+    }
 }
 struct MioGatewayTaskStatus: Decodable, Sendable {
     let configured: Bool
@@ -357,8 +367,10 @@ struct MioGatewayStatusV2: Decodable, Sendable {
         guard data.count <= maxResponseBytes,
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               exact(root, ["protocolVersion", "release", "configurationRevision", "tasks", "quota"]),
-              let tasks = root["tasks"] as? [String: Any], exact(tasks, ["ask", "everyday", "lesson"]),
-              tasks.values.allSatisfy({ exact($0, ["configured", "provider", "model", "promptVersion", "capabilities", "configurationError"]) }),
+              // A newer server may add tasks; Mio requires its own three and ignores the rest.
+              let tasks = root["tasks"] as? [String: Any], tasks.count <= 16,
+              Set(tasks.keys).isSuperset(of: ["ask", "everyday", "lesson"]),
+              ["ask", "everyday", "lesson"].allSatisfy({ exact(tasks[$0], ["configured", "provider", "model", "promptVersion", "capabilities", "configurationError"]) }),
               root["quota"] is NSNull || exact(root["quota"], ["limit", "remaining", "resetAt"]),
               let value = try? JSONDecoder().decode(Self.self, from: data), value.protocolVersion == 2,
               MioGatewayMetadata.identifier(value.release) != nil,

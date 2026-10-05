@@ -84,8 +84,8 @@ struct ContentView: View {
             model.handleScenePhase(newPhase)
             if newPhase == .active { day.refresh(); resolveNotificationRoute() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in day.refresh() }
-        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in day.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in day.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange).receive(on: RunLoop.main)) { _ in day.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in day.refresh() }
         .onChange(of: navigation.pendingRoute) { _, _ in resolveNotificationRoute() }
         .onChange(of: maintenance.blocksWork) { _, blocked in if !blocked { resolveNotificationRoute() } }

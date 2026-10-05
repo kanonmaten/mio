@@ -97,7 +97,8 @@ final class MioAnalysisCoordinator {
         queue.removeAll(); observed.removeAll(); eligible.removeAll(); latestSessions.removeAll()
         continuityStarts.removeAll(); endingSessionIDs.removeAll()
         connection = nil; activeSessionID = nil
-        pausedUntil = nil; quotaResetAt = nil
+        // A server-imposed wait survives disable/re-enable; re-saving settings must not bypass it.
+        quotaResetAt = nil
         enabled = false; isWorking = false
         MioDiagnosticsRuntime.analysisEnabled = false
         status = "AI-tolkning är av. Inga fler utdrag skickas."

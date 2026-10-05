@@ -354,7 +354,9 @@ enum MioCloudService {
             if error is CancellationError || Task.isCancelled { event.outcome = .cancelled }
             else if event.outcome == .success { event.outcome = .validationFailed }
             await MioDiagnosticsRepository.shared.record(event, generation: token)
-            await MioConnectionDiscovery.shared.handle(error: error)
+            // Discovery owns its status request's failure. Invalidating here would answer its
+            // waiters with "settings changed" and drop the real 401/403 explanation.
+            if operation != .statusV2 { await MioConnectionDiscovery.shared.handle(error: error) }
             throw error
         }
     }

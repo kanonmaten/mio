@@ -275,6 +275,11 @@ final class MioWorkflowCoordinator {
             let cleanBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !cleanTitle.isEmpty, !cleanBody.isEmpty else { return .failure("Skriv en rubrik och kontrollera svaret innan du sparar.") }
             guard cleanTitle.utf8.count <= 2_000, cleanBody.utf8.count <= 24_000 else { return .failure("Anteckningen är för stor. Korta texten innan du sparar.") }
+            // The stable ID keeps later edits made under Notes; a second save with different
+            // text must say so instead of reporting success while ignoring it.
+            if let existing = content.item(id: draft.id), existing.title != cleanTitle || existing.body != cleanBody {
+                return .conflict("Svaret är redan sparat som anteckning. Ändra den under Anteckningar.")
+            }
             let item = MioContentItem(id: draft.id, kind: .note, title: cleanTitle, body: cleanBody)
             return await content.saveApproved(item)
         }

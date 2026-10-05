@@ -58,6 +58,10 @@ final class MioAnswerNoteTests: XCTestCase {
         try FileManager.default.removeItem(at: url)
         let retried = await fixture.workflow.saveAnswerNote(draft, title: draft.title, body: draft.body)
         XCTAssertEqual(retried, .success)
+        let repeated = await fixture.workflow.saveAnswerNote(draft, title: draft.title, body: draft.body)
+        XCTAssertEqual(repeated, .success, "an identical retry stays idempotent")
+        let edited = await fixture.workflow.saveAnswerNote(draft, title: draft.title, body: "Ändrad text")
+        guard case .conflict = edited else { return XCTFail("changed text must not be silently ignored") }
     }
 
     @MainActor
