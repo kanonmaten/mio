@@ -192,11 +192,15 @@ export function normalizeProviderResponse(data, profile, headers) {
 
 export function normalizeProviderError({ status, data, headers, now = Date.now() }) {
   const code = data?.error?.code ?? data?.error?.type ?? data?.error?.status;
+  // Gemini reports an invalid key as HTTP 400 INVALID_ARGUMENT with a detail reason.
+  const reasons = Array.isArray(data?.error?.details) ? data.error.details.map(detail => detail?.reason) : [];
   let category;
-  if (status === 401 || ['authentication_error', 'invalid_api_key', 'UNAUTHENTICATED'].includes(code)) category = 'provider_authentication';
-  else if ([402, 403].includes(status) || ['permission_error', 'billing_hard_limit_reached', 'PERMISSION_DENIED'].includes(code)) category = 'provider_account';
+  if (status === 401 || ['authentication_error', 'invalid_api_key', 'UNAUTHENTICATED'].includes(code)
+      || reasons.includes('API_KEY_INVALID')) category = 'provider_authentication';
+  // Exhausted billing is an account problem, not a temporary quota; retrying cannot help.
+  else if ([402, 403].includes(status) || ['permission_error', 'billing_hard_limit_reached', 'insufficient_quota', 'PERMISSION_DENIED'].includes(code)) category = 'provider_account';
   else if (status === 404 || ['model_not_found', 'model_not_available', 'not_found_error', 'NOT_FOUND'].includes(code)) category = 'provider_model_unavailable';
-  else if (status === 429 || ['rate_limit_error', 'rate_limit_exceeded', 'insufficient_quota', 'RESOURCE_EXHAUSTED'].includes(code)) category = 'provider_quota';
+  else if (status === 429 || ['rate_limit_error', 'rate_limit_exceeded', 'RESOURCE_EXHAUSTED'].includes(code)) category = 'provider_quota';
   else if ([400, 422].includes(status) || ['invalid_request_error', 'unsupported_parameter'].includes(code)) category = 'provider_parameters';
   else category = 'provider_infrastructure';
   const value = header(headers, 'retry-after');

@@ -77,7 +77,7 @@ test('late D1 reservation remains consumed after timeout and never starts infere
   });
   const pending = send(); await entered.promise;
   const response = await pending;
-  assert.equal(response.status, 504);
+  assert.equal(response.status, 503);
   release.resolve();
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(await reserveCloudBudget(db, config, 0), false, 'The completed late D1 reservation must remain charged');

@@ -169,3 +169,12 @@ test('protected v2 status makes no provider call or quota reservation and expose
   assert.deepEqual(Object.keys(status.tasks), ['ask', 'everyday', 'lesson']);
   assert.equal(fetches, 0); assert.equal(reserves, 0);
 });
+
+test('v1 status describes the effective everyday task profile for older clients', async () => {
+  const { gatewayStatus } = await import('../src/status.mjs');
+  const base = { apiKey: 'fixture-key', gatewayToken: 'fixture_gateway_token_01234567890123456789', model: 'gpt-6-luna' };
+  assert.equal(gatewayStatus(base).configured, true);
+  const broken = gatewayStatus({ ...base, taskProfiles: { everyday: { model: 'not-a-reviewed-model' } } });
+  assert.equal(broken.configured, false, 'v1 must not report an everyday task that /v1/analyze refuses');
+  assert.equal(broken.model, 'not-a-reviewed-model');
+});

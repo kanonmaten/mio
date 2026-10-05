@@ -46,7 +46,7 @@ try {
       const response = await runtime.dispatchFetch(`https://fixture.example/cancel?scenario=${scenario}${scenario === 'cancel-before' ? '&before' : ''}`);
       if (scenario === 'quota') {
         assert.deepEqual(await response.json(), { results: [
-          { status: 504, body: { error: 'upstream_timeout' } }, { status: 504, body: { error: 'upstream_timeout' } }
+          { status: 503, body: { error: 'budget_store_failed' } }, { status: 503, body: { error: 'budget_store_failed' } }
         ], recovered: 200, quotaCalls: 3 });
         assert.ok(performance.now() - started < 42_000, 'The production 40s deadline must bound hung D1 in workerd');
         assert.equal(modelCalls, 1);

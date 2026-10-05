@@ -5,10 +5,12 @@ import { TASK_IDS, resolveTaskProfile, taskProfiles, taskConfigurationIdentifier
 
 export const RELEASE = '2026-10-03.1';
 export function gatewayStatus(config, valid = true) {
-  const provider = config.provider ?? 'openai';
-  const configured = valid && resolveTaskProfile({ ...config, taskProfiles: undefined }, 'everyday').configured;
+  // Older clients only call /v1/analyze, so v1 status describes the effective everyday task.
+  const { provider, model } = valid ? taskConfigurationIdentifiers(config, 'everyday')
+    : { provider: config.provider ?? 'openai', model: safeModelIdentifier(config.model) };
+  const configured = valid && resolveTaskProfile(config, 'everyday').configured;
   return { protocolVersion: 2, release: RELEASE, configured,
-    provider: Object.hasOwn(PROVIDERS, provider) ? provider : '', model: safeModelIdentifier(config.model),
+    provider: Object.hasOwn(PROVIDERS, provider) ? provider : '', model,
     promptVersion: ANALYSIS_V2_PROMPT_VERSION,
     capabilities: ['analysis-context-v2', 'ask-v1', 'analysis-v1', 'lesson-notes-v1'] };
 }

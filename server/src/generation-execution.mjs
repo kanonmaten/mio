@@ -8,11 +8,17 @@ const MAX_UPSTREAM_BYTES = 65_536;
 const errorStatus = category => category === 'provider_quota' ? 429
   : ['provider_model_unavailable', 'provider_parameters'].includes(category) ? 422 : 502;
 
+function providerFailure(response, data, now) {
+  const error = normalizeProviderError({ status: response.status, data, headers: response.headers, now: now() });
+  return new RequestError(errorStatus(error.category), error.category, error.retryAfter ?? 60);
+}
+
 async function readUpstream(response, profile, signal, now) {
   const hasJSON = response.headers.get('content-type')?.toLowerCase().startsWith('application/json');
   if (Number(response.headers.get('content-length')) > MAX_UPSTREAM_BYTES || !response.body) {
     cancelBody(response.body);
-    throw new RequestError(502, 'invalid_upstream_response');
+    // An unreadable error envelope still keeps its status category (e.g. 429 + Retry-After).
+    throw response.ok ? new RequestError(502, 'invalid_upstream_response') : providerFailure(response, undefined, now);
   }
   // Error envelopes have the same limits/deadline as successful envelopes. Only
   // normalized fixed codes leave this boundary; arbitrary error bodies never do.
@@ -24,7 +30,9 @@ async function readUpstream(response, profile, signal, now) {
       const { value, done } = await awaitWithSignal(reader.read(), signal);
       if (done) break;
       size += value.byteLength;
-      if (size > MAX_UPSTREAM_BYTES) throw new RequestError(502, 'upstream_response_too_large');
+      if (size > MAX_UPSTREAM_BYTES) {
+        throw response.ok ? new RequestError(502, 'upstream_response_too_large') : providerFailure(response, undefined, now);
+      }
       chunks.push(value);
     }
     let data;
@@ -34,10 +42,7 @@ async function readUpstream(response, profile, signal, now) {
         if (response.ok) throw new RequestError(502, 'invalid_upstream_response');
       }
     }
-    if (!response.ok) {
-      const error = normalizeProviderError({ status: response.status, data, headers: response.headers, now: now() });
-      throw new RequestError(errorStatus(error.category), error.category, error.retryAfter ?? 60);
-    }
+    if (!response.ok) throw providerFailure(response, data, now);
     if (!hasJSON) throw new RequestError(502, 'invalid_upstream_response');
     try {
       const result = normalizeProviderResponse(data, profile, response.headers);
@@ -86,7 +91,10 @@ export async function executeGeneration({ config, mode, payload, fetchImpl, sign
       let reservation;
       try { reservation = await awaitWithSignal(Promise.resolve().then(() => reserveBudget(config)), controller.signal); }
       catch (error) {
-        if (controller.signal.aborted) throw controller.signal.reason;
+        const reason = controller.signal.reason;
+        // A budget store that outlives the deadline is a store failure, not a provider
+        // timeout. Its late result is discarded: no inference and no refund attempt.
+        if (controller.signal.aborted && !(reason instanceof RequestError && reason.code === 'upstream_timeout')) throw reason;
         throw new RequestError(503, 'budget_store_failed');
       }
       if (reservation === false || reservation?.allowed === false) {
@@ -118,6 +126,7 @@ export async function executeGeneration({ config, mode, payload, fetchImpl, sign
     ensureCurrent();
     return { result, normalized, promptVersion: generation.promptVersion, config: selected.config };
   } catch (error) {
+    if (error instanceof RequestError && error.code === 'budget_store_failed') throw error;
     if (controller.signal.aborted) throw controller.signal.reason;
     if (error instanceof RequestError) throw error;
     if (error instanceof ProviderCompatibilityError) throw new RequestError(422, 'task_configuration_invalid');

@@ -273,8 +273,11 @@ test('native provider error codes retain category when generic HTTP 400 obscures
     [{ error: { status: 'PERMISSION_DENIED' } }, 'provider_account'],
     [{ error: { status: 'RESOURCE_EXHAUSTED' } }, 'provider_quota'],
     [{ error: { status: 'NOT_FOUND' } }, 'provider_model_unavailable'],
-    [{ error: { code: 'insufficient_quota' } }, 'provider_quota']
+    [{ error: { code: 'insufficient_quota' } }, 'provider_account'],
+    [{ error: { status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] } }, 'provider_authentication']
   ]) assert.deepEqual(normalizeError({ status: 400, data }), { category });
+  // OpenAI reports exhausted billing as HTTP 429; retrying after a delay cannot help.
+  assert.deepEqual(normalizeError({ status: 429, data: { error: { code: 'insufficient_quota' } } }), { category: 'provider_account' });
 });
 
 test('operator asserted custom models cannot be URLs or accidentally copied credentials', () => {

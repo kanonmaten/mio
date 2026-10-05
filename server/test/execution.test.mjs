@@ -26,17 +26,17 @@ async function fixture(t, options) {
   return { url, responses, send: () => fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(500) }) };
 }
 
-test('hung quota returns the post-body deadline and releases both concurrency slots', async t => {
+test('hung quota returns a budget-store failure at the deadline and releases both concurrency slots', async t => {
   let reservations = 0;
   let providerCalls = 0;
   const f = await fixture(t, { reserveBudget: () => { reservations++; return new Promise(() => {}); },
     fetchImpl: async () => { providerCalls++; return completion(); } });
   const results = await Promise.all([f.send(), f.send()]);
   for (const response of results) {
-    assert.equal(response.status, 504);
-    assert.deepEqual(await response.json(), { error: 'upstream_timeout' });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'budget_store_failed' });
   }
-  assert.equal((await f.send()).status, 504);
+  assert.equal((await f.send()).status, 503);
   assert.equal(reservations, 3);
   assert.equal(providerCalls, 0);
   await tick();
@@ -49,11 +49,11 @@ test('late uncancellable quota completion cannot start inference or refund quota
   const f = await fixture(t, { reserveBudget: () => reservation.promise,
     fetchImpl: async () => { providerCalls++; return completion(); } });
   const response = await f.send();
-  assert.equal(response.status, 504);
+  assert.equal(response.status, 503);
   reservation.resolve(true);
   await tick();
   assert.equal(providerCalls, 0);
-  assert.deepEqual(await response.json(), { error: 'upstream_timeout' });
+  assert.deepEqual(await response.json(), { error: 'budget_store_failed' });
 });
 
 test('quota and response reading share one deadline even when transports ignore abort', async t => {
@@ -182,4 +182,13 @@ test('public generation metadata drops URLs and credential-shaped identifiers', 
       'X-Mio-Returned-Model': 'model-1', 'X-Mio-Upstream-Request-ID': 'req_1',
       'X-Mio-Usage-Input-Tokens': '4', 'X-Mio-Usage-Output-Tokens': '2', 'X-Mio-Usage-Reasoning-Tokens': '0'
     });
+});
+
+test('oversized provider error envelopes keep their quota category and Retry-After', async t => {
+  const f = await fixture(t, { fetchImpl: async () => new Response('x'.repeat(70_000), { status: 429,
+    headers: { 'Content-Type': 'application/json', 'Retry-After': '7' } }) });
+  const response = await f.send();
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get('retry-after'), '7');
+  assert.deepEqual(await response.json(), { error: 'provider_quota' });
 });
