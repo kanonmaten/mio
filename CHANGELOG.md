@@ -2,7 +2,7 @@
 
 ## Gatewayn publicerad, 2026-10-05
 
-- `mio-private-gateway` kör nu release `2026-10-05.1` (NIM/DeepSeek, `/v2`). Driftguiden förklarar att Dashboardens Deploy bara ändrar inställningar och aldrig publicerar ny kod. Felsökning av Pianissimo-anslutningen: en DNS-profil (t.ex. Quad9) på iPhonen kan hindra `…ts.net`-uppslag.
+- `mio-private-gateway` kör release `2026-10-05.1` (`/v2`). NIM:s gratisnivå svarade inte inom 40 s; aktuellt val är nu Groq `qwen/qwen3.8-27b`, med Groqs gratisgränser dokumenterade i katalogen. Driftguiden förklarar att Dashboardens Deploy bara ändrar inställningar och aldrig publicerar ny kod. Felsökning av Pianissimo-anslutningen: en DNS-profil (t.ex. Quad9) på iPhonen kan hindra `…ts.net`-uppslag.
 
 ## IPA-workflowens testtid, 2026-10-05
 

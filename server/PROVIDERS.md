@@ -31,7 +31,13 @@ Det finns ingen tyst parameter-, modell- eller leverantörsfallback. En okänd e
 
 OpenAI direkt: `gpt-6-luna`, `gpt-6-sol`, `gpt-5.1` (`-2025-11-13`), `gpt-5.2` (`-2025-12-11`), `gpt-5.4` (`-2026-03-05`), `gpt-4.1` (`-2025-04-14`), `gpt-4.1-mini` (`-2025-04-14`), `gpt-4.1-nano` (`-2025-04-14`), `gpt-4o` (`-2024-08-06`, `-2024-11-20`) och `gpt-4o-mini` (`-2024-07-18`). Inga andra datumändelser är tillåtna.
 
-### NVIDIA NIM (aktuellt val)
+### Groq (aktuellt val)
+
+`qwen/qwen3.8-27b` med `GROQ_API_KEY`, reasoning av via `reasoning_effort: none` och strikt JSON-schema. Groqs gratisnivå begränsar per organisation (fler nycklar ger inte mer), enligt tredjepartssammanställningar 2026-10-05 eftersom Groqs egen sida inte kunde hämtas: **30 anrop/min, 1 000 anrop/dygn, 8 000 token/min och 200 000 token/dygn**. Kontrollera de exakta värdena för ditt konto under console.groq.com → Settings → Limits. Token per minut begränsar först: en lektionsdel är några tusen token, en kort fråga några hundra. Mio har `MIO_REQUESTS_PER_MINUTE=20` och ingen egen dagsgräns; Groqs 429 visas som kvotfel utan automatiskt omförsök. Heldagsanalys ryms inte i 200 000 token/dygn.
+
+### NVIDIA NIM (tidigare val)
+
+**Observerat 2026-10-05:** efter publicering svarade NIM:s gratisnivå inte inom Mios 40 s-gräns på en enkel fråga från telefonen, och användarens direkta prov mot NIM fick inget svar. Gatewayn bytte därför till Groq. Orsaken (kö på delad gratiskapacitet eller schema-vägen) är inte fastställd.
 
 Granskat 2026-10-05. NIM:s värdade API på `https://integrate.api.nvidia.com/v1` är OpenAI-kompatibelt. Gratisnivån har **40 anrop per minut per API-nyckel**, delat mellan alla modeller, och ingen dagskvot. Mio sätter därför `MIO_REQUESTS_PER_MINUTE=20` och ingen daglig gräns.
 

@@ -28,7 +28,7 @@ En lösenordshanterare fungerar också om du väljer bokstäver och siffror utan
 
 ## 2. Byt leverantör eller modell
 
-Aktuellt val är **NVIDIA NIM → `deepseek-ai/deepseek-v4.1-flash`**. Se [katalogen](../PROVIDERS.md) för andra tillåtna modeller och varför GLM 5.3 och Kimi K3 är spärrade.
+Aktuellt val (sedan 2026-10-05 kväll) är **Groq → `qwen/qwen3.8-27b`**. NIM-gratisnivån svarade inte inom Mios 40 s vid första provet; se [katalogen](../PROVIDERS.md#nvidia-nim-tidigare-val). Se [katalogen](../PROVIDERS.md) för andra tillåtna modeller och varför GLM 5.3 och Kimi K3 är spärrade.
 
 1. Stäng av AI-tolkning i Mio och låt pågående anrop bli klara.
 2. Cloudflare Dashboard → **Workers & Pages → mio-private-gateway → Settings → Variables and Secrets**.
@@ -36,15 +36,17 @@ Aktuellt val är **NVIDIA NIM → `deepseek-ai/deepseek-v4.1-flash`**. Se [katal
 
    | Namn | Typ | Värde |
    |---|---|---|
-   | `MIO_AI_PROVIDER` | Text | `nvidia` |
-   | `MIO_AI_MODEL` | Text | `deepseek-ai/deepseek-v4.1-flash` |
-   | `NVIDIA_API_KEY` | Secret | Din `nvapi-…`-nyckel |
-   | `MIO_REQUESTS_PER_MINUTE` | Text | `20` (NIM tillåter 40/min per nyckel) |
+   | `MIO_AI_PROVIDER` | Text | `groq` |
+   | `MIO_AI_MODEL` | Text | `qwen/qwen3.8-27b` |
+   | `GROQ_API_KEY` | Secret | Din Groq-nyckel (console.groq.com → API Keys) |
+   | `MIO_REQUESTS_PER_MINUTE` | Text | `20` (Groqs gratisnivå tillåter 30/min) |
    | `MIO_LESSON_INTERVAL_SECONDS` | Text | `60` |
    | `MIO_GATEWAY_TOKEN` | Secret | Behåll befintlig |
 
-4. **Ta bort** `MIO_REQUESTS_PER_DAY` (ingen daglig gräns; eller ange ett heltal om du vill ha en), `MIO_OPENAI_MODEL` och, när du inte längre behöver gå tillbaka, `GROQ_API_KEY`. Kontrollera att `MIO_AI_TASK_PROFILES` saknas eller pekar på det du vill; den går före de globala värdena.
-5. Spara med **Deploy**. Gör sedan steg 5.
+4. **Ta bort** `MIO_REQUESTS_PER_DAY` (ingen daglig gräns; eller ange ett heltal om du vill ha en), `MIO_OPENAI_MODEL` och, när du inte längre behöver gå tillbaka, `NVIDIA_API_KEY`. Kontrollera att `MIO_AI_TASK_PROFILES` saknas eller pekar på det du vill; den går före de globala värdena.
+5. Spara med **Deploy**. Uppdatera samma textvärden i `server/wrangler.jsonc`, annars återställer nästa `wrangler deploy` dem. Gör sedan steg 5.
+
+Dashboardens **Deploy** publicerar bara inställningar med den kod som redan körs. Ny gatewaykod kräver steg 3.
 
 Behåll serveradress, gatewaytoken, D1-databas och Access-par vid modellbyten; ingen ny IPA behövs. Exempel tillbaka till Groq: `groq`, `qwen/qwen3.8-27b`, Secret `GROQ_API_KEY`.
 
@@ -103,7 +105,7 @@ Källor: [Worker-skydd](https://developers.cloudflare.com/workers/configuration/
 **Modellfri status.** I Mio: **Testa text-AI-anslutning**. Det anropar skyddad `GET /v2/status`, gör inget modellanrop och förbrukar ingen kvot. Förvänta:
 
 - release `2026-10-05.1` och protocolVersion 2,
-- uppgifterna `ask`, `everyday`, `lesson` som `nvidia · deepseek-ai/deepseek-v4.1-flash`,
+- uppgifterna `ask`, `everyday`, `lesson` som `groq · qwen/qwen3.8-27b`,
 - "Servern har ingen daglig gräns" (kvoten är `null` när `MIO_REQUESTS_PER_DAY` saknas).
 
 `configured:true` betyder giltig lokal konfiguration, inte att nyckeln, saldot eller modellen fungerar. Ny konfiguration ger 409 en gång i appen; granska och aktivera igen.

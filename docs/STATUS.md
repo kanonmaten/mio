@@ -5,6 +5,7 @@
 - Användaren körde i `server/` på sin dator med Node 26.10.0: `npm ci`, 130/130 gateway-tester, Worker dry-run och samtliga fyra runtimeprov (inga externa anrop), `wrangler secret list` (`MIO_GATEWAY_TOKEN` och `NVIDIA_API_KEY` finns) och sedan `wrangler deploy`.
 - Läsverifierat via Cloudflare-API: `mio-private-gateway` ändrad 20:20 UTC, och den publicerade koden innehåller `RELEASE = "2026-10-05.1"`, NVIDIA-adaptern och `/v2/status`. Den tidigare aktiva koden (ändrad 11:59 UTC) var fortfarande den gamla OpenAI-koden; en Dashboard-deploy med NIM-variabler gav därför 503 `gateway_not_configured` på telefonen (export kl. 21:21 och 21:35 lokal tid, utan `X-Mio-Release`).
 - Användaren rapporterar att text-AI-testet nu fungerar. Inte utfört här: syntetiska modellprov, granskning av ny export efter publiceringen.
+- Därefter: en enkel fråga från telefonen fick timeout efter Mios 40 s-gräns, och användarens direkta prov mot NIM fick inget svar. Användaren bytte till Groq `qwen/qwen3.8-27b` i en lokal `wrangler.jsonc` och körde `wrangler deploy`. Groq-anrop och den lokala filändringen är inte verifierade härifrån.
 - Transkriptionstestets "hostname could not be found" berodde på en Quad9-DNS-profil på iPhonen som tog över `…ts.net`-uppslag från Tailscale. Efter att profilen stängts av fungerar anslutningstestet enligt användaren. Ingen kodändring.
 
 ## IPA-workflowen grön för `82036a6`, 2026-10-05
