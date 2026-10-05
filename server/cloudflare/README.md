@@ -4,7 +4,7 @@ Gatewayen `mio-private-gateway` är en Cloudflare Worker. Den tar emot godkända
 
 Guiden gäller den befintliga installationen. Ett helt nytt konto står sist.
 
-**Läge 2026-10-05:** den aktiva Workern kör fortfarande äldre OpenAI-kod (version `4c22cc43-…`), som saknar NIM, Groq, taskprofiler och `/v2`. Att bara ändra variabler i Dashboard räcker därför inte. Ny kod måste publiceras först (steg 3).
+**Läge 2026-10-05 kväll:** gatewaykoden med release `2026-10-05.1` (NIM, taskprofiler och `/v2`) är publicerad med `wrangler deploy`. Observera: **Deploy** i Dashboard efter en variabeländring publicerar samma kod som redan körs, med nya inställningar. Den hämtar aldrig ny kod från repot. Ny gatewaykod kräver alltid steg 3.
 
 ## 1. Vilken hemlighet är vilken?
 

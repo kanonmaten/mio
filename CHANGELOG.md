@@ -1,5 +1,9 @@
 # Ändringslogg
 
+## Gatewayn publicerad, 2026-10-05
+
+- `mio-private-gateway` kör nu release `2026-10-05.1` (NIM/DeepSeek, `/v2`). Driftguiden förklarar att Dashboardens Deploy bara ändrar inställningar och aldrig publicerar ny kod. Felsökning av Pianissimo-anslutningen: en DNS-profil (t.ex. Quad9) på iPhonen kan hindra `…ts.net`-uppslag.
+
 ## IPA-workflowens testtid, 2026-10-05
 
 - Körning #23: ljudtestet passerade. UI-testet fastnar direkt efter tryck på "Markera … som klar": appen blir aldrig inaktiv ("App event loop idle notification not received"). Samma appkod passerade i körning #20, så något i den nya simulatorn blockerar troligen huvudtråden när uppgiften avslutas och dess alarm/påminnelse tas bort (AlarmKit/notiser i `MioSystemServices.cancelActions`). Workflowen skriver nu ut huvudtrådens stack ur testets spindump för att visa exakt vilket anrop som blockerar.

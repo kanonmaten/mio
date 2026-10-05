@@ -1,5 +1,12 @@
 # Bygg- och teststatus
 
+## Gatewayn publicerad med NIM-koden, 2026-10-05
+
+- Användaren körde i `server/` på sin dator med Node 26.10.0: `npm ci`, 130/130 gateway-tester, Worker dry-run och samtliga fyra runtimeprov (inga externa anrop), `wrangler secret list` (`MIO_GATEWAY_TOKEN` och `NVIDIA_API_KEY` finns) och sedan `wrangler deploy`.
+- Läsverifierat via Cloudflare-API: `mio-private-gateway` ändrad 20:20 UTC, och den publicerade koden innehåller `RELEASE = "2026-10-05.1"`, NVIDIA-adaptern och `/v2/status`. Den tidigare aktiva koden (ändrad 11:59 UTC) var fortfarande den gamla OpenAI-koden; en Dashboard-deploy med NIM-variabler gav därför 503 `gateway_not_configured` på telefonen (export kl. 21:21 och 21:35 lokal tid, utan `X-Mio-Release`).
+- Användaren rapporterar att text-AI-testet nu fungerar. Inte utfört här: syntetiska modellprov, granskning av ny export efter publiceringen.
+- Transkriptionstestets "hostname could not be found" berodde på en Quad9-DNS-profil på iPhonen som tog över `…ts.net`-uppslag från Tailscale. Efter att profilen stängts av fungerar anslutningstestet enligt användaren. Ingen kodändring.
+
 ## IPA-workflowen grön för `82036a6`, 2026-10-05
 
 - [Körning 37343657715](https://github.com/kanonmaten/mio/actions/runs/37343657715) (Bygg Mio IPA #24, runner `xcode-27`): native strict concurrency, Release, testkompilering, samtliga iOS-simulator-XCTest och tre UI-smokeprov godkända på 11 min; artifact `Mio-IPA` skapad. IPA:ns SHA-256 och byggnummer står i `Mio-buildinfo.txt` i artifacten (granskningsmiljön kunde inte hämta den). **Inte installerad och inte telefonverifierad.**

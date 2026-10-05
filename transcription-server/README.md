@@ -93,6 +93,7 @@ Skriptet visar modell och version när tjänsten är redo. Inget ljud skickas.
 | Tjänsten startar om hela tiden | GPU-minnet är slut (stäng spel och andra GPU-appar) eller CUDA fungerar inte: kör `nvidia-smi` och `install.sh` igen |
 | Mio säger fel token (401) | Klistra in token igen, utan mellanslag. Det är inte text-AI:ns token |
 | Fungerar lokalt men inte från telefonen | Tailscale på i telefonen? Rätt adress från `tailscale serve status`? Grants som släpper igenom ditt konto? |
+| "A server with the specified hostname could not be found" på telefonen | Namnet når inte Tailscales DNS. Slå på **Use Tailscale DNS** i Tailscale-appen och stäng av andra DNS-profiler (t.ex. Quad9, NextDNS, AdGuard under Inställningar → Allmänt → VPN och enhetshantering). |
 
 ## Uppdateringar
 
