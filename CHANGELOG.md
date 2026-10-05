@@ -1,5 +1,9 @@
 # Ändringslogg
 
+## IPA-workflowens testtid, 2026-10-05
+
+- Körning #21 avbröts när jobbet nådde 30 minuter under iOS-testerna (körning #20 behövde 18 min för samma steg). Varje test har nu en tidsgräns (normalt 2 min, högst 5 min), så ett test som hänger misslyckas med sitt namn i stället för att tysta förbruka jobbet. Teststeget får högst 35 min och jobbet 50 min.
+
 ## Enklare Pianissimo-installation med automatisk uppdatering, 2026-10-05
 
 - `transcription-server/install.sh` installerar eller uppdaterar hela tjänsten med ett kommando: verktyg, tjänstekonto, Python och låsta paket, konfiguration med ny token, modellnedladdning, systemd och Tailscale Serve (om Tailscale redan är inloggat). Fungerar från valfri sökväg till arbetskopian.

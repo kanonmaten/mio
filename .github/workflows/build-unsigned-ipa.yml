@@ -16,7 +16,7 @@ jobs:
   build:
     name: Xcode 27 – bygg, test och IPA
     runs-on: xcode-27
-    timeout-minutes: 30
+    timeout-minutes: 50
     env:
       EXPECTED_IOS_MAJOR: "27"
       MINIMUM_IOS_VERSION: "26.0"
@@ -95,6 +95,8 @@ jobs:
             build-for-testing 2>&1 | tee "$RUNNER_TEMP/Mio-test-build.log"
 
       - name: Kör enhetstester
+        # A hung test fails by name after its allowance instead of consuming the job limit.
+        timeout-minutes: 35
         run: |
           set -euo pipefail
           command -v jq
@@ -139,6 +141,9 @@ jobs:
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$RUNNER_TEMP/TestDerivedData" \
             -resultBundlePath "$RUNNER_TEMP/Mio-tests.xcresult" \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 120 \
+            -maximum-test-execution-time-allowance 300 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
