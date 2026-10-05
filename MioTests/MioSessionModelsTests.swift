@@ -89,6 +89,23 @@ final class MioSessionModelsTests: XCTestCase {
         XCTAssertEqual(register.sessions.first { $0.id == lesson.id }?.endedAt, Date(timeIntervalSince1970: 2_010))
     }
 
+    func testInPlaceMutationKeepsOrderingSelectionAndOtherSessions() {
+        var register = MioSessionRegister()
+        let older = MioSession(startedAt: Date(timeIntervalSince1970: 1_000), title: "Äldre")
+        let newer = MioSession(startedAt: Date(timeIntervalSince1970: 3_000), title: "Nyare")
+        register.current = older
+        register.current = newer
+        register.current = MioSession(startedAt: Date(timeIntervalSince1970: 2_000), title: "Mitten")
+        register.current?.transcripts.append(TranscriptSegment(text: "Syntetisk text", containsMio: false))
+        register.current?.title = "Mitten ändrad"
+        XCTAssertEqual(register.sessions.map(\.title), ["Nyare", "Mitten ändrad", "Äldre"])
+        XCTAssertEqual(register.current?.transcripts.count, 1)
+        register.current = nil
+        register.current?.title = "Ingen vald"
+        XCTAssertNil(register.current)
+        XCTAssertEqual(register.sessions.count, 3, "deselecting keeps every session in the register")
+    }
+
     func testSessionRegisterRejectsOlderMutationResults() {
         var register = MioSessionRegister()
         var original = MioSession(title: "Äldre")
