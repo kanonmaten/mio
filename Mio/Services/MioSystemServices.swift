@@ -236,7 +236,11 @@ final class MioSystemServices {
     /// Call before deleting a post, so a failed system cancellation remains visible.
     @discardableResult
     func cancelActions(for itemID: UUID) async -> Bool {
-        guard !isBusy else { return false }
+        guard !isBusy else {
+            // A stale message from another operation must not explain this failure.
+            errorMessage = "En annan alarm- eller påminnelseåtgärd pågår. Vänta tills den är klar och försök igen."
+            return false
+        }
         isBusy = true
         errorMessage = nil
         statusMessage = nil
@@ -265,7 +269,11 @@ final class MioSystemServices {
     /// Calendar copies belong to the user-selected calendar and are not deleted here.
     @discardableResult
     func removeAll() async -> Bool {
-        guard !isBusy else { return false }
+        guard !isBusy else {
+            // A stale message from another operation must not explain this failure.
+            errorMessage = "En annan alarm- eller påminnelseåtgärd pågår. Vänta tills den är klar och försök igen."
+            return false
+        }
         isBusy = true
         errorMessage = nil
         statusMessage = nil

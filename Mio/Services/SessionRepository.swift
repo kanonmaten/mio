@@ -142,6 +142,17 @@ actor SessionRepository {
         var sessions = try loadSessions()
         sessions.removeAll { $0.id == id }
         try write(sessions)
+        // Session exports are regenerable snapshots and may contain the deleted session.
+        try removeTemporaryExports()
+    }
+
+    func removeTemporaryExports() throws {
+        for directory in Set([exportDirectoryURL, fileManager.temporaryDirectory]) {
+            guard fileManager.fileExists(atPath: directory.path) else { continue }
+            let temporaryExports = try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+                .filter { $0.lastPathComponent.hasPrefix("Mio-session-") && $0.pathExtension == "json" }
+            for export in temporaryExports { try fileManager.removeItem(at: export) }
+        }
     }
 
     @discardableResult
@@ -153,17 +164,14 @@ actor SessionRepository {
         if fileManager.fileExists(atPath: storageURL.path) {
             try fileManager.removeItem(at: storageURL)
         }
-        for directory in Set([exportDirectoryURL, fileManager.temporaryDirectory]) {
-            guard fileManager.fileExists(atPath: directory.path) else { continue }
-            let temporaryExports = try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-                .filter { $0.lastPathComponent.hasPrefix("Mio-session-") && $0.pathExtension == "json" }
-            for export in temporaryExports { try fileManager.removeItem(at: export) }
-        }
+        try removeTemporaryExports()
         cachedSessions = []; cachedStamp = nil; deletedSessionIDs = []
         return generation
     }
 
     func makeExportFile(for session: MioSession) throws -> URL {
+        // A caller's snapshot must never resurrect a deleted session in a new export.
+        guard !deletedSessionIDs.contains(session.id) else { throw SessionRepositoryError.missingSession }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "sv-SE")
         formatter.dateFormat = "yyyy-MM-dd-HHmm"

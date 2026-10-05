@@ -108,13 +108,18 @@ actor MioContentRepository {
         if fileManager.fileExists(atPath: storageURL.path) {
             try fileManager.removeItem(at: storageURL)
         }
+        try removeTemporaryExports()
+        cachedItems = []; cachedStamp = nil
+    }
+
+    /// Full local exports include sessions, so a session deletion removes them as well.
+    func removeTemporaryExports() throws {
         for directory in Set([exportDirectoryURL, fileManager.temporaryDirectory]) {
             guard fileManager.fileExists(atPath: directory.path) else { continue }
             let temporaryExports = try fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
                 .filter { $0.lastPathComponent.hasPrefix("Mio-lokal-export-") && $0.pathExtension == "json" }
             for export in temporaryExports { try fileManager.removeItem(at: export) }
         }
-        cachedItems = []; cachedStamp = nil
     }
 
     func makeExportFile(

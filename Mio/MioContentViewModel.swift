@@ -135,6 +135,11 @@ final class MioContentViewModel {
         catch { return publish(.failure("Kunde inte radera lokalt innehåll: \(error.localizedDescription)")) }
     }
 
+    func removeExportsOutcome() async -> MioOperationOutcome {
+        do { try await repository.removeTemporaryExports(); exportURL = nil; return .success }
+        catch { return publish(.failure("Kunde inte radera tidigare exportfiler: \(error.localizedDescription)")) }
+    }
+
     func item(id: UUID) -> MioContentItem? { items.first { $0.id == id } }
 
     func filteredItems(kinds: Set<MioContentKind>? = nil, searchText: String = "") -> [MioContentItem] {

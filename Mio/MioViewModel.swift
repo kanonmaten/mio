@@ -38,6 +38,8 @@ final class MioViewModel {
     var isPreparingExport = false
     var isSwitchingCaptureMode = false
     private var suspendedEverydaySessionID: UUID?
+    /// True only while startup is preparing a session it created itself.
+    private var preparingNewSession = false
     var isLessonActive: Bool { currentSession?.isLesson == true && currentSession?.endedAt == nil }
     /// Receives finalized text only; the assistant never observes or stores audio buffers.
     @ObservationIgnored var onFinalizedTranscript: ((MioSession) -> Void)?
@@ -190,6 +192,7 @@ final class MioViewModel {
     func beginListening() {
         guard !MioMaintenanceState.shared.blocksWork else {
             errorMessage = "Slutför dataåtgärden innan du startar mikrofonen."
+            abandonUnstartedLesson()
             return
         }
         guard !isSwitchingCaptureMode else { return }
@@ -246,7 +249,10 @@ final class MioViewModel {
         writeAdmitted = false
         await MioMaintenanceState.shared.waitForExclusive()
         guard !Task.isCancelled, !MioMaintenanceState.shared.recoveryBlocked,
-              currentSession?.id == lessonID else { return }
+              currentSession?.id == lessonID else {
+            if currentSession?.id == lessonID { abandonUnstartedLesson() }
+            return
+        }
         // Continue the original explicit lesson command through the tracked startup task.
         isSwitchingCaptureMode = false
         beginListening()
@@ -276,7 +282,7 @@ final class MioViewModel {
     }
 
     private func startListening() async {
-        guard !Task.isCancelled, !MioMaintenanceState.shared.blocksWork else { return }
+        guard !Task.isCancelled, !MioMaintenanceState.shared.blocksWork else { abandonUnstartedLesson(); return }
         guard runState == .off
                 || runState == .paused
                 || runState == .failed
@@ -284,14 +290,15 @@ final class MioViewModel {
         else { return }
         if repositoryGeneration == nil { repositoryGeneration = await repository.operationGeneration() }
         diagnosticsGeneration = await diagnostics.beginRequest()
-        guard !Task.isCancelled, !MioMaintenanceState.shared.blocksWork else { return }
+        guard !Task.isCancelled, !MioMaintenanceState.shared.blocksWork else { abandonUnstartedLesson(); return }
         pauseTask?.cancel()
         pauseTask = nil
         pauseUntil = nil
         errorMessage = nil
         exportURL = nil
 
-        if currentSession == nil || currentSession?.endedAt != nil {
+        preparingNewSession = currentSession == nil || currentSession?.endedAt != nil
+        if preparingNewSession {
             currentSession = MioSession()
             lastPersistedAt = nil
             appendEvent(
@@ -310,7 +317,8 @@ final class MioViewModel {
         statusMessage = "Ansluter till transkriptionsservern innan mikrofonen startas …"
 
         guard await forceSave() else {
-            runState = .paused
+            runState = .off
+            if !abandonUnstartedLesson() { runState = .paused }
             statusMessage = "Mikrofonen är av. Sessionen kunde inte sparas."
             return
         }
@@ -371,13 +379,46 @@ final class MioViewModel {
 
     private func finishCancelledPreparation() async {
         errorMessage = nil
-        runState = .off
         liveTranscript = ""
         activePipelineID = nil
+        guard currentSession?.isLesson == true || preparingNewSession else {
+            // A resumed session keeps its identity and remains paused, not ended.
+            runState = .paused
+            appendEvent(kind: .info, message: "Starten avbröts av användaren. Sessionen är fortfarande pausad.")
+            statusMessage = "Starten avbröts. Mikrofonen används inte; tryck Fortsätt när du vill lyssna igen."
+            await forceSave(allowCancelledCleanup: true)
+            await refreshSupport()
+            return
+        }
+        runState = .off
         statusMessage = "Starten avbröts. Mio är av och mikrofonen används inte."
         finishCurrentSession(message: "Starten avbröts av användaren.")
         if await forceSave(allowCancelledCleanup: true), currentSession?.isLesson == true { returnToEveryday() }
         await refreshSupport()
+    }
+
+    /// A lesson that never reached capture holds no evidence and was never persisted.
+    /// Dropping it restores the suspended everyday session without a disk write, which
+    /// must also work while deletion recovery blocks writes.
+    @discardableResult
+    private func abandonUnstartedLesson() -> Bool {
+        guard let lesson = currentSession, lesson.isLesson, lesson.endedAt == nil, lesson.transcripts.isEmpty,
+              lastPersistedAt == nil, pipeline == nil, runState == .off else { return false }
+        saveTask?.cancel(); saveTask = nil
+        sessionRegister.remove(id: lesson.id)
+        sessionOperationTokens[lesson.id] = nil
+        if let id = suspendedEverydaySessionID,
+           let suspended = previousSessions.first(where: { $0.id == id && $0.endedAt == nil }) {
+            currentSession = suspended
+            runState = .paused
+            statusMessage = "Lektionen startades inte. Vardags-Mio är pausat tills du väljer Fortsätt Mio."
+        } else {
+            currentSession = nil
+            statusMessage = "Lektionen startades inte. Mikrofonen används inte."
+        }
+        suspendedEverydaySessionID = nil
+        stateRevision &+= 1
+        return true
     }
 
     private func finishFailedLessonPreparation() async {
@@ -414,9 +455,11 @@ final class MioViewModel {
         liveTranscript = ""
         statusMessage = "Mio är av. Mikrofonen används inte."
         let didSave = await forceSave()
-        if let lesson = currentSession, lesson.isLesson, didSave {
+        if let lesson = currentSession, lesson.isLesson {
+            // Finalization is queued even when the final save failed; the workflow retries
+            // that save first and keeps the lesson visibly pending until it succeeds.
             onLessonFinished?(lesson)
-            returnToEveryday()
+            if didSave { returnToEveryday() }
         }
     }
 
@@ -925,6 +968,30 @@ final class MioViewModel {
         catch {
             errorMessage = "Kunde inte spara sessionsdata: \(error.localizedDescription)"
             return false
+        }
+    }
+
+    /// Retries the final checkpoint of an ended session that may exist only in memory.
+    func persistEndedSession(id: UUID) async -> MioOperationOutcome {
+        guard let session = session(id: id), session.endedAt != nil else {
+            return .failure("Sessionen är inte avslutad eller finns inte längre.")
+        }
+        do {
+            if repositoryGeneration == nil { repositoryGeneration = await repository.operationGeneration() }
+            let token = try await operationToken(for: id)
+            guard MioMaintenanceState.shared.beginWrite() else {
+                return .conflict("Sessionen väntar på att den lokala dataåtgärden slutförs.")
+            }
+            defer { MioMaintenanceState.shared.endWrite() }
+            let stored = try await repository.saveCaptureCheckpoint(session, token: token)
+            if var current = self.session(id: id) {
+                current.mutationRevision = max(current.mutationRevision ?? 0, stored.mutationRevision ?? 0)
+                if currentSession?.id == id { currentSession = current } else { sessionRegister.replace(current) }
+            }
+            if currentSession?.id == id { lastPersistedAt = .now }
+            return .success
+        } catch {
+            return .failure("Kunde inte spara lektionen: \(error.localizedDescription)")
         }
     }
 

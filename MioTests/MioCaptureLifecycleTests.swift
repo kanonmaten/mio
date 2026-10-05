@@ -102,6 +102,56 @@ final class MioCaptureLifecycleTests: XCTestCase {
     }
 
     @MainActor
+    func testLessonCancelledBeforeCaptureRestoresEverydayWithoutLeavingAnOpenLesson() async throws {
+        let fixture = fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        defer { MioMaintenanceState.shared.endExclusive() }
+        let model = MioViewModel(repository: fixture.repository, captureFactory: { _, _ in LifecycleCapture() })
+        await model.bootstrap()
+        model.beginListening()
+        await waitUntil { model.runState == .listening }
+        let everydayID = try XCTUnwrap(model.currentSession?.id)
+        let lesson = Task { await model.beginLesson(title: "Väntar på dataåtgärd") }
+        await waitUntil { model.runState == .stopping }
+        // An export/deletion barrier arrives while the lesson transition is admitted.
+        let exclusive = Task { await MioMaintenanceState.shared.beginExclusive(deleting: false) }
+        await waitUntil { model.isLessonActive }
+        XCTAssertTrue(await exclusive.value)
+        lesson.cancel()
+        await lesson.value
+        XCTAssertEqual(model.currentSession?.id, everydayID)
+        XCTAssertNil(model.currentSession?.endedAt)
+        XCTAssertEqual(model.runState, .paused)
+        XCTAssertFalse(model.allSessions.contains(where: \.isLesson), "an unstarted lesson must not remain open")
+    }
+
+    @MainActor
+    func testCancelledResumeKeepsPausedEverydaySessionOpen() async throws {
+        let fixture = fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let held = LifecycleCapture(holdsStart: true)
+        var starts = 0
+        let model = MioViewModel(repository: fixture.repository, captureFactory: { _, _ in
+            starts += 1
+            return starts == 2 ? held : LifecycleCapture()
+        })
+        await model.bootstrap()
+        model.beginListening()
+        await waitUntil { model.runState == .listening }
+        let everydayID = try XCTUnwrap(model.currentSession?.id)
+        await model.pause(.untilResumed)
+        XCTAssertEqual(model.runState, .paused)
+        model.beginListening()
+        await held.waitForStart()
+        model.cancelPreparation()
+        await held.releaseStart()
+        await waitUntil { model.runState == .paused && model.currentSession?.id == everydayID }
+        XCTAssertNil(model.currentSession?.endedAt, "cancelling a resume must not end the existing session")
+        XCTAssertEqual(model.allSessions.count, 1)
+        await model.stopListening()
+    }
+
+    @MainActor
     func testSuccessfulLessonSaveFinalizesDespiteEarlierPresentationError() async throws {
         let fixture = fixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }

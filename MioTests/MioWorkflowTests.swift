@@ -183,6 +183,80 @@ final class MioWorkflowTests: XCTestCase {
     }
 
     @MainActor
+    func testPendingLessonSurvivesRecoveryBlockAndRestart() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "MioWorkflowTests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defer { MioMaintenanceState.shared.setRecoveryBlocked(false) }
+        func launch() -> (workflow: MioWorkflowCoordinator, capture: MioViewModel, assistant: MioAssistantViewModel) {
+            let capture = MioViewModel(repository: SessionRepository(storageURL: root.appendingPathComponent("sessions.json")))
+            let assistant = MioAssistantViewModel(repository: MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json")))
+            let content = MioContentViewModel(repository: MioContentRepository(storageURL: root.appendingPathComponent("content.json")))
+            let workflow = MioWorkflowCoordinator(capture: capture, content: content, assistant: assistant,
+                analysis: MioAnalysisCoordinator(), journal: MioDeletionJournal(storageURL: root.appendingPathComponent("operations.json")),
+                diagnostics: MioDiagnosticsRepository(storageURL: root.appendingPathComponent("diagnostics.json")),
+                systemActions: MioSystemActionPort(cancel: { _ in .success }, removeAll: { .success }),
+                clearCredentials: {}, pendingLessonDefaults: defaults)
+            return (workflow, capture, assistant)
+        }
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let session = MioSession(startedAt: start, endedAt: start.addingTimeInterval(60), title: "Väntande lektion", captureMode: .lesson)
+        let repository = SessionRepository(storageURL: root.appendingPathComponent("sessions.json"))
+        let token = try await repository.operationToken(for: session.id, generation: await repository.operationGeneration())
+        _ = try await repository.saveCaptureCheckpoint(session, token: token)
+
+        let first = launch()
+        await first.workflow.bootstrap()
+        MioMaintenanceState.shared.setRecoveryBlocked(true)
+        try XCTUnwrap(first.capture.onLessonFinished)(session)
+        for _ in 0..<200 { await Task.yield() }
+        XCTAssertTrue(first.workflow.pendingLessonIDs.contains(session.id), "a blocked finalization must stay visibly pending")
+        XCTAssertTrue(first.assistant.lessons.isEmpty)
+        MioMaintenanceState.shared.setRecoveryBlocked(false)
+
+        // A restart restores the pending ID and completes the local registration.
+        let second = launch()
+        await second.workflow.bootstrap()
+        for _ in 0..<10_000 { if !second.assistant.lessons.isEmpty { break }; await Task.yield() }
+        XCTAssertEqual(second.assistant.lessons.map(\.sessionID), [session.id])
+        XCTAssertFalse(second.workflow.pendingLessonIDs.contains(session.id))
+    }
+
+    @MainActor
+    func testSessionDeletionRemovesExportsThatMayContainIt() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let exports = root.appendingPathComponent("exports", isDirectory: true)
+        let sessions = SessionRepository(storageURL: root.appendingPathComponent("sessions.json"), exportDirectoryURL: exports)
+        let capture = MioViewModel(repository: sessions)
+        let assistant = MioAssistantViewModel(repository: MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json")))
+        let content = MioContentViewModel(repository: MioContentRepository(storageURL: root.appendingPathComponent("content.json"),
+                                                                           exportDirectoryURL: exports))
+        let workflow = MioWorkflowCoordinator(capture: capture, content: content, assistant: assistant,
+            analysis: MioAnalysisCoordinator(), journal: MioDeletionJournal(storageURL: root.appendingPathComponent("operations.json")),
+            diagnostics: MioDiagnosticsRepository(storageURL: root.appendingPathComponent("diagnostics.json")),
+            systemActions: MioSystemActionPort(cancel: { _ in .success }, removeAll: { .success }), clearCredentials: {})
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let session = MioSession(startedAt: start, endedAt: start.addingTimeInterval(60), title: "Exporterad")
+        let token = try await sessions.operationToken(for: session.id, generation: await sessions.operationGeneration())
+        _ = try await sessions.saveCaptureCheckpoint(session, token: token)
+        await workflow.bootstrap()
+        let export = try await sessions.makeExportFile(for: session)
+        let fullExport = exports.appendingPathComponent("Mio-lokal-export-syntetisk.json")
+        try Data("{}".utf8).write(to: fullExport)
+        let deleted = await workflow.deleteSession(id: session.id)
+        XCTAssertEqual(deleted, .success)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: export.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fullExport.path))
+        do {
+            _ = try await sessions.makeExportFile(for: session)
+            XCTFail("A deleted session must not be exported from a stale snapshot")
+        } catch {}
+    }
+
+    @MainActor
     func testCancelledQueuedFinalizationDoesNotRunAfterDeletionCommand() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

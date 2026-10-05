@@ -14,6 +14,10 @@ final class MioWorkflowCoordinator {
     private(set) var pendingLessonIDs: Set<UUID> = []
     private(set) var queuedCommands = 0
     @ObservationIgnored private let maintenance: MioMaintenanceState
+    /// ID-only list of lessons awaiting finalization, so a failed save, a recovery
+    /// block or an app restart cannot silently drop them.
+    @ObservationIgnored private let pendingLessonDefaults: UserDefaults
+    static let pendingLessonsKey = "mio.workflow.pendingLessonFinalization"
     @ObservationIgnored private var commandTail: Task<Void, Never>?
     @ObservationIgnored private var tailID: UUID?
     @ObservationIgnored private var commands: [UUID: Task<MioOperationOutcome, Never>] = [:]
@@ -39,7 +43,9 @@ final class MioWorkflowCoordinator {
          assistant: MioAssistantViewModel, analysis: MioAnalysisCoordinator,
          journal: MioDeletionJournal = MioDeletionJournal(), diagnostics: MioDiagnosticsRepository = .shared,
          systemActions: MioSystemActionPort? = nil, questions: MioQuestionWorkflow? = nil,
-         clearCredentials: (@MainActor () throws -> Void)? = nil) {
+         clearCredentials: (@MainActor () throws -> Void)? = nil,
+         pendingLessonDefaults: UserDefaults = .standard) {
+        self.pendingLessonDefaults = pendingLessonDefaults
         let systemActions = systemActions ?? .native
         let maintenance = MioMaintenanceState.shared
         let questions = questions ?? MioQuestionWorkflow(canSend: { !maintenance.blocksWork })
@@ -71,7 +77,10 @@ final class MioWorkflowCoordinator {
             case .sessions:
                 if operation.scope == .all { return await capture.deleteAllDataOutcome() }
                 guard let id = operation.targetID else { return .failure("Sessionens identifierare saknas.") }
-                return await capture.deleteSessionOutcome(id: id, ignoreMaintenance: true)
+                let deleted = await capture.deleteSessionOutcome(id: id, ignoreMaintenance: true)
+                guard deleted.isSuccess else { return deleted }
+                // Never report the deletion complete while an app-owned export may still hold it.
+                return await content.removeExportsOutcome()
             case .content:
                 if operation.scope == .all { return await content.deleteAllDataOutcome() }
                 guard let id = operation.targetID else { return .failure("Postens identifierare saknas.") }
@@ -97,14 +106,21 @@ final class MioWorkflowCoordinator {
         let recovered = await resumeDeletion()
         guard recovered.isSuccess else { return }
         await loadPresentationIfNeeded()
+        resumePendingLessons()
     }
 
     func finalizeLesson(_ session: MioSession, fromCapture: Bool = false) async -> MioOperationOutcome {
         await enqueue { [self] in
             if fromCapture, capture.session(id: session.id) == nil { return .cancelled }
             guard let end = session.endedAt, session.isLesson else { return .failure("Lektionen måste vara avslutad innan den kan registreras.") }
-            pendingLessonIDs.insert(session.id)
+            markLessonPending(session.id)
             do {
+                // The final checkpoint may have failed when capture stopped; never register
+                // a lesson whose ended session exists only in memory.
+                if capture.session(id: session.id) != nil {
+                    let persisted = await capture.persistEndedSession(id: session.id)
+                    guard persisted.isSuccess else { return persisted }
+                }
                 let latest = try await assistant.latestDocument()
                 if !latest.lessons.contains(where: { $0.id == session.id && $0.sessionID == session.id }) {
                     let saved = await assistant.saveLessonOutcome(id: session.id, session: session,
@@ -112,7 +128,7 @@ final class MioWorkflowCoordinator {
                     guard saved.isSuccess else { return saved }
                 }
                 try Task.checkCancellation()
-                pendingLessonIDs.remove(session.id)
+                clearLessonPending(session.id)
                 analysis.summarizeLesson(session, assistant: assistant)
                 return .success
             } catch is CancellationError { return .cancelled }
@@ -121,8 +137,8 @@ final class MioWorkflowCoordinator {
     }
 
     func retryLessonFinalization() async -> MioOperationOutcome {
-        for id in pendingLessonIDs {
-            guard let session = capture.session(id: id) else { continue }
+        for id in pendingLessonIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
+            guard let session = capture.session(id: id) else { clearLessonPending(id); continue }
             let result = await finalizeLesson(session)
             guard result.isSuccess else { return result }
         }
@@ -223,9 +239,26 @@ final class MioWorkflowCoordinator {
             defer { maintenance.endExclusive() }
             let result = await deletion.resumePending()
             maintenance.setRecoveryBlocked(!result.isSuccess)
-            if result.isSuccess { await loadPresentationIfNeeded() }
+            if result.isSuccess { await loadPresentationIfNeeded(); resumePendingLessons() }
             return result
         }
+    }
+
+    private func markLessonPending(_ id: UUID) { pendingLessonIDs.insert(id); storePendingLessons() }
+    private func clearLessonPending(_ id: UUID) { pendingLessonIDs.remove(id); storePendingLessons() }
+    private func storePendingLessons() {
+        pendingLessonDefaults.set(pendingLessonIDs.map(\.uuidString).sorted(), forKey: Self.pendingLessonsKey)
+    }
+
+    /// Restores persisted IDs, drops those whose session no longer exists, and retries
+    /// the rest automatically. Only local registration runs; model work stays consented.
+    private func resumePendingLessons() {
+        let stored = (pendingLessonDefaults.stringArray(forKey: Self.pendingLessonsKey) ?? []).compactMap(UUID.init(uuidString:))
+        pendingLessonIDs.formUnion(stored)
+        pendingLessonIDs = pendingLessonIDs.filter { capture.session(id: $0) != nil }
+        storePendingLessons()
+        guard !pendingLessonIDs.isEmpty, !maintenance.recoveryBlocked else { return }
+        automatically { [weak self] in _ = await self?.retryLessonFinalization() }
     }
 
     private func loadPresentationIfNeeded() async {
@@ -265,8 +298,10 @@ final class MioWorkflowCoordinator {
             let outcome = await deletion.begin(scope: scope, targetID: targetID)
             maintenance.setRecoveryBlocked(!outcome.isSuccess)
             if outcome.isSuccess {
-                if scope == .all { pendingLessonIDs = [] }
-                else if scope == .session, let targetID { pendingLessonIDs.remove(targetID) }
+                if scope == .all { pendingLessonIDs = []; storePendingLessons() }
+                else if scope == .session, let targetID { clearLessonPending(targetID) }
+                // Invalidation cancelled queued automatic work; surviving lessons are retried.
+                resumePendingLessons()
             }
             return outcome
         }
@@ -326,8 +361,10 @@ final class MioWorkflowCoordinator {
             }
         }
         capture.onLessonFinished = { [weak self] session in
-            guard let self, !maintenance.recoveryBlocked else { return }
-            pendingLessonIDs.insert(session.id)
+            guard let self else { return }
+            markLessonPending(session.id)
+            // Blocked recovery defers the work; resumePendingLessons runs it afterwards.
+            guard !maintenance.recoveryBlocked else { return }
             automatically { [weak self] in _ = await self?.finalizeLesson(session, fromCapture: true) }
         }
         capture.onCaptureStateChanged = { [weak self] state in self?.captureStateChanged(state) }
