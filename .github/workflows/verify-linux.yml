@@ -18,6 +18,11 @@ jobs:
     container: swift:6.3.3-noble
     timeout-minutes: 20
     steps:
+      - name: Installera Python för verifieraren
+        # The Swift image has no python3; the verifier itself needs the system interpreter.
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3 ca-certificates
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -30,14 +35,15 @@ jobs:
           version: '0.12.22'
           enable-cache: false
       - name: Kör samma lokala verifiering
-        run: python3 "$GITHUB_WORKSPACE/scripts/verify.py" --logs-dir "$RUNNER_TEMP/mio-verification"
+        run: python3 "$GITHUB_WORKSPACE/scripts/verify.py" --logs-dir "$GITHUB_WORKSPACE/.mio-verification"
       - name: Spara syntetiska kontrollresultat
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: Mio-Linux-verification
+          # Workspace-relative paths resolve identically inside the job container.
           path: |
-            ${{ runner.temp }}/mio-verification/*.log
-            ${{ runner.temp }}/mio-verification/verification.json
+            .mio-verification/*.log
+            .mio-verification/verification.json
           if-no-files-found: warn
           retention-days: 14

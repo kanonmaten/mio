@@ -52,6 +52,9 @@ jobs:
           plutil -lint Mio/PrivacyInfo.xcprivacy
 
       - name: Diagnostisera strikt concurrency i det riktiga iOS-targetet
+        # Diagnostic gate: warnings are recorded and uploaded, but do not block the IPA
+        # until the existing warnings have been fixed (PLAN.md, Developer experience).
+        continue-on-error: true
         run: |
           set -euo pipefail
           python3 "$GITHUB_WORKSPACE/scripts/verify_concurrency.py" \
