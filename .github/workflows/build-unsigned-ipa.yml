@@ -145,6 +145,21 @@ jobs:
             ONLY_ACTIVE_ARCH=NO \
             test-without-building 2>&1 | tee "$RUNNER_TEMP/Mio-tests.log"
 
+      - name: Visa testfel från resultatpaketet
+        # Parallel xcodebuild output names failing tests without their assertion text.
+        if: failure()
+        run: |
+          set -uo pipefail
+          test -d "$RUNNER_TEMP/Mio-tests.xcresult" || { echo "Inget xcresult skapades."; exit 0; }
+          xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Mio-tests.xcresult" --compact \
+            > "$RUNNER_TEMP/Mio-test-summary.json" || exit 0
+          python3 - "$RUNNER_TEMP/Mio-test-summary.json" <<'PY'
+          import json, sys
+          summary = json.load(open(sys.argv[1]))
+          for failure in summary.get("testFailures", []):
+              print(f"::error::{failure.get('testIdentifierString') or failure.get('testName')}: {failure.get('failureText')}")
+          PY
+
       - name: Skapa IPA-filen
         run: |
           set -euo pipefail
