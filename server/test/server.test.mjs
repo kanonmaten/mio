@@ -30,8 +30,8 @@ async function fixture(t, options = {}) {
 test('transport settings stay bounded while invalid generation configuration remains discoverable', () => {
   assert.throws(() => loadConfig({}));
   assert.equal(resolveTaskProfile(loadConfig({ OPENAI_API_KEY: token, MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'gpt-6-luna' }), 'ask').configured, false);
-  assert.throws(() => loadConfig({ OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'example', MIO_REQUESTS_PER_DAY: '999999' }));
-  assert.equal(loadConfig({ OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'example' }).requestsPerDay, 100);
+  assert.throws(() => loadConfig({ OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'example', MIO_REQUESTS_PER_DAY: '1000001' }));
+  assert.equal(loadConfig({ OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'example' }).requestsPerDay, null);
 });
 
 test('payload preserves exactly approved text and refuses unknown fields', () => {
@@ -158,8 +158,12 @@ test('invalid upstream JSON and redirects never become answers', async t => {
   assert.deepEqual(await r.json(), { error: 'provider_infrastructure' });
 });
 
-test('the shared daily cap cannot be raised through environment or direct configuration', () => {
+test('the daily cap is optional, but a configured cap must be a bounded positive integer', () => {
   const env = { OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'gpt-6-luna' };
-  assert.throws(() => loadConfig({ ...env, MIO_REQUESTS_PER_DAY: '101' }));
-  assert.throws(() => createMioServer({ config: { ...defaults, requestsPerDay: 101 } }));
+  for (const value of [undefined, '', '0']) assert.equal(loadConfig({ ...env, MIO_REQUESTS_PER_DAY: value }).requestsPerDay, null);
+  assert.equal(loadConfig({ ...env, MIO_REQUESTS_PER_DAY: '2000' }).requestsPerDay, 2000);
+  for (const value of ['-1', '1.5', 'many', '1000001']) assert.throws(() => loadConfig({ ...env, MIO_REQUESTS_PER_DAY: value }));
+  assert.throws(() => loadConfig({ ...env, MIO_REQUESTS_PER_MINUTE: '61' }));
+  for (const requestsPerDay of [0, 1.5, 1_000_001]) assert.throws(() => createMioServer({ config: { ...defaults, requestsPerDay } }));
+  assert.doesNotThrow(() => createMioServer({ config: { ...defaults, requestsPerDay: null } }).close());
 });

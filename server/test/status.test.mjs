@@ -6,7 +6,7 @@ const env = { MIO_AI_PROVIDER: 'groq', MIO_AI_MODEL: 'qwen/qwen3.8-27b', GROQ_AP
 test('status exposes safe configuration metadata despite invalid provider, key or limits', async () => {
   const { statusFromEnvironment, authenticated } = await import('../src/status.mjs');
   assert.equal(statusFromEnvironment(env, loadConfig).configured, true);
-  for (const patch of [{ GROQ_API_KEY: '' }, { MIO_AI_MODEL: 'unreviewed-model' }, { MIO_REQUESTS_PER_DAY: '0' },
+  for (const patch of [{ GROQ_API_KEY: '' }, { MIO_AI_MODEL: 'unreviewed-model' }, { MIO_REQUESTS_PER_DAY: '-1' },
     { MIO_LESSON_INTERVAL_SECONDS: '59' }, { GROQ_API_KEY: token }]) {
     assert.equal(statusFromEnvironment({ ...env, ...patch }, loadConfig).configured, false);
   }

@@ -194,7 +194,7 @@ Gör sedan samma test från en Tailscale-ansluten dator med Serve-HTTPS-adressen
 
 På iPhone: läs en känd svensk mening med namn, datum och siffror. Vänta cirka 15–30 s och kontrollera både text och ljudtider. Prova kontinuerligt tal över 20-sekundsgränser så att ord inte försvinner eller dubbleras. Precision/latens är ännu inte godkända för daglig användning.
 
-Under aktiv lektion: stoppa/starta tjänsten, gör ett kort avbrott och ett avbrott över 60 s, byt Wi-Fi/mobilnät, lås skärmen och återgå. Sessionen ska bevaras, serverstatus uppdateras och gamla ljuddelar få synliga luckor. Starta om datorn: Tailscale Serve och tjänsten ska komma tillbaka utan terminalsession. Testa även telefonavbrott och manuell Fortsätt efter iOS-ljudreset. Kör hela [acceptansmatrisen](../docs/TESTPLAN_PIANISSIMO.md).
+Under aktiv lektion: stoppa/starta tjänsten, gör ett kort avbrott och ett avbrott över 60 s, byt Wi-Fi/mobilnät, lås skärmen och återgå. Sessionen ska bevaras, serverstatus uppdateras och gamla ljuddelar få synliga luckor. Starta om datorn: Tailscale Serve och tjänsten ska komma tillbaka utan terminalsession. Testa även telefonavbrott och manuell Fortsätt efter iOS-ljudreset. Kör hela [acceptansmatrisen](../docs/TESTPLAN_HELHET.md#pianissimo-återanslutning-och-bakgrund).
 
 ## 7. Uppdatering och återställning
 

@@ -91,7 +91,7 @@ test('v2 HTTP endpoint validates before quota and returns sanitized metadata on 
   assert.equal(f.calls(), 0); assert.equal(f.budgets(), 0);
   const r = await f.send(); assert.equal(r.status, 200); assert.deepEqual(await r.json(), result);
   for (const response of [r, await f.send(payload, 'wrong')]) {
-    assert.equal(response.headers.get('x-mio-release'), '2026-10-03.1');
+    assert.equal(response.headers.get('x-mio-release'), '2026-10-05.1');
     assert.equal(response.headers.get('x-mio-provider'), 'openai');
     assert.equal(response.headers.get('x-mio-model'), 'gpt-6-luna');
     assert.equal(response.headers.get('x-mio-prompt-version'), '2026-09-30.1');
@@ -103,7 +103,7 @@ test('status authenticates without model calls or budget and advertises implemen
   const f = await fixture(t);
   assert.equal((await f.get('wrong')).status, 401);
   const r = await f.get(token); assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { protocolVersion: 2, release: '2026-10-03.1', configured: true,
+  assert.deepEqual(await r.json(), { protocolVersion: 2, release: '2026-10-05.1', configured: true,
     provider: 'openai', model: 'gpt-6-luna', promptVersion: '2026-09-30.1',
     capabilities: ['analysis-context-v2', 'ask-v1', 'analysis-v1', 'lesson-notes-v1'] });
   assert.equal(f.calls(), 0); assert.equal(f.budgets(), 0);

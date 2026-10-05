@@ -139,7 +139,7 @@ export async function executeGeneration({ config, mode, payload, fetchImpl, sign
 
 export function generationMetadataHeaders(normalized) {
   const headers = {};
-  const safeID = value => typeof value === 'string' && /^[A-Za-z0-9._:/-]{1,150}$/u.test(value) && !value.includes('://') && !/^(?:sk[-_]|gsk_|AIza)/iu.test(value);
+  const safeID = value => typeof value === 'string' && /^[A-Za-z0-9._:/-]{1,150}$/u.test(value) && !value.includes('://') && !/^(?:sk[-_]|gsk_|AIza|nvapi-)/iu.test(value);
   if (safeID(normalized.returnedModel)) headers['X-Mio-Returned-Model'] = normalized.returnedModel;
   const requestID = normalized.provenance?.requestID;
   if (safeID(requestID) && /^[A-Za-z0-9._:-]{1,128}$/u.test(requestID)) headers['X-Mio-Upstream-Request-ID'] = requestID;

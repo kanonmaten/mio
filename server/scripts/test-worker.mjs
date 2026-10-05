@@ -157,7 +157,7 @@ for (const bindings of [
     assert.equal(metadata.configured, false); assert.equal(metadata.protocolVersion, 2);
     assert.deepEqual(metadata.capabilities, ['analysis-context-v2', 'ask-v1', 'analysis-v1', 'lesson-notes-v1']);
     assert.equal(status.headers.get('cache-control'), 'no-store');
-    assert.equal(status.headers.get('x-mio-release'), '2026-10-03.1');
+    assert.equal(status.headers.get('x-mio-release'), '2026-10-05.1');
     assert.match(status.headers.get('x-mio-request-id'), /^[a-f0-9-]{36}$/u);
     assert.equal(calls, 0);
   } finally { await invalidRuntime.dispose(); }

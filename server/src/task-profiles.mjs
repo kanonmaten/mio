@@ -4,7 +4,7 @@ export const TASK_IDS = Object.freeze(['ask', 'everyday', 'lesson']);
 const PROFILE_FIELDS = new Set(['provider', 'model', 'adapterOptions', 'baseURL', 'compatibility']);
 const plainObject = value => value !== null && typeof value === 'object' && !Array.isArray(value)
   && [Object.prototype, null].includes(Object.getPrototypeOf(value));
-const credentialShapedIdentifier = value => /^(?:sk[-_]|gsk_|AIza)/iu.test(value);
+const credentialShapedIdentifier = value => /^(?:sk[-_]|gsk_|AIza|nvapi-)/iu.test(value);
 export const safeProviderIdentifier = value => typeof value === 'string' && /^[A-Za-z0-9._-]{1,64}$/u.test(value)
   && !credentialShapedIdentifier(value) ? value : '';
 export const safeModelIdentifier = value => typeof value === 'string' && /^[A-Za-z0-9._:/-]{1,150}$/u.test(value)

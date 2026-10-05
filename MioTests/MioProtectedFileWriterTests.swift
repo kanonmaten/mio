@@ -16,7 +16,7 @@ final class MioProtectedFileWriterTests: XCTestCase {
         XCTAssertEqual((directory[.posixPermissions] as? NSNumber)?.intValue, 0o700)
         #if os(iOS)
         // The Simulator has no Data Protection keybag and reports no protection class;
-        // the real class is a physical-device check (docs/ENHETSPROV.md, Filskydd/export).
+        // the real class is a physical-device check (docs/TESTPLAN_HELHET.md, Filskydd/export).
         #if !targetEnvironment(simulator)
         let protection = (file[.protectionKey] as? FileProtectionType)?.rawValue ?? file[.protectionKey] as? String
         XCTAssertEqual(protection, FileProtectionType.completeUntilFirstUserAuthentication.rawValue)

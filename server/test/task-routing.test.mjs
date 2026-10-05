@@ -5,7 +5,7 @@ import { createMioServer, loadConfig } from '../src/server.mjs';
 
 const token = 'fixture_gateway_token_01234567890123456789';
 const env = { MIO_AI_PROVIDER: 'openai', MIO_AI_MODEL: 'gpt-6-luna', OPENAI_API_KEY: 'fixture-openai',
-  GROQ_API_KEY: 'fixture-groq', MIO_GATEWAY_TOKEN: token, MIO_REQUESTS_PER_MINUTE: '60' };
+  GROQ_API_KEY: 'fixture-groq', MIO_GATEWAY_TOKEN: token, MIO_REQUESTS_PER_MINUTE: '60', MIO_REQUESTS_PER_DAY: '100' };
 const approved = { question: 'Syntetiskt godkänt prov', context: [] };
 const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 function completion(request) {
@@ -123,6 +123,15 @@ for (const [variable, expected] of [['MIO_REQUESTS_PER_MINUTE', 'local_minute_li
     assert.equal(f.calls.length, 1);
   });
 }
+
+test('without a daily cap, status reports no quota and requests are limited only per minute', async t => {
+  const f = await fixture(t, { MIO_REQUESTS_PER_DAY: '', MIO_REQUESTS_PER_MINUTE: '2' }, { reserveBudget: undefined, readQuota: undefined });
+  assert.equal((await fetch(`${f.base}/v2/status`, { headers: auth }).then(response => response.json())).quota, null);
+  assert.equal((await f.ask()).status, 200); assert.equal((await f.ask()).status, 200);
+  const limited = await f.ask();
+  assert.equal(limited.status, 429); assert.equal((await limited.json()).error, 'local_minute_limit');
+  assert.equal(f.calls.length, 2);
+});
 
 test('unknown external quota and malformed revisions never pretend capacity or start provider work', async t => {
   const f = await fixture(t, {}, { readQuota: undefined });

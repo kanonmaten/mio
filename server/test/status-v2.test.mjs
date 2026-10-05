@@ -90,7 +90,7 @@ test('environment discovery distinguishes global configuration failures without 
     assert.equal(task.configured, false); assert.equal(task.configurationError, 'gateway_configuration_invalid');
   }
   assert.equal(status.tasks.ask.provider, 'groq'); assert.equal(status.tasks.ask.model, 'qwen/qwen3.8-27b');
-  assert.deepEqual(status.quota, { limit: 100, remaining: null, resetAt: null });
+  assert.equal(status.quota, null);
   assert.ok(!JSON.stringify(status).includes('private credential'));
 });
 
@@ -177,4 +177,16 @@ test('v1 status describes the effective everyday task profile for older clients'
   const broken = gatewayStatus({ ...base, taskProfiles: { everyday: { model: 'not-a-reviewed-model' } } });
   assert.equal(broken.configured, false, 'v1 must not report an everyday task that /v1/analyze refuses');
   assert.equal(broken.model, 'not-a-reviewed-model');
+});
+
+test('without a daily cap, cloud reservations keep only the minute limit and status has no quota', async t => {
+  const db = database(t); const config = { requestsPerMinute: 2, requestsPerDay: null };
+  for (let minute = 0; minute < 150; minute++) {
+    assert.deepEqual(await reserveCloudBudgetOutcome(db, config, minute * 60_000), { allowed: true });
+    assert.deepEqual(await reserveCloudBudgetOutcome(db, config, minute * 60_000 + 1), { allowed: true });
+    assert.deepEqual(await reserveCloudBudgetOutcome(db, config, minute * 60_000 + 2), { allowed: false, reason: 'local_minute_limit' });
+  }
+  assert.equal(db.sql.prepare('SELECT day_count FROM mio_budget').get().day_count, 300);
+  assert.equal(await readCloudBudget(db, config, 0), null);
+  assert.equal(gatewayStatusV2({ ...base, requestsPerDay: null }, { remaining: 5 }).quota, null);
 });

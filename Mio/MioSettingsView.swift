@@ -343,13 +343,15 @@ struct MioAIConnectionStatusView: View {
                     }
                 }
                 Section("Gemensam kapacitet") {
-                    if let remaining = status.quota?.remaining {
-                        LabeledContent("Kvar i delad dagskvot", value: "\(remaining) av \(status.quota?.limit ?? 100)")
-                    } else { Text("Återstående dagskvot är okänd.") }
+                    if let quota = status.quota {
+                        if let remaining = quota.remaining {
+                            LabeledContent("Kvar i delad dagskvot", value: "\(remaining) av \(quota.limit)")
+                        } else { Text("Återstående dagskvot är okänd.") }
+                    } else { Text("Servern har ingen daglig gräns. Minutgränsen och leverantörens egna gränser gäller.") }
                     if let reset = status.quota?.resetAt.flatMap(MioAnalysisResult.parseDate) {
                         LabeledContent("Nästa återställning", value: reset.formatted())
                     }
-                    Text("Högst 100 gemensamma AI-anrop per dag räcker inte till minutanalys hela dagen. Kapaciteten är en observation och reserveras inte av denna kontroll.")
+                    Text("Frågor, vardagsanalys och lektioner delar samma kapacitet. Den är en observation och reserveras inte av denna kontroll.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }

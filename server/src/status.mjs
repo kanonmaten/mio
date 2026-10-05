@@ -3,7 +3,7 @@ import { PROVIDERS, providerProfile } from './provider.mjs';
 import { ANALYSIS_V2_PROMPT_VERSION, PROMPT_VERSION } from './prompts.mjs';
 import { TASK_IDS, resolveTaskProfile, taskProfiles, taskConfigurationIdentifiers, safeModelIdentifier, safeProviderIdentifier } from './task-profiles.mjs';
 
-export const RELEASE = '2026-10-03.1';
+export const RELEASE = '2026-10-05.1';
 export function gatewayStatus(config, valid = true) {
   // Older clients only call /v1/analyze, so v1 status describes the effective everyday task.
   const { provider, model } = valid ? taskConfigurationIdentifiers(config, 'everyday')
@@ -49,7 +49,8 @@ export function metadataHeaders(status, promptVersion = status.promptVersion ?? 
 const taskPromptVersion = task => task === 'everyday' ? ANALYSIS_V2_PROMPT_VERSION : PROMPT_VERSION;
 const taskCapabilities = task => ['reasoning-off', 'temperature-zero', 'strict-json',
   task === 'ask' ? 'ask-v1' : task === 'everyday' ? 'analysis-context-v2' : 'lesson-notes-v1'];
-const quotaLimit = config => Number.isSafeInteger(config.requestsPerDay) && config.requestsPerDay > 0 ? config.requestsPerDay : 100;
+// null means no daily cap; status then reports quota as null instead of an invented limit.
+const quotaLimit = config => Number.isSafeInteger(config.requestsPerDay) && config.requestsPerDay > 0 ? config.requestsPerDay : null;
 const canonical = value => Array.isArray(value) ? value.map(canonical)
   : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
 function safeResetAt(value) {
@@ -85,6 +86,7 @@ export function gatewayStatusV2(config, quota = null) {
     configurationError: selected[task].configurationError
   }]));
   const limit = quotaLimit(config);
+  if (limit === null) return { protocolVersion: 2, release: RELEASE, configurationRevision: configurationRevision(config), tasks, quota: null };
   const remaining = Number.isSafeInteger(quota?.remaining) && quota.remaining >= 0 && quota.remaining <= limit ? quota.remaining : null;
   const resetAt = safeResetAt(quota?.resetAt);
   return { protocolVersion: 2, release: RELEASE, configurationRevision: configurationRevision(config), tasks,

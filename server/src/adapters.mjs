@@ -92,7 +92,10 @@ export function buildProviderRequest(config, generation) {
     ...(Object.hasOwn(profile.options, 'zeroDataRetention') ? { zdr: profile.options.zeroDataRetention } : {}) };
   return { url: `${profile.base}/chat/completions`, profile, headers, body: {
     model: profile.requestedModel, temperature: 0, max_tokens: generation.maxOutputTokens, stream: false,
+    // NIM's DeepSeek chat template thinks unless both template switches are off;
+    // reasoning_effort is a thinking budget there, not an off switch.
     ...(profile.provider === 'openrouter' ? { reasoning: { enabled: false }, provider: router }
+      : profile.provider === 'nvidia' ? { chat_template_kwargs: { thinking: false, enable_thinking: false } }
       : !profile.plain ? { reasoning_effort: 'none' } : {}),
     response_format: { type, json_schema: jsonSchema }, messages: generation.messages.map(message => ({ ...message }))
   } };
@@ -105,7 +108,7 @@ const invalid = () => { throw new ProviderResponseError(); };
 const reasoningViolation = () => { throw new ProviderResponseError('provider_parameters'); };
 const safeID = (value, model = false) => typeof value === 'string'
   && (model ? /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u : /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u).test(value)
-  && !value.includes('://') && !/^(?:sk[-_]|gsk_|AIza)/iu.test(value) ? value : undefined;
+  && !value.includes('://') && !/^(?:sk[-_]|gsk_|AIza|nvapi-)/iu.test(value) ? value : undefined;
 const tokenCount = value => Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000 ? value : undefined;
 const header = (headers, name) => typeof headers?.get === 'function' ? headers.get(name)
   : isObject(headers) ? Object.entries(headers).find(([key]) => key.toLowerCase() === name)?.[1] : undefined;

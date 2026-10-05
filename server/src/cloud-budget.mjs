@@ -26,13 +26,14 @@ export async function reserveCloudBudgetOutcome(database, config, now = Date.now
   if (!database) throw new Error('Missing quota database');
   const minute = Math.floor(now / 60_000); const day = Math.floor(now / 86_400_000);
   const result = await database.prepare(RESERVE_SQL).bind(
-    minute, day, config.requestsPerMinute, config.requestsPerDay
+    // No daily cap binds an unreachable bound, so the counters stay comparable over time.
+    minute, day, config.requestsPerMinute, config.requestsPerDay ?? Number.MAX_SAFE_INTEGER
   ).first();
   if (result?.id === 1) return { allowed: true };
   // The failed atomic statement changed nothing. A later read only classifies the
   // denial; it never refunds or resets a reservation made by another request.
   const row = await readCounters(database);
-  if (row?.day === day && row.day_count >= config.requestsPerDay) return { allowed: false, reason: 'local_day_limit' };
+  if (config.requestsPerDay != null && row?.day === day && row.day_count >= config.requestsPerDay) return { allowed: false, reason: 'local_day_limit' };
   if (row?.minute === minute && row.minute_count >= config.requestsPerMinute) return { allowed: false, reason: 'local_minute_limit' };
   return { allowed: false, reason: 'local_request_limit' };
 }
@@ -42,7 +43,8 @@ export async function reserveCloudBudget(database, config, now = Date.now()) {
 }
 
 export async function readCloudBudget(database, config, now = Date.now()) {
-  const limit = config.requestsPerDay ?? 100;
+  const limit = config.requestsPerDay ?? null;
+  if (limit === null) return null;
   if (!Number.isSafeInteger(limit) || limit < 1 || !Number.isSafeInteger(now) || now < 0) throw new Error('Invalid quota observation');
   if (!database) return { limit, remaining: null, resetAt: null };
   const day = Math.floor(now / 86_400_000);

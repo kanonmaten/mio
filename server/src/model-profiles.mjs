@@ -5,6 +5,7 @@ export const PROVIDERS = Object.freeze({
   gemini: Object.freeze(['https://generativelanguage.googleapis.com/v1beta', 'GEMINI_API_KEY', 'gemini']),
   anthropic: Object.freeze(['https://api.anthropic.com/v1', 'ANTHROPIC_API_KEY', 'anthropic']),
   openrouter: Object.freeze(['https://openrouter.ai/api/v1', 'OPENROUTER_API_KEY', 'chat']),
+  nvidia: Object.freeze(['https://integrate.api.nvidia.com/v1', 'NVIDIA_API_KEY', 'chat']),
   mistral: Object.freeze(['https://api.mistral.ai/v1', 'MISTRAL_API_KEY', 'chat']),
   deepseek: Object.freeze(['https://api.deepseek.com', 'DEEPSEEK_API_KEY', 'responses']),
   custom: Object.freeze([null, 'MIO_AI_API_KEY', 'chat'])
@@ -50,6 +51,10 @@ function reviewedModel(provider, model, compatibility) {
     case 'openai': return openai.get(model);
     case 'groq': return model === 'qwen/qwen3.8-27b' ? record('strict-json-schema',
       ['https://console.groq.com/docs/structured-outputs', 'https://console.groq.com/docs/reasoning']) : undefined;
+    // GLM 5.3 (Flash) and Kimi K3 think unconditionally and are deliberately absent.
+    case 'nvidia': return model === 'deepseek-ai/deepseek-v4.1-flash' ? record('strict-json-schema',
+      ['https://build.nvidia.com/deepseek-ai/deepseek-v4.1-flash',
+        'https://docs.api.nvidia.com/nim/reference/deepseek-ai-deepseek-v4-1-flash']) : undefined;
     case 'gemini': return gemini.has(model) ? record('gemini-json-schema',
       [`https://ai.google.dev/gemini-api/docs/models/${model}`,
         'https://ai.google.dev/gemini-api/docs/generate-content/thinking',
@@ -91,7 +96,7 @@ export function providerProfile(config) {
   validateProvider(provider);
   const model = config?.model;
   if (typeof model !== 'string' || model.length > 128 || !/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u.test(model)
-      || model.includes('://') || /^(?:sk[-_]|gsk_|AIza)/iu.test(model)) {
+      || model.includes('://') || /^(?:sk[-_]|gsk_|AIza|nvapi-)/iu.test(model)) {
     throw new ProviderCompatibilityError();
   }
   const reviewed = reviewedModel(provider, model, config.compatibility);
@@ -109,7 +114,7 @@ export function providerProfile(config) {
   }
   return Object.freeze({ provider, base, wire: PROVIDERS[provider][2], requestedModel: model,
     plain: reviewed.plain, schemaDialect: reviewed.schemaDialect, options, capabilities: CAPABILITIES,
-    contractReview: Object.freeze({ reviewedAt: '2026-10-02',
+    contractReview: Object.freeze({ reviewedAt: provider === 'nvidia' ? '2026-10-05' : '2026-10-02',
       status: provider === 'custom' ? 'operator-asserted' : 'documentation-reviewed',
       sources: Object.freeze([...reviewed.sources]), liveTested: false }) });
 }

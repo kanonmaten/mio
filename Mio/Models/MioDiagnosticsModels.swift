@@ -346,7 +346,8 @@ struct MioGatewayQuota: Decodable, Sendable {
     let resetAt: String?
 
     var isValid: Bool {
-        (1...100).contains(limit) && (remaining == nil || (0...limit).contains(remaining!))
+        // Mirrors the gateway's optional daily cap (MAX_REQUESTS_PER_DAY); no cap is reported as quota null.
+        (1...1_000_000).contains(limit) && (remaining == nil || (0...limit).contains(remaining!))
             && (resetAt == nil || (resetAt!.utf8.count <= 30 && resetAt!.hasSuffix("Z")
                 && MioAnalysisResult.parseDate(resetAt!) != nil))
     }

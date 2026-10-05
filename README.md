@@ -4,7 +4,7 @@ Privat SwiftUI-app för iOS 26+ (första testtelefon iPhone 16 Pro, senare även
 
 **Aktuellt helhetsbygge: 0.9.0 — ej släppt.** Pianissimo-, bakgrunds-, inställnings- och AI-/lektionsändringar i arbetskopian är ännu inte Xcode-byggda eller publicerade; den befintliga build 5 innehåller dem inte. Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
 
-Aktuell implementation och överlämning finns på grenen `codex/mio-plan-reliability`: läs [den ursprungliga planen](PLAN.md) och [överlämningsguiden](docs/OVERLAMNING_PLAN_2026-10-04.md) för verifierat läge och återstående acceptansprov.
+[Planen för tillförlitlighet](PLAN.md) styr 0.9.0; [status](docs/STATUS.md) visar verifierat läge och återstående acceptansprov.
 
 ## Funktioner
 
@@ -15,7 +15,7 @@ Aktuell implementation och överlämning finns på grenen `codex/mio-plan-reliab
 - **Anteckningar:** sökbara anteckningar, uppgifter och synliga uttryckliga minnen.
 - **Morgon/Kväll:** lokal dagsöversikt, avklarade uppgifter, sessioner och lektioner; uppdatering vid foreground, dag-/tidszonsbyte och generella dagliga notiser som öppnar dagens översikt.
 - **Alarm och påminnelser:** AlarmKit-alarm, återkommande veckodagar och lokala notiser. Behörigheter begärs först när du sparar en systemåtgärd.
-- **Valfri AI:** aktivera löpande analys av nya textutdrag för planer/uppgifter utan Mio-tilltal, eller ställ en enskild fråga med förhandsgranskning. Av vid appstart. Ett modellfritt anslutningsprov visar autentisering, protokoll, release, uppgiftsprofiler och delad kapacitet; det bevisar inte leverantörsbehörighet eller modellkvalitet. Profil-/modellbyte görs på servern enligt [bytesguiden](server/PROVIDERS.md), med reasoning av, temperatur 0 och strikt schema. Ändrad konfiguration kräver ny granskning/aktivering. Högst 100 AI-anrop per dygn delas mellan alla uppgifter.
+- **Valfri AI:** aktivera löpande analys av nya textutdrag för planer/uppgifter utan Mio-tilltal, eller ställ en enskild fråga med förhandsgranskning. Av vid appstart. Ett modellfritt anslutningsprov visar autentisering, protokoll, release, uppgiftsprofiler och delad kapacitet; det bevisar inte leverantörsbehörighet eller modellkvalitet. Modellen väljs på servern (nu NVIDIA NIM med DeepSeek V4.1 Flash, se [katalogen](server/PROVIDERS.md)), med reasoning av, temperatur 0 och strikt schema. Ändrad konfiguration kräver ny granskning/aktivering. Alla uppgifter delar en minutgräns; någon dagsgräns finns bara om servern sätter en.
 - **Tillfälligt AI-svar:** granska och redigera svaret innan du uttryckligen sparar det som en vanlig lokal anteckning. Ingen frågehistorik, extra AI-komprimering eller systemåtgärd skapas av svaret.
 - Lokal versionsmärkt JSON-export och återupptagbar radering av appdata, egna alarm/notiser och serveranslutningar. Raderingsfel visas med nästa steg. Inget råljud sparas.
 
@@ -25,8 +25,8 @@ Utan AI används en enkel lokal kommandogrammatik. Med aktiverad AI kan även va
 
 1. Läs [användarguiden](docs/ANVANDNING.md) och sätt upp [Pianissimo, systemd och Tailscale](transcription-server/README.md).
 2. Bygg och installera enligt [installation](docs/INSTALLATION.md). Linux kan inte bygga iOS-appen.
-3. Kör [verifieringen](docs/VERIFIERING.md) och [helhetstestet](docs/TESTPLAN_HELHET.md) med syntetiska data. Dokumentera därefter [enhets- och mätproven](docs/ENHETSPROV.md) före vardagsanvändning.
-4. Om du vill använda moln-AI: följ [Groq, åtkomsttoken och Access steg för steg](server/cloudflare/GROQ_ACCESS.md) för befintlig Worker eller [Cloudflare-grundinstallationen](server/cloudflare/README.md) för drift utan påslagen dator, eller [serverguiden](server/README.md) för egen värd. Manuella poster fungerar utan server. Ljudtranskription kräver din Pianissimo-dator.
+3. Kör [verifieringen](docs/INSTALLATION.md#verifiera-före-bygge) och [helhetstestet](docs/TESTPLAN_HELHET.md) med syntetiska data, inklusive mätprotokollet, före vardagsanvändning.
+4. Om du vill använda moln-AI: följ [Cloudflare-guiden](server/cloudflare/README.md) (leverantör, tokens, Access och publicering), eller [serverguiden](server/README.md) för egen värd. Manuella poster fungerar utan server. Ljudtranskription kräver din Pianissimo-dator.
 
 ## Utveckling
 
@@ -36,7 +36,7 @@ Utan AI används en enkel lokal kommandogrammatik. Med aktiverad AI kan även va
 python3 scripts/verify.py
 ```
 
-Samma grind körs automatiskt i GitHub-workflowen **Verifiera Mio på Linux** vid varje push. [Verifieringsguiden](docs/VERIFIERING.md) beskriver beroenden, låst Python, loggar, Node-stöd, separat concurrencydiagnostik och begränsningarna när Swift hoppas över. Linux ersätter inte native mikrofon/konvertering, Keychain, URLSession, SwiftUI eller Xcode. Xcode/SDK-/IPA-grinden finns i `.github/workflows/build-unsigned-ipa.yml`; varje körning behöver faktisk runner- och revisionskontroll.
+Samma grind körs automatiskt i GitHub-workflowen **Verifiera Mio på Linux** vid varje push. [Verifieringsavsnittet](docs/INSTALLATION.md#verifiera-före-bygge) beskriver beroenden, grindar och begränsningar. Linux ersätter inte native mikrofon/konvertering, Keychain, URLSession, SwiftUI eller Xcode. Xcode/SDK-/IPA-grinden finns i `.github/workflows/build-unsigned-ipa.yml`; varje körning behöver faktisk runner- och revisionskontroll.
 
 Läs [CLAUDE.md](CLAUDE.md) (instruktioner för Claude Code), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMAP.md), [beslut](docs/DECISIONS.md), [datamodell](docs/DATAMODELL.md) och [ändringslogg](CHANGELOG.md). Commit, push och publicering kräver uttrycklig begäran.
 

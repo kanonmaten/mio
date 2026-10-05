@@ -99,6 +99,7 @@ const supported = [
   ['gemini', 'gemini-2.5-flash', 'gemini', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'],
   ['anthropic', 'claude-haiku-4-5', 'anthropic', 'https://api.anthropic.com/v1/messages'],
   ['openrouter', 'openai/gpt-4.1', 'chat', 'https://openrouter.ai/api/v1/chat/completions'],
+  ['nvidia', 'deepseek-ai/deepseek-v4.1-flash', 'chat', 'https://integrate.api.nvidia.com/v1/chat/completions'],
   ['custom', 'synthetic/model:version', 'chat', 'https://synthetic.example/v1/chat/completions']
 ];
 for (const [provider, model, wire, url] of supported) {
@@ -138,12 +139,27 @@ for (const [provider, model, wire, url] of supported) {
           assert.equal(request.body.provider.require_parameters, true);
           assert.equal(request.body.provider.allow_fallbacks, false);
           assert.deepEqual(request.body.provider.only, ['openai']);
+        } else if (provider === 'nvidia') {
+          assert.deepEqual(request.body.chat_template_kwargs, { thinking: false, enable_thinking: false });
+          assert.equal(Object.hasOwn(request.body, 'reasoning_effort'), false);
         } else assert.equal(request.body.reasoning_effort, 'none');
       }
     }
     assert.equal(normalize(response(wire), request.profile).text, '{"label":"a"}');
   });
 }
+
+test('NVIDIA NIM accepts only the reviewed thinking-off DeepSeek profile and rejects leaked reasoning', () => {
+  for (const model of ['z-ai/glm-5.3', 'z-ai/glm-5.3-flash', 'moonshotai/kimi-k3', 'deepseek-ai/deepseek-v4-flash', 'nvapi-secret']) {
+    assert.throws(() => build(config('nvidia', model), generic()), /provider_model_incompatible/u);
+  }
+  const request = build(config('nvidia', 'deepseek-ai/deepseek-v4.1-flash'), generic());
+  assert.equal(request.headers.Authorization, 'Bearer synthetic-secret');
+  assert.throws(() => normalize(response('chat', { choices: [{ finish_reason: 'stop', message: { role: 'assistant',
+    content: '{"label":"a"}', reasoning_content: 'hidden chain' } }] }), request.profile), /provider_parameters/u);
+  assert.equal(normalize(response('chat', { choices: [{ finish_reason: 'stop', message: { role: 'assistant',
+    content: '{"label":"a"}', reasoning_content: null } }] }), request.profile).text, '{"label":"a"}');
+});
 
 test('plain direct OpenAI profile does not send unsupported reasoning controls', () => {
   const request = build(config('openai', 'gpt-4.1'), generic());

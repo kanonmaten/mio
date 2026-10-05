@@ -1,5 +1,12 @@
 # Ändringslogg
 
+## NVIDIA NIM, ingen dagsgräns och städad dokumentation, 2026-10-05
+
+- **Gateway:** ny provider `nvidia` med enbart `deepseek-ai/deepseek-v4.1-flash`. Tänkandet stängs av med NIM:s mallflaggor och `reasoning_content` avvisas. GLM 5.3 (Flash) och Kimi K3 är spärrade eftersom de alltid tänker. `nvapi-`-formade värden avvisas som modell-ID.
+- **Kvot:** `MIO_REQUESTS_PER_DAY` är valfri; tom eller `0` betyder ingen dagsgräns och `/v2/status` ger då `quota: null`. Ett satt värde får vara upp till 1 000 000. `wrangler.jsonc` väljer NIM med 20 anrop/minut. Release `2026-10-05.1`.
+- **App:** godtar dagsgränser över 100 i status och visar "ingen daglig gräns" i stället för den fasta texten om 100 anrop.
+- **Dokumentation:** `docs/` minskade från 20 filer till 9. Historiska v0.1/v0.2-planer, kravmatris, OpenAI-noten, AI-felsökningen 2026-09-30, överlämningen 2026-10-04, `WORKFLOW.md` och `docs/superpowers/` togs bort (finns i git-historiken). Pianissimo- och enhetsproven ingår nu i `TESTPLAN_HELHET.md`, verifieringen i `INSTALLATION.md` och leverantörskontrakten i `server/PROVIDERS.md`. `GROQ_ACCESS.md` ersattes av en leverantörsneutral `server/cloudflare/README.md`.
+
 ## Granskning och rättningar 2026-10-05 — Claude Code
 
 Planen och implementationen på `codex/mio-plan-reliability` granskades mot `PLAN.md`. Det mesta följde planen; följande fel rättades:
@@ -37,7 +44,7 @@ Planen och implementationen på `codex/mio-plan-reliability` granskades mot `PLA
 ## Utredning 2026-09-30 — AI-driftfel och sammanhang
 
 - Läskontroll av faktiskt publicerad Worker bekräftar äldre OpenAI-kod med nya Groq-inställningar: gatewayen kan inte initieras. Uppdaterad befintlig gateway passerar mocktester och lokal Worker-verifiering; ingen publicering utförd.
-- Dokumenterat varför exporten saknar AI-anropsbevis och föreslagit lokal begränsad diagnostik samt separerat nytt underlag/bakåtkontext, mjuka gränser och stabila förslagsbeslut. Detta var ett designförslag vid utredningen; implementationen ovan följer användarens efterföljande godkännande; se [utredningen](docs/AI_FELSOKNING_2026_09_30.md).
+- Dokumenterat varför exporten saknar AI-anropsbevis och föreslagit lokal begränsad diagnostik samt separerat nytt underlag/bakåtkontext, mjuka gränser och stabila förslagsbeslut. Detta var ett designförslag vid utredningen; implementationen ovan följer användarens efterföljande godkännande; se utredningen.
 
 ## Arbetskopia 2026-09-30 — granskad Pianissimo-driftguide
 
@@ -143,7 +150,7 @@ Efter uppdaterat användarbeslut 2026-09-26 används appidentiteten `app.mio.ass
 
 ### Kompatibilitet och verifiering
 
-Bundle identifier, lagringsvägar, JSON-schema och migreringsbeteende behålls. Namnbytet kräver ingen ny datamigrering. Bygg- och telefonresultat saknas för denna revision; följ [status](docs/STATUS.md) och [testplanen](docs/TESTPLAN_V0_2.md).
+Bundle identifier, lagringsvägar, JSON-schema och migreringsbeteende behålls. Namnbytet kräver ingen ny datamigrering. Bygg- och telefonresultat saknas för denna revision; följ [status](docs/STATUS.md) och testplanen.
 
 ## v0.1.0 — historisk prototyp, telefonprov 2026-08-20
 

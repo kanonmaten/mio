@@ -1,15 +1,22 @@
 # Bygg- och teststatus
 
+## NVIDIA NIM och valfri dagsgräns, 2026-10-05
+
+Arbetskopia på `claude/magical-tesla-0eospr`, ej committad vid kontrollen. **Inte publicerad, inte iOS-byggd, inget verkligt modellanrop.**
+
+- Lokalt (Node 22, ej den pinnade 26.10): 130/130 gateway-tester, Worker dry-run med NIM-variablerna samt Worker runtime/avbrott godkända. 228 strukturella kontroller (inklusive alla relativa Markdown-länkar) och 4 verifierarprov godkända.
+- Inte utfört: Swift-kompilering och XCTest för ändrad kvotvalidering och statustext (kräver GitHub-workflowen för den pushade commiten), Cloudflare-publicering, NIM-modellprov, IPA och telefonprov. Att NIM tillämpar strikt JSON-schema och tänkande av är dokumentgranskat, inte provat.
+
 ## Granskning och rättningar, 2026-10-05
 
 Grenen `codex/mio-plan-reliability` granskades mot `PLAN.md` med Claude Code och rättades i separata commits (se [ändringsloggen](../CHANGELOG.md)). **Fortfarande ej släppt, inte iOS-byggd och inte telefonverifierad.**
 
 - Överlämningens påstående att Linux-grindarna var gröna gällde bara den ursprungliga värden: GitHub-workflowen **Verifiera Mio på Linux** misslyckades för `4fa92a0` innan någon grind kördes ([körning 37227941960](https://github.com/kanonmaten/mio/actions/runs/37227941960)). Efter CI-rättningen passerade samma `verify.py` för `f4ac563` ([körning 37277380844](https://github.com/kanonmaten/mio/actions/runs/37277380844)): strukturkontroller, verifierartester, Node-tester, Worker-runtime, Pianissimo fake-backend, portabla XCTest, capture recovery och portable concurrency. Detta är första oberoende bekräftelsen av de portabla Swift-testerna.
 - Rättningarna i steg 1 passerade samma workflow för `be30bf4` ([körning 37277821957](https://github.com/kanonmaten/mio/actions/runs/37277821957)). Alla rättningar tillsammans passerade samma workflow för `0c571c9` ([körning 37280188338](https://github.com/kanonmaten/mio/actions/runs/37280188338)), med 247 portabla XCTest. Under vägen fångade CI ett eget fel i granskningen (en `_modify`-accessor gav exklusivitetsfel vid varje sparning); den delen återställdes. Ett grönt resultat gäller bara den commit det kördes för.
-- Första iOS-körningarna av grenen (IPA-workflowen, [37280837886](https://github.com/kanonmaten/mio/actions/runs/37280837886) och [37283457503](https://github.com/kanonmaten/mio/actions/runs/37283457503)): native strict concurrency, Release-bygge, testkompilering och tre UI-smokeprov inklusive tillgänglighetsgranskning godkända. Två iOS-enhetstester från överlämningen föll: konverteraren gav 16 011 i stället för 16 000 samples per sekund (filtersvans vid strömslut, nu begränsad till faktisk inlängd) och simulatorn rapporterar inget Data Protection-skydd (kontrollen gäller nu fysisk enhet enligt [enhetsprotokollet](ENHETSPROV.md)). Ett race-prov föll en gång och passerade nästa gång; det bevakas. Ingen IPA skapades av dessa körningar.
+- Första iOS-körningarna av grenen (IPA-workflowen, [37280837886](https://github.com/kanonmaten/mio/actions/runs/37280837886) och [37283457503](https://github.com/kanonmaten/mio/actions/runs/37283457503)): native strict concurrency, Release-bygge, testkompilering och tre UI-smokeprov inklusive tillgänglighetsgranskning godkända. Två iOS-enhetstester från överlämningen föll: konverteraren gav 16 011 i stället för 16 000 samples per sekund (filtersvans vid strömslut, nu begränsad till faktisk inlängd) och simulatorn rapporterar inget Data Protection-skydd (kontrollen gäller nu fysisk enhet enligt [enhetsprotokollet](TESTPLAN_HELHET.md#mätprotokoll-och-resultatmall)). Ett race-prov föll en gång och passerade nästa gång; det bevakas. Ingen IPA skapades av dessa körningar.
 - **IPA-workflowen grön för `e8e3a8b`** ([körning 37286459399](https://github.com/kanonmaten/mio/actions/runs/37286459399), runner `xcode-27`): native strict concurrency, Release, testkompilering, samtliga iOS-simulator-XCTest och tre UI-smokeprov godkända; IPA:n zip-testad med `arm64`, `app.mio.assistant` och minsta iOS 26.0. Artifact `Mio-IPA` innehåller `Mio-unsigned.ipa` och `Mio-buildinfo.txt` med IPA:ns SHA-256, version och byggnummer (läses därifrån; granskningsmiljön kunde inte hämta artifacten). **Inte installerad och inte telefonverifierad.**
 - Lokalt i granskningsmiljön (Node 22, ej den pinnade 26.10): 125/125 gateway-tester och Worker dry-run/runtime/avbrott inklusive 40 s hängande D1 godkända efter gatewayrättningarna; 27/27 Pianissimo-API-tester med fake-backend; 296 strukturella kontroller. Ingen Swift-kompilator fanns lokalt.
-- Inte utfört: IPA-workflowen (Xcode Release, iOS-XCTest inklusive tre UI-smokeprov, native concurrency, IPA), Cloudflare-publicering (ska inkludera `enable_request_signal` och verifiera verkligt klientavbrott), verkliga providerprov och fysiska enhetsprov enligt [enhetsprotokollet](ENHETSPROV.md).
+- Inte utfört: IPA-workflowen (Xcode Release, iOS-XCTest inklusive tre UI-smokeprov, native concurrency, IPA), Cloudflare-publicering (ska inkludera `enable_request_signal` och verifiera verkligt klientavbrott), verkliga providerprov och fysiska enhetsprov enligt [enhetsprotokollet](TESTPLAN_HELHET.md#mätprotokoll-och-resultatmall).
 
 ## Helhetsbygge 0.9.0 — överlämnad gren, 2026-10-04
 
@@ -40,7 +47,7 @@ Nästa drift-/enhetsgrindar: publicera avsedd gateway efter uttrycklig begäran 
 - Aktiv Worker-version `4c22cc43-a625-48d1-86e5-e45638cbcb8e` och dess faktiska kod hämtade med läsanrop. Publicerad kod stöder endast OpenAI och läser äldre OpenAI-inställningar; aktiva bindningar anger Groq/Qwen och saknar OpenAI-nyckel/-modell. Initieringen kan därför inte lyckas och kodens felväg är 503 `gateway_not_configured`. Samma konfigurationsfel reproducerat mot äldre repokod med syntetiska inställningar, utan modelltrafik.
 - Anonym `/health` gav HTTP 403 från Access. Telefonanropets exakta status, installerat byggnummer och Access-autentisering kan inte bestämmas från den bifogade tomma exporten. Ingen fungerande Groq-nyckel eller verklig modellåtkomst har verifierats.
 - Befintlig arbetskopias **40/40 Node-prov**, **Worker dry-run och lokal OpenAI/Groq-runtime** samt **144 portabla projektkontroller efter dokumentationsändringen** godkända. Alla AI-prov mockade. Ingen publicering, Xcode/XCTest, installation eller telefonverifiering.
-- [Utredning och designförslag](AI_FELSOKNING_2026_09_30.md) beskriver saknad AI-diagnostik, bekräftad kontext-/dedupliceringsbrist och rekommenderad begränsad bakåtkontext med mjuka gränser och stabila beslut. Vid utredningstillfället var detta ett förslag; efterföljande godkännande och implementation redovisas ovan. Befintlig Groq-kod kan publiceras efter uttrycklig begäran.
+- Utredning och designförslag beskriver saknad AI-diagnostik, bekräftad kontext-/dedupliceringsbrist och rekommenderad begränsad bakåtkontext med mjuka gränser och stabila beslut. Vid utredningstillfället var detta ett förslag; efterföljande godkännande och implementation redovisas ovan. Befintlig Groq-kod kan publiceras efter uttrycklig begäran.
 
 ## Pianissimo-driftguide granskad, 2026-09-30
 
@@ -60,7 +67,7 @@ Stegstatus verifierad via GitHub: **Bygg osignerad iPhone-app lyckades** för `a
 
 **Inte Xcode-kompilerad, inte XCTest-körd, inte installerad på iPhone och inte driftsatt.** Build 5 nedan gäller tidigare Apple-transkription. Kontrollerna nedan gjordes i arbetskopian före commit/push. Ingen ny iOS-byggkörning eller driftsättning har utförts.
 
-- Implementerat: original Pianissimo bakom API v1, separat ljudfångst/uppladdning, privat Tailscale-adress/Keychain, 60 s RAM-gräns och synliga luckor, nätåterförsök, iOS-avbrottshantering och samlade inställningar. Se [beslut](DECISIONS.md), [driftguide](../transcription-server/README.md) och [20 acceptansprov](TESTPLAN_PIANISSIMO.md).
+- Implementerat: original Pianissimo bakom API v1, separat ljudfångst/uppladdning, privat Tailscale-adress/Keychain, 60 s RAM-gräns och synliga luckor, nätåterförsök, iOS-avbrottshantering och samlade inställningar. Se [beslut](DECISIONS.md), [driftguide](../transcription-server/README.md) och [20 acceptansprov](TESTPLAN_HELHET.md#pianissimo-återanslutning-och-bakgrund).
 - **GPU-smoke utförd** på denna CachyOS-värd: RTX 4060 Ti 8 GiB, NVIDIA 615.71.09, Python 3.12.14, torch 2.14.0+cu130, NeMo 2.7.0. Original `KlangAI/pianissimo-sv`, revision `95c85c9b08afff7b48b540984b1e9b693b31ddd4`, laddades på CUDA. Första laddning inklusive hämtning: 41,98 s. 20 s syntetisk tystnad gav tom ordlista, peak allokerat GPU-minne cirka 4788 MiB. Detta verifierar laddning/inference, **inte svensk talprecision, ordalignment eller iPhone-latens**. Ingen privat inspelning användes. Efter rättning av NeMos utfyllnad för korta slutdelar upprepades GPU-provet: cachad laddning 15,87 s, tystnad 0,1/0,5/20 s gav noll ord och 0,05/0,05/0,12 s inference, samma peak 4788 MiB. Dessa tider gäller tystnad, inte svenskt tal.
 - **25/25 Python-API-prov godkända** med falsk modell: auth, format/storlek, tidsstämplar, idempotenta retries/konflikt/cache-expiration, överlast, parallell health, laddning och fastnad inference/omstartssignal. Starlette ger en deprecationsvarning för testklientens httpx; inga testfel. Testerna kördes med localhost-tillgång utanför sandboxen.
 - **40/40 befintliga Node-gatewaytester godkända**, simulerad text-AI. Första sandboxförsöket misslyckades; körning med localhost-tillgång passerade. Gatewaykoden ändrades inte av motorbytet och ingen riktig AI-trafik skickades.
@@ -144,7 +151,7 @@ Historiskt: build 4 (`595e4a8`, Actions 36278717100) klarade 46 XCTest. Build 3 
 
 1. Installera IPA:n enligt [installationsguiden](INSTALLATION.md), först på iPhone 16 Pro.
 2. Kör först S01–S07 för svensk talmodell, därefter H01–H15 i [helhetstestet](TESTPLAN_HELHET.md). Börja med syntetiska data och håll AI avstängt.
-3. Prova behörigheter, tillgänglighet, dagbyte och radering. Kör sedan låst skärm, avbrott och längre batteriprov enligt [transkriptionstestet](TESTPLAN_V0_1.md).
+3. Prova behörigheter, tillgänglighet, dagbyte och radering. Kör sedan låst skärm, avbrott och längre batteriprov enligt [transkriptionstestet](TESTPLAN_HELHET.md#långprov-latens-värme-och-batteri).
 4. När [Cloudflare-gatewayen](../server/cloudflare/README.md) eller egen server är konfigurerad: kör AI01–AI06, A07–A14 och L01–L05 med syntetiska data.
 
 [Användarguiden](ANVANDNING.md) beskriver de dagliga flödena. Byggfel och telefonfynd ska åtgärdas innan helhetsbygget betraktas som verifierat.
@@ -153,9 +160,9 @@ Historiskt: build 4 (`595e4a8`, Actions 36278717100) klarade 46 XCTest. Build 3 
 
 [Telefonprovet 2026-08-20](TESTRESULTAT_V0_1.md) gäller en äldre revision på iPhone 13: 2 min 30 s, fem textsegment, två Mio-detektioner och DictationTranscriber med `sv_SE`. Bara elva sekunders bakgrund finns dokumenterat. Mätvärdena är oförändrade och bevisar inte aktuell versions funktion.
 
-Tidigare statiska kontroller av v0.2.0 och byggflödet finns i projekthistoriken. Den äldre [testplanen v0.2](TESTPLAN_V0_2.md) är historiskt underlag; nya installationer följer helhetstestet.
+Tidigare statiska kontroller av v0.2.0 och byggflödet finns i projekthistoriken. Den äldre testplanen v0.2 är historiskt underlag; nya installationer följer helhetstestet.
 
-I den historiska Apple-implementationen krävde `SpeechTranscriber`-installation, bakgrundsdrift och ljudavbrott fysisk telefon. Den aktuella appen använder original Pianissimo utan Apple-/CPU-fallback; paus och avbrott kräver manuell fortsättning. Följ den aktuella [enhetsprovningen](ENHETSPROV.md).
+I den historiska Apple-implementationen krävde `SpeechTranscriber`-installation, bakgrundsdrift och ljudavbrott fysisk telefon. Den aktuella appen använder original Pianissimo utan Apple-/CPU-fallback; paus och avbrott kräver manuell fortsättning. Följ den aktuella [enhetsprovningen](TESTPLAN_HELHET.md#mätprotokoll-och-resultatmall).
 
 ## Registrera nya resultat
 

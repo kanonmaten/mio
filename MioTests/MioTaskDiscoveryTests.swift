@@ -98,10 +98,11 @@ final class MioTaskDiscoveryTests: XCTestCase {
         let unknown = try MioGatewayStatusV2.decode(fixture { $0["quota"] = ["limit": 100, "remaining": NSNull(), "resetAt": NSNull()] })
         XCTAssertNil(unknown.quota?.remaining); XCTAssertNil(unknown.quota?.resetAt)
         XCTAssertNil(try MioGatewayStatusV2.decode(fixture { $0["quota"] = NSNull() }).quota)
+        XCTAssertEqual(try MioGatewayStatusV2.decode(fixture { $0["quota"] = ["limit": 2000, "remaining": 1500, "resetAt": NSNull()] }).quota?.limit, 2000)
         let quotas: [[String: Any]] = [
             ["limit": 100, "remaining": -1, "resetAt": NSNull()],
             ["limit": 100, "remaining": 101, "resetAt": NSNull()],
-            ["limit": 101, "remaining": 100, "resetAt": NSNull()],
+            ["limit": 1_000_001, "remaining": 100, "resetAt": NSNull()],
             ["limit": 0, "remaining": 0, "resetAt": NSNull()],
             ["limit": 100, "remaining": 3.5, "resetAt": NSNull()],
             ["limit": 100, "remaining": 3, "resetAt": "2026-02-30T00:00:00.000Z"],

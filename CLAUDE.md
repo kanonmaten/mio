@@ -24,7 +24,7 @@ Read [README](README.md), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMA
 - AI adapters must require reasoning **off** (not merely hidden), temperature 0 and the provider's strict JSON schema. No silent parameter or model fallback. The model catalog in `server/src/model-profiles.mjs` must be reviewed for new models; a provider prefix is not proof of support. Custom endpoints need the explicit `chat-none-strict` contract. Validate every response, single questions included, before the app uses it.
 - Detailed lessons use `/v1/lesson-notes`: at most 3,500 bytes of source text per part, normally at least 60 s between calls, saved parts with source quotes and model/prompt metadata. Copying compiles parts locally; incomplete notes must be labelled. No slides, flashcards or extra AI compression. Homework suggestions need an explicit Yes. Legacy `highlights` never count as finished detailed notes.
 - Document consent requirements and local rules for recording other people.
-- Non-goals for 0.9.0 (see `PLAN.md`): no chat history, streaming UI, model tools, autonomous actions, TTS, embeddings, client model selector, automatic failover or quota increases.
+- Non-goals for 0.9.0 (see `PLAN.md`): no chat history, streaming UI, model tools, autonomous actions, TTS, embeddings, client model selector or automatic failover. Exception by user decision 2026-10-05: the daily AI cap is optional and unset by default (NVIDIA NIM only limits per minute); keep the per-minute cap.
 
 ## Working rules
 

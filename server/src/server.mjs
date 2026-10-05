@@ -37,6 +37,8 @@ export function validatePayload(value) {
   return value;
 }
 
+const MAX_REQUESTS_PER_DAY = 1_000_000;
+
 function positiveInteger(value, fallback, maximum) {
   if (value === undefined || value === '') return fallback;
   const parsed = Number(value);
@@ -44,6 +46,13 @@ function positiveInteger(value, fallback, maximum) {
     throw new Error('Ogiltig numerisk serverinställning.');
   }
   return parsed;
+}
+
+// Unset or 0 means no local daily cap. The per-minute cap, concurrency limit and the
+// provider's own limits still apply (user decision 2026-10-05, NVIDIA NIM has no daily quota).
+function dailyLimit(value) {
+  if (value === undefined || value === '' || value === '0') return null;
+  return positiveInteger(value, null, MAX_REQUESTS_PER_DAY);
 }
 
 export function loadConfig(env = process.env) {
@@ -61,7 +70,7 @@ export function loadConfig(env = process.env) {
     model: env.MIO_AI_MODEL ?? (provider === 'openai' ? env.MIO_OPENAI_MODEL : '') ?? '',
     port: positiveInteger(env.PORT, 8787, 65_535),
     requestsPerMinute: positiveInteger(env.MIO_REQUESTS_PER_MINUTE, provider === 'groq' ? 1 : 6, 60),
-    requestsPerDay: positiveInteger(env.MIO_REQUESTS_PER_DAY, 100, 100),
+    requestsPerDay: dailyLimit(env.MIO_REQUESTS_PER_DAY),
     upstreamTimeoutMs: 40_000,
     bodyTimeoutMs: 5_000
   };
@@ -76,8 +85,10 @@ function validateConfig(config) {
       || config.gatewayToken.startsWith('sk-')) throw new Error('Konfigurera en separat MIO_GATEWAY_TOKEN.');
   if (config.lessonIntervalSeconds !== undefined && (!Number.isSafeInteger(config.lessonIntervalSeconds)
       || config.lessonIntervalSeconds < 60 || config.lessonIntervalSeconds > 3600)) throw new Error('Lektionsintervallet måste vara 60–3600 sekunder.');
-  if (config.requestsPerDay > 100 || config.requestsPerMinute > 60 || config.upstreamTimeoutMs > 40_000 || config.bodyTimeoutMs > 5_000) throw new Error('Servergränserna får inte höja Mios kvot eller tidsgränser.');
-  for (const field of ['requestsPerMinute', 'requestsPerDay', 'upstreamTimeoutMs', 'bodyTimeoutMs']) {
+  if (config.requestsPerMinute > 60 || config.upstreamTimeoutMs > 40_000 || config.bodyTimeoutMs > 5_000) throw new Error('Servergränserna får inte höja Mios minutkvot eller tidsgränser.');
+  if (config.requestsPerDay != null && (!Number.isSafeInteger(config.requestsPerDay) || config.requestsPerDay < 1
+      || config.requestsPerDay > MAX_REQUESTS_PER_DAY)) throw new Error('Ogiltig dagsgräns.');
+  for (const field of ['requestsPerMinute', 'upstreamTimeoutMs', 'bodyTimeoutMs']) {
     if (!Number.isSafeInteger(config[field]) || config[field] < 1) throw new Error('Ogiltig servergräns.');
   }
 }
@@ -148,7 +159,7 @@ export function createMioServer({ config: baseConfig = loadConfig(), fetchImpl =
     if (minuteBucket !== Math.floor(time / 60_000)) { minuteBucket = Math.floor(time / 60_000); minuteCount = 0; }
     if (dayBucket !== Math.floor(time / 86_400_000)) { dayBucket = Math.floor(time / 86_400_000); dayCount = 0; }
     if (active >= 2) throw new RequestError(429, 'local_concurrency_limit');
-    if (dayCount >= config.requestsPerDay) throw new RequestError(429, 'local_day_limit');
+    if (config.requestsPerDay != null && dayCount >= config.requestsPerDay) throw new RequestError(429, 'local_day_limit');
     if (minuteCount >= config.requestsPerMinute) throw new RequestError(429, 'local_minute_limit');
     minuteCount += 1; dayCount += 1;
   }
@@ -182,7 +193,7 @@ export function createMioServer({ config: baseConfig = loadConfig(), fetchImpl =
           try { quota = await awaitWithSignal(Promise.resolve().then(() => readQuota(config)), guardController.signal); }
           catch { /* Unknown capacity is explicit; status never reserves or infers. */ }
           finally { clearTimeout(timer); }
-        } else if (!reserveBudget) {
+        } else if (!reserveBudget && config.requestsPerDay != null) {
           const time = now();
           const used = dayBucket === Math.floor(time / 86_400_000) ? dayCount : 0;
           quota = { limit: config.requestsPerDay, remaining: Math.max(0, config.requestsPerDay - used),

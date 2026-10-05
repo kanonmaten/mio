@@ -2,7 +2,7 @@
 
 Valfri server för godkända frågor, vardagsutdrag och detaljerade lektioner. Appens manuella innehåll kräver ingen text-AI. [Pianissimo](../transcription-server/README.md) är en separat privat GPU/Tailscale-tjänst; ljud skickas aldrig till denna gateway och ingen råljudsfil lagras.
 
-Arbetskopian har gemensam Node/Worker-execution, exakta modellprofiler och task-routing. Ingen publicering, verklig modellåtkomst, Xcode-build eller telefonacceptans följer av lokala tester. Den verifierade äldre produktionsbundeln är ännu inkompatibel med Groq-inställningarna; [releaseguiden](cloudflare/GROQ_ACCESS.md) skiljer förberedelse, uttrycklig publicering, read-back och separat sändningsgodkännande.
+Arbetskopian har gemensam Node/Worker-execution, exakta modellprofiler och task-routing. Ingen publicering, verklig modellåtkomst, Xcode-build eller telefonacceptans följer av lokala tester. Den aktiva produktionsbundeln är äldre OpenAI-kod och måste ersättas innan NIM fungerar; [Cloudflare-guiden](cloudflare/README.md) beskriver publicering, read-back och separat sändningsgodkännande.
 
 ## Verifiera utan modelltrafik
 
@@ -24,7 +24,7 @@ Se [installation](../docs/INSTALLATION.md) för plattformsförutsättningar och 
 
 ## Konfiguration och egen Node-drift
 
-[Leverantörsguiden](PROVIDERS.md) och [kontraktsmatrisen](../docs/LEVERANTORSKONTRAKT.md) anger exakt provider/model/Secret och separat verklig verifiering. Reasoning OFF, temperatur 0 och strikt schema är obligatoriskt. Nyckeln ligger serverägd; en separat `MIO_GATEWAY_TOKEN` används av appen. Access- och transkriptionstokens är andra hemligheter.
+[Leverantörskatalogen](PROVIDERS.md) anger exakt provider/model/Secret och separat verklig verifiering. Reasoning OFF, temperatur 0 och strikt schema är obligatoriskt. Nyckeln ligger serverägd; en separat `MIO_GATEWAY_TOKEN` används av appen. Access- och transkriptionstokens är andra hemligheter.
 
 För egen Node-drift kopieras bara gatewayens `server/src/*.mjs` och `server/package.json` till exempelvis `/opt/mio-gateway`. Skapa privat `.env` där, ägd av tjänsteanvändaren med 0600. Kopiera inte hela Mio-repot, Swift/Xcode, exporter, ljud, Git-historik, utvecklingsmiljö eller befintliga hemligheter. `env.example` beskriver globala värden; taskprofiler beskrivs nedan. Leverantörskonto/kostnadskontroll och betrodd HTTPS behövs.
 
@@ -50,7 +50,7 @@ Ogiltig gatewaytoken eller numeriska säkerhetsgränser blockerar Node-start. En
 `MIO_AI_PROVIDER`/`MIO_AI_MODEL` är global default. Valfri `MIO_AI_TASK_PROFILES` är JSON med `ask`, `everyday`, `lesson`, exempelvis:
 
 ```json
-{"ask":{"provider":"openai","model":"gpt-4.1-mini"},"lesson":{"provider":"groq","model":"qwen/qwen3.8-27b"}}
+{"ask":{"provider":"openai","model":"gpt-4.1-mini"},"lesson":{"provider":"nvidia","model":"deepseek-ai/deepseek-v4.1-flash"}}
 ```
 
 Saknad override ärver global konfiguration. Skild provider använder sin designated serversecret, aldrig en global nyckel från annan provider. Tillåtna profilfält är provider, model, validerade adapterOptions samt custom-kontraktets baseURL/compatibility. Felaktig task spärras explicit; ingen request-time fallback. Alla aliases/snapshots och schema-dialekter finns i matrisen. Legacy `MIO_OPENAI_MODEL` läses endast för OpenAI-konfiguration när det nya namnet saknas.
@@ -59,7 +59,7 @@ Saknad override ärver global konfiguration. Skild provider använder sin design
 
 - `protocolVersion:2`, `release` och 64 hextecken `configurationRevision`.
 - `tasks.ask/everyday/lesson`: configured, provider, model, promptVersion, capabilities, fast configurationError eller null.
-- `quota`: limit (högst 100), remaining och resetAt, vilka kan vara null när läsning inte kan bevisas. D1-läsningen är tidsbegränsad och ändrar inga räknare.
+- `quota`: `null` när ingen dagsgräns är satt; annars limit, remaining och resetAt, där de två sista kan vara null när läsning inte kan bevisas. D1-läsningen är tidsbegränsad och ändrar inga räknare.
 
 Configured betyder granskad lokal konfiguration, inte giltiga providercredentials, saldo, modellåtkomst eller kvalitet. Revisionen binds till offentliga profil-/policy-/gränsval och endpointidentitet utan att exponera URL eller secretfingerprint; giltig secretrotation byter inte revision. Discovery accepterar bounded okända provider-/capabilitynamn, men kontrollerar de förmågor vald task kräver.
 
@@ -80,7 +80,7 @@ Fråga är högst 2000 UTF-8-byte, sex context-utdrag, 200 byte etikett/4000 byt
 
 Hela operationen efter body begränsas till **40 s**, inklusive kvotreservation, fetch, bounded bodyläsning, parsing och domänvalidering. Deadline skiljs från klientavbrott. Sena D1-reservationer kan ha förbrukat kvot men får aldrig starta senare inferens eller osäker refund. Slots/listeners frigörs på alla utgångar. Node och Worker använder samma executionpolicy med separat faktisk Worker-runtimecoverage.
 
-Fyra genereringsrutter delar högst **100/UTC-dygn**, med medföljande konfiguration sex/minut och två samtidiga anrop per instans. Gränser kan sänkas; dagsgränsen kan inte höjas över 100. **Observera vid uppgradering:** en befintlig installation med `MIO_REQUESTS_PER_DAY` över 100 startar inte längre (Worker svarar 503 `gateway_not_configured`) förrän värdet sänkts. Konfigurationsrevisionen innehåller även gatewayns release, så varje ny publicering ger 409 `configuration_changed` en gång och kräver ny granskning/aktivering i appen. En D1-kvotkontroll som överskrider deadline ger 503 `budget_store_failed`, inte `upstream_timeout`. Workern kräver kompatibilitetsflaggan `enable_request_signal` för att klientavbrott ska nå gatewayn. Lektionsintervallet är 60–3600 s, normalt minst 60 s även efter lång status-/modellväntan. Frågor, vardagsanalys och lektioner delar kvot; detta räcker inte för heldags minutanalys. Misstänkt timeout/avbrott får inte automatiskt skickas om eftersom kostnad/kvot kan ha uppstått.
+Fyra genereringsrutter delar `MIO_REQUESTS_PER_MINUTE` (högst 60; medföljande konfiguration 20, under NIM:s 40/min) och två samtidiga anrop per instans. `MIO_REQUESTS_PER_DAY` är valfri: tom eller `0` betyder ingen dagsgräns (beslut 2026-10-05), annars ett heltal 1–1 000 000 per UTC-dygn. Ett ogiltigt värde ger 503 `gateway_not_configured`. Konfigurationsrevisionen innehåller även gatewayns release, så varje ny publicering ger 409 `configuration_changed` en gång och kräver ny granskning/aktivering i appen. En D1-kvotkontroll som överskrider deadline ger 503 `budget_store_failed`, inte `upstream_timeout`. Workern kräver kompatibilitetsflaggan `enable_request_signal` för att klientavbrott ska nå gatewayn. Lektionsintervallet är 60–3600 s, normalt minst 60 s även efter lång status-/modellväntan. Frågor, vardagsanalys och lektioner delar kvot. Misstänkt timeout/avbrott får inte automatiskt skickas om eftersom kostnad/kvot kan ha uppstått.
 
 ## Diagnostik, samtycke och lektioner
 
@@ -94,4 +94,4 @@ Detaljerade lektionsdelar sparas atomiskt med källcitat och modell/promptmetada
 
 ## Nästa externa grind
 
-Efter lokala kontroller: jämför exakta kod-/bundle-/releasevärden och produktionsinställningar, få uttrycklig publiceringsbegäran, bevara Worker/D1/Secrets/Access och read-verifiera aktiv version samt autentiserad v2-status. Kontrollera negativa Access/gatewayauth och alternativa adresser. Först efter separat sändningsgodkännande körs [tre syntetiska modellprov](../docs/LEVERANTORSKONTRAKT.md#separat-godkänt-syntetiskt-modellprov). Därefter behövs matching Xcode/XCTest/IPA, installation och iPhone-acceptans. [Groq/Access-guiden](cloudflare/GROQ_ACCESS.md) beskriver den konkreta ordningen.
+Efter lokala kontroller: jämför exakta kod-/bundle-/releasevärden och produktionsinställningar, få uttrycklig publiceringsbegäran, bevara Worker/D1/Secrets/Access och read-verifiera aktiv version samt autentiserad v2-status. Kontrollera negativa Access/gatewayauth och alternativa adresser. Först efter separat sändningsgodkännande körs [tre syntetiska modellprov](PROVIDERS.md#separat-godkänt-syntetiskt-modellprov). Därefter behövs matching Xcode/XCTest/IPA, installation och iPhone-acceptans. [Cloudflare-guiden](cloudflare/README.md) beskriver den konkreta ordningen.

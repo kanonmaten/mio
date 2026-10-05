@@ -17,22 +17,26 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 | Dagen | Lokal morgon- och kvällsöversikt; godkända notiser öppnar rätt lokal vy | Notiser har opaka ID:n utan privata rubriker; ingen molnsammanfattning |
 | AI | Godkänd fråga eller aktiverad löpande tolkning via serverprofiler; anslutning/kapacitet; explicit spara ett svar som anteckning | Av från början; modellfri status bevisar inte leverantörsåtkomst eller kvalitet |
 
+## Textleverantör, 2026-10-05
+
+Text-AI byts till NVIDIA NIM med DeepSeek V4.1 Flash, utan dagsgräns ([beslut](DECISIONS.md#text-ai-via-nvidia-nim-utan-dagsgräns-2026-10-05)). Nästa steg: publicera gatewayen och sätt NIM-variablerna enligt [Cloudflare-guiden](../server/cloudflare/README.md), modellfri status, därefter separat godkänt syntetiskt modellprov för strikt JSON och svensk kvalitet.
+
 ## PLAN.md i arbetskopian, 2026-10-03
 
 De fyra första lokala etappernas grindar är passerade: regressioner för ljud/gateway/lagring/discovery; appägd workflow och generationsskydd; åtskilda tasks/modellprofiler/adaptrar/exekvering; samt sammanhängande UI med tre avgränsade funktioner. Etapp 5 förbereder gemensam verifieringsentrypoint, concurrency-kontroll, syntetisk historikmätning, dokumentation och gatewayrelease `2026-10-03.1`. Exakta aktuella resultat och kvarstående kontroller står i [status](STATUS.md). Detta är källarbete och lokala verifieringsgrindar, inte en släppt eller telefonverifierad produkt.
 
-Servern väljer `ask`/`everyday`/`lesson` från validerade profiler och serverägda nycklar. Skyddad `/v2/status` visar konfiguration, revision och gemensam kapacitet. Nya anrop kräver aktuell revision; ändring leder till ny preview eller aktivering. [Leverantörsmatrisen](LEVERANTORSKONTRAKT.md) listar exakta granskade ID:n, spärrade kontrakt och separat syntetiskt prov. Inga verkliga leverantörsprofiler är verifierade för denna revision.
+Servern väljer `ask`/`everyday`/`lesson` från validerade profiler och serverägda nycklar. Skyddad `/v2/status` visar konfiguration, revision och gemensam kapacitet. Nya anrop kräver aktuell revision; ändring leder till ny preview eller aktivering. [Leverantörsmatrisen](../server/PROVIDERS.md) listar exakta granskade ID:n, spärrade kontrakt och separat syntetiskt prov. Inga verkliga leverantörsprofiler är verifierade för denna revision.
 
 Lektionsdelar och kopiering märker om underlaget är aktuellt, äldre eller okänt, utan att ändra original eller automatiskt sända rättningar. Svar kan uttryckligen sparas som anteckning. Anslutnings-/kapacitetsvyn visar modellfria taskstatusar, delad kvot och återstående arbete; 100 modellförsök per dygn är fortsatt ett gemensamt tak, inte heldagskapacitet. Notisöppning använder ett lokalt mål-ID och godkänner ingen annan åtgärd.
 
-Read-only produktionskontroll den 3 oktober visar att den gamla OpenAI-bundlen fortfarande är aktiv med Groq-konfiguration. D1-bindningen matchar repot; all-traffic Access och service-token-funktion är ännu inte bevisade. Releasearbetet är därför inte färdigt. Efter exakt godkänd publicering ska bundle, release, profiler och D1/Access läsas tillbaka; skyddad modellfri status och negativa authprov körs först. Verkliga fråga-/vardag-/lektionsprov kräver därefter separat godkännande av syntetisk payload. Xcode/XCTest för samma revision, IPA och fysisk acceptans följer som egna grindar. Se [releaseguiden](../server/cloudflare/GROQ_ACCESS.md).
+Read-only produktionskontroll den 3 oktober visar att den gamla OpenAI-bundlen fortfarande är aktiv med Groq-konfiguration. D1-bindningen matchar repot; all-traffic Access och service-token-funktion är ännu inte bevisade. Releasearbetet är därför inte färdigt. Efter exakt godkänd publicering ska bundle, release, profiler och D1/Access läsas tillbaka; skyddad modellfri status och negativa authprov körs först. Verkliga fråga-/vardag-/lektionsprov kräver därefter separat godkännande av syntetisk payload. Xcode/XCTest för samma revision, IPA och fysisk acceptans följer som egna grindar. Se [releaseguiden](../server/cloudflare/README.md).
 
 ## Leveransgrindar
 
 1. Kontrollera projektfiler, privata data, lokala tester och dokumentation med den gemensamma verifieringsentrypointen. Registrera Linuxvärden separat från native- och telefonresultat.
 2. Efter uttryckligt tillstånd: commit/push och GitHub Actions på faktisk tillgänglig `xcode-27`-runner. Release och XCTest måste bli gröna för samma commit.
 3. Hämta validerad IPA och installera rent på iPhone 16 Pro med `app.mio.assistant`; prova iPhone 13 senare.
-4. Kör [helhetstestet](TESTPLAN_HELHET.md) samt återstående [långtest](TESTPLAN_V0_1.md).
+4. Kör [helhetstestet](TESTPLAN_HELHET.md) samt återstående [långtest](TESTPLAN_HELHET.md#långprov-latens-värme-och-batteri).
 5. Registrera exakt revision, build, enhet och resultat i [status](STATUS.md). Åtgärda verkliga fel innan daglig tillit.
 
 Versionsnumret 1.0.0 används först när accepterad vardagsomfattning är verifierad. Inget datum eller löfte om heldagslyssning ges utan mätningar. Appversion, byggnummer och lagringsschema är separata värden. `CURRENT_PROJECT_VERSION` höjs inför nästa distribuerade build; bundle identifier och beständiga lagringsvägar ändras inte.
@@ -53,7 +57,7 @@ Leverantörsadaptrar, strikt schema även för frågor och detaljerade lektionsa
 
 Prioriterad implementation finns i arbetskopian: (1) versionsmärkt ljud-API/originalmodell och driftpaket, (2) mikrofon separerad från nätet och begränsad RAM-kö, (3) sessionsbevarande vid avbrott/luckor och iOS-lifecycle, (4) samlade inställningar/status/återkoppling, (5) dokumentation och tester. Ingen HA, publik ljudport eller lokal Apple-fallback.
 
-Återstående leveransgrindar: nytt Xcode-bygge och XCTest, installera systemd/Tailscale enligt driftguiden, därefter [Pianissimo-acceptansprov](TESTPLAN_PIANISSIMO.md), särskilt svensk precision över chunkgränser, låst skärm, omstart, nätbyte och batteri. GPU-laddning i utvecklingsmiljö ersätter inte dessa prov.
+Återstående leveransgrindar: nytt Xcode-bygge och XCTest, installera systemd/Tailscale enligt driftguiden, därefter [Pianissimo-acceptansprov](TESTPLAN_HELHET.md#pianissimo-återanslutning-och-bakgrund), särskilt svensk precision över chunkgränser, låst skärm, omstart, nätbyte och batteri. GPU-laddning i utvecklingsmiljö ersätter inte dessa prov.
 
 ## Kontext och AI-diagnostik, 2026-09-30
 

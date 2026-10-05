@@ -72,7 +72,7 @@ Under **Inställningar → Alarm, notiser och behörigheter** kan du skapa frist
 
 Det finns två separata flöden. **AI-assistent → Aktivera AI-tolkning** ger samtycke till löpande nya vardagsutdrag och lektioner du avslutar medan läget är på. Läget återställs till av när app-processen startar om. Paus/stopp kan slutföra redan godkänd vardagssluttext och bryter kontexten inför Fortsätt; text före aktiveringen eller över en ljudlucka tas inte med som bakåtkontext. Stäng av AI-tolkning stoppar väntande analys, inklusive lektionskön. Redan skickad text kan inte återkallas. Vid nät-/gräns-/konfigurationsfel stoppas läget och behöver aktiveras igen manuellt. En sparad lektion som inte analyserats kan skickas med ett separat godkännande från dess detaljvy.
 
-**Testa text-AI-anslutning** under anslutningsinställningarna gör ett modellfritt statusanrop. Det visar autentisering, protokoll, gatewayrelease, serverns profiler för fråga/vardag/lektion och delad dagskvot när den går att läsa. Giltig konfiguration bevisar inte leverantörens API-behörighet, modellåtkomst eller svensk kvalitet. Okänd återstående kvot betyder just okänd, inte noll. Högst 100 AI-anrop per dygn delas mellan uppgifterna; visat återstående lektionsarbete är en uppskattning, inte reserverad kapacitet.
+**Testa text-AI-anslutning** under anslutningsinställningarna gör ett modellfritt statusanrop. Det visar autentisering, protokoll, gatewayrelease, serverns profiler för fråga/vardag/lektion och delad dagskvot om servern har en. Giltig konfiguration bevisar inte leverantörens API-behörighet, modellåtkomst eller svensk kvalitet. Okänd återstående kvot betyder just okänd, inte noll. Uppgifterna delar serverns minutgräns och eventuell dagsgräns; visat återstående lektionsarbete är en uppskattning, inte reserverad kapacitet.
 
 För **enskilda frågor** följer du stegen nedan:
 
@@ -96,7 +96,7 @@ Stoppa sessionen och gå till **Inställningar → Integritet, export och raderi
 
 Detta gäller arbetskopians nya kod; befintlig build 5 behöver ersättas med en ny verifierad IPA och gatewayen behöver uppdateras.
 
-**Byta till Groq:** följ [Cloudflare-bytesguiden](../server/PROVIDERS.md). Modell och API-nyckel ändras på servern; appens adress och gatewaytoken behålls. Reasoning är av, temperatur 0 och strikt JSON används automatiskt. Modellens JSON visas som vanliga anteckningar och förslag i appen.
+**Byta modell eller leverantör:** följ [Cloudflare-guiden](../server/cloudflare/README.md#2-byt-leverantör-eller-modell); tillåtna modeller står i [katalogen](../server/PROVIDERS.md). Modell och API-nyckel ändras på servern; appens adress och gatewaytoken behålls. Reasoning är av, temperatur 0 och strikt JSON används automatiskt. Modellens JSON visas som vanliga anteckningar och förslag i appen.
 
 Servern kan ha olika kompatibla profiler för enskild fråga, vardag och lektion. Gör det modellfria anslutningsprovet efter ett byte och aktivera/granska på nytt. Det finns ingen modellväljare i appen eller tyst reservmodell.
 
@@ -108,4 +108,4 @@ Efter nätfel, kvotfel eller omstart: färdiga detaljerade delar finns kvar. Vä
 
 Om du rättar textunderlaget senare visas att anteckningarna bygger på **äldre text**; när revisionsunderlag saknas anges **okänd aktualitet**. Sparade delar/citat bevaras och rättningen skickas inte automatiskt igen. Kopierad anteckning behåller dessa varningar, ofullständiga delar och eventuella ljudluckor. Granska underlaget även när alla delar är bearbetade.
 
-För [Groq, tokenåterställning och Cloudflare Access](../server/cloudflare/GROQ_ACCESS.md) finns en sammanhängande steg-för-steg-guide. Access kräver den nya appens separata Client ID-/Client Secret-fält; de finns inte i build 5.
+För [tokens, leverantörsbyte och Cloudflare Access](../server/cloudflare/README.md) finns en sammanhängande steg-för-steg-guide. Access kräver den nya appens separata Client ID-/Client Secret-fält; de finns inte i build 5.

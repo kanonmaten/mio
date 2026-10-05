@@ -22,6 +22,7 @@ const configs = [
   ['gemini', 'gemini-2.5-flash', 'GEMINI_API_KEY', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', 'gemini'],
   ['anthropic', 'claude-haiku-4-5', 'ANTHROPIC_API_KEY', 'https://api.anthropic.com/v1/messages', 'anthropic'],
   ['openrouter', 'openai/gpt-4.1', 'OPENROUTER_API_KEY', 'https://openrouter.ai/api/v1/chat/completions', 'chat'],
+  ['nvidia', 'deepseek-ai/deepseek-v4.1-flash', 'NVIDIA_API_KEY', 'https://integrate.api.nvidia.com/v1/chat/completions', 'chat'],
   ['custom', 'host/model:version', 'MIO_AI_API_KEY', 'https://inference.example/v1/chat/completions', 'chat']
 ];
 function configFor(provider, model, key) {
@@ -63,6 +64,9 @@ for (const [provider, model, key, url, wire] of configs) {
         assert.equal(request.body.provider.require_parameters, true);
         assert.equal(request.body.provider.allow_fallbacks, false);
         assert.deepEqual(request.body.provider.only, ['openai']);
+      } else if (provider === 'nvidia') {
+        assert.deepEqual(request.body.chat_template_kwargs, { thinking: false, enable_thinking: false });
+        assert.equal(Object.hasOwn(request.body, 'reasoning_effort'), false);
       } else assert.equal(request.body.reasoning_effort, 'none');
       assert.equal(providerResponseText(envelope(wire, notes), request.profile), JSON.stringify(notes));
     }
@@ -72,7 +76,8 @@ for (const [provider, model, key, url, wire] of configs) {
 test('unknown and mandatory-thinking models fail before an API request is built', () => {
   for (const [provider, model] of [['groq', 'openai/gpt-oss-20b'], ['groq', 'invented'],
     ['openai', 'gpt-6-astra'], ['gemini', 'gemini-2.5-pro'], ['gemini', 'gemini-3-flash'],
-    ['anthropic', 'claude-opus-4-7'], ['deepseek', 'deepseek-reasoner']]) {
+    ['anthropic', 'claude-opus-4-7'], ['deepseek', 'deepseek-reasoner'],
+    ['nvidia', 'z-ai/glm-5.3'], ['nvidia', 'moonshotai/kimi-k3']]) {
     assert.throws(() => providerProfile({ provider, model }), /provider_model_incompatible/u);
   }
   assert.throws(() => providerProfile({ provider: 'custom', model: 'test' }));
