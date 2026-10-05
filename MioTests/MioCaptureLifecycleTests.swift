@@ -116,7 +116,8 @@ final class MioCaptureLifecycleTests: XCTestCase {
         // An export/deletion barrier arrives while the lesson transition is admitted.
         let exclusive = Task { await MioMaintenanceState.shared.beginExclusive(deleting: false) }
         await waitUntil { model.isLessonActive }
-        XCTAssertTrue(await exclusive.value)
+        let admitted = await exclusive.value
+        XCTAssertTrue(admitted)
         lesson.cancel()
         await lesson.value
         XCTAssertEqual(model.currentSession?.id, everydayID)

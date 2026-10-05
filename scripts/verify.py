@@ -107,6 +107,9 @@ def main() -> int:
                                  "seconds": round(time.monotonic() - started, 3), "log": log.name})
         print(f"{'PASS' if code == 0 else 'FAIL'} {name}: {log}", flush=True)
         if code:
+            # CI logs are often the only evidence available; show the failing gate's tail.
+            tail = log.read_text(errors="replace").splitlines()[-80:]
+            print("\n".join(f"  | {line}" for line in tail), flush=True)
             failed = True
             break
     receipt["finishedAt"] = datetime.now(timezone.utc).isoformat()

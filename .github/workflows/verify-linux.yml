@@ -50,4 +50,5 @@ jobs:
             .mio-verification/*.log
             .mio-verification/verification.json
           if-no-files-found: warn
+          include-hidden-files: true
           retention-days: 14
