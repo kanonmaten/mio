@@ -247,9 +247,18 @@ final class MioSystemServices {
         errorMessage = nil
         statusMessage = nil
         defer { isBusy = false }
+        let reminderID = Self.reminderID(for: itemID)
+        let hadAlarm = knownAlarmIDs.contains(itemID)
+        guard hadAlarm else {
+            // Every alarm Mio schedules is remembered, so an unknown item has none. Skipping
+            // AlarmKit here keeps completing a task independent of the alarm daemon, which can
+            // stall; the simulator UI test never saw a completed task while this path ran.
+            notificationCenter.removePendingNotificationRequests(withIdentifiers: [reminderID])
+            notificationCenter.removeDeliveredNotifications(withIdentifiers: [reminderID])
+            reminders.removeAll { $0.id == reminderID }
+            return true
+        }
         do {
-            let reminderID = Self.reminderID(for: itemID)
-            let hadAlarm = knownAlarmIDs.contains(itemID)
             // AlarmKit and notification removal are synchronous daemon calls; running them
             // off the main actor keeps "Markera som klar" from freezing the UI.
             let removed = try await Task.detached(priority: .userInitiated) {
