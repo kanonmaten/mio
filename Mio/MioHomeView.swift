@@ -10,6 +10,7 @@ struct MioHomeView: View {
     @Environment(MioNavigationCoordinator.self) private var navigation
     @Environment(MioAnalysisCoordinator.self) private var analysis
     @Environment(\.openMioSettings) private var openSettings
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(MioCloudSettings.serverKey) private var server = ""
     @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
     @State private var showAsk = false
@@ -70,7 +71,7 @@ struct MioHomeView: View {
 
     private var weekHeader: some View {
         HStack(spacing: 4) {
-            Text(day.overviewDate.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(MioTheme.swedish)).capitalized)
+            Text(day.overviewDate.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(MioTheme.swedish)).mioSentenceCased)
                 .font(.headline)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
@@ -100,13 +101,28 @@ struct MioHomeView: View {
 
     @ViewBuilder
     private var nextPanel: some View {
-        let next = MioNextUp.make(content: contentModel.items, now: .now, calendar: day.calendar)
+        let next = nextUp
         MioPanel {
             switch next {
             case .upcoming(let item), .overdue(let item):
                 itemLine(item, timeText: next == .overdue(item)
                          ? "Kvar sedan \(MioTimeText.describe(item.scheduledAt, relativeTo: .now, calendar: day.calendar))"
                          : MioTimeText.describe(item.scheduledAt, relativeTo: .now, calendar: day.calendar))
+            case .none where server.isEmpty:
+                // Unpaired, pairing is the one real next step, so it leads instead of "Klart för i dag".
+                Label("Para datorn för text och AI.", systemImage: "desktopcomputer")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                Button(action: openSettings) {
+                    Text("Para")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .accessibilityIdentifier("mio.home.pair")
             case .none:
                 Text(emptyNextText)
                     .font(.body)
@@ -128,6 +144,10 @@ struct MioHomeView: View {
                 }
             }
         }
+    }
+
+    private var nextUp: MioNextUp {
+        MioNextUp.make(content: contentModel.items, now: .now, calendar: day.calendar)
     }
 
     private var emptyNextText: String {
@@ -209,7 +229,10 @@ struct MioHomeView: View {
     @ViewBuilder
     private var aiStatus: some View {
         if server.isEmpty {
-            statusLine("Para datorn för att få text och AI.", symbol: "desktopcomputer", action: "Para", perform: openSettings)
+            // The Nästa panel already carries the pairing step when nothing else is next.
+            if !(isTodaySelected && nextUp == .none) {
+                statusLine("Para datorn för att få text och AI.", symbol: "desktopcomputer", action: "Para", perform: openSettings)
+            }
         } else if !aiEnabled {
             statusLine("AI är pausad.", symbol: "pause.circle", action: "Slå på") { aiEnabled = true }
         } else if let until = analysis.pausedUntil, until > .now {
@@ -219,11 +242,14 @@ struct MioHomeView: View {
     }
 
     private func statusLine(_ text: String, symbol: String, action: String?, perform: @escaping () -> Void) -> some View {
-        HStack(spacing: 10) {
+        // At accessibility sizes the button moves below the text instead of squeezing it.
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
+        return layout {
             Label(text, systemImage: symbol)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Spacer(minLength: 8)
+            if !stacked { Spacer(minLength: 8) }
             if let action {
                 Button(action, action: perform)
                     .buttonStyle(.bordered)
@@ -255,15 +281,17 @@ struct MioHomeView: View {
     @ViewBuilder
     private var overview: some View {
         @Bindable var navigation = navigation
-        HStack {
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let header = stacked ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) : AnyLayout(HStackLayout())
+        header {
             MioSectionTitle(isTodaySelected ? "I dag" : "Dagen")
             Picker("Översikt", selection: $navigation.dailyPeriod) {
                 Text("Morgon").tag(MioDailyPeriod.morning)
                 Text("Kväll").tag(MioDailyPeriod.evening)
             }
             .pickerStyle(.segmented)
-            .frame(maxWidth: 200)
-            .padding(.top, 8)
+            .frame(maxWidth: stacked ? .infinity : 200)
+            .padding(.top, stacked ? 0 : 8)
         }
         let groups = overviewGroups
         MioPanel {
@@ -325,4 +353,9 @@ struct MioAskSheet: View {
         let lessons = sessions.filter { $0.isLesson && $0.endedAt != nil }.compactMap(\.title)
         return MioSuggestedQuestions.make(content: items, lessonTitles: lessons, now: .now, calendar: day.calendar)
     }
+}
+
+private extension String {
+    /// Swedish dates capitalize only the first letter ("Söndag 11 oktober").
+    var mioSentenceCased: String { prefix(1).uppercased() + dropFirst() }
 }

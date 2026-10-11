@@ -38,6 +38,7 @@ struct MioApp: App {
         _day = State(initialValue: day)
         MioSystemServices.shared.configureNotificationRouting { navigation.receive($0) }
         MioMetricKitSubscriber.shared.start()
+        MioTheme.useRoundedLargeTitles()
         // Lock Screen presence: Live Activity with App Intent controls, and iOS's own
         // progress UI for lesson notes that continue after the user leaves the app.
         let liveActivity = MioLiveActivityController(capture: capture)

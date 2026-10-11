@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The week-planner world: a violet-tinted ground, plain reading panels on top, one violet
 /// tint for controls. Liquid Glass stays on system bars and controls; panels never use it.
@@ -9,6 +10,15 @@ enum MioTheme {
     static let tint = Color.accentColor
     static let swedish = Locale(identifier: "sv_SE")
     static let panelRadius: CGFloat = 22
+
+    /// Large navigation titles ("v. 41") use SF Rounded and still scale with Dynamic Type.
+    @MainActor static func useRoundedLargeTitles() {
+        // 34 pt is the default large-title size; UIFontMetrics scales it to the user's text size.
+        let base = UIFont.systemFont(ofSize: 34, weight: .bold)
+        guard let rounded = base.fontDescriptor.withDesign(.rounded) else { return }
+        let font = UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: UIFont(descriptor: rounded, size: 34))
+        UINavigationBar.appearance().largeTitleTextAttributes = [.font: font]
+    }
 }
 
 extension View {
@@ -66,22 +76,19 @@ struct MioWeekRibbon: View {
 
     var body: some View {
         if typeSize.isAccessibilitySize {
-            ScrollView(.horizontal) { cells.padding(.horizontal, 2) }
-                .scrollIndicators(.hidden)
+            // Two rows keep all seven days, and today's ring, on screen without a hidden scroll.
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) { cells }
         } else {
-            cells
+            HStack(spacing: 6) { cells }
         }
     }
 
     private var cells: some View {
-        HStack(spacing: 6) {
-            ForEach(week.days) { day in
-                Button { select(day.date) } label: {
-                    MioDayCell(day: day, isSelected: calendar.isDate(day.date, inSameDayAs: selectedDate))
-                        .frame(minWidth: typeSize.isAccessibilitySize ? 76 : nil)
-                }
-                .buttonStyle(.plain)
+        ForEach(week.days) { day in
+            Button { select(day.date) } label: {
+                MioDayCell(day: day, isSelected: calendar.isDate(day.date, inSameDayAs: selectedDate))
             }
+            .buttonStyle(.plain)
         }
     }
 }
@@ -97,6 +104,7 @@ private struct MioDayCell: View {
                 .foregroundStyle(isSelected ? MioTheme.tint : Color.secondary)
             Text(day.date.formatted(.dateTime.day().locale(MioTheme.swedish)))
                 .font(.title3.weight(day.isToday ? .bold : .medium))
+                .fontDesign(.rounded)
                 .monospacedDigit()
                 .foregroundStyle(day.isFuture ? Color.secondary : Color.primary)
             HStack(spacing: 3) {
@@ -179,7 +187,7 @@ struct MioStreakGridView: View {
             .frame(maxWidth: .infinity)
             .overlay {
                 if day.isToday {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Color.primary.opacity(0.6), lineWidth: 1.5)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(MioTheme.tint, lineWidth: 1.5)
                 }
             }
     }
