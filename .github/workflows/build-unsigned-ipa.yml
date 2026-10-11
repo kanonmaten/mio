@@ -131,6 +131,7 @@ jobs:
             exit 1
           fi
           echo "Vald simulator: $SIMULATOR_UDID"
+          echo "SIMULATOR_UDID=$SIMULATOR_UDID" >> "$GITHUB_ENV"
           xcrun simctl boot "$SIMULATOR_UDID" || true
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
           trap 'xcrun simctl shutdown "$SIMULATOR_UDID" || true' EXIT
@@ -150,6 +151,46 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             ONLY_ACTIVE_ARCH=NO \
             test-without-building 2>&1 | tee "$RUNNER_TEMP/Mio-tests.log"
+
+      - name: Ta skärmbilder i simulatorn
+        # Fresh simulator, no user data: Hem in light, dark and the largest text size, so the
+        # design can be reviewed before installing. Never blocks the IPA; runs even after a test failure.
+        if: ${{ !cancelled() && env.SIMULATOR_UDID != '' }}
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          APP_PATH="$RUNNER_TEMP/TestDerivedData/Build/Products/Debug-iphonesimulator/Mio.app"
+          test -d "$APP_PATH"
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")"
+          OUT="$RUNNER_TEMP/Mio-screenshots"
+          mkdir -p "$OUT"
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          trap 'xcrun simctl shutdown "$SIMULATOR_UDID" || true' EXIT
+          xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
+          shoot() {
+            xcrun simctl ui "$SIMULATOR_UDID" appearance "$1"
+            xcrun simctl ui "$SIMULATOR_UDID" content_size "$2"
+            xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_ID" || true
+            xcrun simctl launch "$SIMULATOR_UDID" "$BUNDLE_ID"
+            sleep 8
+            xcrun simctl io "$SIMULATOR_UDID" screenshot "$OUT/$3.png"
+          }
+          shoot light large hem-ljus
+          shoot dark large hem-mork
+          shoot light accessibility-extra-extra-extra-large hem-storsta-text
+          shoot dark accessibility-extra-large hem-mork-stor-text
+          ls -l "$OUT"
+
+      - name: Ladda upp skärmbilder
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mio-screenshots
+          path: ${{ runner.temp }}/Mio-screenshots/*.png
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Visa testfel från resultatpaketet
         # Parallel xcodebuild output names failing tests without their assertion text.

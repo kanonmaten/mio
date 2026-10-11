@@ -87,9 +87,7 @@ final class MioWeekPlannerTests: XCTestCase {
         XCTAssertEqual(MioDayPhase.at(date("2026-10-09T15:00:00Z"), calendar: calendar), .evening)
         XCTAssertEqual(MioDayPhase.at(date("2026-10-09T01:00:00Z"), calendar: calendar), .evening)
     }
-}
 
-final class MioSuggestedQuestionsTests: XCTestCase {
     func testQuestionsUseTheLatestLessonAndNextItemAndStayShort() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Europe/Stockholm")!
