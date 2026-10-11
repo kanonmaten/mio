@@ -1,0 +1,323 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-11T00:00:00Z",
+  "title": "Design System: Mio",
+  "extensions": {
+    "colorMeta": {
+      "violet-tint": {
+        "role": "primary",
+        "displayName": "Almanacksviolett (ljust)",
+        "canonical": "#6B3FD4",
+        "oklch": "oklch(50.9% 0.214 290.2)",
+        "tonalRamp": [
+          "#150046",
+          "#2D0074",
+          "#4705A1",
+          "#6335CA",
+          "#845FF1",
+          "#A387FF",
+          "#C7B3FF",
+          "#EDE0FF"
+        ],
+        "asset": "AccentColor (Any)"
+      },
+      "violet-tint-dark": {
+        "role": "primary",
+        "displayName": "Almanacksviolett (mörkt)",
+        "canonical": "#AE91FF",
+        "oklch": "oklch(72.8% 0.157 294.3)",
+        "tonalRamp": [
+          "#120035",
+          "#2C055D",
+          "#482585",
+          "#6545AB",
+          "#876AD1",
+          "#A78EF0",
+          "#CCB8FF",
+          "#F2E3FF"
+        ],
+        "asset": "AccentColor (Dark)"
+      },
+      "lilac-ground": {
+        "role": "neutral",
+        "displayName": "Lila mark",
+        "canonical": "#F2EEFB",
+        "oklch": "oklch(95.6% 0.018 300.1)",
+        "tonalRamp": [
+          "#0C0912",
+          "#25222C",
+          "#413E48",
+          "#5F5B66",
+          "#827E8A",
+          "#A39FAB",
+          "#C9C5D1",
+          "#F0ECF9"
+        ],
+        "asset": "MioGround (Any)"
+      },
+      "night-violet-ground": {
+        "role": "neutral",
+        "displayName": "Nattviolett mark",
+        "canonical": "#1A1230",
+        "oklch": "oklch(21.1% 0.057 293.1)",
+        "tonalRamp": [
+          "#0C071B",
+          "#251F3A",
+          "#413A5A",
+          "#5F587B",
+          "#817A9F",
+          "#A29CBF",
+          "#C8C3E2",
+          "#EFEBFF"
+        ],
+        "asset": "MioGround (Dark)"
+      },
+      "paper-surface": {
+        "role": "neutral",
+        "displayName": "Papper",
+        "canonical": "#FFFFFF",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0B0B0B",
+          "#242424",
+          "#404040",
+          "#5D5D5D",
+          "#808080",
+          "#A1A1A1",
+          "#C7C7C7",
+          "#EEEEEE"
+        ],
+        "asset": "MioSurface (Any)"
+      },
+      "plum-surface": {
+        "role": "neutral",
+        "displayName": "Plommonyta",
+        "canonical": "#261C3D",
+        "oklch": "oklch(25.7% 0.061 295.8)",
+        "tonalRamp": [
+          "#0D071B",
+          "#261E3B",
+          "#42395B",
+          "#60577C",
+          "#8379A0",
+          "#A49BC0",
+          "#C9C2E3",
+          "#F0EAFF"
+        ],
+        "asset": "MioSurface (Dark)"
+      },
+      "lavender-ribbon": {
+        "role": "neutral",
+        "displayName": "Lavendelband",
+        "canonical": "#E4DCF8",
+        "oklch": "oklch(90.9% 0.039 298.7)",
+        "tonalRamp": [
+          "#0D0815",
+          "#262032",
+          "#423C51",
+          "#605971",
+          "#837C94",
+          "#A49DB5",
+          "#C9C4D8",
+          "#F0ECFC"
+        ],
+        "asset": "MioRibbon (Any)"
+      },
+      "dusk-ribbon": {
+        "role": "neutral",
+        "displayName": "Skymningsband",
+        "canonical": "#322750",
+        "oklch": "oklch(30.7% 0.072 294.1)",
+        "tonalRamp": [
+          "#0D051F",
+          "#261D3F",
+          "#423861",
+          "#605583",
+          "#8278A7",
+          "#A39AC7",
+          "#C9C1E8",
+          "#EFEAFF"
+        ],
+        "asset": "MioRibbon (Dark)"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Veckonummer",
+        "purpose": "Stor navigeringstitel i SF Rounded, främst \"v. 41\"."
+      },
+      "headline": {
+        "displayName": "Sektionsrubrik",
+        "purpose": "MioSectionTitle ovanför paneler."
+      },
+      "title": {
+        "displayName": "Panelrad",
+        "purpose": "Huvudrad i panel, datumrad, knappetiketter."
+      },
+      "body": {
+        "displayName": "Brödtext",
+        "purpose": "Radtitlar och tomlägen."
+      },
+      "body-secondary": {
+        "displayName": "Metadata",
+        "purpose": "Tider, status, gruppetiketter."
+      },
+      "label": {
+        "displayName": "Veckodag",
+        "purpose": "Veckodagsbokstav i dagcellen och veckoetiketter."
+      },
+      "day-numeral": {
+        "displayName": "Datumsiffra",
+        "purpose": "Datum i dagcellen, rundad med tabellsiffror."
+      }
+    },
+    "shadows": [],
+    "materials": [
+      {
+        "name": "liquid-glass-regular",
+        "value": "glassEffect(.regular) / .glass / .glassProminent",
+        "purpose": "Bara kontroller och navigering: flikfält, Fånga-knappen, lyssningsfältet, inställningspanelens ram, framträdande knappar. Reduce Transparency ger systemGroupedBackground."
+      }
+    ],
+    "motion": [
+      {
+        "name": "symbol-pulse",
+        "value": "symbolEffect(.pulse)",
+        "purpose": "Fångas statusikon medan Mio lyssnar; av med Reduce Motion."
+      },
+      {
+        "name": "settings-drag",
+        "value": "DragGesture, stäng vid > 90 pt",
+        "purpose": "Inställningspanelen följer fingret åt höger; ingen förskjutning med Reduce Motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "accessibility-type",
+        "value": "dynamicTypeSize.isAccessibilitySize",
+        "purpose": "Veckobandet blir 4 kolumner; statusrader och översiktsrubrik staplas."
+      },
+      {
+        "name": "content-max",
+        "value": "680pt",
+        "purpose": "Hems innehåll centreras på breda skärmar."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "MioPanel: den ogenomskinliga läsytan på den tonade marken.",
+      "html": "<div class=\"ds-ground\"><div class=\"ds-panel\"><div class=\"ds-panel-title\">3 att granska</div><div class=\"ds-panel-sub\">1 sparad till senare</div></div></div>",
+      "css": ".ds-ground{background:#F2EEFB;padding:16px;font-family:-apple-system,'SF Pro Text',system-ui,sans-serif}.ds-panel{background:#FFFFFF;border-radius:22px;padding:16px;display:flex;flex-direction:column;gap:2px;transition:background .2s}.ds-panel:hover{background:#FBFAFE}.ds-panel-title{font-size:17px;font-weight:600;color:#1C1C1E}.ds-panel-sub{font-size:15px;color:rgba(60,60,67,.6)}"
+    },
+    {
+      "name": "Primär knapp",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "glassProminent-kapsel i tonen, full bredd; en per panel.",
+      "html": "<button class=\"ds-btn-primary\">Starta Mio</button>",
+      "css": ".ds-btn-primary{width:100%;background:#6B3FD4;color:#fff;border:none;border-radius:9999px;padding:14px 20px;font:600 17px -apple-system,'SF Pro Text',system-ui,sans-serif;box-shadow:inset 0 1px 0 rgba(255,255,255,.35);transition:filter .2s,transform .1s}.ds-btn-primary:hover{filter:brightness(1.08)}.ds-btn-primary:active{transform:scale(.98)}.ds-btn-primary:focus-visible{outline:2px solid #6B3FD4;outline-offset:3px}"
+    },
+    {
+      "name": "Sekundär knapp",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "bordered-kapsel i tonen för små åtgärder bredvid text.",
+      "html": "<button class=\"ds-btn-secondary\">Para</button>",
+      "css": ".ds-btn-secondary{background:rgba(107,63,212,.15);color:#6B3FD4;border:none;border-radius:9999px;padding:7px 14px;font:400 17px -apple-system,'SF Pro Text',system-ui,sans-serif;transition:background .2s}.ds-btn-secondary:hover{background:rgba(107,63,212,.22)}.ds-btn-secondary:focus-visible{outline:2px solid #6B3FD4;outline-offset:2px}"
+    },
+    {
+      "name": "Veckoband",
+      "kind": "custom",
+      "refersTo": "day-cell",
+      "description": "Sju dagceller, måndag först; i dag ringad, vald dag fylld, tre aktivitetsprickar.",
+      "html": "<div class=\"ds-ribbon\"><button class=\"ds-day\"><span class=\"ds-wd\">M</span><span class=\"ds-dn\">5</span><span class=\"ds-dots\"><i class=on></i><i></i><i></i></span></button><button class=\"ds-day\"><span class=\"ds-wd\">T</span><span class=\"ds-dn\">6</span><span class=\"ds-dots\"><i class=on></i><i class=on></i><i></i></span></button><button class=\"ds-day\"><span class=\"ds-wd\">O</span><span class=\"ds-dn\">7</span><span class=\"ds-dots\"><i></i><i></i><i></i></span></button><button class=\"ds-day ds-sel\"><span class=\"ds-wd\">T</span><span class=\"ds-dn\">8</span><span class=\"ds-dots\"><i class=on></i><i class=on></i><i class=on></i></span></button><button class=\"ds-day ds-today\"><span class=\"ds-wd\">F</span><span class=\"ds-dn\">9</span><span class=\"ds-dots\"><i class=on></i><i></i><i></i></span></button><button class=\"ds-day ds-future\"><span class=\"ds-wd\">L</span><span class=\"ds-dn\">10</span><span class=\"ds-dots\"><i></i><i></i><i></i></span></button><button class=\"ds-day ds-future\"><span class=\"ds-wd\">S</span><span class=\"ds-dn\">11</span><span class=\"ds-dots\"><i></i><i></i><i></i></span></button></div>",
+      "css": ".ds-ribbon{display:flex;gap:6px;background:#F2EEFB;padding:8px;font-family:-apple-system,system-ui,sans-serif}.ds-day{flex:1;min-height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:transparent;border:2px solid transparent;border-radius:14px;cursor:pointer;transition:background .2s}.ds-day:hover{background:rgba(107,63,212,.08)}.ds-day:focus-visible{outline:2px solid #6B3FD4;outline-offset:2px}.ds-wd{font-size:12px;font-weight:600;color:rgba(60,60,67,.6)}.ds-dn{font-family:'SF Pro Rounded',ui-rounded,system-ui,sans-serif;font-size:20px;font-weight:500;font-variant-numeric:tabular-nums;color:#1C1C1E}.ds-dots{display:flex;gap:3px}.ds-dots i{width:5px;height:5px;border-radius:3px;background:rgba(107,63,212,.18)}.ds-dots i.on{background:#6B3FD4}.ds-sel{background:rgba(107,63,212,.16)}.ds-sel .ds-wd{color:#6B3FD4}.ds-today{border-color:#6B3FD4}.ds-today .ds-dn{font-weight:700}.ds-future .ds-dn{color:rgba(60,60,67,.6)}"
+    },
+    {
+      "name": "Tolv veckor",
+      "kind": "custom",
+      "refersTo": "streak-cell",
+      "description": "Strecknät 12 × 7 i en panel; tonens djup visar aktivitet.",
+      "html": "<div class=\"ds-panel ds-streak\"><div class=\"ds-streak-head\"><b>23 dagar med Mio</b><span>4 i rad</span></div><div class=\"ds-grid\"><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=l0></i><i class=l2></i><i class=l4></i><i class=l1></i><i class=l3></i><i class=lf></i><i class=lf></i><i class=lf></i><i class=lf></i></div></div>",
+      "css": ".ds-streak{background:#FFFFFF;border-radius:22px;padding:16px;font-family:-apple-system,system-ui,sans-serif}.ds-streak-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}.ds-streak-head b{font-size:17px;font-weight:600}.ds-streak-head span{font-size:15px;font-weight:500;color:#6B3FD4}.ds-grid{display:grid;grid-template-columns:repeat(12,1fr);grid-auto-flow:column;grid-template-rows:repeat(7,auto);gap:4px}.ds-grid i{aspect-ratio:1;border-radius:4px;background:#E4DCF8}.ds-grid i.l1{background:rgba(107,63,212,.4)}.ds-grid i.l2{background:rgba(107,63,212,.7)}.ds-grid i.l3{background:#6B3FD4}.ds-grid i.lf{background:rgba(228,220,248,.45)}"
+    },
+    {
+      "name": "Rad",
+      "kind": "custom",
+      "refersTo": "item-row",
+      "description": "MioItemRow: symbol i tonen, titel, svensk tidsfras, valfri kontroll.",
+      "html": "<div class=\"ds-row\"><svg class=\"ds-row-icon\" viewBox=\"0 0 24 24\" width=\"22\" height=\"22\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg><div class=\"ds-row-text\"><div class=\"ds-row-title\">Lämna in labbrapport (syntetiskt exempel)</div><div class=\"ds-row-time\">kl. 13.40</div></div><button class=\"ds-row-check\" aria-label=\"Markera som klar\"><svg viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"10\"/></svg></button></div>",
+      "css": ".ds-row{display:flex;align-items:center;gap:12px;min-height:44px;font-family:-apple-system,system-ui,sans-serif}.ds-row-icon{width:28px;color:#6B3FD4;flex:none}.ds-row-text{flex:1}.ds-row-title{font-size:17px;font-weight:500;color:#1C1C1E}.ds-row-time{font-size:15px;color:rgba(60,60,67,.6)}.ds-row-check{width:44px;height:44px;border:none;background:none;color:#6B3FD4;cursor:pointer;border-radius:22px}.ds-row-check:hover{background:rgba(107,63,212,.08)}.ds-row-check:focus-visible{outline:2px solid #6B3FD4}"
+    },
+    {
+      "name": "Lyssningsfält",
+      "kind": "nav",
+      "refersTo": "listening-bar",
+      "description": "Diskret glastillbehör ovanför flikfältet: prick, ett ord, timer, paus.",
+      "html": "<div class=\"ds-listen\"><span class=\"ds-dot\"></span><span class=\"ds-listen-word\">Lyssnar</span><span class=\"ds-listen-timer\">12:04</span><button class=\"ds-listen-pause\" aria-label=\"Pausa Mio\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"currentColor\"><rect x=\"6\" y=\"5\" width=\"4\" height=\"14\" rx=\"1\"/><rect x=\"14\" y=\"5\" width=\"4\" height=\"14\" rx=\"1\"/></svg></button></div>",
+      "css": ".ds-listen{display:flex;align-items:center;gap:8px;padding:0 14px;height:48px;border-radius:9999px;background:rgba(255,255,255,.55);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);border:1px solid rgba(255,255,255,.6);font-family:-apple-system,system-ui,sans-serif}.ds-dot{width:8px;height:8px;border-radius:4px;background:#6B3FD4}.ds-listen-word{font-size:15px;font-weight:500}.ds-listen-timer{flex:1;font-size:15px;font-variant-numeric:tabular-nums;color:rgba(60,60,67,.6)}.ds-listen-pause{width:44px;height:44px;border:none;background:none;color:#6B3FD4;cursor:pointer;border-radius:22px}.ds-listen-pause:hover{background:rgba(107,63,212,.1)}.ds-listen-pause:focus-visible{outline:2px solid #6B3FD4}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Almanackan med veckonummer",
+    "overview": "Mio ser ut som en svensk veckoalmanacka, inte som en widgetpanel. Veckonumret (\"v. 41\") är sidans största text, och de sju dagarna Mån–Sön organiserar allt under det: nästa sak, det som väntar på granskning, dagens morgon- eller kvällsöversikt och tolv veckors användning. Ingen hjältekort-över-rutnät-uppställning; ordningen är almanackans.\n\nVärlden är en violett tonad mark (blek lila i ljust läge, djup nattviolett i mörkt) med vanliga, ogenomskinliga läsytor ovanpå. En enda mättad violett ton bär kontroller, markeringar och framsteg. Liquid Glass hör till systemets kontroller och navigering – flikfältet, den runda Fånga-knappen, lyssningsfältet, inställningspanelen och de framträdande knapparna – och aldrig till anteckningar, transkript eller listor. Typografin är Apples egen: SF Pro i textstilar som skalas med Dynamic Type, och SF Rounded för siffror som ska kännas som en almanacka (veckonumret och datumsiffrorna).\n\nTätheten är låg och lugn: få val per vy, korta svenska rader, framsteg som syns utan att skuldbelägga. Lyssnandet är diskret i rummet – en liten prick och ett ord, inget rött, ingen vågform.",
+    "keyCharacteristics": [
+      "Veckonummer i SF Rounded som stor titel; datum och sju dagceller direkt under.",
+      "Violett mark, vanliga paneler med 22 pt kontinuerliga hörn, inga skuggor.",
+      "En ton för allt interaktivt; tillståndsfärger bara för luckor, varningar och fel.",
+      "Glas bara på kontroller och navigering; läsytor är alltid ogenomskinliga.",
+      "Allt skalas med Dynamic Type och byter layout vid tillgänglighetsstorlekar i stället för att klippa."
+    ],
+    "rules": [
+      {
+        "name": "The One Tint Rule",
+        "body": "Allt som går att trycka på eller som visar framsteg använder `MioTheme.tint`. Ingen andra accentfärg införs.",
+        "section": "colors"
+      },
+      {
+        "name": "The State Colours Rule",
+        "body": "Systemets orange betyder avbrott eller varning (avbrutet lyssnande, pausgräns), rött betyder fel eller att stänga av, grönt betyder klart eller godkänt. De används bara för just de tillstånden, aldrig som dekor.",
+        "section": "colors"
+      },
+      {
+        "name": "The Rounded Numerals Rule",
+        "body": "SF Rounded används för almanackans siffror – veckonummer och datum – och inte för brödtext eller rubriker.",
+        "section": "typography"
+      },
+      {
+        "name": "The Text Style Rule",
+        "body": "Storlekar anges som textstilar (`.title3`, `.subheadline` …), aldrig som fasta punktvärden, så att Dynamic Type når de största storlekarna.",
+        "section": "typography"
+      },
+      {
+        "name": "The Glass-on-Controls Rule",
+        "body": "Liquid Glass hör till kontroller och navigering. Anteckningar, transkript, listor och `MioPanel` är alltid ogenomskinliga läsytor.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Flat Panel Rule",
+        "body": "Paneler skiljs från marken enbart genom ton – ingen skugga, ingen kant, ingen gloria.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** lägg varje ny skärm på `mioGround()` eller `mioListGround()` och dess läsinnehåll i `MioPanel` eller vanliga grupperade rader.",
+      "**Do** använd `MioTheme.tint` för allt interaktivt och för framsteg; låt systemets semantiska färger bära texten.",
+      "**Do** använd kontinuerliga hörn i skalan 4 / 14 / 22 / 28 pt och kapslar för knappar.",
+      "**Do** ange typografi som textstilar och testa i den största tillgänglighetsstorleken; stapla eller bryt till rutnät hellre än att klippa eller dölja i skroll.",
+      "**Do** ge varje ikonknapp minst 44 × 44 pt träffyta och ett svenskt tillgänglighetsnamn.",
+      "**Do** visa en enda primär åtgärd per panel."
+    ],
+    "donts": [
+      "**Don't** lägg Liquid Glass, material eller skuggor på anteckningar, transkript, listor eller paneler.",
+      "**Don't** inför en andra accentfärg eller använd orange, rött eller grönt för annat än varning, fel och klart.",
+      "**Don't** gör lyssningsfältet iögonfallande: inget rött, ingen vågform, ingen pulserande animation där.",
+      "**Don't** använd SF Rounded för brödtext eller rubriker; den hör till veckonummer och datumsiffror.",
+      "**Don't** ange fasta punktstorlekar för text som ska skalas med Dynamic Type."
+    ]
+  }
+}
