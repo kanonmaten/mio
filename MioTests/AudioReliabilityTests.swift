@@ -8,13 +8,13 @@ import AVFoundation
 final class AudioReliabilityTests: XCTestCase {
     func testRepeatedCaptureFormatDoesNotProduceDiagnosticPerTap() async throws {
         let epoch = UUID()
-        let stamps: [AudioCaptureStamp] = (0..<21).map { (index: Int) -> AudioCaptureStamp in
+        let stamps: [AudioCaptureStamp] = (0..<23).map { (index: Int) -> AudioCaptureStamp in
             let hostTime = 10.0 + Double(index)
             let sampleTime = Int64(index * 16_000)
             return AudioCaptureStamp(epoch: epoch, sequence: UInt64(index + 1), hostUptime: hostTime,
-                sampleTime: sampleTime, sampleRate: 16_000, frames: 16_000, callbackUptime: 32)
+                sampleTime: sampleTime, sampleRate: 16_000, frames: 16_000, callbackUptime: 34)
         }
-        let fixture = AudioPipelineFixture(now: 32, capturedAt: 10, stamps: stamps)
+        let fixture = AudioPipelineFixture(now: 34, capturedAt: 10, stamps: stamps)
         let pipeline = fixture.pipeline()
         _ = try await pipeline.start()
         await waitUntil { fixture.transport.requestCount == 1 }
@@ -26,15 +26,15 @@ final class AudioReliabilityTests: XCTestCase {
 
     func testChangedCaptureFormatIsReportedWithoutRepeatedTapDiagnostics() async throws {
         let epoch = UUID()
-        var stamps: [AudioCaptureStamp] = (0..<21).map { (index: Int) -> AudioCaptureStamp in
+        var stamps: [AudioCaptureStamp] = (0..<23).map { (index: Int) -> AudioCaptureStamp in
             let hostTime = 10.0 + Double(index)
             let sampleTime = Int64(index * 16_000)
             return AudioCaptureStamp(epoch: epoch, sequence: UInt64(index + 1), hostUptime: hostTime,
-                sampleTime: sampleTime, sampleRate: 16_000, frames: 16_000, callbackUptime: 32)
+                sampleTime: sampleTime, sampleRate: 16_000, frames: 16_000, callbackUptime: 34)
         }
-        stamps.append(.init(epoch: epoch, sequence: 22, hostUptime: 31, sampleTime: 0,
-                            sampleRate: 48_000, frames: 48_000, callbackUptime: 32))
-        let fixture = AudioPipelineFixture(now: 32, capturedAt: 10, stamps: stamps)
+        stamps.append(.init(epoch: epoch, sequence: 24, hostUptime: 33, sampleTime: 0,
+                            sampleRate: 48_000, frames: 48_000, callbackUptime: 34))
+        let fixture = AudioPipelineFixture(now: 34, capturedAt: 10, stamps: stamps)
         let pipeline = fixture.pipeline()
         _ = try await pipeline.start()
         await waitUntil { fixture.diagnostics.conversions.contains { $0.sampleRate == 48_000 } }
@@ -107,8 +107,8 @@ final class AudioReliabilityTests: XCTestCase {
 
     func testAssemblerEarliestExpiryIncludesRetainedOverlapAndDiscardReleasesIt() {
         var assembler = AudioChunkAssembler(sessionID: UUID())
-        _ = assembler.append(Data(count: 21 * 32_000), at: .now, uptime: 10)
-        XCTAssertEqual(assembler.expiresAt, 89)
+        _ = assembler.append(Data(count: 23 * 32_000), at: .now, uptime: 10)
+        XCTAssertEqual(assembler.expiresAt, 91)
         XCTAssertEqual(assembler.retainedSamples, 2 * 16_000)
         assembler.discard()
         XCTAssertNil(assembler.expiresAt)
@@ -295,7 +295,7 @@ final class AudioReliabilityTests: XCTestCase {
     }
 
     func testRetryPreservesChunkIdentityAndOriginalExpiry() async throws {
-        let fixture = AudioPipelineFixture(now: 30, capturedAt: 10, frames: 21 * 16_000, retryOnce: true)
+        let fixture = AudioPipelineFixture(now: 30, capturedAt: 10, frames: 23 * 16_000, retryOnce: true)
         let pipeline = fixture.pipeline()
         _ = try await pipeline.start()
         await waitUntil { fixture.events.offline }

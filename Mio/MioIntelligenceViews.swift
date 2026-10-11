@@ -69,6 +69,7 @@ struct LessonDetailView: View {
     let content: MioContentViewModel
     @Environment(MioAssistantViewModel.self) private var assistant
     @Environment(MioAnalysisCoordinator.self) private var analysis
+    @Environment(MioWorkflowCoordinator.self) private var workflow
     @State private var copied = false
     @State private var continuationTask: Task<Void, Never>?
     @State private var continuationID = UUID()
@@ -160,6 +161,8 @@ struct LessonDetailView: View {
                     if session.endedAt != nil {
                         Button("Skapa eller fortsätt detaljerade anteckningar") { continueLesson(session) }
                             .disabled(isPreparingContinuation || analysis.isWorking || document.isComplete)
+                        Text("Textdelar skickas till din dator, med minst en minut emellan. Arbetet fortsätter i bakgrunden när du lämnar appen; sparade delar finns kvar efter avbrott. Råljud skickas inte.")
+                            .font(.footnote).foregroundStyle(.secondary)
                     }
                     NavigationLink("Granska föreslagna läxor och planer") { SuggestionInboxView(contentModel: content, sessionModel: model) }
                     NavigationLink("Originaltext, egen anteckning och radering") {
@@ -183,7 +186,7 @@ struct LessonDetailView: View {
     private func continueLesson(_ approvedSession: MioSession) {
         if analysis.enabled {
             continuationError = nil
-            analysis.summarizeLesson(approvedSession, assistant: assistant)
+            workflow.requestLessonNotes(approvedSession, userInitiated: true)
             return
         }
         guard MioAIPreference.isEnabled(in: .standard) else {
@@ -203,7 +206,7 @@ struct LessonDetailView: View {
                 try Task.checkCancellation()
                 guard continuationID == id, model.session(id: approvedSession.id) != nil else { return }
                 continuationError = nil
-                analysis.summarizeLesson(approvedSession, assistant: assistant)
+                workflow.requestLessonNotes(approvedSession, userInitiated: true)
             } catch is CancellationError { }
             catch { if continuationID == id { continuationError = error.localizedDescription } }
         }

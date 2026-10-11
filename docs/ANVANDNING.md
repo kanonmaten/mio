@@ -10,9 +10,9 @@ Alla inställningar finns i en panel som glider in från höger: tryck kugghjule
 
 **Para datorn:** kör `mio-pair` på datorn ([gatewayguiden](../server/README.md)) och välj **Dator → Skanna QR-kod**. Kameran används bara för koden. Koden innehåller datorns Tailscale-adress och tokens för AI-gatewayen och, om den finns, Pianissimo. Tokens sparas i nyckelringen. Fungerar inte kameran: **Ange uppgifterna manuellt** med värdena från `mio-pair --text` (transkriptionen är valfri). Efter parningen kontrollerar Mio datorn utan att skicka ljud eller använda AI-kvot och visar resultatet. Första gången visas en kort påminnelse om samtycke när du spelar in andra. Datorn måste vara igång med Tailscale; iPhone ska vara i samma tailnet. Se [driftguiden](../transcription-server/README.md) för Pianissimo.
 
-**Ansluten** visar senast lyckade kontakt. **Ansluter** visas under anslutningskontroll. Vid **Offline** försöker en aktiv session igen automatiskt; högst 60 s ljud kan vänta i RAM. Äldre ljud tappas med synlig lucka. Efter stopp kan du behöva Testa anslutning för en färsk kontroll. iOS-ljudavbrott kan kräva Fortsätt; efter appens tvångsavslutning startas aldrig mikrofonen automatiskt.
+**Ansluten** visar senast lyckade kontakt. **Ansluter** visas under anslutningskontroll. Vid **Offline** försöker en aktiv session igen automatiskt; högst 60 s ljud kan vänta i RAM. Äldre ljud tappas med synlig lucka. Efter stopp kan du behöva Testa anslutning för en färsk kontroll. Efter ett iOS-ljudavbrott startar Mio mikrofonen igen själv; efter appens tvångsavslutning startas den aldrig automatiskt.
 
-Mikrofon, transkriptionsanslutning och text-AI visas separat. En aktiv mikrofon kan alltså fånga ljud medan servern är offline. Vid paus/stopp stängs mikrofonen först; redan fångad sluttext kan avslutas under högst 15 sekunder, fortfarande inom ljudets ursprungliga 60-sekundsgräns. Du kan avbryta väntan. Efter ljudavbrott, ljudvägsbyte eller reset väljer du själv Fortsätt när iOS tillåter; inte heller en tidsvald paus startar mikrofonen automatiskt.
+Mikrofon, transkriptionsanslutning och text-AI visas separat. En aktiv mikrofon kan alltså fånga ljud medan servern är offline. Vid paus/stopp stängs mikrofonen först; redan fångad sluttext kan avslutas under högst 15 sekunder, fortfarande inom ljudets ursprungliga 60-sekundsgräns. Du kan avbryta väntan. Efter samtal, Siri, ljudvägsbyte eller reset startar Mio mikrofonen igen av sig själv och markerar luckan i transkriptet. Nekar iOS det i bakgrunden får du notisen "Tryck för att fortsätta lyssna"; Mio fortsätter när appen öppnas. Nekas det på skärmen, eller efter tre omstarter på en minut, väljer du Fortsätt. Din egen paus eller ditt stopp ångras aldrig automatiskt, inte heller en tidsvald paus.
 
 ## Fånga och ordna
 
@@ -23,7 +23,7 @@ Mikrofon, transkriptionsanslutning och text-AI visas separat. En aktiv mikrofon 
 5. Tryck **Fortsätt Mio** för att återuppta den pausade vardagslyssningen. Mikrofonen startar inte automatiskt efter lektionen.
 6. **Lektioner → Historik och råtext** innehåller tidigare sessioner, manuella poster, texträttningar och äldre manuell lektionsindelning. Inga tidigare data är borttagna.
 
-Spela bara in andra med tydligt samtycke och enligt lokala regler. Paus/stopp ska släcka iOS mikrofonindikator. Långvarig drift med låst skärm behöver verifieras på din telefon; tvångsavslutning startar aldrig om lyssningen automatiskt.
+Spela bara in andra med tydligt samtycke och enligt lokala regler. Talarmärkningen på din dator analyserar rösterna för att skilja talare åt (talare 1–4). Det sker bara i datorns RAM och raderas när sessionen avslutas eller efter 10 minuter, men det är ändå en analys av andras röster: berätta det när du ber om samtycke, och stäng av den på servern (`MIO_SPEAKER_LABELS=0`) om någon inte vill. Paus/stopp ska släcka iOS mikrofonindikator. Långvarig drift med låst skärm behöver verifieras på din telefon; tvångsavslutning startar aldrig om lyssningen automatiskt.
 
 ## Be Mio föreslå något
 
@@ -97,7 +97,7 @@ Detta gäller arbetskopians nya kod; befintlig build 5 behöver ersättas med en
 
 Servern kan ha olika kompatibla profiler för enskild fråga, vardag och lektion. Gör det modellfria anslutningsprovet efter ett byte och aktivera/granska på nytt. Det finns ingen modellväljare i appen eller tyst reservmodell.
 
-**Lektion:** tryck Starta lektion, avsluta när undervisningen är slut och öppna lektionen i Lektioner. När AI är på startar bearbetningen efter avslut; annars väljer du **Skapa eller fortsätt detaljerade anteckningar** när AI är på igen. Låt appen vara öppen medan den bearbetar textdelarna. Du ser antal bearbetade textdelar, detaljerade rubriker/anteckningar och öppningsbara källcitat. Läxor granskas separat med Ja/Nej/Inte nu.
+**Lektion:** tryck Starta lektion, avsluta när undervisningen är slut och öppna lektionen i Lektioner. När AI är på startar bearbetningen efter avslut; annars väljer du **Skapa eller fortsätt detaljerade anteckningar** när AI är på igen. Bearbetningen fortsätter i bakgrunden med iOS förloppsruta; avbryts den finns sparade delar kvar och resten fortsätter nästa gång AI är på. Du ser antal bearbetade textdelar, detaljerade rubriker/anteckningar och öppningsbara källcitat. Läxor granskas separat med Ja/Nej/Inte nu.
 
 Tryck **Kopiera hela anteckningen** och klistra in den hos valfri AI för att exempelvis få en förklaring eller skapa frågekort. Mio skapar inga sådana läromedel själv. Kopieringen är vanlig läsbar text med rubriker; den innehåller också osäkerheter och tydlig markering om delar återstår. Även när alla delar är bearbetade måste AI-utkastet granskas mot underlaget.
 
