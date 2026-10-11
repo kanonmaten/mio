@@ -18,6 +18,12 @@ final class MioWorkflowCoordinator {
     /// block or an app restart cannot silently drop them.
     @ObservationIgnored private let pendingLessonDefaults: UserDefaults
     static let pendingLessonsKey = "mio.workflow.pendingLessonFinalization"
+    /// ID-only list of lessons whose detailed notes were requested but may be unfinished,
+    /// so notes interrupted by suspension or iOS ending the task resume after a relaunch.
+    static let lessonNotesKey = "mio.workflow.lessonNotesInProgress"
+    /// Called after the user's own action queued lesson notes (iOS continued processing).
+    @ObservationIgnored var onLessonNotesStarted: ((UUID) -> Void)?
+    @ObservationIgnored private var analysisWasEnabled = false
     @ObservationIgnored private var commandTail: Task<Void, Never>?
     @ObservationIgnored private var tailID: UUID?
     @ObservationIgnored private var commands: [UUID: Task<MioOperationOutcome, Never>] = [:]
@@ -107,6 +113,7 @@ final class MioWorkflowCoordinator {
         guard recovered.isSuccess else { return }
         await loadPresentationIfNeeded()
         resumePendingLessons()
+        observeAnalysisAvailability()
     }
 
     func finalizeLesson(_ session: MioSession, fromCapture: Bool = false) async -> MioOperationOutcome {
@@ -129,7 +136,7 @@ final class MioWorkflowCoordinator {
                 }
                 try Task.checkCancellation()
                 clearLessonPending(session.id)
-                analysis.summarizeLesson(session, assistant: assistant)
+                requestLessonNotes(session, userInitiated: fromCapture)
                 return .success
             } catch is CancellationError { return .cancelled }
             catch { return .failure("Kunde inte registrera lektionen: \(error.localizedDescription)") }
@@ -261,6 +268,45 @@ final class MioWorkflowCoordinator {
         automatically { [weak self] in _ = await self?.retryLessonFinalization() }
     }
 
+    /// Queues detailed notes for an ended lesson and remembers it until the notes are complete.
+    func requestLessonNotes(_ session: MioSession, userInitiated: Bool) {
+        analysis.summarizeLesson(session, assistant: assistant)
+        guard analysis.hasPendingLessonNotes(sessionID: session.id) else { return }
+        var stored = storedLessonNotes()
+        if !stored.contains(session.id) { stored.append(session.id); storeLessonNotes(stored) }
+        if userInitiated { onLessonNotesStarted?(session.id) }
+    }
+
+    /// Re-queues listed lessons whose notes are still incomplete and drops finished or
+    /// deleted ones. Runs whenever AI becomes enabled, including after launch.
+    func resumeUnfinishedLessonNotes() {
+        guard analysis.enabled, !maintenance.recoveryBlocked else { return }
+        var unfinished: [UUID] = []
+        for id in storedLessonNotes() {
+            guard let session = capture.session(id: id), session.isLesson, session.endedAt != nil,
+                  !MioLessonDocument(session: session, records: assistant.analyses).isComplete else { continue }
+            unfinished.append(id)
+            analysis.summarizeLesson(session, assistant: assistant)
+        }
+        storeLessonNotes(unfinished)
+    }
+
+    private func storedLessonNotes() -> [UUID] {
+        (pendingLessonDefaults.stringArray(forKey: Self.lessonNotesKey) ?? []).compactMap(UUID.init(uuidString:))
+    }
+
+    private func storeLessonNotes(_ ids: [UUID]) {
+        pendingLessonDefaults.set(ids.map(\.uuidString), forKey: Self.lessonNotesKey)
+    }
+
+    private func observeAnalysisAvailability() {
+        let enabled = withObservationTracking { analysis.enabled } onChange: { [weak self] in
+            Task { @MainActor [weak self] in self?.observeAnalysisAvailability() }
+        }
+        if enabled, !analysisWasEnabled { resumeUnfinishedLessonNotes() }
+        analysisWasEnabled = enabled
+    }
+
     private func loadPresentationIfNeeded() async {
         guard !loadedPresentation else { return }
         loadedPresentation = true
@@ -298,7 +344,7 @@ final class MioWorkflowCoordinator {
             let outcome = await deletion.begin(scope: scope, targetID: targetID)
             maintenance.setRecoveryBlocked(!outcome.isSuccess)
             if outcome.isSuccess {
-                if scope == .all { pendingLessonIDs = []; storePendingLessons() }
+                if scope == .all { pendingLessonIDs = []; storePendingLessons(); storeLessonNotes([]) }
                 else if scope == .session, let targetID { clearLessonPending(targetID) }
                 // Invalidation cancelled queued automatic work; surviving lessons are retried.
                 resumePendingLessons()

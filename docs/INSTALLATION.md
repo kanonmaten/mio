@@ -31,6 +31,10 @@ Förnya Mio och SideStore före den kostnadsfria signeringens sjudagarsgräns: W
 
 Pairing-filer, certifikat och Apple-uppgifter är känsliga och hör aldrig hemma i repot. Se [SideStores felsökning](https://docs.sidestore.io/docs/troubleshooting) och [FAQ](https://docs.sidestore.io/docs/faq) vid pairing- eller appgränsproblem.
 
+## Live Activity och widgettillägget (otestat)
+
+IPA:n innehåller nu tillägget `MioWidgets.appex` (`app.mio.assistant.widgets`) för låsskärmens och Dynamic Islands "Lyssnar"-ruta med Pausa/Fortsätt och Stopp. SideStore måste signera det som ett andra app-ID. Med ett gratiskonto räknas det mot gränsen för app-ID:n per vecka; att det fungerar med SideStore är ännu inte provat på telefonen. Om installationen misslyckas eller rutan aldrig syns: notera felet från SideStore och kontrollera **Inställningar → Mio → Live Activities**. "Fortsätt" öppnar Mio, eftersom iOS inte låter en app i bakgrunden starta mikrofonen.
+
 ## Alternativ: direkt med Xcode
 
 Kräver en Mac som stöder vald Xcode-version och telefonens iOS. Kontrollera [Apples kompatibilitetstabell](https://developer.apple.com/xcode/system-requirements); Monterey kan inte bygga detta projekt.

@@ -1,5 +1,12 @@
 # Ändringslogg
 
+## Helhetsbygget 2026-10-11 (pågår)
+
+- Live Activity: nytt widgettillägg `MioWidgets` (`app.mio.assistant.widgets`, inbäddat i appens PlugIns) visar "Lyssnar · tid", "Pausad" eller "Avbrott" och antal ljudluckor på låsskärmen och i Dynamic Island. Tiden ritas av systemet, så rutan uppdateras bara vid paus, fortsättning, avbrott och nya luckor. Knapparna Pausa och Stopp är App Intents (`LiveActivityIntent`) som körs i appen; Fortsätt öppnar Mio. Ingen transkriptionstext visas. Kompilerat och SideStore-signerat tillägg är otestat.
+- Lektionsanteckningar efter "Avsluta lektion" (eller "Skapa eller fortsätt") visas som iOS 26 `BGContinuedProcessingTask` med iOS egen förloppsruta (klara textdelar av totalt), så arbetet kan fortsätta när du lämnar appen. Avbryter iOS eller du uppgiften stoppas bara den lektionens anteckningar; sparade delar finns kvar och resten återupptas automatiskt nästa gång AI är på, även efter omstart. Inget `processing`-bakgrundsläge lagt till (Apples dokumentation kräver det inte; otestat på telefon).
+- "Markera som klar" och radering av poster: AlarmKit- och notisborttagning samt läsning av alarmlistan körs nu utanför huvudtråden, så gränssnittet inte fryser (misstänkt orsak till UI-testhänget i körning #22–#23).
+- Nya portabla XCTest: Live Activity-tillståndet, förloppet för lektionsanteckningar, stopp av en lektions anteckningar och återupptagning efter omstart. `verify_project.py` kontrollerar widgettillägget och IPA-workflowen kräver `.appex` i paketet.
+
 ## AI-gatewayen flyttar till datorn med Groq, 2026-10-11
 
 - Gatewayen kör nu på din CachyOS-dator bredvid Pianissimo, bakom `tailscale serve --https=8443`. `server/install.sh` installerar allt: tjänstekonto, Groq-nyckel (dold inmatning, fil som bara root kan läsa), härdad systemd-tjänst och Tailscale. `mio-pair` visar en QR-kod med datorns adress och båda tokens; ingenting sparas.

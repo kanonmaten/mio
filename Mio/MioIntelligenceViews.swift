@@ -139,6 +139,7 @@ struct LessonDetailView: View {
     let content: MioContentViewModel
     @Environment(MioAssistantViewModel.self) private var assistant
     @Environment(MioAnalysisCoordinator.self) private var analysis
+    @Environment(MioWorkflowCoordinator.self) private var workflow
     @State private var confirmAnalysis = false
     @State private var copied = false
     @State private var continuationTask: Task<Void, Never>?
@@ -262,7 +263,7 @@ struct LessonDetailView: View {
     private func continueLesson(_ approvedSession: MioSession) {
         if analysis.enabled {
             continuationError = nil
-            analysis.summarizeLesson(approvedSession, assistant: assistant)
+            workflow.requestLessonNotes(approvedSession, userInitiated: true)
             return
         }
         let id = UUID()
@@ -278,7 +279,7 @@ struct LessonDetailView: View {
                 try Task.checkCancellation()
                 guard continuationID == id, model.session(id: approvedSession.id) != nil else { return }
                 continuationError = nil
-                analysis.summarizeLesson(approvedSession, assistant: assistant)
+                workflow.requestLessonNotes(approvedSession, userInitiated: true)
             } catch is CancellationError { }
             catch { if continuationID == id { continuationError = error.localizedDescription } }
         }
