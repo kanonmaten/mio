@@ -20,6 +20,13 @@ protocol TranscriptionTransport: Sendable {
     /// Starts transport synchronously; its waiting task must not capture application PCM.
     func startTranscription(_ chunk: AudioChunk) -> Task<TranscriptionReply, Error>
     func cancel()
+    /// Best effort: asks the server to drop the session's speaker state and text cache now
+    /// instead of after its 10-minute idle limit. Never throws or blocks capture.
+    func endSession(_ sessionID: UUID) async
+}
+
+extension TranscriptionTransport {
+    func endSession(_ sessionID: UUID) async { }
 }
 
 typealias AudioCaptureFactory = @Sendable (AsyncStream<CapturedPCMBuffer>.Continuation,
@@ -294,9 +301,18 @@ actor LiveTranscriptionPipeline: MioCapturePipeline {
 
     private func receive(_ event: PipelineEvent) {
         guard !stopping else { return }
-        if case .interruptionBegan = event {
+        switch event {
+        case .interruptionBegan:
             interruptionStart = clock.date(); finishEpoch(); timeline.reset(); startWorker()
             scheduleExpiry()
+        case .restartFailed:
+            // The engine is down until a foreground retry; the gap runs from the last converted
+            // audio, and keeping it open stops tick() from turning the wait into a forced pause.
+            if interruptionStart == nil {
+                interruptionStart = lastAudioEnd.map { wallOrigin.addingTimeInterval($0 - uptimeOrigin) } ?? clock.date()
+            }
+            finishEpoch(); timeline.reset(); startWorker(); scheduleExpiry()
+        default: break
         }
         deliver([event])
     }

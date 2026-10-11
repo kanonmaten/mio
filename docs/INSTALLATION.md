@@ -52,7 +52,7 @@ Tester finns i `MioTests/`: modeller, actorägda lagringspatchar, workflow, för
 | Första start | Gå igenom fem flikar, spara/testa privat transkriptionsanslutning och tillåt mikrofonen vid uttrycklig sessionsstart |
 | Transkription offline | Följ Pianissimo-guiden: dator vaken, systemd redo, Tailscale på båda enheterna, rätt HTTPS-adress/token. Build 5 kan inte använda ljudservern |
 | Mikrofon nekad | Aktivera Mio under **Integritet och säkerhet → Mikrofon** |
-| Texten stannar efter ljudavbrott/ljudvägsbyte | Kontrollera separat mikrofon-/transkriptionsstatus och välj Fortsätt när iOS tillåter. Spara observationen med textfri händelselogg; ingen automatisk mikrofonstart förväntas |
+| Texten stannar efter ljudavbrott/ljudvägsbyte | Mio ska starta om mikrofonen själv eller visa notisen "Tryck för att fortsätta lyssna". Annars: kontrollera mikrofon-/transkriptionsstatus, välj Fortsätt och spara observationen med textfri händelselogg |
 | Raderingen är delvis utförd | Följ bannertexten och välj Försök slutföra raderingen igen. Starta inte nya ändringar eller AI-sändningar medan återhämtningen är blockerad |
 | Stabilt Actions-jobb är rött | Spara första tydliga felet, stegets namn, körnings-URL och commit. Senare fel kan vara följdfel |
 | Xcode visar signeringsfel | Kontrollera Team och konto; byt inte appidentitet vid uppgradering |

@@ -1,5 +1,12 @@
 # Ändringslogg
 
+## Helhetsbygget 2026-10-11 (pågår)
+
+- Fångst på telefonen: efter samtal, Siri, media reset eller ändrad ljudväg startar Mio mikrofonen igen av sig själv och markerar luckan, men aldrig efter din paus eller ditt stopp. Nekar iOS i bakgrunden visas notisen "Tryck för att fortsätta lyssna" och Mio fortsätter när appen öppnas. Högst tre automatiska omstarter per minut. Den inbyggda mikrofonen begär rundupptagning när den stöds.
+- Ljudet styckas vid naturliga pauser (8–22 s ägt ljud, 1 s kontext per sida, högst 24 s per begäran) med en energibaserad pausdetektor (`SpeechPauseDetector`, XCTest i Linux-grinden). Hälsokontrollen kräver nu 24 s/768 044 byte.
+- Talare: ord från PC:n kan ha `speaker` 1–4. Varje talarbyte blir ett eget textsegment, transkriptet visar "Talare 1/2/3" där talaren byts, och du kan byta namn på en talare i en avslutad session (bara visning, originalet ändras inte). AI ser "Talare N: " men aldrig egna namn. Stopp ber PC:n radera sessionens talarminne (`DELETE /v1/sessions/{id}`).
+- Inget av detta är kompilerat eller telefonprovat i denna ändring.
+
 ## AI-gatewayen flyttar till datorn med Groq, 2026-10-11
 
 - Gatewayen kör nu på din CachyOS-dator bredvid Pianissimo, bakom `tailscale serve --https=8443`. `server/install.sh` installerar allt: tjänstekonto, Groq-nyckel (dold inmatning, fil som bara root kan läsa), härdad systemd-tjänst och Tailscale. `mio-pair` visar en QR-kod med datorns adress och båda tokens; ingenting sparas.

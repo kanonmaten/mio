@@ -44,6 +44,9 @@ final class MioViewModel {
     /// Receives finalized text only; the assistant never observes or stores audio buffers.
     @ObservationIgnored var onFinalizedTranscript: ((MioSession) -> Void)?
     @ObservationIgnored var onLessonFinished: ((MioSession) -> Void)?
+    /// Local-notification fallback when iOS refuses a background microphone restart.
+    @ObservationIgnored var onResumeNotice: ((MioResumeNotice) -> Void)?
+    @ObservationIgnored var isAppActive: @MainActor () -> Bool = { UIApplication.shared.applicationState == .active }
 
     @ObservationIgnored private let diagnostics: MioDiagnosticsRepository
     @ObservationIgnored private var diagnosticsGeneration: UUID?
@@ -352,6 +355,8 @@ final class MioViewModel {
             serverVersion = details.health.serverVersion
             connectionState = .connected; connectionCheckedAt = .now
             appendEvent(kind: .info, message: "Mikrofonen startade. Privat transkription: \(details.health.metadata.model), revision \(details.health.metadata.revision).")
+            // Ask on screen now; iOS cannot show the permission prompt from the background.
+            onResumeNotice?(.prepare)
             await refreshSupport()
         } catch {
             if pipeline !== newPipeline {
@@ -449,6 +454,8 @@ final class MioViewModel {
         finishingPipeline = nil
         activePipelineID = nil
 
+        onResumeNotice?(.withdraw)
+        if let endedID = currentSession?.id { releaseServerSession(endedID) }
         sampleBattery(reason: "Slutvärde för batteriet")
         finishCurrentSession(message: "Sessionen stoppades av användaren.")
         runState = .off
@@ -479,6 +486,7 @@ final class MioViewModel {
 
         runState = .paused
         liveTranscript = ""
+        onResumeNotice?(.withdraw)
         if let interval = length.interval {
             let resumeDate = Date.now.addingTimeInterval(interval)
             pauseUntil = resumeDate
@@ -584,6 +592,39 @@ final class MioViewModel {
         } catch {
             errorMessage = "Kunde inte spara textändringen: \(error.localizedDescription)"
             return false
+        }
+    }
+
+    /// Display-only: the stored speaker numbers in the transcript never change.
+    func renameSpeaker(sessionID: UUID, speaker: Int, name: String) async -> Bool {
+        guard MioMaintenanceState.shared.beginWrite() else { return false }
+        defer { MioMaintenanceState.shared.endWrite() }
+        guard let session = session(id: sessionID), session.endedAt != nil,
+              session.transcripts.contains(where: { $0.speaker == speaker }) else {
+            errorMessage = "Talare kan byta namn när sessionen har stoppats."
+            return false
+        }
+        do {
+            let token = try await operationToken(for: sessionID)
+            let stored = try await repository.renameSpeaker(sessionID: sessionID, speaker: speaker, name: name, token: token)
+            replaceSessionInMemory(stored)
+            exportURL = nil
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = "Kunde inte spara talarnamnet: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    /// Best effort and fire-and-forget: the server forgets the session's speakers after 10
+    /// idle minutes anyway, so a failure here is never shown or retried.
+    private func releaseServerSession(_ id: UUID) {
+        guard let connection = try? TranscriptionSettings.connection() else { return }
+        let client = TranscriptionClient(connection: connection)
+        Task {
+            await client.endSession(id)
+            client.cancel()
         }
     }
 
@@ -732,12 +773,16 @@ final class MioViewModel {
     }
 
     private func receiveRemoteTranscript(chunk: AudioChunk, reply: TranscriptionReply, words: [TranscriptionWord]) {
-        guard let first = words.first, let last = words.last else { return }
-        let start = max(chunk.startedAt, chunk.origin.addingTimeInterval(first.start))
-        let end = min(chunk.endedAt, chunk.origin.addingTimeInterval(last.end))
-        receiveTranscript(words.map(\.text).joined(separator: " "), isFinal: true,
-                          audioStartedAt: start, audioEndedAt: end, audioTimingIsValid: chunk.timingValidity.isReliable,
-                          chunkID: chunk.id, metadata: reply.metadata, timingValidity: chunk.timingValidity)
+        // One segment per speaker turn; without labels this is one segment per chunk as before.
+        for run in TranscriptionWord.speakerRuns(words) {
+            guard let first = run.words.first, let last = run.words.last else { continue }
+            let start = max(chunk.startedAt, chunk.origin.addingTimeInterval(first.start))
+            let end = max(start, min(chunk.endedAt, chunk.origin.addingTimeInterval(last.end)))
+            receiveTranscript(run.words.map(\.text).joined(separator: " "), isFinal: true,
+                              audioStartedAt: start, audioEndedAt: end, audioTimingIsValid: chunk.timingValidity.isReliable,
+                              chunkID: chunk.id, metadata: reply.metadata, timingValidity: chunk.timingValidity,
+                              speaker: run.speaker)
+        }
     }
 
     private func receiveTranscript(
@@ -746,7 +791,8 @@ final class MioViewModel {
         audioStartedAt: Date,
         audioEndedAt: Date,
         audioTimingIsValid: Bool,
-        chunkID: UUID? = nil, metadata: TranscriptionMetadata? = nil, timingValidity: AudioTimingValidity? = nil
+        chunkID: UUID? = nil, metadata: TranscriptionMetadata? = nil, timingValidity: AudioTimingValidity? = nil,
+        speaker: Int? = nil
     ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -765,6 +811,7 @@ final class MioViewModel {
             segment.sourceChunkID = chunkID
             segment.transcriptionMetadata = metadata
             segment.timingValidity = timingValidity
+            segment.speaker = speaker
             currentSession?.transcripts.append(segment)
 
             if !audioTimingIsValid {
@@ -821,8 +868,22 @@ final class MioViewModel {
         case let .interruptionEnded(shouldResume):
             if shouldResume, runState == .interrupted || runState == .listening {
                 runState = .listening
-                statusMessage = "Mikrofonen levererar ljud igen."
-                appendEvent(kind: .interruption, message: statusMessage)
+                statusMessage = "Mio lyssnar igen. Avbrottet är markerat som en lucka."
+                appendEvent(kind: .interruption, message: "Mikrofonen startades om automatiskt efter avbrottet.")
+                onResumeNotice?(.withdraw)
+            }
+        case let .restartFailed(message):
+            guard runState == .interrupted || runState == .listening else { return }
+            let decision = MioCaptureResumePolicy.decision(userWantsListening: true, interruptionOngoing: false,
+                restartFailed: true, appIsActive: isAppActive())
+            if decision == .notifyUser {
+                // The pipeline keeps the session and the open gap; becoming active retries.
+                runState = .interrupted
+                statusMessage = "\(message) Öppna Mio för att fortsätta lyssna."
+                appendEvent(kind: .interruption, message: "\(message) En notis ber dig öppna Mio.")
+                onResumeNotice?(.post)
+            } else {
+                pauseAfterFailure("\(message) Tryck Fortsätt för att lyssna igen.")
             }
         case let .routeChanged(message): appendEvent(kind: .routeChange, message: message)
         case let .needsResume(message): pauseAfterFailure(message)

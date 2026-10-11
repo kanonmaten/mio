@@ -30,6 +30,9 @@ struct MioApp: App {
         _navigation = State(initialValue: navigation)
         _day = State(initialValue: day)
         MioSystemServices.shared.configureNotificationRouting { navigation.receive($0) }
+        capture.onResumeNotice = { notice in
+            Task { await MioSystemServices.shared.handleResumeNotice(notice) }
+        }
     }
 
     var body: some Scene {

@@ -46,6 +46,11 @@ final class MicrophoneCapture: AudioCapturing, @unchecked Sendable {
     private var tapInstalled = false
     private var active = false
     private var interrupted = false
+    /// An automatic restart was refused (typically in the background); foreground retries it.
+    private var restartPending = false
+    private var restartUptimes: [TimeInterval] = []
+    /// Invalidates a delayed retry once a newer restart, interruption or stop happened.
+    private var restartGeneration = 0
     private var stopped = false
     private var lastBuffer: TimeInterval = 0
     private var droppedBuffers = 0
@@ -92,7 +97,18 @@ final class MicrophoneCapture: AudioCapturing, @unchecked Sendable {
     func checkAfterForeground() {
         queue.async { [self] in
             guard active, !stopped else { return }
-            if interrupted || !engine.isRunning || ProcessInfo.processInfo.systemUptime - lastBufferUptime > 5 {
+            if interrupted || restartPending || !engine.isRunning {
+                // Foreground is when iOS reliably allows activation again, and iOS does not
+                // guarantee an .ended notification for every interruption.
+                interrupted = false; restartPending = false; restartGeneration += 1
+                do {
+                    try rebuild()
+                    event(.interruptionEnded(shouldResume: true))
+                } catch {
+                    tearDownEngine()
+                    event(.needsResume("Mikrofonen kunde inte startas igen. Tryck Fortsätt när ljudet är ledigt."))
+                }
+            } else if ProcessInfo.processInfo.systemUptime - lastBufferUptime > 5 {
                 event(.needsResume("Mikrofonen behöver återstartas. Tryck Fortsätt för att fortsätta samma session."))
             }
         }
@@ -110,6 +126,8 @@ final class MicrophoneCapture: AudioCapturing, @unchecked Sendable {
         try session.setCategory(.record, mode: .measurement)
         try session.setAllowHapticsAndSystemSoundsDuringRecording(true)
         try session.setActive(true)
+        // Apple: set data source and polar pattern only after category, mode and activation.
+        preferOmnidirectionalBuiltInMicrophone()
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw MioError.invalidAudioStream }
@@ -166,41 +184,108 @@ final class MicrophoneCapture: AudioCapturing, @unchecked Sendable {
     private func handle(_ notification: CaptureNotification) {
         guard active, !stopped else { return }
         switch notification {
-        case let .interruption(rawType, rawOptions):
+        case let .interruption(rawType, _):
             guard let raw = rawType, let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
             if type == .began {
-                interrupted = true
+                interrupted = true; restartPending = false; restartGeneration += 1
                 tearDownEngine(); event(.interruptionBegan)
             } else {
-                let options = rawOptions ?? 0
+                // User decision 2026-10-11: listening resumes after calls and Siri whether or
+                // not .shouldResume is set. That option is a playback hint; Mio only records,
+                // and only while the user has neither paused nor stopped (this object exists).
                 interrupted = false
-                guard AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume) else {
-                    event(.needsResume("Ljudavbrottet är slut. Tryck Fortsätt för att återstarta mikrofonen.")); return
-                }
-                recover()
+                restartAutomatically()
             }
         case .servicesLost:
-            interrupted = true; tearDownEngine(); event(.interruptionBegan)
+            interrupted = true; restartPending = false; restartGeneration += 1
+            tearDownEngine(); event(.interruptionBegan)
         case .servicesReset:
+            // Every audio object is invalid after a reset: start from a new engine and session setup.
             tearDownEngine(); engine = AVAudioEngine()
-            active = false
-            event(.mediaServicesReset)
+            interrupted = false
+            restartAutomatically()
         case let .routeChanged(rawReason):
             let raw = rawReason ?? 0
             let reason = AVAudioSession.RouteChangeReason(rawValue: raw)
             // Our own setCategory also emits a route notification; never restart for that.
             guard reason != .categoryChange, !interrupted else { return }
-            event(.routeChanged("Ljudvägen ändrades. Tryck Fortsätt för att använda det nya mikrofonformatet."))
-            recover()
+            // A running engine adopts the new route itself; a format change stops it and
+            // arrives as an engine configuration change.
+            guard !engine.isRunning || restartPending else {
+                event(.routeChanged("Ljudvägen ändrades; mikrofonen fortsätter.")); return
+            }
+            event(.routeChanged("Ljudvägen ändrades. Mio startar om mikrofonen."))
+            restartAutomatically()
         case let .engineConfigurationChanged(engineID):
             guard engineID == ObjectIdentifier(engine), !interrupted else { return }
-            recover()
+            restartAutomatically()
         }
     }
 
-    private func recover() {
-        // System resume hints do not authorize another microphone start.
-        tearDownEngine()
-        event(.needsResume("Mikrofonen behöver återstartas. Tryck Fortsätt när ljudvägen är tillgänglig."))
+    private func restartAutomatically() {
+        let decision = MioCaptureResumePolicy.decision(userWantsListening: active && !stopped,
+            interruptionOngoing: interrupted, restartFailed: false, appIsActive: true)
+        guard decision == .restart else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard MioCaptureResumePolicy.allowsAutomaticRestart(previous: restartUptimes, now: now) else {
+            tearDownEngine(); restartPending = false
+            event(.needsResume("Mikrofonen startades om flera gånger i rad. Tryck Fortsätt för att försöka igen."))
+            return
+        }
+        restartUptimes = restartUptimes.filter { now - $0 < 60 } + [now]
+        attemptRestart(retries: 1)
+    }
+
+    private func attemptRestart(retries: Int) {
+        restartGeneration += 1
+        let generation = restartGeneration
+        do {
+            try rebuild()
+            guard engine.isRunning else { return }
+            restartPending = false
+            event(.interruptionEnded(shouldResume: true))
+        } catch {
+            tearDownEngine()
+            if retries > 0 {
+                // The interrupting audio may still be deactivating; retry once shortly.
+                queue.asyncAfter(deadline: .now() + 1) { [weak self] in
+                    guard let self, generation == self.restartGeneration, self.active, !self.stopped,
+                          !self.interrupted else { return }
+                    self.attemptRestart(retries: retries - 1)
+                }
+                return
+            }
+            // Typically iOS refusing a background start. The application decides whether to
+            // notify; the next foreground check retries once more.
+            restartPending = true
+            event(.restartFailed("iOS tillät inte att mikrofonen startade igen."))
+        }
+    }
+
+    /// Prefers the built-in microphone's omnidirectional pattern so quieter, farther voices are
+    /// not filtered out by a directional beam. Only when the route already uses the built-in
+    /// microphone; unsupported devices, modes or failures silently keep the system choice.
+    private func preferOmnidirectionalBuiltInMicrophone() {
+        guard session.currentRoute.inputs.contains(where: { $0.portType == .builtInMic }),
+              let port = session.availableInputs?.first(where: { $0.portType == .builtInMic }),
+              let sources = port.dataSources else { return }
+        let omni = AVAudioSession.PolarPattern.omnidirectional
+        let supportsOmni = { (source: AVAudioSessionDataSourceDescription) in
+            source.supportedPolarPatterns?.contains(omni) == true
+        }
+        let selected = port.selectedDataSource.flatMap { supportsOmni($0) ? $0 : nil }
+        guard let source = selected ?? sources.first(where: supportsOmni) else {
+            event(.routeChanged("Rundupptagning stöds inte av den inbyggda mikrofonen här; iOS val behålls."))
+            return
+        }
+        // Each change reconfigures the route, so only request what differs.
+        guard port.selectedDataSource?.dataSourceID != source.dataSourceID || source.selectedPolarPattern != omni else { return }
+        do {
+            if port.selectedDataSource?.dataSourceID != source.dataSourceID { try port.setPreferredDataSource(source) }
+            if source.selectedPolarPattern != omni { try source.setPreferredPolarPattern(omni) }
+            event(.routeChanged("Inbyggd mikrofon med rundupptagning begärd (\(source.dataSourceName))."))
+        } catch {
+            event(.routeChanged("Rundupptagning kunde inte väljas; iOS val behålls."))
+        }
     }
 }

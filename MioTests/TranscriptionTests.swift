@@ -10,18 +10,20 @@ final class TranscriptionTests: XCTestCase {
         let origin = Date(timeIntervalSince1970: 1_000)
         var assembler = AudioChunkAssembler(sessionID: UUID())
         var chunks: [AudioChunk] = []
+        // Silence has no pause to prefer, so cores are forced at the 22 s maximum.
         for second in 0..<45 {
-            chunks += assembler.append(Data(repeating: UInt8(second), count: 32_000),
+            chunks += assembler.append(Data(count: 32_000),
                                        at: origin.addingTimeInterval(Double(second)), uptime: Double(second))
         }
         chunks.append(try XCTUnwrap(assembler.finish()))
         XCTAssertEqual(chunks.count, 3)
-        XCTAssertEqual(chunks.map(\.startedAt), [origin, origin.addingTimeInterval(20), origin.addingTimeInterval(40)])
-        XCTAssertEqual(chunks.map(\.endedAt), [origin.addingTimeInterval(20), origin.addingTimeInterval(40), origin.addingTimeInterval(45)])
+        XCTAssertEqual(chunks.map(\.startedAt), [origin, origin.addingTimeInterval(22), origin.addingTimeInterval(44)])
+        XCTAssertEqual(chunks.map(\.endedAt), [origin.addingTimeInterval(22), origin.addingTimeInterval(44), origin.addingTimeInterval(45)])
         XCTAssertEqual(chunks.map(\.sequence), [0, 1, 2])
-        XCTAssertEqual(chunks[1].pcm.count, 22 * 32_000)
+        XCTAssertEqual(chunks[1].pcm.count, 24 * 32_000)
+        XCTAssertEqual(chunks[1].wave.count, TranscriptionHealth.requiredBytes)
         XCTAssertEqual(chunks[0].expiresAt, 60)
-        XCTAssertEqual(chunks[1].expiresAt, 79)
+        XCTAssertEqual(chunks[1].expiresAt, 81)
         XCTAssertNil(assembler.finish())
         XCTAssertEqual(String(data: chunks[0].wave.prefix(4), encoding: .utf8), "RIFF")
         XCTAssertEqual(chunks[0].wave.count, chunks[0].pcm.count + 44)
