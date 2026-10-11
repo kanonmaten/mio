@@ -1464,6 +1464,7 @@ version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "numpy" },
     { name = "uvicorn" },
 ]
 
@@ -1484,6 +1485,7 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'test'", specifier = "==0.28.1" },
     { name = "huggingface-hub", marker = "extra == 'inference'", specifier = "==0.36.2" },
     { name = "nemo-toolkit", extras = ["asr"], marker = "extra == 'inference'", specifier = "==2.7.0" },
+    { name = "numpy", specifier = "==2.5.3" },
     { name = "pytest", marker = "extra == 'test'", specifier = "==9.0.2" },
     { name = "pyyaml", marker = "extra == 'test'", specifier = "==6.0.3" },
     { name = "uvicorn", specifier = "==0.42.0" },

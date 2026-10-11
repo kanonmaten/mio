@@ -2,6 +2,17 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Pianissimo: dämpade samtal med flera talare, 2026-10-11
+
+Användargodkänd plan: PC-tjänsten ska klara samtal där flera personer hörs dämpat. API v1 behålls; allt nytt är additivt.
+
+- **Förbehandling** före modellen, modelloberoende och bara i RAM: DC-borttagning, 80 Hz högpass (nollfas via FFT så ordtider står still), nivå mot cirka −23 dBFS på talliknande ramar med högst +20 dB och ingen förstärkning av ren tystnad eller jämnt brus, mjuk toppbegränsning. Av med `MIO_PREPROCESS=0`. Förkastat: brusreducering, eftersom den ofta höjer ordfelen för modern taligenkänning ([arXiv 2512.17562](https://arxiv.org/abs/2512.17562)); scipy, eftersom numpy räcker och inte lägger till ett beroende; ett vanligt IIR-filter, eftersom dess fasfördröjning skulle flytta ordtiderna.
+- **Talarmärkning** med NVIDIA Streaming Sortformer `nvidia/diar_streaming_sortformer_4spk-v2` (CC-BY-4.0, NeMo, redan i GPU-beroendena). Valfritt `speaker` 1–4/`null` per ord. Talarcachen hålls per session bara i RAM och raderas vid sessionsslut (`DELETE /v1/sessions/{id}`), efter 10 minuter utan ny del eller vid omstart. Ett fel i talarsteget ger aldrig fel på transkriptionen. Talarmodellen låses till en commit vid installation och uppdateras inte på natten. Av med `MIO_SPEAKER_LABELS=0`.
+- **Pausstyrda delar:** appen skär 8–22 s ägt ljud vid pauser plus 1 s kontext per sida. 22 + 2 = 24 s ryms exakt i serverns befintliga gräns, som därför inte ändras.
+- **Mätning:** `transcription-server/scripts/measure_wer.py` jämför ordfelfrekvens med och utan förbehandling på publikt svenskt tal (FLEURS sv_se) under syntetiskt dämpade villkor och två överlappande talare.
+
+Ej verifierat: den riktiga Sortformer-körningen (skriven mot källkoden i NeMo 2.7.0 utan GPU-prov), svensk talarkvalitet (modellen är främst tränad på engelska), extra GPU-minne och latens, samt om förbehandlingen faktiskt sänker ordfelen. Mät med skriptet på datorn innan förbehandlingen eller talarmärkningen betraktas som förbättringar.
+
 ## Pianissimo följer senaste versionen, 2026-10-05
 
 Användarbeslut: transkriptionsservern ska alltid köra senaste `KlangAI/pianissimo-sv`, inte en fast revision.

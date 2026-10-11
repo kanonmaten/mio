@@ -7,6 +7,7 @@ from uuid import uuid4
 import wave
 
 from fastapi.testclient import TestClient
+import numpy as np
 import pytest
 
 from mio_transcription.app import create_app
@@ -234,3 +235,173 @@ def test_api_uses_backend_metadata_and_readiness_contract():
         assert response.json()["metadata"]["backend"] == "synthetic"
         assert client.post("/v1/transcribe", headers=headers(), content=audio()).status_code == 503
         assert backend.calls == 0
+
+
+class Diarizer:
+    """Fake speaker model: each owned region is one speaker, numbered per session state."""
+    def __init__(self):
+        self.calls, self.fail, self.load_error = [], False, None
+
+    def load(self):
+        if self.load_error:
+            raise self.load_error
+
+    def new_state(self):
+        return {"seen": 0}
+
+    def diarize(self, audio, state):
+        self.calls.append(len(audio))
+        if self.fail:
+            raise RuntimeError("synthetic")
+        return [(0.0, len(audio) / 16000, state["seen"] % 4)], {"seen": state["seen"] + 1}
+
+
+@pytest.fixture
+def start():
+    clients = []
+
+    def run(app):
+        client = TestClient(app)
+        client.__enter__()
+        clients.append(client)
+        for _ in range(400):
+            body = client.get("/health", headers=headers()).json()
+            if body["status"] == "ready" and body["speakerLabels"] != "loading":
+                break
+            time.sleep(.005)
+        return client
+    yield run
+    for client in clients:
+        client.__exit__(None, None, None)
+
+
+def test_speaker_labels_are_additive_and_follow_the_session(start):
+    backend, diarizer = Backend(), Diarizer()
+    client = start(create_app(backend, TOKEN, fatal_exit=lambda _: None, diarizer=diarizer))
+    health = client.get("/health", headers=headers()).json()
+    assert health["speakerLabels"] == "ready" and health["preprocessing"] is True
+    session = str(uuid4())
+    first = client.post("/v1/transcribe", headers=headers(**{"X-Mio-Session-ID": session}), content=audio())
+    second = client.post("/v1/transcribe", headers=headers(**{"X-Mio-Session-ID": session}), content=audio())
+    other = client.post("/v1/transcribe", headers=headers(), content=audio())
+    assert first.json()["words"] == [{"text": "Hej", "start": .1, "end": .5, "speaker": 1}]
+    assert second.json()["words"][0]["speaker"] == 2
+    assert other.json()["words"][0]["speaker"] == 1
+    assert diarizer.calls == [16000] * 3
+    # Ending the session drops its RAM state; a late chunk gets no invented numbering.
+    assert client.delete(f"/v1/sessions/{session}").status_code == 401
+    assert client.delete(f"/v1/sessions/{session.upper()}", headers=headers()).status_code == 204
+    assert client.delete("/v1/sessions/bad", headers=headers()).status_code == 400
+    late = client.post("/v1/transcribe", headers=headers(**{"X-Mio-Session-ID": session}), content=audio())
+    assert late.json()["words"][0]["speaker"] is None
+    assert len(diarizer.calls) == 3
+
+
+def test_ending_a_session_also_drops_its_cached_text(start):
+    backend = Backend()
+    client = start(create_app(backend, TOKEN, fatal_exit=lambda _: None))
+    h = headers()
+    assert client.post("/v1/transcribe", headers=h, content=audio()).status_code == 200
+    assert client.delete(f"/v1/sessions/{h['X-Mio-Session-ID']}", headers=headers()).status_code == 204
+    assert client.post("/v1/transcribe", headers=h, content=audio()).status_code == 200
+    assert backend.calls == 2
+
+
+def test_speaker_failure_never_fails_transcription(start):
+    backend, diarizer, exits = Backend(), Diarizer(), []
+    diarizer.fail = True
+    client = start(create_app(backend, TOKEN, fatal_exit=exits.append, diarizer=diarizer))
+    response = client.post("/v1/transcribe", headers=headers(), content=audio())
+    assert response.status_code == 200
+    assert response.json()["words"] == [{"text": "Hej", "start": .1, "end": .5, "speaker": None}]
+    assert exits == []
+
+
+def test_unloadable_speaker_model_keeps_v1_words_unchanged(start):
+    backend, diarizer = Backend(), Diarizer()
+    diarizer.load_error = OSError("missing")
+    client = start(create_app(backend, TOKEN, fatal_exit=lambda _: None, diarizer=diarizer))
+    assert client.get("/health", headers=headers()).json()["speakerLabels"] == "off"
+    response = client.post("/v1/transcribe", headers=headers(), content=audio())
+    assert response.json()["words"] == [{"text": "Hej", "start": .1, "end": .5}]
+
+
+def test_no_speaker_model_means_unchanged_v1_words(service):
+    client, _, _ = service
+    assert client.get("/health", headers=headers()).json()["speakerLabels"] == "off"
+    assert client.post("/v1/transcribe", headers=headers(), content=audio()).json()["words"] == [
+        {"text": "Hej", "start": .1, "end": .5}]
+
+
+def test_speaker_state_expires_after_idle_ttl(start):
+    backend, diarizer, now = Backend(), Diarizer(), [0.0]
+    client = start(create_app(backend, TOKEN, fatal_exit=lambda _: None, diarizer=diarizer,
+                              speaker_clock=lambda: now[0]))
+    session = {"X-Mio-Session-ID": str(uuid4())}
+    assert client.post("/v1/transcribe", headers=headers(**session), content=audio()).json()["words"][0]["speaker"] == 1
+    now[0] = 600
+    again = client.post("/v1/transcribe", headers=headers(**session), content=audio())
+    assert again.json()["words"][0]["speaker"] == 1  # fresh state after 10 minutes idle
+
+
+def test_oversized_result_drops_speakers_before_failing(start):
+    backend, diarizer = Backend(), Diarizer()
+    # Fits the 262144-byte cap without speaker fields, but not with them.
+    backend.words = [{"word": "å" * 67, "start": .1, "end": .5}] * 1500
+    client = start(create_app(backend, TOKEN, fatal_exit=lambda _: None, diarizer=diarizer))
+    response = client.post("/v1/transcribe", headers=headers(), content=audio())
+    assert response.status_code == 200
+    assert "speaker" not in response.json()["words"][0]
+
+
+class RecordingBackend(Backend):
+    def transcribe(self, pcm):
+        self.pcm = pcm
+        return super().transcribe(pcm)
+
+
+def offset_audio(samples=16_000):
+    buffer = BytesIO()
+    with wave.open(buffer, "wb") as output:
+        output.setnchannels(1)
+        output.setsampwidth(2)
+        output.setframerate(16_000)
+        output.writeframes(np.full(samples, 3000, dtype="<i2").tobytes())
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_preprocessing_reaches_the_model_only_when_enabled(start, enabled):
+    backend = RecordingBackend()
+    client = start(create_app(backend, TOKEN, fatal_exit=lambda _: None, preprocessing=enabled))
+    body = offset_audio()
+    assert client.post("/v1/transcribe", headers=headers(), content=body).status_code == 200
+    received = np.frombuffer(backend.pcm, dtype="<i2")
+    assert len(received) == 16_000
+    if enabled:
+        assert abs(received.mean()) < 5  # DC offset removed before the model
+    else:
+        assert backend.pcm == body[44:]
+    assert client.get("/health", headers=headers()).json()["preprocessing"] is enabled
+
+
+@pytest.mark.parametrize("seconds,core", [(8 + 2, (16_000, 144_000)), (22 + 2, (16_000, 368_000)),
+                                          (22, (0, 352_000))])
+def test_pause_cut_chunk_lengths_fit_the_contract(service, seconds, core):
+    client, _, _ = service
+    response = client.post("/v1/transcribe", content=audio(seconds * 16_000), headers=headers(
+        **{"X-Mio-Core-Start": str(core[0]), "X-Mio-Core-End": str(core[1])}))
+    assert response.status_code == 200
+    assert len(audio(24 * 16_000)) <= 1_048_576
+
+
+def test_one_sample_over_24_seconds_is_rejected(service):
+    client, backend, _ = service
+    assert client.post("/v1/transcribe", headers=headers(), content=audio(24 * 16_000 + 1)).status_code == 422
+    assert backend.calls == 0
+
+
+def test_invalid_feature_flag_is_a_configuration_error(monkeypatch):
+    monkeypatch.setenv("MIO_PREPROCESS", "kanske")
+    with pytest.raises(ValueError):
+        create_app(Backend(), TOKEN)

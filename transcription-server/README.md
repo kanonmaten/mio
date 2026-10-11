@@ -4,8 +4,8 @@ Mio skickar korta ljuddelar från iPhone till din egen dator, där **Pianissimo*
 
 Du behöver:
 
-- CachyOS (eller Arch) med en NVIDIA-GPU med minst ~5 GB ledigt grafikminne. Provat på RTX 4060 Ti 8 GB.
-- Ungefär 15 GB ledigt diskutrymme (Python/CUDA-paket + modellen ~2,5 GB).
+- CachyOS (eller Arch) med en NVIDIA-GPU med minst ~5 GB ledigt grafikminne, uppskattningsvis ~1 GB till med talarmärkning (ej uppmätt). Provat på RTX 4060 Ti 8 GB.
+- Ungefär 16 GB ledigt diskutrymme (Python/CUDA-paket + modellen ~2,5 GB + talarmodellen ~0,5 GB).
 - Ett Tailscale-konto (gratis), samma på datorn och telefonen.
 
 ## 1. Installera
@@ -31,8 +31,8 @@ Skriptet frågar efter ditt lösenord för `sudo` och gör sedan allt detta. Fö
 1. Installerar `uv`, `rsync`, `curl` och `tailscale` om de saknas.
 2. Skapar tjänstekontot `mio-transcription` och kopierar bara serverkoden till `/opt/mio-transcription`.
 3. Installerar Python 3.12 och exakt låsta paket (NeMo, PyTorch med CUDA).
-4. Skapar `/etc/mio-transcription.conf` med en ny hemlig token och senaste Pianissimo-versionen.
-5. Laddar ner modellen, startar tjänsten och väntar tills den svarar "redo".
+4. Skapar `/etc/mio-transcription.conf` med en ny hemlig token och senaste Pianissimo-versionen. Saknas talarmodellens version läggs den till (låst commit).
+5. Laddar ner modellerna, startar tjänsten och väntar tills den svarar "redo".
 6. Slår på en nattlig uppdatering av Pianissimo (se [Uppdateringar](#uppdateringar)).
 7. Kopplar tjänsten till Tailscale om Tailscale redan är inloggat.
 
@@ -84,7 +84,7 @@ Efter en SideStore-förnyelse med LocalDevVPN: slå på Tailscale igen. Datorn m
 ~/mio/transcription-server/check.sh
 ```
 
-Skriptet visar modell och version när tjänsten är redo. Inget ljud skickas.
+Skriptet visar modell och version när tjänsten är redo. Inget ljud skickas. I svaret visar `"preprocessing"` om förbehandlingen är på och `"speakerLabels"` om talarmärkningen är `ready`, `loading` eller `off`.
 
 | Problem | Gör så här |
 |---|---|
@@ -93,6 +93,7 @@ Skriptet visar modell och version när tjänsten är redo. Inget ljud skickas.
 | Tjänsten startar om hela tiden | GPU-minnet är slut (stäng spel och andra GPU-appar) eller CUDA fungerar inte: kör `nvidia-smi` och `install.sh` igen |
 | Mio säger fel token (401) | Klistra in token igen, utan mellanslag. Det är inte text-AI:ns token |
 | Fungerar lokalt men inte från telefonen | Tailscale på i telefonen? Rätt adress från `tailscale serve status`? Grants som släpper igenom ditt konto? |
+| `"speakerLabels":"off"` fast du vill ha talare | `sudo journalctl -u mio-transcription -n 50 --no-pager` visar orsaken. Saknas `MIO_DIARIZATION_REVISION`: kör `install.sh` igen. Transkriptionen fungerar ändå |
 | "A server with the specified hostname could not be found" på telefonen | Namnet når inte Tailscales DNS. Slå på **Use Tailscale DNS** i Tailscale-appen och stäng av andra DNS-profiler (t.ex. Quad9, NextDNS, AdGuard under Inställningar → Allmänt → VPN och enhetshantering). |
 
 ## Uppdateringar
@@ -113,9 +114,56 @@ Om du använder Mio just när bytet sker blir det en kort lucka i texten.
 | Stänga av automatisk uppdatering | `sudo systemctl disable --now mio-pianissimo-update.timer` |
 | Uppdatera Mios serverkod (efter `git pull`) | `cd ~/mio && git pull && transcription-server/install.sh` |
 
+**Talarmodellen** (`nvidia/diar_streaming_sortformer_4spk-v2`) är låst till den commit som `install.sh` valde och uppdateras inte på natten. Nattuppdateringen rör bara Pianissimos cache. Byta till senaste: ta bort raden `MIO_DIARIZATION_REVISION=` ur `/etc/mio-transcription.conf` (`sudo nano /etc/mio-transcription.conf`) och kör `install.sh` igen.
+
 **Byta token:** `sudo rm /etc/mio-transcription.conf` och kör `install.sh` igen. Det skapar en ny token (och tar senaste modellen). Spara sedan den nya token i Mio.
 
 Mios app behöver ingen ny version när modellen uppdateras: appen bryr sig bara om API:t, inte om vilken modellversion som körs. Den visar dock aktuell version under **Testa sparad anslutning**.
+
+## Förbehandling och talarmärkning
+
+Båda är på som standard och styrs med rader i `/etc/mio-transcription.conf`. Starta om efter ändring: `sudo systemctl restart mio-transcription`.
+
+| Rad | Betydelse |
+|---|---|
+| `MIO_PREPROCESS=0` | Stäng av förbehandlingen (DC-offset bort, 80 Hz högpass, nivåutjämning med högst +20 dB och mjuk toppbegränsning). Ingen brusreducering används |
+| `MIO_SPEAKER_LABELS=0` | Stäng av talarmärkningen; orden får då inget `speaker`-fält |
+| `MIO_DIARIZATION_REVISION=<commit>` | Talarmodellens låsta version; sätts av `install.sh` |
+
+Talarmärkningen numrerar upp till fyra talare per session (1, 2, …) i den ordning de hörs först. Den laddas efter att transkriptionen redan är redo, och om den fallerar skrivs en rad i journalen och texten kommer ändå, bara utan talare. Detaljer finns i [API.md](API.md#talarmärkning).
+
+**Ej verifierat:** den riktiga talarmodellen och förbehandlingen är bara provade med syntetiska signaler och falska modeller, inte på GPU eller med riktigt tal. Talarmodellen är främst tränad på engelska. Mät gärna med skriptet nedan innan du litar på resultatet.
+
+## Mäta ordfelfrekvens
+
+`scripts/measure_wer.py` mäter Pianissimos ordfelfrekvens (WER) på **publikt** svenskt tal, med och utan förbehandling, i tre villkor: `ren`, `dämpad` (lågpass ~3 kHz, −15 till −25 dB, syntetiskt rum och lågt brus) och `dämpad_två_talare` (två dämpade talare som överlappar 0,5–1 s). Allt byggs i RAM; skriptet skriver ingen ljudfil och skriver bara ut sammanräknade siffror. Använd det aldrig på privata inspelningar.
+
+1. Hämta FLEURS svenska testdel (~440 MB, CC-BY-4.0) till en tillfällig mapp:
+
+   ```bash
+   mkdir -p /var/tmp/mio-wer
+   /opt/mio-transcription/.venv/bin/hf download google/fleurs data/sv_se/test.tsv data/sv_se/audio/test.tar.gz \
+       --repo-type dataset --local-dir /var/tmp/mio-wer/fleurs
+   tar -xzf /var/tmp/mio-wer/fleurs/data/sv_se/audio/test.tar.gz -C /var/tmp/mio-wer/fleurs/data/sv_se/audio
+   ```
+
+   Andra källor (till exempel Common Voice) går också: lägg 16 kHz mono 16-bit `.wav` med en `.txt` med samma namn bredvid, till exempel `ffmpeg -i klipp.mp3 -ar 16000 -ac 1 -sample_fmt s16 klipp.wav`.
+
+2. Stoppa tjänsten (GPU-minnet räcker inte till två kopior av modellen) och kör mätningen som tjänstekontot:
+
+   ```bash
+   sudo systemctl stop mio-pianissimo-update.timer mio-transcription.service
+   cd /opt/mio-transcription && sudo -u mio-transcription env $(sudo grep '^MIO_MODEL_' /etc/mio-transcription.conf | xargs) \
+       HF_HOME=/var/lib/mio-transcription/models HF_HUB_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 \
+       .venv/bin/python scripts/measure_wer.py --data /var/tmp/mio-wer/fleurs/data/sv_se --limit 100
+   sudo systemctl start mio-transcription.service mio-pianissimo-update.timer
+   ```
+
+   `--json` ger maskinläsbart resultat, `--seed` ändrar de syntetiska villkoren och `--conditions dämpad` kör ett enskilt villkor. Samma frö ger samma syntetiska ljud med och utan förbehandling.
+
+3. Ta bort testdatat: `rm -rf /var/tmp/mio-wer`.
+
+WER räknas på ordnivå efter gemener och borttagen interpunktion; siffror skrivs inte ut som ord. Syntetiska villkor är en grov modell av verkliga rum: bekräfta alltid med ett kort prov med personer som samtycker.
 
 ## Avinstallera
 
@@ -134,12 +182,13 @@ sudo userdel mio-transcription
 
 - Ljudet behandlas bara i RAM. Inga ljudfiler, transkript eller tokens skrivs till disk eller logg.
 - Upp till åtta textsvar sparas i högst ~90 s i minnet så att ett återförsök inte transkriberas två gånger.
+- Talarmärkningen analyserar rösterna. Dess talarcache (röstkännetecken, inte ljud) finns bara i RAM, per session, och raderas när appen avslutar sessionen, efter 10 minuter utan nytt ljud eller vid omstart. Högst fyra sessioner hålls samtidigt.
 - Tjänsten har ingen swap och inga core dumps. Undvik viloläge till disk (hibernation) medan Mio används, eftersom det kan skriva RAM till disk.
-- Spela bara in andra med deras samtycke och enligt lokala regler.
+- Spela bara in andra med deras samtycke och enligt lokala regler. Berätta att talarmärkningen skiljer röster åt, eller stäng av den med `MIO_SPEAKER_LABELS=0`.
 
 ## För utvecklare
 
-Tester med en falsk modell, utan GPU eller ljud:
+Tester med falska modeller och syntetiska signaler, utan GPU eller inspelat tal:
 
 ```bash
 uv --directory ~/mio/transcription-server sync --locked --extra test --python 3.12
