@@ -13,6 +13,15 @@ Användargodkänd plan: PC-tjänsten ska klara samtal där flera personer hörs 
 
 Ej verifierat: den riktiga Sortformer-körningen (skriven mot källkoden i NeMo 2.7.0 utan GPU-prov), svensk talarkvalitet (modellen är främst tränad på engelska), extra GPU-minne och latens, samt om förbehandlingen faktiskt sänker ordfelen. Mät med skriptet på datorn innan förbehandlingen eller talarmärkningen betraktas som förbättringar.
 
+## Live Activity och fortsatt bearbetning, 2026-10-11
+
+Användarbeslut (helhetsplanen 2026-10-11): Lyssnandet syns på låsskärmen och lektionsanteckningar ska bli klara även när appen lämnas.
+
+- **Live Activity** i ett eget widgettillägg, utan App Group: allt tillstånd ligger i ActivityKits content state (fas, sessionsstart, paustid, antal luckor). Tiden visas med `Text(timerInterval:)`, så inga täta uppdateringar behövs. Pausa/Stopp är `LiveActivityIntent` som körs i appens process och anropar samma paus/stopp som knapparna i appen. Fortsätt använder `supportedModes = .foreground(.immediate)` och öppnar appen, eftersom iOS inte tillåter att mikrofonen startas från bakgrunden. Förkastat: `AudioRecordingIntent` för att starta inspelning från låsskärmen (oklart samspel, kräver telefonprov) och App Group för delat tillstånd (kräver extra rättighet med gratiskonto).
+- **`BGContinuedProcessingTask`** (iOS 26) med unik identifierare per begäran under jokertecknet `app.mio.assistant.lesson-notes.*` och strategin `.fail`. Själva arbetet körs i analyskoordinatorn oavsett; uppgiften speglar bara förloppet och stoppar arbetet när iOS avslutar den (Apples rekommendation i utvecklarforumet). Inget `processing`-bakgrundsläge, eftersom Apples dokumentation inte kräver det. Ej verifierat på telefon.
+
+Källor: [Performing long-running tasks](https://developer.apple.com/documentation/backgroundtasks/performing-long-running-tasks-on-ios-and-ipados), [WWDC25 Finish tasks in the background](https://developer.apple.com/videos/play/wwdc2025/227/), [forumtråd om jokerteckenidentifierare](https://developer.apple.com/forums/thread/799126), [forumtråd om start och avslut](https://developer.apple.com/forums/thread/807370), [AudioRecordingIntent](https://developer.apple.com/documentation/appintents/audiorecordingintent), [supportedModes](https://developer.apple.com/documentation/appintents/appintent/supportedmodes).
+
 ## Pianissimo följer senaste versionen, 2026-10-05
 
 Användarbeslut: transkriptionsservern ska alltid köra senaste `KlangAI/pianissimo-sv`, inte en fast revision.

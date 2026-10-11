@@ -101,18 +101,36 @@ def main():
     for path in resolved_group_files(project, references, '710000000000000000000001'):
         check((ROOT / path).is_file(), f'Xcode-gruppens källsökväg finns: {path}')
     builds = dict(re.findall(r'([A-F0-9]{24}) /\*[^*]+\*/ = \{isa = PBXBuildFile; fileRef = ([A-F0-9]{24})', project))
-    for folder, phase in [('Mio', '910000000000000000000001'), ('MioTests', '910000000000000000000002'), ('MioUITests', '920000000000000000000001')]:
+    # The widget extension also compiles the Foundation/ActivityKit sources it shares with the app.
+    widget_shared = ['MioListeningActivityState.swift', 'MioListeningAttributes.swift']
+    for folder, phase, shared in [('Mio', '910000000000000000000001', []), ('MioTests', '910000000000000000000002', []),
+                                  ('MioUITests', '920000000000000000000001', []),
+                                  ('MioWidgets', 'BAC600000000000000000401', widget_shared)]:
         sources = sorted((ROOT / folder).rglob('*.swift'))
         body = object_body(project, phase)
         target_files = [references.get(builds.get(b, ''), '').strip('"') for b in re.findall(r'([A-F0-9]{24}) /\*[^*]+in Sources \*/', body)]
-        expected = [p.name for p in sources]
+        expected = [p.name for p in sources] + shared
         check(collections.Counter(target_files) == collections.Counter(expected), f'{folder}: exakt alla {len(expected)} Swift-filer ingår en gång i rätt target')
+    for name in widget_shared:
+        check(len(list((ROOT / 'Mio').rglob(name))) == 1, f'Delad widgetkälla finns i appen: {name}')
+    embed = object_body(project, 'BAC600000000000000000404')
+    check('dstSubfolderSpec = 13;' in embed and 'MioWidgets.appex in Embed Foundation Extensions' in embed
+          and 'BAC600000000000000000404' in object_body(project, 'A10000000000000000000001'),
+          'Widgettillägget bäddas in i appens PlugIns')
+    check(project.count('PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant.widgets;') == 2, 'Widgetidentiteten app.mio.assistant.widgets i Debug och Release')
+    check(len(set(re.findall(r'CURRENT_PROJECT_VERSION = ([^;]+);', project))) == 1, 'Appen och widgettillägget har samma byggnummer')
+    with (ROOT / 'MioWidgets/Info.plist').open('rb') as file:
+        widget_info = plistlib.load(file)
+    check(widget_info.get('NSExtension', {}).get('NSExtensionPointIdentifier') == 'com.apple.widgetkit-extension', 'Widgettilläggets extension point')
     for path in (ROOT / 'Mio').glob('*.plist'):
         with path.open('rb') as file:
             info = plistlib.load(file)
         check(bool(info.get('NSMicrophoneUsageDescription')), 'Mikrofonens behörighetstext')
         check(bool(info.get('NSAlarmKitUsageDescription')), 'AlarmKits behörighetstext')
         check(info.get('UIBackgroundModes') == ['audio'], 'Bakgrundsläget audio bevarat')
+        check(info.get('NSSupportsLiveActivities') is True, 'Live Activity tillåten')
+        check(info.get('BGTaskSchedulerPermittedIdentifiers') == ['app.mio.assistant.lesson-notes.*'],
+              'Fortsatt bakgrundsbearbetning för lektionsanteckningar tillåten')
         check(not info.get('NSAppTransportSecurity', {}).get('NSAllowsArbitraryLoads', False), 'Ingen generell HTTP-exception')
     with (ROOT / 'Mio/PrivacyInfo.xcprivacy').open('rb') as file:
         privacy = plistlib.load(file)
@@ -122,7 +140,7 @@ def main():
         if path.suffix in ('.xcscheme', '.xcsettings') or path.name == 'contents.xcworkspacedata':
             ET.parse(path)
     check(project.count('PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant;') == 2, 'Appidentiteten app.mio.assistant i Debug och Release')
-    check(project.count('MARKETING_VERSION = 0.9.0;') == 2, 'Helhetsbygge 0.9.0 i Debug och Release')
+    check(project.count('MARKETING_VERSION = 0.9.0;') == 4, 'Helhetsbygge 0.9.0 i appens och widgettilläggets Debug och Release')
     check(set(re.findall(r'IPHONEOS_DEPLOYMENT_TARGET = ([^;]+);', project)) == {'26.0'}, 'Minst iOS 26.0')
     check(project.count('ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;') == 2, 'AppIcon vald i Debug och Release')
     check('Assets.xcassets in Resources' in object_body(project, '810000000000000000000001'), 'Bildkatalogen ingår i appens resurser')
@@ -166,7 +184,7 @@ def main():
                         check(result.returncode == 0, f'Bash-syntax: {name}: {step.get("name", "namnlöst steg")}')
     result = subprocess.run(['git', 'diff', '--check'], cwd=ROOT, text=True, capture_output=True)
     check(result.returncode == 0, 'git diff --check')
-    for folder in ('Mio', 'MioTests', 'MioUITests', 'server', 'transcription-server', 'scripts', 'docs'):
+    for folder in ('Mio', 'MioTests', 'MioUITests', 'MioWidgets', 'server', 'transcription-server', 'scripts', 'docs'):
         for path in (ROOT / folder).rglob('*'):
             if {'node_modules', '.wrangler', 'dist', '.venv', '__pycache__', '.pytest_cache'}.intersection(path.relative_to(ROOT).parts):
                 continue

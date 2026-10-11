@@ -90,7 +90,9 @@ final class MioSystemServices {
         alarmStatus = alarmManager.authorizationState
         if alarmStatus == .authorized {
             do {
-                alarms = try alarmManager.alarms.sorted { $0.id.uuidString < $1.id.uuidString }
+                // The alarm list is a synchronous daemon read; keep it off the main actor.
+                let current = try await Task.detached(priority: .userInitiated) { try AlarmManager.shared.alarms }.value
+                alarms = current.sorted { $0.id.uuidString < $1.id.uuidString }
                 rememberAlarmIDs(Set(alarms.map(\.id)))
             } catch {
                 errorMessage = "Kunde inte läsa Mios alarm: \(error.localizedDescription)"
@@ -246,24 +248,41 @@ final class MioSystemServices {
         statusMessage = nil
         defer { isBusy = false }
         do {
-            if alarmManager.authorizationState == .authorized {
-                if try alarmManager.alarms.contains(where: { $0.id == itemID }) {
-                    try alarmManager.cancel(id: itemID)
-                }
-                rememberAlarmIDs(knownAlarmIDs.subtracting([itemID]))
-            } else if knownAlarmIDs.contains(itemID) {
+            let reminderID = Self.reminderID(for: itemID)
+            let hadAlarm = knownAlarmIDs.contains(itemID)
+            // AlarmKit and notification removal are synchronous daemon calls; running them
+            // off the main actor keeps "Markera som klar" from freezing the UI.
+            let removed = try await Task.detached(priority: .userInitiated) {
+                try MioSystemServices.removeSystemEntries(itemID: itemID, reminderID: reminderID, hadAlarm: hadAlarm)
+            }.value
+            guard removed else {
                 errorMessage = "Posten har haft ett Mio-alarm. Tillåt alarm i Inställningar igen så att Mio kan kontrollera och ta bort det innan posten raderas."
                 return false
             }
-            let id = Self.reminderID(for: itemID)
-            notificationCenter.removePendingNotificationRequests(withIdentifiers: [id])
-            notificationCenter.removeDeliveredNotifications(withIdentifiers: [id])
+            rememberAlarmIDs(knownAlarmIDs.subtracting([itemID]))
             await refresh()
             return true
         } catch {
             errorMessage = "Kunde inte ta bort postens alarm. Posten har inte raderats: \(error.localizedDescription)"
             return false
         }
+    }
+
+    /// Returns false, without removing anything, when a known Mio alarm cannot be checked
+    /// because alarm permission was withdrawn. Uses only Sendable inputs and shared managers.
+    nonisolated private static func removeSystemEntries(itemID: UUID, reminderID: String, hadAlarm: Bool) throws -> Bool {
+        let manager = AlarmManager.shared
+        if manager.authorizationState == .authorized {
+            if try manager.alarms.contains(where: { $0.id == itemID }) {
+                try manager.cancel(id: itemID)
+            }
+        } else if hadAlarm {
+            return false
+        }
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [reminderID])
+        center.removeDeliveredNotifications(withIdentifiers: [reminderID])
+        return true
     }
 
     /// Calendar copies belong to the user-selected calendar and are not deleted here.

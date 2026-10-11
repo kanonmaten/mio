@@ -46,6 +46,9 @@ SOURCES = [
     "Mio/MioAssistantViewModel.swift",
     "Mio/MioAnalysisCoordinator.swift",
     "Mio/Services/LiveTranscriptionPipeline.swift",
+    "Mio/Models/MioListeningActivityState.swift",
+    "Mio/Models/MioListeningActivityMapping.swift",
+    "Mio/Models/MioLessonNotesProgress.swift",
 ]
 TESTS = [
     "MioTests/MioCloudTests.swift",
@@ -72,6 +75,7 @@ TESTS = [
     "MioTests/MioDeletionRecoveryTests.swift",
     "MioTests/MioProtectedFileWriterTests.swift",
     "MioTests/MioIntegrationTests.swift",
+    "MioTests/MioBackgroundPresenceTests.swift",
 ]
 UI_ONLY_TEST = "testCurrentSessionSnapshotWinsOverEarlierPersistedCopy"  # Now included with UIKit boundaries substituted.
 
