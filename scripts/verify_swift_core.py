@@ -30,6 +30,8 @@ SOURCES = [
     "Mio/Models/MioAnalysisModels.swift",
     "Mio/Models/MioEverydayContext.swift",
     "Mio/Models/MioDiagnosticsModels.swift",
+    "Mio/Models/MioPairing.swift",
+    "Mio/Models/MioAnalysisSchedule.swift",
     "Mio/Services/MioProtectedFileWriter.swift",
     "Mio/Services/MioDeletionJournal.swift",
     "Mio/Services/MioAssistantRepository.swift",
@@ -49,6 +51,8 @@ SOURCES = [
 ]
 TESTS = [
     "MioTests/MioCloudTests.swift",
+    "MioTests/MioPairingTests.swift",
+    "MioTests/MioAnalysisScheduleTests.swift",
     "MioTests/MioContentModelsTests.swift",
     "MioTests/MioWakeWordDetectorTests.swift",
     "MioTests/MioNavigationTests.swift",
@@ -97,15 +101,12 @@ def portable_cloud_source() -> str:
     settings = source[settings_start:service_start]
     # Preserve the real URL validation used by default coordinator closures.
     endpoint, _, _ = function_source(settings, "endpoint")
-    updated_credentials, _, _ = function_source(settings, "updatedCredentials")
     token_validation, _, _ = function_source(settings, "validateToken")
     platform_settings = f'''@MainActor enum MioCloudSettings {{
-    static let enabledKey = "mio.cloud.enabled"
     static let serverKey = "mio.cloud.server"
-    static var usesAccess: Bool {{ false }}
     static var serverAddress: String {{ UserDefaults.standard.string(forKey: serverKey) ?? "" }}
+    static var isPaired: Bool {{ (try? endpoint(for: serverAddress)) != nil }}
     {endpoint}
-    {updated_credentials}
     private {token_validation}
     static func connection() throws -> MioCloudConnection {{ throw MioCloudError.disabled }}
 }}

@@ -17,7 +17,7 @@ final class MioConnectionDiscoveryTests: XCTestCase {
         _ = try await discovery.prepare(connection: original, task: .ask)
         XCTAssertEqual(calls, 2)
         var rotated = original
-        rotated = .init(endpoint: original.endpoint, token: "rotated", access: .init(clientID: "fixture", clientSecret: "rotated"))
+        rotated = .init(endpoint: original.endpoint, token: "rotated")
         _ = try await discovery.prepare(connection: rotated, task: .ask)
         XCTAssertEqual(calls, 3)
     }

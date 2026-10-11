@@ -39,6 +39,7 @@ enum MioGatewayErrorCode: String, Codable, Sendable {
     case providerTransport = "provider_transport"
     case providerInvalidResponse = "provider_invalid_response"
     case localMinuteLimit = "local_minute_limit", localDayLimit = "local_day_limit"
+    case localTokenLimit = "local_token_limit"
     case localRequestLimit = "local_request_limit"
     case localConcurrencyLimit = "local_concurrency_limit", budgetStoreFailed = "budget_store_failed"
 }

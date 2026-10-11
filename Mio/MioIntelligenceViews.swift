@@ -1,74 +1,6 @@
 import SwiftUI
 import UIKit
 
-struct AnalysisSettingsView: View {
-    @Environment(MioAnalysisCoordinator.self) private var analysis
-    let model: MioViewModel
-    let content: MioContentViewModel
-    @Environment(\.openMioSettings) private var openSettings
-    @State private var confirmEnable = false
-    @State private var error: String?
-    @State private var activationTask: Task<Void, Never>?
-    @State private var activationID = UUID()
-    @State private var isActivating = false
-
-    var body: some View {
-        Form {
-            Section("Löpande assistent") {
-                Text("AI kan upptäcka planer och uppgifter i vanliga samtal utan att du säger Mio. Du granskar alltid förslagen innan de sparas som poster.")
-                Text(analysis.status).foregroundStyle(.secondary)
-                if analysis.enabled {
-                    Button("Stäng av AI-tolkning", role: .destructive) { analysis.disable() }
-                } else {
-                    Button("Aktivera AI-tolkning …") { confirmEnable = true }
-                        .disabled(isActivating)
-                }
-                if isActivating { ProgressView("Kontrollerar text-AI-anslutningen …") }
-                Text("Läget är av vid varje appstart. Under vardagslyssning skickas nya textutdrag med högst en minut tidigare godkänd text från samma obrutna lyssning. Anrop sker tidigast var minut; en oavslutad mening kan vänta upp till två minuter. Paus/stopp bearbetar kvarvarande godkänd text. Avstängning avbryter även pågående lektionsanalys.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section("Lektioner") {
-                Text("Starta en lektion med den separata knappen. Vardags-Mio pausas medan lektionsunderlaget fångas. När du avslutar kan aktiverad AI skapa detaljerade anteckningar med förklaringar och exempel samt föreslå läxor. Långa lektioner bearbetas i flera sparade delar; ofullständiga anteckningar märks och kan fortsättas manuellt.")
-                Text("Text-AI får endast text; ljud går till din privata Pianissimo-server. Ingen ljudfil sparas. AI kan missförstå feltranskriberad text. Du kan se textunderlaget bakom varje del.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Section("Anslutning för text-AI") {
-                NavigationLink("Server, token och molnfrågor") { CloudConnectionSettingsView() }
-                Text("Ljudtranskription konfigureras separat under Transkription. Denna anslutning skickar endast godkänd text till AI.").font(.footnote)
-            }
-            if let error = error ?? analysis.errorMessage { Section { Text(error).foregroundStyle(.red) } }
-        }
-        .navigationTitle("AI-assistent")
-        .confirmationDialog("Aktivera löpande AI-tolkning?", isPresented: $confirmEnable, titleVisibility: .visible) {
-            Button("Ja, analysera text via min server") {
-                let id = UUID()
-                activationID = id
-                isActivating = true
-                activationTask?.cancel()
-                activationTask = Task { @MainActor in
-                    defer {
-                        if activationID == id { isActivating = false; activationTask = nil }
-                    }
-                    do {
-                        try await analysis.enable(existingSessions: model.allSessions)
-                        try Task.checkCancellation()
-                        if activationID == id { error = nil }
-                    } catch is CancellationError { }
-                    catch { if activationID == id { self.error = error.localizedDescription } }
-                }
-            }
-        } message: {
-            Text("Nya textutdrag från vardagslyssning och text från lektioner du avslutar skickas till \(MioCloudSettings.serverAddress.isEmpty ? "din konfigurerade server" : MioCloudSettings.serverAddress) och vidare till dess AI-leverantör. Vardagsutdrag kan ta med högst en minut tidigare text efter denna aktivering, inom samma obrutna lyssning. Det sker utan godkännande för varje utdrag tills du stänger av läget. Använd läget bara när berörda personer samtycker. Kalender, uppgifter och minnen kräver fortfarande ditt godkännande.")
-        }
-        .onDisappear {
-            activationID = UUID()
-            activationTask?.cancel()
-            activationTask = nil
-            isActivating = false
-        }
-    }
-}
-
 struct LessonStartButton: View {
     let model: MioViewModel
     @State private var showTitle = false
@@ -87,13 +19,12 @@ struct LessonStartButton: View {
             Button("Starta") { Task { await model.beginLesson(title: title) } }
             Button("Avbryt", role: .cancel) {}
         } message: {
-            Text("Vardags-Mio pausas. Lektionen får eget textunderlag och AI-anteckningar om du har aktiverat AI-tolkning. Ljudet sparas inte.")
+            Text("Vardags-Mio pausas. Lektionen får eget textunderlag och AI-anteckningar när AI är på. Ljudet sparas inte.")
         }
     }
 }
 
 struct LessonLibraryView: View {
-    @Environment(\.openMioSettings) private var openSettings
     let model: MioViewModel
     let content: MioContentViewModel
     @Environment(MioAnalysisCoordinator.self) private var analysis
@@ -120,11 +51,10 @@ struct LessonLibraryView: View {
                     }
                 }
                 Section {
-                    Button("Inställningar") { openSettings() }
                     Text(analysis.status).font(.footnote).foregroundStyle(.secondary)
                     NavigationLink("Historik och råtext") { TimelineTabView(contentModel: content, sessionModel: model) }
                 } footer: {
-                    Text("Tidigare transkript och manuella poster finns kvar i historiken. De skickas inte automatiskt till AI när du aktiverar läget.")
+                    Text("Tidigare transkript och manuella poster finns kvar i historiken. AI får bara text som fångas medan AI är på.")
                 }
             }
             .navigationTitle("Lektioner")
@@ -139,7 +69,6 @@ struct LessonDetailView: View {
     let content: MioContentViewModel
     @Environment(MioAssistantViewModel.self) private var assistant
     @Environment(MioAnalysisCoordinator.self) private var analysis
-    @State private var confirmAnalysis = false
     @State private var copied = false
     @State private var continuationTask: Task<Void, Never>?
     @State private var continuationID = UUID()
@@ -229,7 +158,7 @@ struct LessonDetailView: View {
                     if let error = continuationError ?? analysis.errorMessage { Text(error).foregroundStyle(.red) }
                     if isPreparingContinuation { ProgressView("Kontrollerar lektionsanslutningen …") }
                     if session.endedAt != nil {
-                        Button("Skapa eller fortsätt detaljerade anteckningar …") { confirmAnalysis = true }
+                        Button("Skapa eller fortsätt detaljerade anteckningar") { continueLesson(session) }
                             .disabled(isPreparingContinuation || analysis.isWorking || document.isComplete)
                     }
                     NavigationLink("Granska föreslagna läxor och planer") { SuggestionInboxView(contentModel: content, sessionModel: model) }
@@ -243,14 +172,6 @@ struct LessonDetailView: View {
         .onChange(of: assistant.analyses) { _, _ in copied = false }
         .onChange(of: session?.title) { _, _ in copied = false }
         .onChange(of: session?.transcripts) { _, _ in copied = false }
-        .confirmationDialog("Skicka lektionsunderlaget till AI?", isPresented: $confirmAnalysis, titleVisibility: .visible) {
-            Button(analysis.enabled ? "Ja, analysera denna lektion" : "Ja, aktivera AI-tolkning och fortsätt lektionen") {
-                if let session { continueLesson(session) }
-            }
-        } message: {
-            Text("Återstående textdelar skickas till din AI-server för detaljerade anteckningar. Äldre korta huvudpunkter räknas inte som detaljerade anteckningar. Färdiga delar och deras källcitat bevaras även efter rättningar; rättad text skickas inte automatiskt igen. Håll appen öppen under bearbetningen; efter avbrott kan du fortsätta här. Råljud skickas inte."
-                 + (analysis.enabled ? "" : " AI-tolkningen aktiveras också för nya vardagsutdrag och lektioner du senare avslutar, tills du stänger av läget. Vardagsutdrag kan ta med högst en minut tidigare text efter aktiveringen inom samma obrutna lyssning. Använd läget endast när berörda personer samtycker. Förslag kräver fortfarande ditt godkännande."))
-        }
         .onDisappear {
             continuationID = UUID()
             continuationTask?.cancel()
@@ -263,6 +184,10 @@ struct LessonDetailView: View {
         if analysis.enabled {
             continuationError = nil
             analysis.summarizeLesson(approvedSession, assistant: assistant)
+            return
+        }
+        guard MioAIPreference.isEnabled(in: .standard) else {
+            continuationError = "AI är pausad. Slå på AI under Inställningar → AI."
             return
         }
         let id = UUID()
