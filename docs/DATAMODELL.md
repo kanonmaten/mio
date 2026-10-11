@@ -4,7 +4,7 @@ Helhetsbygge 0.9.0, nyinstallation enligt användarbeslut 2026-09-26. Appidentit
 
 ## Lokala lager
 
-Filerna ligger under appens Application Support:
+Filerna ligger under appens Application Support. Från 2026-10-11 lagras sessioner, innehåll och assistentdata i SwiftData (`Mio/store/Mio.store`, se avsnittet nedan); tabellen beskriver JSON-formatet som migreras en gång, används som reserv när migreringen avbryts och fortfarande är exportformatet:
 
 | Fil | Innehåll | Schema |
 |---|---|---|
@@ -12,6 +12,7 @@ Filerna ligger under appens Application Support:
 | `Mio/content-v1.json` | Tidslinjeposter, anteckningar, uppgifter, planer och uttryckliga minnen | `schemaVersion: 1`, `items` |
 | `Mio/diagnostics-v1.json` | Begränsad textfri AI-anropsjournal | `schemaVersion: 1`, `events` |
 | `Mio/assistant-v1.json` | Väntande frågor/förslag, lektioner och bearbetade källidentiteter | `schemaVersion: 1`, `suggestions`, `lessons`, `processedSources`, valfritt `analyses`, `analysisDecisions` |
+| `Mio/metrickit-v1.json` | Apples textfria MetricKit-rapporter (krasch, häng, CPU, disk, minne), högst 40 st, 3 MB och 30 dagar | `schemaVersion: 1`, `reports` |
 | `Mio/operations-v1.json` | Påbörjad radering: operations-ID, scope, valfritt mål-ID och avslutade fasta steg | `schemaVersion: 1`, `operations`; inga innehållstexter eller hemligheter |
 
 Det finns **tre domänlager**, plus en begränsad diagnostikjournal och en liten raderingsjournal. Raderingsjournalen tas bort när alla dess steg är slutförda; den är ingen allmän databas eller meddelandekö.
@@ -74,7 +75,7 @@ Gemensam export heter `Mio-lokal-export-ÅÅÅÅ-MM-DD-HHmm-UUID.json` och skriv
 }
 ```
 
-Exporten har ett additivt valfritt `diagnostics`-fält; äldre export utan fältet kan fortfarande avkodas. Exporten har inga ljuddata, token, API-nycklar eller systemkalenderkopior. Avkodning stöder även export utan assistantfält, men appen erbjuder ingen importknapp. Filernas egna schemaVersion är fortfarande 1.
+Exporten har additiva valfria fält `diagnostics` och `diagnostics.metricReports` (MetricKit-rapporterna); äldre export utan fältet kan fortfarande avkodas. Exporten har inga ljuddata, token, API-nycklar eller systemkalenderkopior. Avkodning stöder även export utan assistantfält, men appen erbjuder ingen importknapp. Filernas egna schemaVersion är fortfarande 1.
 
 Sessionens enskilda radering tar bort dess lektioner/förslag/analysbeslut och lossar manuella poster. Radering av en post avbryter dess Mio-alarm/notis. Fullständig radering avbryter alla egna alarm/notiser, glömmer båda serveranslutningarna och avstänger AI, raderar de tre domänlagren, diagnostiken och interna exportkopior. Kända gamla interna exportnamn städas också; delade systemkataloger raderas inte.
 
@@ -127,3 +128,18 @@ Vardagsanalys använder `/v2/analyze`: `fragments` är enbart nya källor, `cont
 Diagnostik kan additivt innehålla bounded/sanerad konfigurationsrevision, faktiskt returnerad modell, upstream request-ID och rapporterade input-/output-/reasoning-tokenantal. Okända leverantörsnamn får visas endast som säkra protokollidentifierare; de ger inte automatiskt modellstöd. Otillåtna URL-/nyckelliknande eller för stora metadata tas bort. Saknad usage bevisar inte frånvaro av intern reasoning.
 
 Modellfri skyddad `/v2/status` ger aktuell release, offentlig konfigurationsrevision, tre uppgifter (`ask`, `everyday`, `lesson`) och delad kvot. Uppgiftens kompatibilitet och konfigurationsfel visas separat. Revisionen härleds utan publicerade hemligheter eller secret-fingerprints. En kort lyckad discoverycache är anslutnings- och revisionsbunden och ogiltigförklaras vid inställnings-/auth-/409-fel. Fryst revision följer godkänd fråga och aktiverad analys; serverns ändrade konfiguration kräver ny granskning/manuell aktivering, aldrig automatiskt nytt POST. Cache, samtycke och kö sparas inte som innehåll.
+
+## SwiftData-lager och diagnostik, 2026-10-11
+
+Sessioner, innehåll och assistentdata ligger i en SwiftData-databas, `Mio/store/Mio.store`, med ett versionerat schema (`MioSchemaV1`, version 1.0.0) och en `SchemaMigrationPlan` utan steg ännu. Ingen CloudKit. Mappen `store/` har samma skydd som övriga lager (`completeUntilFirstUserAuthentication`, ingen backup, `0700`).
+
+- Varje rad har identitetskolumner (sessions-, segment-, post-, förslags- eller lektions-ID, ordningstal) och en `payload` med samma Codable-JSON som i filerna. Nya valfria fält i värdetyperna, t.ex. `speaker` och `speakerNames`, följer därför med utan schemaändring.
+- Tabeller: sessionshuvud (sessionen utan text och luckor), transkriptsegment, ljudluckor, innehållsposter, förslag, lektioner, analyser (detaljerade lektionsdelar markeras), analysbeslut och bearbetade källor.
+- Skrivningar är radvisa: repositoryt jämför med senast sparade tillstånd och ändrar bara berörda rader. Live-fångst lägger bara till nya segmentrader. Varje ändring sparas i en `ModelContext.transaction`; fel rullar tillbaka och nästa läsning hämtar om allt.
+- Repositoryn är `@ModelActor`-actorer bakom samma anropsformer som JSON-actorerna. Över actorgränser skickas bara värdetyper, aldrig `@Model`-objekt. Linux-testerna använder JSON-actorerna.
+
+**Engångsmigrering vid start.** `content-v1.json`, `sessions.json` och `assistant-v1.json` läses med dagens avkodare. Är något schema okänt eller en fil oläslig migreras ingenting, inget raderas, appen kör vidare på JSON-filerna och visar ett svenskt meddelande. Annars skrivs allt i en enda transaktion, antal sessioner, segment, luckor, poster, förslag, lektioner, analyser, beslut och källor jämförs, och först därefter skrivs markören `Mio/swiftdata-migration-v1.json` (`verified`). JSON-filerna flyttas sedan till `Mio/backup-pre-swiftdata/` (markören blir `backedUp`); en befintlig backup skrivs aldrig över. Mappen raderas vid nästa lyckade start, och direkt vid radering i appen. Avbrott före markören ger en ny, idempotent migrering; avbrott efter den slutför bara flytten. Okänd markör stoppar allt.
+
+`diagnostics-v1.json` ligger kvar som fil. Raderingsjournalen `operations-v1.json` och generationsspärrarna behålls: de skyddar mot sena fångst-callbacks efter radering och täcker steg utanför databasen (alarm, notiser, nycklar). Exporten är oförändrad JSON.
+
+**MetricKit och loggning.** En `MXMetricManagerSubscriber` sparar Apples textfria JSON-rapporter i `Mio/metrickit-v1.json` (högst 40, 3 MB, 30 dagar; okänt schema skrivs inte över). Sidan Inställningar → Om Mio → Diagnostik visar datum, typ och en sifferbaserad sammanfattning med dela/kopiera; rapporterna ingår i exporten och raderas med diagnostiken. `os.Logger` (subsystem `app.mio.assistant`, kategorierna `capture`, `transcription`, `ai`, `storage`) loggar bara fasta meddelanden och heltal, aldrig användartext.

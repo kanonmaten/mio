@@ -546,8 +546,30 @@ final class MioSwiftDataAssistantStorage: MioAssistantStorage {
             for row in try context.fetch(FetchDescriptor<MioAnalysisRow>()) { context.delete(row) }
             for row in try context.fetch(FetchDescriptor<MioDecisionRow>()) { context.delete(row) }
             for row in try context.fetch(FetchDescriptor<MioProcessedSourceRow>()) { context.delete(row) }
-            nextOrdinal = 0
-            try stage(document, replacing: MioAssistantStoreDocument())
+            // Insert directly: lookups could still see rows that are only pending deletion.
+            var ordinal = 0
+            func next() -> Int { defer { ordinal += 1 }; return ordinal }
+            for value in document.suggestions {
+                context.insert(MioSuggestionRow(suggestionID: value.id, ordinal: next(),
+                                                payload: try MioRowCodec.encode(value)))
+            }
+            for value in document.lessons {
+                context.insert(MioLessonRow(lessonID: value.id, sessionID: value.sessionID, ordinal: next(),
+                                            payload: try MioRowCodec.encode(value)))
+            }
+            for value in document.analyses ?? [] {
+                context.insert(MioAnalysisRow(recordID: value.id, sessionID: value.sessionID,
+                                              isDetailedPart: value.sections != nil, ordinal: next(),
+                                              payload: try MioRowCodec.encode(value)))
+            }
+            for value in document.analysisDecisions ?? [] {
+                context.insert(MioDecisionRow(decisionID: value.id, sessionID: value.sessionID, ordinal: next(),
+                                              payload: try MioRowCodec.encode(value)))
+            }
+            for source in document.processedSources {
+                context.insert(MioProcessedSourceRow(sessionID: source.sessionID, segmentID: source.segmentID))
+            }
+            nextOrdinal = ordinal
             return
         }
         // read() sets the next position; it runs here only after a failed write.
@@ -634,6 +656,17 @@ final class MioSwiftDataAssistantStorage: MioAssistantStorage {
 
 // MARK: - Repositories
 
+/// The pre-migration JSON backup may still hold deleted text until the next launch removes
+/// it. Single deletions remove it right away, best effort: the rows are already gone, so a
+/// file error must not report the deletion itself as failed. Full deletion still throws.
+enum MioLegacyBackup {
+    static func discardAfterDeletion() {
+        do { try MioLegacyStoreFiles.standard.discardBackup() } catch {
+            MioLog.error(.storage, "legacy backup cleanup after deletion failed")
+        }
+    }
+}
+
 /// Session repository backed by SwiftData. The shared core keeps the operation tokens,
 /// merge and validation rules; only changed rows are written per checkpoint.
 @ModelActor
@@ -672,7 +705,7 @@ actor MioSwiftDataSessionRepository: MioSessionStore {
     }
     func delete(id: UUID) throws {
         try core.delete(id: id)
-        try MioLegacyStoreFiles.standard.discardBackup()
+        MioLegacyBackup.discardAfterDeletion()
     }
     func removeTemporaryExports() throws { try core.removeTemporaryExports() }
     @discardableResult
@@ -699,7 +732,7 @@ actor MioSwiftDataContentRepository: MioContentStore {
     func upsert(_ item: MioContentItem) throws -> [MioContentItem] { try core.upsert(item) }
     func delete(id: UUID) throws -> [MioContentItem] {
         let items = try core.delete(id: id)
-        try MioLegacyStoreFiles.standard.discardBackup()
+        MioLegacyBackup.discardAfterDeletion()
         return items
     }
     func saveApprovedIfAbsent(_ item: MioContentItem) throws -> [MioContentItem] { try core.saveApprovedIfAbsent(item) }
@@ -746,16 +779,16 @@ actor MioSwiftDataAssistantRepository: MioAssistantStore {
     /// A rejected proposal's text must not outlive the rejection in the legacy backup.
     func removeSuggestion(id: UUID) throws {
         try core.removeSuggestion(id: id)
-        try MioLegacyStoreFiles.standard.discardBackup()
+        MioLegacyBackup.discardAfterDeletion()
     }
     func saveLesson(_ lesson: MioLesson, session: MioSession) throws { try core.saveLesson(lesson, session: session) }
     func deleteLesson(id: UUID) throws {
         try core.deleteLesson(id: id)
-        try MioLegacyStoreFiles.standard.discardBackup()
+        MioLegacyBackup.discardAfterDeletion()
     }
     func deleteSessionData(sessionID: UUID) throws {
         try core.deleteSessionData(sessionID: sessionID)
-        try MioLegacyStoreFiles.standard.discardBackup()
+        MioLegacyBackup.discardAfterDeletion()
     }
     func deleteAll(now: Date) throws {
         try core.deleteAll(now: now)
