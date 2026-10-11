@@ -6,15 +6,15 @@ import { request as httpRequest } from 'node:http';
 import { createMioServer } from '../src/server.mjs';
 
 const token = 'fixture_gateway_token_01234567890123456789';
-const config = { apiKey: 'fixture-key', gatewayToken: token, model: 'gpt-6-luna',
+const config = { apiKey: 'fixture-key', gatewayToken: token, model: 'qwen/qwen3.8-27b',
   requestsPerMinute: 60, requestsPerDay: 100, upstreamTimeoutMs: 45, bodyTimeoutMs: 45 };
 const body = JSON.stringify({ question: 'Syntetiskt prov', context: [] });
 const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => Promise.withResolvers();
 function completion() {
-  return Response.json({ status: 'completed', output: [{ type: 'message', role: 'assistant',
-    content: [{ type: 'output_text', text: '{"answer":"Syntetiskt svar"}' }] }] });
+  return Response.json({ choices: [{ finish_reason: 'stop', message: { role: 'assistant',
+    content: '{"answer":"Syntetiskt svar"}' } }] });
 }
 async function fixture(t, options) {
   const responses = [];
@@ -25,52 +25,6 @@ async function fixture(t, options) {
   const url = `http://127.0.0.1:${server.address().port}/v1/ask`;
   return { url, responses, send: () => fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(500) }) };
 }
-
-test('hung quota returns a budget-store failure at the deadline and releases both concurrency slots', async t => {
-  let reservations = 0;
-  let providerCalls = 0;
-  const f = await fixture(t, { reserveBudget: () => { reservations++; return new Promise(() => {}); },
-    fetchImpl: async () => { providerCalls++; return completion(); } });
-  const results = await Promise.all([f.send(), f.send()]);
-  for (const response of results) {
-    assert.equal(response.status, 503);
-    assert.deepEqual(await response.json(), { error: 'budget_store_failed' });
-  }
-  assert.equal((await f.send()).status, 503);
-  assert.equal(reservations, 3);
-  assert.equal(providerCalls, 0);
-  await tick();
-  assert.ok(f.responses.every(response => response.listenerCount('close') === 0));
-});
-
-test('late uncancellable quota completion cannot start inference or refund quota', async t => {
-  const reservation = deferred();
-  let providerCalls = 0;
-  const f = await fixture(t, { reserveBudget: () => reservation.promise,
-    fetchImpl: async () => { providerCalls++; return completion(); } });
-  const response = await f.send();
-  assert.equal(response.status, 503);
-  reservation.resolve(true);
-  await tick();
-  assert.equal(providerCalls, 0);
-  assert.deepEqual(await response.json(), { error: 'budget_store_failed' });
-});
-
-test('quota and response reading share one deadline even when transports ignore abort', async t => {
-  const quota = deferred();
-  let cancelled = 0;
-  const stream = new ReadableStream({ cancel() { cancelled++; } });
-  const f = await fixture(t, { reserveBudget: () => quota.promise,
-    fetchImpl: async () => new Response(stream, { headers: { 'Content-Type': 'application/json' } }) });
-  const pending = f.send();
-  setTimeout(() => quota.resolve(true), 25);
-  const response = await pending;
-  assert.equal(response.status, 504);
-  assert.deepEqual(await response.json(), { error: 'upstream_timeout' });
-  await tick();
-  assert.equal(cancelled, 1);
-  assert.equal(stream.locked, false);
-});
 
 test('late transport completion is discarded and its body cancelled after the deadline', async t => {
   const transport = deferred();
@@ -85,48 +39,24 @@ test('late transport completion is discarded and its body cancelled after the de
   assert.equal((await response.json()).error, 'upstream_timeout');
 });
 
-test('Node socket disconnect during quota releases the slot and never starts a late provider call', async t => {
-  const reservation = deferred();
-  const entered = deferred();
-  let providerCalls = 0;
-  let reservations = 0;
-  const f = await fixture(t, { config: { ...config, upstreamTimeoutMs: 500 },
-    reserveBudget: () => { reservations++; entered.resolve(); return reservations <= 2 ? reservation.promise : true; },
-    fetchImpl: async () => { providerCalls++; return completion(); } });
-  const clients = [1, 2].map(() => {
-    const client = httpRequest(f.url, { method: 'POST', headers });
-    client.on('error', () => {}); client.end(body); return client;
-  });
-  await entered.promise;
-  // Both requests must have reached the reservation before their sockets are closed.
-  while (reservations < 2) await tick();
-  for (const client of clients) client.destroy();
-  await Promise.all(f.responses.map(response => once(response, 'close')));
-  const response = await f.send();
-  assert.equal(response.status, 200);
-  reservation.resolve(true); await tick();
-  assert.equal(providerCalls, 1);
-});
-
-test('explicit runtime cancellation during quota is distinct from deadline expiry', async t => {
+test('explicit runtime cancellation during the provider call is distinct from deadline expiry', async t => {
   const controller = new AbortController();
   const entered = deferred();
-  const quota = deferred();
-  let providerCalls = 0;
-  const f = await fixture(t, { requestSignal: () => controller.signal,
-    reserveBudget: () => { entered.resolve(); return quota.promise; },
-    fetchImpl: async () => { providerCalls++; return completion(); } });
+  let aborted = 0;
+  const f = await fixture(t, { config: { ...config, upstreamTimeoutMs: 500 }, requestSignal: () => controller.signal,
+    fetchImpl: (_, init) => { init.signal.addEventListener('abort', () => aborted++, { once: true }); entered.resolve(); return new Promise(() => {}); } });
   const pending = f.send(); await entered.promise; controller.abort();
   const response = await pending;
   assert.equal(response.status, 499);
   assert.deepEqual(await response.json(), { error: 'request_cancelled' });
-  quota.resolve(true); await tick(); assert.equal(providerCalls, 0);
+  assert.equal(aborted, 1);
   assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
 });
 
 test('slow chunked request body has its separate deadline and never reserves quota', async t => {
   let reservations = 0;
-  const f = await fixture(t, { reserveBudget: async () => { reservations++; return true; } });
+  const f = await fixture(t, { counterStore: { load: () => ({ minute: -1, minuteCount: 0, day: -1, dayCount: 0, dayTokens: 0 }),
+    save: () => { reservations++; } } });
   const client = httpRequest(f.url, { method: 'POST', headers });
   client.on('error', () => {});
   client.write('{"question":');

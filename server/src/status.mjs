@@ -3,11 +3,11 @@ import { PROVIDERS, providerProfile } from './provider.mjs';
 import { ANALYSIS_V2_PROMPT_VERSION, PROMPT_VERSION } from './prompts.mjs';
 import { TASK_IDS, resolveTaskProfile, taskProfiles, taskConfigurationIdentifiers, safeModelIdentifier, safeProviderIdentifier } from './task-profiles.mjs';
 
-export const RELEASE = '2026-10-05.1';
+export const RELEASE = '2026-10-11.1';
 export function gatewayStatus(config, valid = true) {
   // Older clients only call /v1/analyze, so v1 status describes the effective everyday task.
   const { provider, model } = valid ? taskConfigurationIdentifiers(config, 'everyday')
-    : { provider: config.provider ?? 'openai', model: safeModelIdentifier(config.model) };
+    : { provider: config.provider ?? 'groq', model: safeModelIdentifier(config.model) };
   const configured = valid && resolveTaskProfile(config, 'everyday').configured;
   return { protocolVersion: 2, release: RELEASE, configured,
     provider: Object.hasOwn(PROVIDERS, provider) ? provider : '', model,
@@ -17,18 +17,14 @@ export function gatewayStatus(config, valid = true) {
 export function statusFromEnvironment(env, parseConfig) {
   try { return gatewayStatus(parseConfig(env)); }
   catch {
-    const provider = env.MIO_AI_PROVIDER ?? 'openai';
-    return gatewayStatus({ provider,
-      model: env.MIO_AI_MODEL ?? (provider === 'openai' ? env.MIO_OPENAI_MODEL : '') }, false);
+    return gatewayStatus({ provider: env.MIO_AI_PROVIDER ?? 'groq', model: env.MIO_AI_MODEL ?? '' }, false);
   }
 }
 
 export function statusV2FromEnvironment(env, parseConfig, quota = null) {
   try { return gatewayStatusV2(parseConfig(env), quota); }
   catch {
-    const provider = env.MIO_AI_PROVIDER ?? 'openai';
-    return gatewayStatusV2({ provider,
-      model: env.MIO_AI_MODEL ?? (provider === 'openai' ? env.MIO_OPENAI_MODEL : ''),
+    return gatewayStatusV2({ provider: env.MIO_AI_PROVIDER ?? 'groq', model: env.MIO_AI_MODEL ?? '',
       taskProfiles: env.MIO_AI_TASK_PROFILES,
       globalConfigurationError: 'gateway_configuration_invalid' }, null);
   }
@@ -50,7 +46,10 @@ const taskPromptVersion = task => task === 'everyday' ? ANALYSIS_V2_PROMPT_VERSI
 const taskCapabilities = task => ['reasoning-off', 'temperature-zero', 'strict-json',
   task === 'ask' ? 'ask-v1' : task === 'everyday' ? 'analysis-context-v2' : 'lesson-notes-v1'];
 // null means no daily cap; status then reports quota as null instead of an invented limit.
-const quotaLimit = config => Number.isSafeInteger(config.requestsPerDay) && config.requestsPerDay > 0 ? config.requestsPerDay : null;
+// A token cap (the binding Groq free-tier limit) takes precedence over a request cap.
+const positiveLimit = value => Number.isSafeInteger(value) && value > 0 ? value : null;
+const quotaUnit = config => positiveLimit(config.tokensPerDay) ? 'tokens' : positiveLimit(config.requestsPerDay) ? 'requests' : null;
+const quotaLimit = config => positiveLimit(config.tokensPerDay) ?? positiveLimit(config.requestsPerDay);
 const canonical = value => Array.isArray(value) ? value.map(canonical)
   : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
 function safeResetAt(value) {
@@ -72,7 +71,8 @@ export function configurationRevision(config) {
       endpoint: profile?.base ?? null }];
   }));
   const publicConfiguration = { protocolVersion: 2, release: RELEASE, tasks,
-    limits: { requestsPerMinute: config.requestsPerMinute ?? 6, requestsPerDay: quotaLimit(config),
+    limits: { requestsPerMinute: config.requestsPerMinute ?? 3, requestsPerDay: positiveLimit(config.requestsPerDay),
+      tokensPerDay: positiveLimit(config.tokensPerDay),
       lessonIntervalSeconds: config.lessonIntervalSeconds ?? 60, upstreamTimeoutMs: config.upstreamTimeoutMs ?? 40_000,
       bodyTimeoutMs: config.bodyTimeoutMs ?? 5_000, concurrency: 2 } };
   return createHash('sha256').update(JSON.stringify(canonical(publicConfiguration))).digest('hex');
@@ -90,5 +90,5 @@ export function gatewayStatusV2(config, quota = null) {
   const remaining = Number.isSafeInteger(quota?.remaining) && quota.remaining >= 0 && quota.remaining <= limit ? quota.remaining : null;
   const resetAt = safeResetAt(quota?.resetAt);
   return { protocolVersion: 2, release: RELEASE, configurationRevision: configurationRevision(config), tasks,
-    quota: { limit, remaining, resetAt } };
+    quota: { limit, remaining, resetAt, unit: quotaUnit(config) } };
 }

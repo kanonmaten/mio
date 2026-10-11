@@ -107,9 +107,20 @@ final class MioTaskDiscoveryTests: XCTestCase {
             ["limit": 100, "remaining": 3.5, "resetAt": NSNull()],
             ["limit": 100, "remaining": 3, "resetAt": "2026-02-30T00:00:00.000Z"],
             ["limit": 100, "remaining": 3, "resetAt": "2026-10-03T00:00:00+02:00"],
-            ["limit": 100, "remaining": 3, "resetAt": NSNull(), "private": "text"]
+            ["limit": 100, "remaining": 3, "resetAt": NSNull(), "private": "text"],
+            ["limit": 100, "remaining": 3, "resetAt": NSNull(), "unit": "minutes"]
         ]
         for quota in quotas { XCTAssertThrowsError(try MioGatewayStatusV2.decode(fixture { $0["quota"] = quota })) }
+    }
+
+    func testQuotaUnitIsOptionalAndDistinguishesTokensFromRequests() throws {
+        let tokens = try MioGatewayStatusV2.decode(fixture {
+            $0["quota"] = ["limit": 190_000, "remaining": 1_000, "resetAt": "2026-10-12T00:00:00.000Z", "unit": "tokens"] })
+        XCTAssertEqual(tokens.quota?.unit, .tokens)
+        let requests = try MioGatewayStatusV2.decode(fixture { $0["quota"] = ["limit": 100, "remaining": 3, "resetAt": NSNull(), "unit": "requests"] })
+        XCTAssertEqual(requests.quota?.unit, .requests)
+        XCTAssertNil(try MioGatewayStatusV2.decode(fixture { $0["quota"] = ["limit": 100, "remaining": 3, "resetAt": NSNull()] }).quota?.unit,
+                     "Older gateways without a unit stay compatible")
     }
 
     func testObservedRevisionIsSeparateFromApprovedBodyAndStatusHasNoRevisionHeader() throws {

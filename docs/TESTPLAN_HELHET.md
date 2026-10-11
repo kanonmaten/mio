@@ -65,7 +65,7 @@ Bakgrundsavbrott i äldre export visade `Session activation failed`, men exakt o
 
 ## AI-prov efter egen serverkonfiguration
 
-Använd [serverguiden](../server/README.md) och den granskade [leverantörsmatrisen](../server/PROVIDERS.md). Verkliga modellanrop kan kosta pengar och kräver separat godkänd syntetisk sändning med uttryckligt vald profil. Kör först den modellfria lokala sviten. Ett statusanrop eller godkänt wire-fixtureprov bevisar inte providerbehörighet, interna modellparametrar eller svensk kvalitet.
+Använd [serverguiden](../server/README.md) och den granskade [leverantörsmatrisen](../server/README.md). Verkliga modellanrop kan kosta pengar och kräver separat godkänd syntetisk sändning med uttryckligt vald profil. Kör först den modellfria lokala sviten. Ett statusanrop eller godkänt wire-fixtureprov bevisar inte providerbehörighet, interna modellparametrar eller svensk kvalitet.
 
 | ID | Prov | Förväntat |
 |---|---|---|
@@ -123,7 +123,7 @@ Kör först [verifieringen](INSTALLATION.md#verifiera-före-bygge). Node och det
 
 | ID | Prov | Förväntat |
 |---|---|---|
-| P01 | Uppdaterad gateway: byt till NVIDIA NIM enligt [Cloudflare-guiden](../server/cloudflare/README.md#2-byt-leverantör-eller-modell), fråga 2 + 2 | Samma appadress/token fungerar; korrekt svar. Kontrollera verklig kvot, svarstid och att inga reasoning-tokens används |
+| P01 | Uppdaterad gateway: byt till NVIDIA NIM enligt [Cloudflare-guiden](../server/README.md), fråga 2 + 2 | Samma appadress/token fungerar; korrekt svar. Kontrollera verklig kvot, svarstid och att inga reasoning-tokens används |
 | P02 | Välj en nekad modell, exempelvis `z-ai/glm-5.3` hos NIM (tänker alltid) | Begripligt kompatibilitetsfel före modelltrafik; inget tyst byte av modell/parametrar |
 | P03 | Byt till annan katalogmodell på annan leverantör | Ny hemlighet används, gamla leverantörsnyckeln används inte. Prova fråga, vardagsförslag och lektion separat; registrera vald modell och promptversion |
 | P04 | Utlös 429 med låg testgräns (`MIO_REQUESTS_PER_MINUTE=1` eller en tillfällig `MIO_REQUESTS_PER_DAY`) | AI stannar, väntetid visas, Pianissimo-transkription fortsätter. Inga automatiska återförsök |
@@ -140,7 +140,7 @@ De nya XCTest-fallen kontrollerar delbudget, dokumentordning/ofullständig kopia
 
 | ID | Prov | Förväntat |
 |---|---|---|
-| AC01 | Följ negativa prov i [Cloudflare-guiden](../server/cloudflare/README.md#5-kontrollera-anslutning-och-skydd), även alternativa domäner/previews | Anonym trafik stoppas före Workern; rätt Access-par med fel gatewaytoken nekas före modell/D1 |
+| AC01 | Följ negativa prov i [Cloudflare-guiden](../server/README.md), även alternativa domäner/previews | Anonym trafik stoppas före Workern; rätt Access-par med fel gatewaytoken nekas före modell/D1 |
 | AC02 | Uppgradera app med tidigare sparad gatewaytoken; spara Access-par, starta om | Äldre token fungerar, Access används för fråga, vardagsanalys och lektion; inga hemligheter i export |
 | AC03 | Rotera gatewaytoken och Access-par separat, prova tomma/halva fält och ny serveradress | Spara kräver fullständiga nya värden vid ny server; tomma fält bevarar bara på samma server; gamla värden fungerar inte efter spärr |
 | AC04 | Glöm anslutning/fullständig radering; ändra anslutning under fråga/analys | Alla hemligheter glöms; inga sena svar eller fortsatta anrop med gamla värden; Keychain-fel visas |

@@ -19,17 +19,17 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 
 ## Textleverantör, 2026-10-05
 
-Text-AI byts till NVIDIA NIM med DeepSeek V4.1 Flash, utan dagsgräns ([beslut](DECISIONS.md#text-ai-via-nvidia-nim-utan-dagsgräns-2026-10-05)). Nästa steg: publicera gatewayen och sätt NIM-variablerna enligt [Cloudflare-guiden](../server/cloudflare/README.md), modellfri status, därefter separat godkänt syntetiskt modellprov för strikt JSON och svensk kvalitet.
+Text-AI byts till NVIDIA NIM med DeepSeek V4.1 Flash, utan dagsgräns ([beslut](DECISIONS.md#text-ai-via-nvidia-nim-utan-dagsgräns-2026-10-05)). Nästa steg: publicera gatewayen och sätt NIM-variablerna enligt [Cloudflare-guiden](../server/README.md), modellfri status, därefter separat godkänt syntetiskt modellprov för strikt JSON och svensk kvalitet.
 
 ## PLAN.md i arbetskopian, 2026-10-03
 
 De fyra första lokala etappernas grindar är passerade: regressioner för ljud/gateway/lagring/discovery; appägd workflow och generationsskydd; åtskilda tasks/modellprofiler/adaptrar/exekvering; samt sammanhängande UI med tre avgränsade funktioner. Etapp 5 förbereder gemensam verifieringsentrypoint, concurrency-kontroll, syntetisk historikmätning, dokumentation och gatewayrelease `2026-10-03.1`. Exakta aktuella resultat och kvarstående kontroller står i [status](STATUS.md). Detta är källarbete och lokala verifieringsgrindar, inte en släppt eller telefonverifierad produkt.
 
-Servern väljer `ask`/`everyday`/`lesson` från validerade profiler och serverägda nycklar. Skyddad `/v2/status` visar konfiguration, revision och gemensam kapacitet. Nya anrop kräver aktuell revision; ändring leder till ny preview eller aktivering. [Leverantörsmatrisen](../server/PROVIDERS.md) listar exakta granskade ID:n, spärrade kontrakt och separat syntetiskt prov. Inga verkliga leverantörsprofiler är verifierade för denna revision.
+Servern väljer `ask`/`everyday`/`lesson` från validerade profiler och serverägda nycklar. Skyddad `/v2/status` visar konfiguration, revision och gemensam kapacitet. Nya anrop kräver aktuell revision; ändring leder till ny preview eller aktivering. [Leverantörsmatrisen](../server/README.md) listar exakta granskade ID:n, spärrade kontrakt och separat syntetiskt prov. Inga verkliga leverantörsprofiler är verifierade för denna revision.
 
 Lektionsdelar och kopiering märker om underlaget är aktuellt, äldre eller okänt, utan att ändra original eller automatiskt sända rättningar. Svar kan uttryckligen sparas som anteckning. Anslutnings-/kapacitetsvyn visar modellfria taskstatusar, delad kvot och återstående arbete; 100 modellförsök per dygn är fortsatt ett gemensamt tak, inte heldagskapacitet. Notisöppning använder ett lokalt mål-ID och godkänner ingen annan åtgärd.
 
-Read-only produktionskontroll den 3 oktober visar att den gamla OpenAI-bundlen fortfarande är aktiv med Groq-konfiguration. D1-bindningen matchar repot; all-traffic Access och service-token-funktion är ännu inte bevisade. Releasearbetet är därför inte färdigt. Efter exakt godkänd publicering ska bundle, release, profiler och D1/Access läsas tillbaka; skyddad modellfri status och negativa authprov körs först. Verkliga fråga-/vardag-/lektionsprov kräver därefter separat godkännande av syntetisk payload. Xcode/XCTest för samma revision, IPA och fysisk acceptans följer som egna grindar. Se [releaseguiden](../server/cloudflare/README.md).
+Read-only produktionskontroll den 3 oktober visar att den gamla OpenAI-bundlen fortfarande är aktiv med Groq-konfiguration. D1-bindningen matchar repot; all-traffic Access och service-token-funktion är ännu inte bevisade. Releasearbetet är därför inte färdigt. Efter exakt godkänd publicering ska bundle, release, profiler och D1/Access läsas tillbaka; skyddad modellfri status och negativa authprov körs först. Verkliga fråga-/vardag-/lektionsprov kräver därefter separat godkännande av syntetisk payload. Xcode/XCTest för samma revision, IPA och fysisk acceptans följer som egna grindar. Se [releaseguiden](../server/README.md).
 
 ## Leveransgrindar
 

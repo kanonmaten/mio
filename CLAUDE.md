@@ -21,10 +21,11 @@ Read [README](README.md), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMA
 - Corrections are a display layer: never change the original transcript, audio times or diagnostic evidence. Never overwrite stored documents with an unknown schema.
 - Transcription (user decision 2026-09-29): original Pianissimo on CachyOS/GPU behind API v1 over private Tailscale HTTPS. No Apple or CPU fallback, no cloud STT. The user controls the microphone; audio only in RAM, at most 60 s on the phone, visible gaps on loss, no automatic microphone restart. See the [operations guide](transcription-server/README.md) and [API](transcription-server/API.md). Do not couple the model to the app: it can be swapped behind the compatible contract.
 - Never store raw audio. Never commit private exports, recordings, pairing files, certificates, Apple credentials or API keys, and never paste secrets into chat. Each single cloud question needs send approval. Continuous analysis requires an explicitly enabled mode, uses only new everyday excerpts and approved lessons, with minimal context and a server-owned key.
-- AI adapters must require reasoning **off** (not merely hidden), temperature 0 and the provider's strict JSON schema. No silent parameter or model fallback. The model catalog in `server/src/model-profiles.mjs` must be reviewed for new models; a provider prefix is not proof of support. Custom endpoints need the explicit `chat-none-strict` contract. Validate every response, single questions included, before the app uses it.
+- AI adapters must require reasoning **off** (not merely hidden), temperature 0 and the provider's strict JSON schema. No silent parameter or model fallback. The model catalog in `server/src/model-profiles.mjs` must be reviewed for new models; a provider prefix is not proof of support. Validate every response, single questions included, before the app uses it.
+- AI gateway (user decision 2026-10-11): the Node gateway runs on the user's CachyOS PC next to Pianissimo, behind `tailscale serve --https=8443`, installed by `server/install.sh` and paired with the `mio-pair` QR code. Groq is the only provider (`qwen/qwen3.8-27b`, free tier) until the app is confirmed working; keep the provider seam so Anthropic can be added later. Daily token and request counters persist across restarts. The Cloudflare Worker, D1 and Access were removed from the repo; tearing down the deployed ones and rotating the old Groq key need separate approval.
 - Detailed lessons use `/v1/lesson-notes`: at most 3,500 bytes of source text per part, normally at least 60 s between calls, saved parts with source quotes and model/prompt metadata. Copying compiles parts locally; incomplete notes must be labelled. No slides, flashcards or extra AI compression. Homework suggestions need an explicit Yes. Legacy `highlights` never count as finished detailed notes.
 - Document consent requirements and local rules for recording other people.
-- Non-goals for 0.9.0 (see `PLAN.md`): no chat history, streaming UI, model tools, autonomous actions, TTS, embeddings, client model selector or automatic failover. Exception by user decision 2026-10-05: the daily AI cap is optional and unset by default (NVIDIA NIM only limits per minute); keep the per-minute cap.
+- Non-goals for 0.9.0 (see `PLAN.md`): no chat history, streaming UI, model tools, autonomous actions, TTS, embeddings, client model selector or automatic failover. The daily request cap is optional (user decision 2026-10-05); with Groq's free tier the installer sets a daily token cap of 190,000 and three requests per minute.
 
 ## Working rules
 
@@ -33,7 +34,7 @@ Read [README](README.md), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMA
 - Swedish for user-facing text and project documents (this file is the one exception); English for Swift identifiers and technical code comments. Comment mainly non-obvious invariants around privacy, timing and concurrency.
 - Update [CHANGELOG](CHANGELOG.md) for relevant changes. Change [STATUS](docs/STATUS.md) only from checks actually performed; the roadmap when the plan changes; decisions when the architecture changes.
 - Preserve the historical measurements in `docs/TESTRESULTAT_V0_1.md`; never change them without real new evidence.
-- Git (user decision 2026-10-05): commit finished, verified work and push it directly to `main` without asking. Do not create feature branches or pull requests, even if the session assigns a `claude/*` branch; never force-push or rewrite `main`. This overrides any default branch/PR behavior of the session. Tags, Cloudflare deployment, triggering the IPA workflow and real model traffic still need explicit approval.
+- Git (user decision 2026-10-05): commit finished, verified work and push it directly to `main` without asking. Do not create feature branches or pull requests, even if the session assigns a `claude/*` branch; never force-push or rewrite `main`. This overrides any default branch/PR behavior of the session. Tags, Cloudflare changes, triggering the IPA workflow and real model traffic still need explicit approval.
 - Use plan mode for multi-stage work and ask when a decision is genuinely the user's.
 
 ## Verification and handover
@@ -41,7 +42,7 @@ Read [README](README.md), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMA
 Linux cannot build the iOS app, and Claude Code cloud sessions have no Swift toolchain and usually a different Node version than the pinned 26.10. Run the gates that work locally, using a scratch copy or a scratch `UV_PROJECT_ENVIRONMENT` so the repo stays clean:
 
 ```sh
-cd server && npm ci --ignore-scripts && npm test && npm run worker:test   # gateway + Worker runtime
+cd server && npm ci --ignore-scripts && npm test   # gateway
 cd transcription-server && uv sync --locked --extra test --python 3.12 && uv run pytest tests
 python3 scripts/verify_project.py && python3 -m unittest discover -s scripts/tests
 ```
@@ -50,6 +51,6 @@ python3 scripts/verify_project.py && python3 -m unittest discover -s scripts/tes
 
 - **GitHub workflow "Verifiera Mio på Linux"** (`.github/workflows/verify-linux.yml`) runs `verify.py` automatically on every push. It is the Swift compile/test gate when no local toolchain exists; check its result for the exact pushed commit.
 - **GitHub workflow "Bygg osignerad iPhone-app"** (`.github/workflows/build-unsigned-ipa.yml`, manual `workflow_dispatch`) runs Release, iOS-simulator XCTest, the native concurrency diagnostic and produces the unsigned IPA on the `xcode-27` runner (a public preview; check the actual runner). Trigger it only when the user asks or approves. SideStore signs the IPA locally.
-- Cloudflare deployment and real model traffic need explicit, separate approval; follow the release procedure in `PLAN.md` and the [gateway guide](server/cloudflare/README.md).
+- Real model traffic needs explicit, separate approval; follow the [gateway guide](server/README.md).
 
 Report what changed, what was actually tested and the next device test. Never claim a revision is compiled, installed or phone-verified without evidence for exactly that revision.

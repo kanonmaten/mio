@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Prints one QR code that pairs Mio with this PC: the Tailscale address plus the AI gateway
+# token and, when Pianissimo is installed, its transcription token. Nothing is written to disk.
+# Usage: mio-pair            show the QR code
+#        mio-pair --text     also show the values as text, for typing them in by hand
+set -euo pipefail
+
+fail() { printf 'FEL: %s\n' "$1" >&2; exit 1; }
+show_text=false
+case "${1:-}" in
+    "") ;;
+    --text) show_text=true ;;
+    *) fail "Okänt val: $1. Använd inget val, eller --text." ;;
+esac
+
+command -v qrencode >/dev/null || fail "qrencode saknas: sudo pacman -S qrencode"
+command -v node >/dev/null || fail "node saknas: sudo pacman -S nodejs"
+tailscale status >/dev/null 2>&1 || fail "Tailscale är inte inloggat: sudo tailscale up"
+host="$(tailscale status --json | node -e '
+  const name = JSON.parse(require("node:fs").readFileSync(0, "utf8")).Self?.DNSName ?? "";
+  process.stdout.write(name.replace(/\.$/u, ""));')"
+[[ $host =~ ^[a-z0-9-]+(\.[a-z0-9-]+)+$ ]] || fail "Hittar inte datorns Tailscale-namn. Är MagicDNS och HTTPS på i Tailscale?"
+
+# Secrets travel only through this pipe: never argv, environment, files or the terminal (unless --text).
+payload="$(sudo cat /etc/mio-gateway/gateway.env /etc/mio-transcription.conf 2>/dev/null | node -e '
+  const text = require("node:fs").readFileSync(0, "utf8");
+  const value = name => new RegExp(`^${name}=([A-Za-z0-9_-]{32,256})$`, "mu").exec(text)?.[1] ?? null;
+  const host = process.argv[1];
+  const ai = value("MIO_GATEWAY_TOKEN"), stt = value("MIO_TRANSCRIPTION_TOKEN");
+  if (!ai) { console.error("FEL: Hittar ingen gatewaytoken. Kör server/install.sh först."); process.exit(1); }
+  process.stdout.write(JSON.stringify({ mio: 1,
+    aiURL: `https://${host}:8443`, aiToken: ai,
+    transcriptionURL: stt ? `https://${host}` : null, transcriptionToken: stt }));' "$host")"
+
+printf '%s' "$payload" | qrencode -t ansiutf8 -m 2 -l M
+echo "Skanna i Mio: Inställningar → Dator → Skanna QR-kod."
+echo "Dator: $host (AI på port 8443$(sudo test -f /etc/mio-transcription.conf && echo ', Pianissimo på 443' || echo '; Pianissimo saknas än'))"
+if $show_text; then
+    printf '%s' "$payload" | node -e '
+      const p = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+      console.log(`AI-adress: ${p.aiURL}\nAI-token: ${p.aiToken}`);
+      if (p.transcriptionURL) console.log(`Transkriptionsadress: ${p.transcriptionURL}\nTranskriptionstoken: ${p.transcriptionToken}`);'
+    echo "Stäng terminalen efteråt så att tokens inte ligger kvar på skärmen."
+fi
+unset payload

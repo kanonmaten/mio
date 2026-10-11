@@ -64,7 +64,7 @@ async function readUpstream(response, profile, signal, now) {
 }
 
 export async function executeGeneration({ config, mode, payload, fetchImpl, signal,
-  reserveRequest, reserveBudget, now = Date.now }) {
+  reserveRequest, now = Date.now }) {
   const controller = new AbortController();
   const onCancel = () => controller.abort(signal.reason ?? new RequestError(499, 'request_cancelled'));
   if (signal.aborted) onCancel();
@@ -87,24 +87,6 @@ export async function executeGeneration({ config, mode, payload, fetchImpl, sign
     const provider = buildProviderRequest(selected.config, generation);
     ensureCurrent();
     reserveRequest();
-    if (reserveBudget) {
-      let reservation;
-      try { reservation = await awaitWithSignal(Promise.resolve().then(() => reserveBudget(config)), controller.signal); }
-      catch (error) {
-        const reason = controller.signal.reason;
-        // A budget store that outlives the deadline is a store failure, not a provider
-        // timeout. Its late result is discarded: no inference and no refund attempt.
-        if (controller.signal.aborted && !(reason instanceof RequestError && reason.code === 'upstream_timeout')) throw reason;
-        throw new RequestError(503, 'budget_store_failed');
-      }
-      if (reservation === false || reservation?.allowed === false) {
-        const reason = ['local_minute_limit', 'local_day_limit', 'local_request_limit'].includes(reservation?.reason)
-          ? reservation.reason : 'local_request_limit';
-        throw new RequestError(429, reason);
-      }
-      if (reservation !== true && reservation?.allowed !== true) throw new RequestError(503, 'budget_store_failed');
-    }
-    // D1 may ignore cancellation and consume quota late. Never infer or refund then.
     ensureCurrent();
     let upstream;
     try {

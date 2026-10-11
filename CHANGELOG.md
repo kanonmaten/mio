@@ -1,5 +1,12 @@
 # Ändringslogg
 
+## AI-gatewayen flyttar till datorn med Groq, 2026-10-11
+
+- Gatewayen kör nu på din CachyOS-dator bredvid Pianissimo, bakom `tailscale serve --https=8443`. `server/install.sh` installerar allt: tjänstekonto, Groq-nyckel (dold inmatning, fil som bara root kan läsa), härdad systemd-tjänst och Tailscale. `mio-pair` visar en QR-kod med datorns adress och båda tokens; ingenting sparas.
+- Groq `qwen/qwen3.8-27b` är enda leverantör. OpenAI-, Vercel-, Gemini-, Anthropic-, OpenRouter-, NVIDIA- och custom-adaptrarna, Cloudflare Worker, D1, Access-guiden och Caddy-exemplet är borttagna ur repot (finns i Git-historiken). Leverantörssömmen finns kvar för ett senare byte till Anthropic.
+- Ny dygnsgräns i token (`MIO_TOKENS_PER_DAY`, installationen sätter 190 000 under gratisnivåns 200 000) och tre anrop per minut som standard. Minut-, dygns- och tokenräknarna sparas i `/var/lib/mio-gateway/counters.json` och överlever omstart. `/v2/status` visar kvotens enhet (`unit: tokens|requests`); appen visar "token" efter kvoten.
+- Release `2026-10-11.1`. 95 gatewaytester passerar lokalt med Node 26.11.1; inget riktigt Groq-anrop är gjort än.
+
 ## Gatewayn publicerad, 2026-10-05
 
 - `mio-private-gateway` kör release `2026-10-05.1` (`/v2`). NIM:s gratisnivå svarade inte inom 40 s; aktuellt val är nu Groq `qwen/qwen3.8-27b`, med Groqs gratisgränser dokumenterade i katalogen. Driftguiden förklarar att Dashboardens Deploy bara ändrar inställningar och aldrig publicerar ny kod. Felsökning av Pianissimo-anslutningen: en DNS-profil (t.ex. Quad9) på iPhonen kan hindra `…ts.net`-uppslag.
@@ -22,7 +29,7 @@
 - **Gateway:** ny provider `nvidia` med enbart `deepseek-ai/deepseek-v4.1-flash`. Tänkandet stängs av med NIM:s mallflaggor och `reasoning_content` avvisas. GLM 5.3 (Flash) och Kimi K3 är spärrade eftersom de alltid tänker. `nvapi-`-formade värden avvisas som modell-ID.
 - **Kvot:** `MIO_REQUESTS_PER_DAY` är valfri; tom eller `0` betyder ingen dagsgräns och `/v2/status` ger då `quota: null`. Ett satt värde får vara upp till 1 000 000. `wrangler.jsonc` väljer NIM med 20 anrop/minut. Release `2026-10-05.1`.
 - **App:** godtar dagsgränser över 100 i status och visar "ingen daglig gräns" i stället för den fasta texten om 100 anrop.
-- **Dokumentation:** `docs/` minskade från 20 filer till 9. Historiska v0.1/v0.2-planer, kravmatris, OpenAI-noten, AI-felsökningen 2026-09-30, överlämningen 2026-10-04, `WORKFLOW.md` och `docs/superpowers/` togs bort (finns i git-historiken). Pianissimo- och enhetsproven ingår nu i `TESTPLAN_HELHET.md`, verifieringen i `INSTALLATION.md` och leverantörskontrakten i `server/PROVIDERS.md`. `GROQ_ACCESS.md` ersattes av en leverantörsneutral `server/cloudflare/README.md`.
+- **Dokumentation:** `docs/` minskade från 20 filer till 9. Historiska v0.1/v0.2-planer, kravmatris, OpenAI-noten, AI-felsökningen 2026-09-30, överlämningen 2026-10-04, `WORKFLOW.md` och `docs/superpowers/` togs bort (finns i git-historiken). Pianissimo- och enhetsproven ingår nu i `TESTPLAN_HELHET.md`, verifieringen i `INSTALLATION.md` och leverantörskontrakten i `server/README.md`. `GROQ_ACCESS.md` ersattes av en leverantörsneutral `server/README.md`.
 
 ## Granskning och rättningar 2026-10-05 — Claude Code
 

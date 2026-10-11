@@ -345,7 +345,8 @@ struct MioAIConnectionStatusView: View {
                 Section("Gemensam kapacitet") {
                     if let quota = status.quota {
                         if let remaining = quota.remaining {
-                            LabeledContent("Kvar i delad dagskvot", value: "\(remaining) av \(quota.limit)")
+                            LabeledContent("Kvar i delad dagskvot",
+                                           value: "\(remaining) av \(quota.limit)\(quota.unit == .tokens ? " token" : "")")
                         } else { Text("Återstående dagskvot är okänd.") }
                     } else { Text("Servern har ingen daglig gräns. Minutgränsen och leverantörens egna gränser gäller.") }
                     if let reset = status.quota?.resetAt.flatMap(MioAnalysisResult.parseDate) {

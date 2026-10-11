@@ -170,7 +170,7 @@ Historiskt: build 4 (`595e4a8`, Actions 36278717100) klarade 46 XCTest. Build 3 
 1. Installera IPA:n enligt [installationsguiden](INSTALLATION.md), först på iPhone 16 Pro.
 2. Kör först S01–S07 för svensk talmodell, därefter H01–H15 i [helhetstestet](TESTPLAN_HELHET.md). Börja med syntetiska data och håll AI avstängt.
 3. Prova behörigheter, tillgänglighet, dagbyte och radering. Kör sedan låst skärm, avbrott och längre batteriprov enligt [transkriptionstestet](TESTPLAN_HELHET.md#långprov-latens-värme-och-batteri).
-4. När [Cloudflare-gatewayen](../server/cloudflare/README.md) eller egen server är konfigurerad: kör AI01–AI06, A07–A14 och L01–L05 med syntetiska data.
+4. När [Cloudflare-gatewayen](../server/README.md) eller egen server är konfigurerad: kör AI01–AI06, A07–A14 och L01–L05 med syntetiska data.
 
 [Användarguiden](ANVANDNING.md) beskriver de dagliga flödena. Byggfel och telefonfynd ska åtgärdas innan helhetsbygget betraktas som verifierat.
 
@@ -202,4 +202,4 @@ Node-kompatibiliteten krävde explicit hantering av headeralternativ, timers och
 
 Efter användarens OAuth-godkännande och e-postverifiering publicerades gatewayen på `https://mio-private-gateway.mio-private-gateway.workers.dev`. Första publicerade kodversion: `4eb6e89a-f2fb-4ff5-8f7f-4468facba325`; därefter lades gatewaytoken till som separat Secret. D1-databasen `mio-limits` skapades och kvotschemat importerades. Inga transkript lagras där.
 
-Första konfigurerade provmodell är `gpt-6-luna`. HTTPS-kontrollen gav väntat 503 `gateway_not_configured` innan `OPENAI_API_KEY` lagts in. Det verifierar publicering och konfigurationsspärr, inte modellåtkomst, autentisering i fullt konfigurerad drift eller AI-kvalitet. Senare hälsokontroll 2026-09-28 gav HTTP 200. Syntetiska prov med riktig modell återstår tills användaren vill använda API-saldo. [Driftguide](../server/cloudflare/README.md).
+Första konfigurerade provmodell är `gpt-6-luna`. HTTPS-kontrollen gav väntat 503 `gateway_not_configured` innan `OPENAI_API_KEY` lagts in. Det verifierar publicering och konfigurationsspärr, inte modellåtkomst, autentisering i fullt konfigurerad drift eller AI-kvalitet. Senare hälsokontroll 2026-09-28 gav HTTP 200. Syntetiska prov med riktig modell återstår tills användaren vill använda API-saldo. [Driftguide](../server/README.md).

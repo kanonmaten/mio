@@ -15,112 +15,80 @@ const notes = { candidates: [{ kind: 'task', title: 'Gör uppgift 7', body: 'Til
   sourceIDs: [id], evidence: 'Gör uppgift 7 till fredag.' }], sections: [{ heading: 'Procent och beräkning',
   body: 'Procent betyder hundradelar.\n1. Skriv 20 % som 0,20.\n2. Multiplicera med 50.\n3. Resultatet är 10.',
   sourceIDs: [id], evidence: '20 procent av 50 är 0,20 gånger 50 = 10.' }], uncertainties: [] };
-const configs = [
-  ['openai', 'gpt-6-luna', 'OPENAI_API_KEY', 'https://api.openai.com/v1/responses', 'responses'],
-  ['groq', 'qwen/qwen3.8-27b', 'GROQ_API_KEY', 'https://api.groq.com/openai/v1/chat/completions', 'chat'],
-  ['vercel', 'openai/gpt-6-luna', 'VERCEL_AI_GATEWAY_API_KEY', 'https://ai-gateway.vercel.sh/v1/responses', 'responses'],
-  ['gemini', 'gemini-2.5-flash', 'GEMINI_API_KEY', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', 'gemini'],
-  ['anthropic', 'claude-haiku-4-5', 'ANTHROPIC_API_KEY', 'https://api.anthropic.com/v1/messages', 'anthropic'],
-  ['openrouter', 'openai/gpt-4.1', 'OPENROUTER_API_KEY', 'https://openrouter.ai/api/v1/chat/completions', 'chat'],
-  ['nvidia', 'deepseek-ai/deepseek-v4.1-flash', 'NVIDIA_API_KEY', 'https://integrate.api.nvidia.com/v1/chat/completions', 'chat'],
-  ['custom', 'host/model:version', 'MIO_AI_API_KEY', 'https://inference.example/v1/chat/completions', 'chat']
-];
-function configFor(provider, model, key) {
-  return loadConfig({ MIO_AI_PROVIDER: provider, MIO_AI_MODEL: model, [key]: 'fixture-key',
-    OPENAI_API_KEY: key === 'OPENAI_API_KEY' ? 'fixture-key' : 'must-not-use-other-vendor-key',
-    MIO_GATEWAY_TOKEN: token, MIO_AI_BASE_URL: 'https://inference.example/v1', MIO_AI_COMPATIBILITY: 'chat-none-strict' });
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+function configFor(model = 'qwen/qwen3.8-27b') {
+  return loadConfig({ MIO_AI_MODEL: model, GROQ_API_KEY: 'fixture-key', OPENAI_API_KEY: 'must-not-use-other-vendor-key',
+    MIO_GATEWAY_TOKEN: token });
 }
-function envelope(wire, value) {
-  const text = JSON.stringify(value);
-  if (wire === 'gemini') return { candidates: [{ finishReason: 'STOP', content: { role: 'model', parts: [{ text }] } }] };
-  if (wire === 'chat') return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: text } }] };
-  if (wire === 'anthropic') return { stop_reason: 'end_turn', content: [{ type: 'text', text }] };
-  return { status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }] };
-}
-for (const [provider, model, key, url, wire] of configs) {
-  test(`${provider}: correct secret, endpoint, strict schema, temperature and reasoning policy`, () => {
-    const config = configFor(provider, model, key);
-    assert.equal(config.apiKey, 'fixture-key');
-    for (const mode of ['ask', 'analyze', 'lesson']) {
-      const request = providerRequest({ config, mode, payload });
-      assert.equal(request.url, url);
-      assert.equal(wire === 'gemini' ? request.body.generationConfig.temperature : request.body.temperature, 0);
-      if (wire !== 'gemini') assert.equal(request.body.model, model);
-      if (provider === 'vercel') assert.deepEqual(request.body.providerOptions.gateway.only, ['openai']);
-      assert.ok(!JSON.stringify(request).includes(token));
-      assert.ok(!JSON.stringify(request).includes('must-not-use-other-vendor-key'));
-      const format = wire === 'gemini' ? { schema: request.body.generationConfig.responseJsonSchema }
-        : wire === 'responses' ? request.body.text.format : wire === 'chat'
-          ? request.body.response_format.json_schema : request.body.output_config.format;
-      assert.equal(format.schema.additionalProperties, false);
-      if (mode === 'lesson') assert.deepEqual(format.schema.properties.candidates.items.properties.kind.enum, ['plan', 'task']);
-      assert.deepEqual(format.schema.required, Object.keys(format.schema.properties));
-      if (!['anthropic', 'gemini'].includes(wire)) assert.equal(format.strict, true);
-      if (wire === 'gemini') assert.deepEqual(request.body.generationConfig.thinkingConfig, { thinkingBudget: 0 });
-      else if (wire === 'responses') assert.deepEqual(request.body.reasoning, { effort: 'none' });
-      else if (wire === 'anthropic') assert.deepEqual(request.body.thinking, { type: 'disabled' });
-      else if (provider === 'openrouter') {
-        assert.deepEqual(request.body.reasoning, { enabled: false });
-        assert.equal(request.body.provider.require_parameters, true);
-        assert.equal(request.body.provider.allow_fallbacks, false);
-        assert.deepEqual(request.body.provider.only, ['openai']);
-      } else if (provider === 'nvidia') {
-        assert.deepEqual(request.body.chat_template_kwargs, { thinking: false, enable_thinking: false });
-        assert.equal(Object.hasOwn(request.body, 'reasoning_effort'), false);
-      } else assert.equal(request.body.reasoning_effort, 'none');
-      assert.equal(providerResponseText(envelope(wire, notes), request.profile), JSON.stringify(notes));
-    }
-  });
+function envelope(value) {
+  return { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(value) } }] };
 }
 
-test('unknown and mandatory-thinking models fail before an API request is built', () => {
-  for (const [provider, model] of [['groq', 'openai/gpt-oss-20b'], ['groq', 'invented'],
-    ['openai', 'gpt-6-astra'], ['gemini', 'gemini-2.5-pro'], ['gemini', 'gemini-3-flash'],
-    ['anthropic', 'claude-opus-4-7'], ['deepseek', 'deepseek-reasoner'],
-    ['nvidia', 'z-ai/glm-5.3'], ['nvidia', 'moonshotai/kimi-k3']]) {
+test('groq: correct secret, endpoint, strict schema, temperature and reasoning policy', () => {
+  const config = configFor();
+  assert.equal(config.provider, 'groq');
+  assert.equal(config.apiKey, 'fixture-key');
+  for (const mode of ['ask', 'analyze', 'lesson']) {
+    const request = providerRequest({ config, mode, payload });
+    assert.equal(request.url, GROQ_URL);
+    assert.equal(request.body.temperature, 0);
+    assert.equal(request.body.model, 'qwen/qwen3.8-27b');
+    assert.equal(request.body.reasoning_effort, 'none');
+    assert.equal(request.body.stream, false);
+    assert.equal(request.headers.Authorization, 'Bearer fixture-key');
+    assert.ok(!JSON.stringify(request).includes(token));
+    assert.ok(!JSON.stringify(request).includes('must-not-use-other-vendor-key'));
+    const format = request.body.response_format.json_schema;
+    assert.equal(request.body.response_format.type, 'json_schema');
+    assert.equal(format.strict, true);
+    assert.equal(format.schema.additionalProperties, false);
+    if (mode === 'lesson') assert.deepEqual(format.schema.properties.candidates.items.properties.kind.enum, ['plan', 'task']);
+    assert.deepEqual(format.schema.required, Object.keys(format.schema.properties));
+    assert.equal(providerResponseText(envelope(notes), request.profile), JSON.stringify(notes));
+  }
+});
+
+test('only the reviewed Groq model is accepted; other providers and models fail before a request is built', () => {
+  for (const [provider, model] of [['groq', 'openai/gpt-oss-20b'], ['groq', 'invented'], ['groq', 'qwen/qwen3-32b'],
+    ['openai', 'gpt-6-luna'], ['gemini', 'gemini-2.5-flash'], ['anthropic', 'claude-haiku-4-5'],
+    ['openrouter', 'openai/gpt-4.1'], ['nvidia', 'deepseek-ai/deepseek-v4.1-flash'], ['custom', 'host/model'],
+    ['groq', 'gsk_secretlooking'], ['groq', 'https://evil.example/model'], ['groq', '']]) {
     assert.throws(() => providerProfile({ provider, model }), /provider_model_incompatible/u);
   }
-  assert.throws(() => providerProfile({ provider: 'custom', model: 'test' }));
+  assert.throws(() => providerProfile({ provider: 'groq', model: 'qwen/qwen3.8-27b', adapterOptions: { route: 'x' } }),
+    /provider_options_incompatible/u);
+  const profile = providerProfile({ provider: 'groq', model: 'qwen/qwen3.8-27b' });
+  assert.equal(profile.contractReview.liveTested, false);
+  assert.deepEqual(profile.capabilities, ['reasoning-off', 'temperature-zero', 'strict-json']);
 });
 
-test('custom endpoint requires explicit compatibility and HTTPS without credentials or redirect tricks', () => {
-  for (const baseURL of ['http://example.com/v1', 'https://user:pass@example.com/v1',
-    'https://example.com/v1?key=private', 'https://example.com/#x', 'https://localhost/v1',
-    'https://127.0.0.1/v1', 'https://[::1]/v1', 'https://example.com:444/v1']) {
-    assert.throws(() => providerProfile({ provider: 'custom', model: 'model', compatibility: 'chat-none-strict', baseURL }));
-  }
-});
-
-test('neutral model wins; non-OpenAI presets never reuse legacy OpenAI credentials or model', () => {
-  assert.equal(loadConfig({ OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token,
-    MIO_OPENAI_MODEL: 'gpt-6-luna' }).model, 'gpt-6-luna');
-  const env = { MIO_AI_PROVIDER: 'groq', MIO_GATEWAY_TOKEN: token, OPENAI_API_KEY: 'fixture', MIO_OPENAI_MODEL: 'gpt-6-luna' };
-  const missingKey = loadConfig(env);
-  assert.notEqual(missingKey.apiKey, 'fixture');
+test('removed provider environment variables are ignored and never reused as Groq credentials or model', () => {
+  const env = { MIO_GATEWAY_TOKEN: token, OPENAI_API_KEY: 'fixture', MIO_OPENAI_MODEL: 'gpt-6-luna' };
+  const missingKey = loadConfig({ ...env, MIO_AI_MODEL: 'qwen/qwen3.8-27b' });
+  assert.equal(missingKey.provider, 'groq');
+  assert.equal(missingKey.apiKey, '');
   assert.equal(resolveTaskProfile(missingKey, 'ask').configured, false);
   const missingModel = loadConfig({ ...env, GROQ_API_KEY: 'fixture' });
-  assert.notEqual(missingModel.model, 'gpt-6-luna');
+  assert.equal(missingModel.model, '');
   assert.equal(resolveTaskProfile(missingModel, 'ask').configured, false);
-  assert.equal(loadConfig({ ...env, GROQ_API_KEY: 'fixture', MIO_AI_MODEL: 'qwen/qwen3.8-27b' }).model, 'qwen/qwen3.8-27b');
+  assert.equal(resolveTaskProfile(loadConfig({ ...env, GROQ_API_KEY: 'fixture', MIO_AI_MODEL: 'qwen/qwen3.8-27b' }), 'ask').configured, true);
+  assert.equal(resolveTaskProfile(loadConfig({ ...env, MIO_AI_PROVIDER: 'openai', GROQ_API_KEY: 'fixture',
+    MIO_AI_MODEL: 'qwen/qwen3.8-27b' }), 'ask').configured, false);
 });
 
-test('all response adapters reject truncation, refusals, tools and observable reasoning', () => {
-  for (const wire of ['responses', 'chat', 'anthropic']) {
-    let data = envelope(wire, notes);
-    if (wire === 'responses') data.status = 'incomplete';
-    if (wire === 'chat') data.choices[0].finish_reason = 'length';
-    if (wire === 'anthropic') data.stop_reason = 'max_tokens';
-    assert.throws(() => providerResponseText(data, { wire }));
-    data = envelope(wire, notes);
-    data.usage = { output_tokens_details: { reasoning_tokens: 5 } };
-    assert.throws(() => providerResponseText(data, { wire }));
+test('the chat adapter rejects truncation, refusals, tools and observable reasoning', () => {
+  const profile = { wire: 'chat' };
+  let data = envelope(notes); data.choices[0].finish_reason = 'length';
+  assert.throws(() => providerResponseText(data, profile));
+  data = envelope(notes); data.choices[0].finish_reason = 'content_filter';
+  assert.throws(() => providerResponseText(data, profile));
+  data = envelope(notes); data.usage = { completion_tokens_details: { reasoning_tokens: 5 } };
+  assert.throws(() => providerResponseText(data, profile));
+  for (const patch of [{ refusal: 'No' }, { tool_calls: [{}] }, { function_call: {} }, { reasoning_content: 'thought' }, { reasoning: 'thought' }]) {
+    const value = envelope(notes); Object.assign(value.choices[0].message, patch);
+    assert.throws(() => providerResponseText(value, profile));
   }
-  for (const patch of [{ refusal: 'No' }, { tool_calls: [{}] }, { reasoning_content: 'thought' }]) {
-    const data = envelope('chat', notes); Object.assign(data.choices[0].message, patch);
-    assert.throws(() => providerResponseText(data, { wire: 'chat' }));
-  }
-  const refusal = envelope('responses', notes); refusal.output[0].content.push({ type: 'refusal', refusal: 'No' });
-  assert.throws(() => providerResponseText(refusal));
+  assert.throws(() => providerResponseText({ choices: [] }, profile));
 });
 
 test('detailed notes retain worked steps and exact grounding; invented evidence and notes-as-homework fail', () => {
@@ -139,9 +107,9 @@ test('detailed notes retain worked steps and exact grounding; invented evidence 
 
 async function fixture(t, { model = 'qwen/qwen3.8-27b', fetchImpl, interval = 60 } = {}) {
   let calls = 0;
-  const config = { ...configFor('groq', model, 'GROQ_API_KEY'), requestsPerMinute: 60, lessonIntervalSeconds: interval };
+  const config = { ...configFor(model), requestsPerMinute: 60, lessonIntervalSeconds: interval };
   const server = createMioServer({ config, fetchImpl: async (url, init) => {
-    calls++; return fetchImpl ? fetchImpl(url, init) : Response.json(envelope('chat', notes));
+    calls++; return fetchImpl ? fetchImpl(url, init) : Response.json(envelope(notes));
   } });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });

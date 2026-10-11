@@ -77,7 +77,6 @@ def main() -> int:
         ("node-dependencies", ["npm", "ci", "--prefix", str(ROOT / "server"), "--ignore-scripts"]),
         ("node-tests", ["npm", "--prefix", str(ROOT / "server"), "test"]),
         ("transcription-fake", ["uv", "--directory", str(ROOT / "transcription-server"), "run", "--no-sync", "python", "-m", "pytest", "tests"]),
-        ("worker-runtime", ["npm", "--prefix", str(ROOT / "server"), "run", "worker:test"]),
     ]
     if not args.skip_swift:
         steps.extend([

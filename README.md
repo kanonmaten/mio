@@ -15,7 +15,7 @@ Privat SwiftUI-app för iOS 26+ (första testtelefon iPhone 16 Pro, senare även
 - **Anteckningar:** sökbara anteckningar, uppgifter och synliga uttryckliga minnen.
 - **Morgon/Kväll:** lokal dagsöversikt, avklarade uppgifter, sessioner och lektioner; uppdatering vid foreground, dag-/tidszonsbyte och generella dagliga notiser som öppnar dagens översikt.
 - **Alarm och påminnelser:** AlarmKit-alarm, återkommande veckodagar och lokala notiser. Behörigheter begärs först när du sparar en systemåtgärd.
-- **Valfri AI:** aktivera löpande analys av nya textutdrag för planer/uppgifter utan Mio-tilltal, eller ställ en enskild fråga med förhandsgranskning. Av vid appstart. Ett modellfritt anslutningsprov visar autentisering, protokoll, release, uppgiftsprofiler och delad kapacitet; det bevisar inte leverantörsbehörighet eller modellkvalitet. Modellen väljs på servern (nu Groq med Qwen 3.8 27B, se [katalogen](server/PROVIDERS.md)), med reasoning av, temperatur 0 och strikt schema. Ändrad konfiguration kräver ny granskning/aktivering. Alla uppgifter delar en minutgräns; någon dagsgräns finns bara om servern sätter en.
+- **Valfri AI:** aktivera löpande analys av nya textutdrag för planer/uppgifter utan Mio-tilltal, eller ställ en enskild fråga med förhandsgranskning. Av vid appstart. Ett modellfritt anslutningsprov visar autentisering, protokoll, release, uppgiftsprofiler och delad kapacitet; det bevisar inte leverantörsbehörighet eller modellkvalitet. Modellen väljs på servern (nu Groq med Qwen 3.8 27B, se [katalogen](server/README.md)), med reasoning av, temperatur 0 och strikt schema. Ändrad konfiguration kräver ny granskning/aktivering. Alla uppgifter delar en minutgräns; någon dagsgräns finns bara om servern sätter en.
 - **Tillfälligt AI-svar:** granska och redigera svaret innan du uttryckligen sparar det som en vanlig lokal anteckning. Ingen frågehistorik, extra AI-komprimering eller systemåtgärd skapas av svaret.
 - Lokal versionsmärkt JSON-export och återupptagbar radering av appdata, egna alarm/notiser och serveranslutningar. Raderingsfel visas med nästa steg. Inget råljud sparas.
 
@@ -26,7 +26,7 @@ Utan AI används en enkel lokal kommandogrammatik. Med aktiverad AI kan även va
 1. Läs [användarguiden](docs/ANVANDNING.md) och sätt upp [Pianissimo, systemd och Tailscale](transcription-server/README.md).
 2. Bygg och installera enligt [installation](docs/INSTALLATION.md). Linux kan inte bygga iOS-appen.
 3. Kör [verifieringen](docs/INSTALLATION.md#verifiera-före-bygge) och [helhetstestet](docs/TESTPLAN_HELHET.md) med syntetiska data, inklusive mätprotokollet, före vardagsanvändning.
-4. Om du vill använda moln-AI: följ [Cloudflare-guiden](server/cloudflare/README.md) (leverantör, tokens, Access och publicering), eller [serverguiden](server/README.md) för egen värd. Manuella poster fungerar utan server. Ljudtranskription kräver din Pianissimo-dator.
+4. Om du vill använda moln-AI: följ [Cloudflare-guiden](server/README.md) (leverantör, tokens, Access och publicering), eller [serverguiden](server/README.md) för egen värd. Manuella poster fungerar utan server. Ljudtranskription kräver din Pianissimo-dator.
 
 ## Utveckling
 

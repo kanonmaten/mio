@@ -2,9 +2,10 @@ import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { validateAnalysisPayload, validateAnalysisV2Payload, validateLessonPayload } from './analysis.mjs';
 import { PROVIDERS } from './provider.mjs';
-import { RequestError, awaitWithSignal } from './execution-policy.mjs';
+import { RequestError } from './execution-policy.mjs';
 import { executeGeneration, generationMetadataHeaders } from './generation-execution.mjs';
 import { taskConfigurationIdentifiers } from './task-profiles.mjs';
+import { createFileCounterStore, createMemoryCounterStore } from './state-store.mjs';
 
 import { PROMPT_VERSION, ANALYSIS_V2_PROMPT_VERSION } from './prompts.mjs';
 import { authenticated, gatewayStatus, gatewayStatusV2, configurationRevision, metadataHeaders } from './status.mjs';
@@ -38,6 +39,7 @@ export function validatePayload(value) {
 }
 
 const MAX_REQUESTS_PER_DAY = 1_000_000;
+const MAX_TOKENS_PER_DAY = 1_000_000;
 
 function positiveInteger(value, fallback, maximum) {
   if (value === undefined || value === '') return fallback;
@@ -49,28 +51,29 @@ function positiveInteger(value, fallback, maximum) {
 }
 
 // Unset or 0 means no local daily cap. The per-minute cap, concurrency limit and the
-// provider's own limits still apply (user decision 2026-10-05, NVIDIA NIM has no daily quota).
-function dailyLimit(value) {
+// provider's own limits still apply (user decision 2026-10-05).
+function dailyLimit(value, maximum = MAX_REQUESTS_PER_DAY) {
   if (value === undefined || value === '' || value === '0') return null;
-  return positiveInteger(value, null, MAX_REQUESTS_PER_DAY);
+  return positiveInteger(value, null, maximum);
 }
 
 export function loadConfig(env = process.env) {
-  const provider = env.MIO_AI_PROVIDER ?? 'openai';
+  const provider = env.MIO_AI_PROVIDER ?? 'groq';
   const providerSecrets = Object.fromEntries(Object.entries(PROVIDERS).map(([id, entry]) => [id, env[entry[1]] ?? ""]));
   const config = {
     provider,
     apiKey: providerSecrets[provider] ?? '',
     providerSecrets,
     taskProfiles: env.MIO_AI_TASK_PROFILES,
-    baseURL: env.MIO_AI_BASE_URL,
-    compatibility: env.MIO_AI_COMPATIBILITY,
     lessonIntervalSeconds: positiveInteger(env.MIO_LESSON_INTERVAL_SECONDS, 60, 3600),
     gatewayToken: env.MIO_GATEWAY_TOKEN ?? '',
-    model: env.MIO_AI_MODEL ?? (provider === 'openai' ? env.MIO_OPENAI_MODEL : '') ?? '',
+    model: env.MIO_AI_MODEL ?? '',
     port: positiveInteger(env.PORT, 8787, 65_535),
-    requestsPerMinute: positiveInteger(env.MIO_REQUESTS_PER_MINUTE, provider === 'groq' ? 1 : 6, 60),
+    // Groq's free tier allows 30 requests but only 8,000 tokens per minute; a lesson
+    // part alone is a few thousand tokens, so three requests per minute is the ceiling.
+    requestsPerMinute: positiveInteger(env.MIO_REQUESTS_PER_MINUTE, 3, 60),
     requestsPerDay: dailyLimit(env.MIO_REQUESTS_PER_DAY),
+    tokensPerDay: dailyLimit(env.MIO_TOKENS_PER_DAY, MAX_TOKENS_PER_DAY),
     upstreamTimeoutMs: 40_000,
     bodyTimeoutMs: 5_000
   };
@@ -88,6 +91,8 @@ function validateConfig(config) {
   if (config.requestsPerMinute > 60 || config.upstreamTimeoutMs > 40_000 || config.bodyTimeoutMs > 5_000) throw new Error('Servergränserna får inte höja Mios minutkvot eller tidsgränser.');
   if (config.requestsPerDay != null && (!Number.isSafeInteger(config.requestsPerDay) || config.requestsPerDay < 1
       || config.requestsPerDay > MAX_REQUESTS_PER_DAY)) throw new Error('Ogiltig dagsgräns.');
+  if (config.tokensPerDay != null && (!Number.isSafeInteger(config.tokensPerDay) || config.tokensPerDay < 1
+      || config.tokensPerDay > MAX_TOKENS_PER_DAY)) throw new Error('Ogiltig tokengräns.');
   for (const field of ['requestsPerMinute', 'upstreamTimeoutMs', 'bodyTimeoutMs']) {
     if (!Number.isSafeInteger(config[field]) || config[field] < 1) throw new Error('Ogiltig servergräns.');
   }
@@ -147,21 +152,59 @@ async function readBody(request, timeoutMs, validate = validatePayload, signal) 
 
 /** Single private user, one process. Counters contain numbers only; no transcripts or IPs are kept. */
 export function createMioServer({ config: baseConfig = loadConfig(), fetchImpl = fetch, now = Date.now,
-  reserveBudget, readQuota, requestSignal, configurationForRequest,
+  counterStore = createMemoryCounterStore(), requestSignal, configurationForRequest,
   serverOptions = { maxHeaderSize: 8_192 } } = {}) {
   validateConfig(baseConfig);
-  let minuteBucket = -1; let dayBucket = -1;
-  let minuteCount = 0; let dayCount = 0; let active = 0;
+  const counters = counterStore.load();
+  let active = 0;
   const activeControllers = new Set();
+  const secondsUntilNextDay = time => Math.max(1, Math.ceil(((Math.floor(time / 86_400_000) + 1) * 86_400_000 - time) / 1_000));
+
+  function rollBuckets(time) {
+    if (counters.minute !== Math.floor(time / 60_000)) { counters.minute = Math.floor(time / 60_000); counters.minuteCount = 0; }
+    if (counters.day !== Math.floor(time / 86_400_000)) { counters.day = Math.floor(time / 86_400_000); counters.dayCount = 0; counters.dayTokens = 0; }
+  }
+  function persist() {
+    // A failed write must never turn into a provider call without accounting; the
+    // request is refused instead and the in-memory counters still apply.
+    try { counterStore.save(counters); } catch { throw new RequestError(503, 'budget_store_failed'); }
+  }
 
   function reserveRequest(config) {
     const time = now();
-    if (minuteBucket !== Math.floor(time / 60_000)) { minuteBucket = Math.floor(time / 60_000); minuteCount = 0; }
-    if (dayBucket !== Math.floor(time / 86_400_000)) { dayBucket = Math.floor(time / 86_400_000); dayCount = 0; }
+    rollBuckets(time);
     if (active >= 2) throw new RequestError(429, 'local_concurrency_limit');
-    if (config.requestsPerDay != null && dayCount >= config.requestsPerDay) throw new RequestError(429, 'local_day_limit');
-    if (minuteCount >= config.requestsPerMinute) throw new RequestError(429, 'local_minute_limit');
-    minuteCount += 1; dayCount += 1;
+    if (config.tokensPerDay != null && counters.dayTokens >= config.tokensPerDay) {
+      throw new RequestError(429, 'local_token_limit', secondsUntilNextDay(time));
+    }
+    if (config.requestsPerDay != null && counters.dayCount >= config.requestsPerDay) {
+      throw new RequestError(429, 'local_day_limit', secondsUntilNextDay(time));
+    }
+    if (counters.minuteCount >= config.requestsPerMinute) throw new RequestError(429, 'local_minute_limit');
+    counters.minuteCount += 1; counters.dayCount += 1;
+    persist();
+  }
+
+  function recordUsage(normalized) {
+    const usage = normalized?.usage ?? {};
+    const tokens = Number.isSafeInteger(usage.totalTokens) ? usage.totalTokens
+      : (Number.isSafeInteger(usage.inputTokens) ? usage.inputTokens : 0) + (Number.isSafeInteger(usage.outputTokens) ? usage.outputTokens : 0);
+    rollBuckets(now());
+    counters.dayTokens = Math.min(Number.MAX_SAFE_INTEGER, counters.dayTokens + Math.max(0, tokens));
+    try { counterStore.save(counters); } catch { /* The answer already exists; the next reservation retries the write. */ }
+  }
+
+  function quotaSnapshot(config) {
+    const time = now();
+    rollBuckets(time);
+    const resetAt = new Date((Math.floor(time / 86_400_000) + 1) * 86_400_000).toISOString();
+    if (config.tokensPerDay != null) {
+      return { limit: config.tokensPerDay, remaining: Math.max(0, config.tokensPerDay - counters.dayTokens), resetAt, unit: 'tokens' };
+    }
+    if (config.requestsPerDay != null) {
+      return { limit: config.requestsPerDay, remaining: Math.max(0, config.requestsPerDay - counters.dayCount), resetAt, unit: 'requests' };
+    }
+    return null;
   }
 
   const server = createServer(serverOptions, async (request, response) => {
@@ -185,21 +228,8 @@ export function createMioServer({ config: baseConfig = loadConfig(), fetchImpl =
       if (request.method === 'GET' && ['/v1/status', '/v2/status'].includes(request.url)) {
         if (!authenticated(request.headers.authorization, config.gatewayToken)) { reply(response, 401, { error: 'unauthorized' }); return; }
         if (request.url === '/v1/status') { reply(response, 200, status); return; }
-        let quota = null;
-        if (readQuota) {
-          const guardController = new AbortController();
-          const timer = setTimeout(() => guardController.abort(), Math.min(2_000, config.upstreamTimeoutMs));
-          timer.unref?.();
-          try { quota = await awaitWithSignal(Promise.resolve().then(() => readQuota(config)), guardController.signal); }
-          catch { /* Unknown capacity is explicit; status never reserves or infers. */ }
-          finally { clearTimeout(timer); }
-        } else if (!reserveBudget && config.requestsPerDay != null) {
-          const time = now();
-          const used = dayBucket === Math.floor(time / 86_400_000) ? dayCount : 0;
-          quota = { limit: config.requestsPerDay, remaining: Math.max(0, config.requestsPerDay - used),
-            resetAt: new Date((Math.floor(time / 86_400_000) + 1) * 86_400_000).toISOString() };
-        }
-        reply(response, 200, gatewayStatusV2(config, quota)); return;
+        // Status observes counters only; it never reserves capacity or calls the provider.
+        reply(response, 200, gatewayStatusV2(config, quotaSnapshot(config))); return;
       }
       if (request.method === 'GET' && request.url === '/health') { reply(response, 200, { status: 'ok' }); return; }
       if (request.method !== 'POST' || !['/v1/ask', '/v1/analyze', '/v2/analyze', '/v1/lesson-notes'].includes(request.url)) {
@@ -225,12 +255,13 @@ export function createMioServer({ config: baseConfig = loadConfig(), fetchImpl =
         isLesson ? validateLessonPayload : isV2 ? validateAnalysisV2Payload : isAnalysis ? validateAnalysisPayload : validatePayload, controller.signal);
       if (response.destroyed) return;
       const generated = await executeGeneration({ config, mode: isLesson ? 'lesson' : isV2 ? 'analyze-v2' : isAnalysis ? 'analyze' : 'ask',
-        payload, fetchImpl, signal: controller.signal, now, reserveBudget,
+        payload, fetchImpl, signal: controller.signal, now,
         reserveRequest: () => { reserveRequest(config); active += 1; ownsSlot = true; } });
-      for (const [key, value] of Object.entries({ 'X-Mio-Provider': generated.config.provider ?? 'openai', 'X-Mio-Model': generated.config.model,
+      recordUsage(generated.normalized);
+      for (const [key, value] of Object.entries({ 'X-Mio-Provider': generated.config.provider ?? 'groq', 'X-Mio-Model': generated.config.model,
         'X-Mio-Prompt-Version': generated.promptVersion, 'X-Mio-Configuration-Revision': revision,
         ...generationMetadataHeaders(generated.normalized) })) response.setHeader(key, value);
-      reply(response, 200, isLesson ? { ...generated.result, metadata: { provider: generated.config.provider ?? 'openai',
+      reply(response, 200, isLesson ? { ...generated.result, metadata: { provider: generated.config.provider ?? 'groq',
         model: generated.config.model, promptVersion: generated.promptVersion,
         lessonIntervalSeconds: Math.max(60, config.lessonIntervalSeconds ?? 60) } } : generated.result);
     } catch (error) {
@@ -256,7 +287,9 @@ export function createMioServer({ config: baseConfig = loadConfig(), fetchImpl =
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const config = loadConfig();
-    const server = createMioServer({ config });
+    // MIO_STATE_FILE keeps the daily counters across restarts (set by install.sh).
+    const counterStore = process.env.MIO_STATE_FILE ? createFileCounterStore(process.env.MIO_STATE_FILE) : undefined;
+    const server = createMioServer({ config, ...(counterStore ? { counterStore } : {}) });
     server.on('error', () => { console.error('Mio-servern kunde inte starta. Kontrollera port och inställningar.'); process.exitCode = 1; });
     // HTTPS terminates at the local reverse proxy. Never expose this HTTP listener publicly.
     server.listen(config.port, '127.0.0.1', () => console.log('Mio-servern kör på loopback bakom din HTTPS-proxy.'));

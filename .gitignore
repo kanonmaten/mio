@@ -37,3 +37,6 @@ __pycache__/
 *.wav
 *.pcm
 .mio-verification/
+
+# Claude Code agent worktrees
+.claude/worktrees/

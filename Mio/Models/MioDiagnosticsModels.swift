@@ -341,12 +341,16 @@ struct MioGatewayTasksStatus: Decodable, Sendable {
     }
 }
 struct MioGatewayQuota: Decodable, Sendable {
+    enum Unit: String, Decodable, Sendable { case tokens, requests }
     let limit: Int
     let remaining: Int?
     let resetAt: String?
+    /// Absent from older gateways, which only counted requests.
+    var unit: Unit? = nil
 
     var isValid: Bool {
-        // Mirrors the gateway's optional daily cap (MAX_REQUESTS_PER_DAY); no cap is reported as quota null.
+        // Mirrors the gateway's optional daily caps (MAX_REQUESTS_PER_DAY, MAX_TOKENS_PER_DAY);
+        // no cap is reported as quota null.
         (1...1_000_000).contains(limit) && (remaining == nil || (0...limit).contains(remaining!))
             && (resetAt == nil || (resetAt!.utf8.count <= 30 && resetAt!.hasSuffix("Z")
                 && MioAnalysisResult.parseDate(resetAt!) != nil))
@@ -372,7 +376,8 @@ struct MioGatewayStatusV2: Decodable, Sendable {
               let tasks = root["tasks"] as? [String: Any], tasks.count <= 16,
               Set(tasks.keys).isSuperset(of: ["ask", "everyday", "lesson"]),
               ["ask", "everyday", "lesson"].allSatisfy({ exact(tasks[$0], ["configured", "provider", "model", "promptVersion", "capabilities", "configurationError"]) }),
-              root["quota"] is NSNull || exact(root["quota"], ["limit", "remaining", "resetAt"]),
+              root["quota"] is NSNull || exact(root["quota"], ["limit", "remaining", "resetAt"])
+                || exact(root["quota"], ["limit", "remaining", "resetAt", "unit"]),
               let value = try? JSONDecoder().decode(Self.self, from: data), value.protocolVersion == 2,
               MioGatewayMetadata.identifier(value.release) != nil,
               MioGatewayMetadata.revision(value.configurationRevision) != nil,

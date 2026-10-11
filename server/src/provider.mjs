@@ -8,7 +8,7 @@ export function providerRequest({ config, mode, payload }) {
   return buildProviderRequest(config, createTaskRequest(mode, payload));
 }
 
-export function providerResponseText(data, profile = { wire: 'responses' }) {
+export function providerResponseText(data, profile = { wire: 'chat' }) {
   const result = normalizeProviderResponse(data, profile);
   if (result.finish !== 'completed') {
     throw new ProviderResponseError(result.refusal ? 'provider_refusal' : 'provider_truncated');

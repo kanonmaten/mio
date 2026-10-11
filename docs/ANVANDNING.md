@@ -78,7 +78,7 @@ För **enskilda frågor** följer du stegen nedan:
 
 Manuellt innehåll fungerar utan server. Transkription använder din Pianissimo-server. Om du vill aktivera AI:
 
-1. Sätt upp den medföljande servern enligt [Cloudflare-guiden](../server/cloudflare/README.md) utan påslagen egen dator, eller [serverguiden](../server/README.md) för egen värd, med leverantörens API-nyckel enbart på servern.
+1. Sätt upp den medföljande servern enligt [Cloudflare-guiden](../server/README.md) utan påslagen egen dator, eller [serverguiden](../server/README.md) för egen värd, med leverantörens API-nyckel enbart på servern.
 2. Öppna **Inställningar → AI-assistent → Anslutning för text-AI**. Ange din HTTPS-adress och åtkomsttoken: exakt samma hemliga värde som Workerns `MIO_GATEWAY_TOKEN`, utan `Bearer`. Efter rotation ska det nya värdet sparas även här. Spara anslutningen och slå på **Tillåt molnfrågor**.
 3. Öppna **Mio → Fråga Mio med AI** och skriv frågan. Välj vid behov enstaka poster eller ett kort sessionsutdrag. Korta och rensa texten som ska skickas.
 4. Tryck **Granska innan du skickar**. Mio kan kontrollera anslutningen utan att skicka fråga eller källtext. Läs mottagare, vald serverprofil/release, exakt fråga och exakt kontext.
@@ -96,7 +96,7 @@ Stoppa sessionen och gå till **Inställningar → Integritet, export och raderi
 
 Detta gäller arbetskopians nya kod; befintlig build 5 behöver ersättas med en ny verifierad IPA och gatewayen behöver uppdateras.
 
-**Byta modell eller leverantör:** följ [Cloudflare-guiden](../server/cloudflare/README.md#2-byt-leverantör-eller-modell); tillåtna modeller står i [katalogen](../server/PROVIDERS.md). Modell och API-nyckel ändras på servern; appens adress och gatewaytoken behålls. Reasoning är av, temperatur 0 och strikt JSON används automatiskt. Modellens JSON visas som vanliga anteckningar och förslag i appen.
+**Byta modell eller leverantör:** följ [Cloudflare-guiden](../server/README.md); tillåtna modeller står i [katalogen](../server/README.md). Modell och API-nyckel ändras på servern; appens adress och gatewaytoken behålls. Reasoning är av, temperatur 0 och strikt JSON används automatiskt. Modellens JSON visas som vanliga anteckningar och förslag i appen.
 
 Servern kan ha olika kompatibla profiler för enskild fråga, vardag och lektion. Gör det modellfria anslutningsprovet efter ett byte och aktivera/granska på nytt. Det finns ingen modellväljare i appen eller tyst reservmodell.
 
@@ -108,4 +108,4 @@ Efter nätfel, kvotfel eller omstart: färdiga detaljerade delar finns kvar. Vä
 
 Om du rättar textunderlaget senare visas att anteckningarna bygger på **äldre text**; när revisionsunderlag saknas anges **okänd aktualitet**. Sparade delar/citat bevaras och rättningen skickas inte automatiskt igen. Kopierad anteckning behåller dessa varningar, ofullständiga delar och eventuella ljudluckor. Granska underlaget även när alla delar är bearbetade.
 
-För [tokens, leverantörsbyte och Cloudflare Access](../server/cloudflare/README.md) finns en sammanhängande steg-för-steg-guide. Access kräver den nya appens separata Client ID-/Client Secret-fält; de finns inte i build 5.
+För [tokens, leverantörsbyte och Cloudflare Access](../server/README.md) finns en sammanhängande steg-för-steg-guide. Access kräver den nya appens separata Client ID-/Client Secret-fält; de finns inte i build 5.

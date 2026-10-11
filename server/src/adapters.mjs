@@ -53,52 +53,15 @@ function validateGeneration(generation) {
 export function buildProviderRequest(config, generation) {
   const profile = providerProfile(config);
   validateGeneration(generation);
-  const system = generation.messages.filter(message => message.role === 'system').map(message => message.content).join('\n\n');
-  const messages = generation.messages.filter(message => message.role !== 'system').map(message => ({ ...message }));
-  const format = structuredClone(generation.structuredOutput);
-  const headers = { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' };
-  if (profile.wire === 'responses') {
-    const gateway = { only: ['openai'], ...profile.options };
-    return { url: `${profile.base}/responses`, profile, headers, body: {
-      model: profile.requestedModel, store: false, temperature: 0, max_output_tokens: generation.maxOutputTokens,
-      ...(!profile.plain ? { reasoning: { effort: 'none' } } : {}),
-      ...(profile.provider === 'vercel' ? { providerOptions: { gateway } } : {}),
-      ...(system ? { instructions: system } : {}), text: { format }, tools: [],
-      input: messages.map(message => ({ role: message.role,
-        content: [{ type: message.role === 'assistant' ? 'output_text' : 'input_text', text: message.content }] }))
+  if (profile.wire !== 'chat') incompatible();
+  const { type, ...jsonSchema } = structuredClone(generation.structuredOutput);
+  return { url: `${profile.base}/chat/completions`, profile,
+    headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' }, body: {
+      model: profile.requestedModel, temperature: 0, max_tokens: generation.maxOutputTokens, stream: false,
+      // Reasoning must be off, not hidden; responses that still carry reasoning are rejected below.
+      ...(!profile.plain ? { reasoning_effort: 'none' } : {}),
+      response_format: { type, json_schema: jsonSchema }, messages: generation.messages.map(message => ({ ...message }))
     } };
-  }
-  if (profile.wire === 'anthropic') {
-    return { url: `${profile.base}/messages`, profile,
-      headers: { 'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
-      body: { model: profile.requestedModel, temperature: 0, max_tokens: generation.maxOutputTokens,
-        thinking: { type: 'disabled' }, ...(system ? { system } : {}),
-        ...(profile.options.serviceTier ? { service_tier: profile.options.serviceTier } : {}),
-        output_config: { format: { type: 'json_schema', schema: format.schema } }, messages }
-    };
-  }
-  if (profile.wire === 'gemini') {
-    return { url: `${profile.base}/models/${profile.requestedModel}:generateContent`, profile,
-      headers: { 'x-goog-api-key': config.apiKey, 'Content-Type': 'application/json' }, body: {
-        ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-        contents: messages.map(message => ({ role: message.role === 'assistant' ? 'model' : 'user', parts: [{ text: message.content }] })),
-        generationConfig: { temperature: 0, maxOutputTokens: generation.maxOutputTokens, candidateCount: 1,
-          thinkingConfig: { thinkingBudget: 0 }, responseMimeType: 'application/json', responseJsonSchema: format.schema }
-      } };
-  }
-  const { type, ...jsonSchema } = format;
-  const router = { require_parameters: true, allow_fallbacks: false, only: ['openai'],
-    ...(profile.options.dataCollection ? { data_collection: profile.options.dataCollection } : {}),
-    ...(Object.hasOwn(profile.options, 'zeroDataRetention') ? { zdr: profile.options.zeroDataRetention } : {}) };
-  return { url: `${profile.base}/chat/completions`, profile, headers, body: {
-    model: profile.requestedModel, temperature: 0, max_tokens: generation.maxOutputTokens, stream: false,
-    // NIM's DeepSeek chat template thinks unless both template switches are off;
-    // reasoning_effort is a thinking budget there, not an off switch.
-    ...(profile.provider === 'openrouter' ? { reasoning: { enabled: false }, provider: router }
-      : profile.provider === 'nvidia' ? { chat_template_kwargs: { thinking: false, enable_thinking: false } }
-      : !profile.plain ? { reasoning_effort: 'none' } : {}),
-    response_format: { type, json_schema: jsonSchema }, messages: generation.messages.map(message => ({ ...message }))
-  } };
 }
 
 export class ProviderResponseError extends Error {
@@ -114,18 +77,16 @@ const header = (headers, name) => typeof headers?.get === 'function' ? headers.g
   : isObject(headers) ? Object.entries(headers).find(([key]) => key.toLowerCase() === name)?.[1] : undefined;
 
 function metadata(data, profile, headers) {
-  const returnedModel = safeID(data?.model ?? data?.modelVersion, true);
-  const responseID = safeID(data?.id ?? data?.responseId);
+  const returnedModel = safeID(data?.model, true);
+  const responseID = safeID(data?.id);
   const requestID = safeID(header(headers, 'x-request-id') ?? header(headers, 'request-id'));
-  const raw = profile.wire === 'gemini' ? data?.usageMetadata : data?.usage;
+  const raw = data?.usage;
   const values = {
-    inputTokens: raw?.input_tokens ?? raw?.prompt_tokens ?? raw?.promptTokenCount,
-    outputTokens: raw?.output_tokens ?? raw?.completion_tokens ?? raw?.candidatesTokenCount,
-    totalTokens: raw?.total_tokens ?? raw?.totalTokenCount,
-    reasoningTokens: raw?.output_tokens_details?.reasoning_tokens ?? raw?.completion_tokens_details?.reasoning_tokens ?? raw?.thoughtsTokenCount,
-    cachedInputTokens: raw?.input_tokens_details?.cached_tokens ?? raw?.prompt_tokens_details?.cached_tokens
-      ?? raw?.cache_read_input_tokens ?? raw?.cachedContentTokenCount,
-    cacheCreationInputTokens: raw?.cache_creation_input_tokens
+    inputTokens: raw?.prompt_tokens,
+    outputTokens: raw?.completion_tokens,
+    totalTokens: raw?.total_tokens,
+    reasoningTokens: raw?.completion_tokens_details?.reasoning_tokens,
+    cachedInputTokens: raw?.prompt_tokens_details?.cached_tokens
   };
   const usage = Object.fromEntries(Object.entries(values).filter(([, value]) => tokenCount(value) !== undefined));
   return { ...(returnedModel ? { returnedModel } : {}),
@@ -135,55 +96,20 @@ function metadata(data, profile, headers) {
 
 export function normalizeProviderResponse(data, profile, headers) {
   if (!isObject(data) || !isObject(profile)) invalid();
-  // Check both native and compatibility usage shapes, even on a refusal. Hiding
-  // reasoning text does not satisfy an explicit reasoning-off contract.
-  for (const value of [data.usage?.output_tokens_details?.reasoning_tokens,
-    data.usage?.completion_tokens_details?.reasoning_tokens, data.usageMetadata?.thoughtsTokenCount]) {
+  // Hiding reasoning text does not satisfy an explicit reasoning-off contract.
+  for (const value of [data.usage?.output_tokens_details?.reasoning_tokens, data.usage?.completion_tokens_details?.reasoning_tokens]) {
     if (typeof value === 'number' && value > 0) reasoningViolation();
   }
-  let finish = 'completed', text;
-  if (profile.wire === 'responses') {
-    if (!Array.isArray(data.output)) invalid();
-    if (data.output.some(item => item?.type === 'reasoning')) reasoningViolation();
-    if (data.output.some(item => !isObject(item) || item.type !== 'message' || item.role !== 'assistant'
-        || !Array.isArray(item.content) || item.content.some(part => !isObject(part) || !['output_text', 'refusal'].includes(part.type)))) invalid();
-    if (data.output.some(item => item.content.some(part => part.type === 'refusal'))) finish = 'refused';
-    else if (data.status === 'incomplete' && data.incomplete_details?.reason === 'max_output_tokens') finish = 'truncated';
-    else if (data.status === 'incomplete' && data.incomplete_details?.reason === 'content_filter') finish = 'refused';
-    else if (data.status !== 'completed') invalid();
-    text = data.output.flatMap(item => item.content).map(part => part.text);
-  } else if (profile.wire === 'chat') {
-    if (!Array.isArray(data.choices) || data.choices.length !== 1) invalid();
-    const choice = data.choices[0], message = choice?.message;
-    if (!isObject(message) || message.role !== 'assistant' || message.tool_calls?.length || message.function_call) invalid();
-    if (message.reasoning || message.reasoning_content || message.reasoning_details?.length) reasoningViolation();
-    if (message.refusal || choice.finish_reason === 'content_filter') finish = 'refused';
-    else if (choice.finish_reason === 'length') finish = 'truncated';
-    else if (choice.finish_reason !== 'stop') invalid();
-    text = [message.content];
-  } else if (profile.wire === 'anthropic') {
-    if (!Array.isArray(data.content)) invalid();
-    if (data.content.some(part => ['thinking', 'redacted_thinking'].includes(part?.type))) reasoningViolation();
-    if (data.content.some(part => !isObject(part) || part.type !== 'text')) invalid();
-    if (data.stop_reason === 'refusal') finish = 'refused';
-    else if (data.stop_reason === 'max_tokens') finish = 'truncated';
-    else if (data.stop_reason !== 'end_turn') invalid();
-    text = data.content.map(part => part.text);
-  } else if (profile.wire === 'gemini') {
-    if (data.promptFeedback?.blockReason) finish = 'refused';
-    else {
-      if (!Array.isArray(data.candidates) || data.candidates.length !== 1) invalid();
-      const candidate = data.candidates[0], parts = candidate?.content?.parts;
-      if (!isObject(candidate) || (parts !== undefined && !Array.isArray(parts))) invalid();
-      if (parts?.some(part => part?.thought === true)) reasoningViolation();
-      if (parts?.some(part => !isObject(part) || typeof part.text !== 'string'
-          || Object.keys(part).some(key => !['text', 'thought'].includes(key)))) invalid();
-      if (['SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'RECITATION'].includes(candidate.finishReason)) finish = 'refused';
-      else if (candidate.finishReason === 'MAX_TOKENS') finish = 'truncated';
-      else if (candidate.finishReason !== 'STOP') invalid();
-      text = parts?.map(part => part.text);
-    }
-  } else invalid();
+  if (profile.wire !== 'chat') invalid();
+  let finish = 'completed';
+  if (!Array.isArray(data.choices) || data.choices.length !== 1) invalid();
+  const choice = data.choices[0], message = choice?.message;
+  if (!isObject(message) || message.role !== 'assistant' || message.tool_calls?.length || message.function_call) invalid();
+  if (message.reasoning || message.reasoning_content || message.reasoning_details?.length) reasoningViolation();
+  if (message.refusal || choice.finish_reason === 'content_filter') finish = 'refused';
+  else if (choice.finish_reason === 'length') finish = 'truncated';
+  else if (choice.finish_reason !== 'stop') invalid();
+  let text = [message.content];
   if (finish === 'completed') {
     if (!text?.length || text.some(value => typeof value !== 'string')) invalid();
     text = text.join('\n');
@@ -195,11 +121,8 @@ export function normalizeProviderResponse(data, profile, headers) {
 
 export function normalizeProviderError({ status, data, headers, now = Date.now() }) {
   const code = data?.error?.code ?? data?.error?.type ?? data?.error?.status;
-  // Gemini reports an invalid key as HTTP 400 INVALID_ARGUMENT with a detail reason.
-  const reasons = Array.isArray(data?.error?.details) ? data.error.details.map(detail => detail?.reason) : [];
   let category;
-  if (status === 401 || ['authentication_error', 'invalid_api_key', 'UNAUTHENTICATED'].includes(code)
-      || reasons.includes('API_KEY_INVALID')) category = 'provider_authentication';
+  if (status === 401 || ['authentication_error', 'invalid_api_key', 'UNAUTHENTICATED'].includes(code)) category = 'provider_authentication';
   // Exhausted billing is an account problem, not a temporary quota; retrying cannot help.
   else if ([402, 403].includes(status) || ['permission_error', 'billing_hard_limit_reached', 'insufficient_quota', 'PERMISSION_DENIED'].includes(code)) category = 'provider_account';
   else if (status === 404 || ['model_not_found', 'model_not_available', 'not_found_error', 'NOT_FOUND'].includes(code)) category = 'provider_model_unavailable';

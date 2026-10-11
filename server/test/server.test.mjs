@@ -3,18 +3,22 @@ import { test } from 'node:test';
 import { once } from 'node:events';
 import { createMioServer, loadConfig, validatePayload } from '../src/server.mjs';
 import { resolveTaskProfile } from '../src/task-profiles.mjs';
+import { createFileCounterStore, createMemoryCounterStore, emptyCounters } from '../src/state-store.mjs';
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const token = 'fixture_gateway_token_01234567890123456789';
-const defaults = { apiKey: 'fixture-upstream-credential', gatewayToken: token, model: 'gpt-6-luna',
+const defaults = { apiKey: 'fixture-upstream-credential', gatewayToken: token, model: 'qwen/qwen3.8-27b',
   requestsPerMinute: 30, requestsPerDay: 100, upstreamTimeoutMs: 1000, bodyTimeoutMs: 1000 };
 const payload = { question: 'Vad betyder procent?', context: [{ label: 'Anteckning', text: 'Vi övar procent.' }] };
 const completion = (text = 'Procent betyder hundradelar.') => new Response(JSON.stringify({
-  status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: JSON.stringify({ answer: text }) }] }]
+  choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ answer: text }) } }]
 }), { headers: { 'Content-Type': 'application/json' } });
 
 async function fixture(t, options = {}) {
   const calls = [];
-  const server = createMioServer({ config: { ...defaults, ...options.config }, now: options.now,
+  const server = createMioServer({ config: { ...defaults, ...options.config }, now: options.now, counterStore: options.counterStore,
     fetchImpl: options.fetchImpl ?? (async (url, init) => { calls.push({ url, init }); return completion(); }) });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -29,9 +33,14 @@ async function fixture(t, options = {}) {
 
 test('transport settings stay bounded while invalid generation configuration remains discoverable', () => {
   assert.throws(() => loadConfig({}));
-  assert.equal(resolveTaskProfile(loadConfig({ OPENAI_API_KEY: token, MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'gpt-6-luna' }), 'ask').configured, false);
-  assert.throws(() => loadConfig({ OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'example', MIO_REQUESTS_PER_DAY: '1000001' }));
-  assert.equal(loadConfig({ OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_OPENAI_MODEL: 'example' }).requestsPerDay, null);
+  assert.equal(resolveTaskProfile(loadConfig({ GROQ_API_KEY: token, MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'example' }), 'ask').configured, false);
+  assert.throws(() => loadConfig({ GROQ_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'example', MIO_REQUESTS_PER_DAY: '1000001' }));
+  assert.equal(loadConfig({ GROQ_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'example' }).requestsPerDay, null);
+  // Groq free tier: three requests per minute is the default, the token cap is optional.
+  const defaultsFromEnv = loadConfig({ GROQ_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'qwen/qwen3.8-27b' });
+  assert.equal(defaultsFromEnv.provider, 'groq');
+  assert.equal(defaultsFromEnv.requestsPerMinute, 3);
+  assert.equal(defaultsFromEnv.tokensPerDay, null);
 });
 
 test('payload preserves exactly approved text and refuses unknown fields', () => {
@@ -70,15 +79,16 @@ test('success uses fixed upstream, no storage, no tools and only approved contex
   assert.deepEqual(await response.json(), { answer: 'Procent betyder hundradelar.' });
   assert.equal(f.calls.length, 1);
   const { url, init } = f.calls[0];
-  assert.equal(url, 'https://api.openai.com/v1/responses');
+  assert.equal(url, 'https://api.groq.com/openai/v1/chat/completions');
   assert.equal(init.redirect, 'manual');
   assert.equal(init.headers.Authorization, `Bearer ${defaults.apiKey}`);
   assert.ok(!JSON.stringify(init).includes(token));
   const request = JSON.parse(init.body);
-  assert.equal(request.store, false);
-  assert.equal(request.max_output_tokens, 1000);
-  assert.deepEqual(request.tools, []);
-  assert.deepEqual(JSON.parse(request.input[0].content[0].text), payload);
+  assert.equal(request.max_tokens, 1000);
+  assert.equal(request.stream, false);
+  assert.equal('tools' in request, false);
+  assert.equal(request.messages.length, 2);
+  assert.deepEqual(JSON.parse(request.messages[1].content), payload);
   assert.ok(!('previous_response_id' in request));
 });
 
@@ -159,11 +169,87 @@ test('invalid upstream JSON and redirects never become answers', async t => {
 });
 
 test('the daily cap is optional, but a configured cap must be a bounded positive integer', () => {
-  const env = { OPENAI_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'gpt-6-luna' };
+  const env = { GROQ_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'qwen/qwen3.8-27b' };
   for (const value of [undefined, '', '0']) assert.equal(loadConfig({ ...env, MIO_REQUESTS_PER_DAY: value }).requestsPerDay, null);
   assert.equal(loadConfig({ ...env, MIO_REQUESTS_PER_DAY: '2000' }).requestsPerDay, 2000);
   for (const value of ['-1', '1.5', 'many', '1000001']) assert.throws(() => loadConfig({ ...env, MIO_REQUESTS_PER_DAY: value }));
   assert.throws(() => loadConfig({ ...env, MIO_REQUESTS_PER_MINUTE: '61' }));
   for (const requestsPerDay of [0, 1.5, 1_000_001]) assert.throws(() => createMioServer({ config: { ...defaults, requestsPerDay } }));
   assert.doesNotThrow(() => createMioServer({ config: { ...defaults, requestsPerDay: null } }).close());
+});
+
+const usageCompletion = totalTokens => Response.json({ usage: { prompt_tokens: totalTokens - 10, completion_tokens: 10, total_tokens: totalTokens },
+  choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ answer: 'Svar.' }) } }] });
+
+test('the daily token cap counts reported usage and blocks before a provider call until the next UTC day', async t => {
+  let time = Date.parse('2026-10-11T12:00:00Z');
+  const f = await fixture(t, { config: { tokensPerDay: 1000, requestsPerDay: null }, now: () => time,
+    fetchImpl: async (url, init) => { f.calls.push({ url, init }); return usageCompletion(600); } });
+  assert.equal((await f.ask()).status, 200);
+  assert.equal((await f.ask()).status, 200);
+  time += 60_001;
+  const limited = await f.ask();
+  assert.equal(limited.status, 429);
+  assert.deepEqual(await limited.json(), { error: 'local_token_limit' });
+  assert.equal(Number(limited.headers.get('retry-after')), 12 * 3600 - 60);
+  assert.equal(f.calls.length, 2);
+  time = Date.parse('2026-10-12T00:00:01Z');
+  assert.equal((await f.ask()).status, 200);
+  assert.equal(f.calls.length, 3);
+});
+
+test('status reports the token quota with its unit and never a request count as tokens', async t => {
+  let time = Date.parse('2026-10-11T12:00:00Z');
+  const f = await fixture(t, { config: { tokensPerDay: 1000 }, now: () => time,
+    fetchImpl: async () => usageCompletion(250) });
+  assert.equal((await f.ask()).status, 200);
+  const status = await (await fetch(`${f.base}/v2/status`, { headers: { Authorization: `Bearer ${token}` } })).json();
+  assert.deepEqual(status.quota, { limit: 1000, remaining: 750, resetAt: '2026-10-12T00:00:00.000Z', unit: 'tokens' });
+});
+
+test('counters survive a gateway restart so a restart cannot reset the daily allowance', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'mio-counters-'));
+  const path = join(directory, 'counters.json');
+  const time = Date.parse('2026-10-11T12:00:00Z');
+  const first = await fixture(t, { config: { tokensPerDay: 1000 }, now: () => time,
+    counterStore: createFileCounterStore(path), fetchImpl: async () => usageCompletion(900) });
+  assert.equal((await first.ask()).status, 200);
+  const saved = JSON.parse(readFileSync(path, 'utf8'));
+  assert.deepEqual(Object.keys(saved).sort(), ['day', 'dayCount', 'dayTokens', 'minute', 'minuteCount']);
+  assert.equal(saved.dayTokens, 900);
+  assert.equal(statSync(path).mode & 0o777, 0o600);
+  assert.ok(!readFileSync(path, 'utf8').includes('procent'));
+  let restartedCalls = 0;
+  const second = await fixture(t, { config: { tokensPerDay: 1000 }, now: () => time + 120_000,
+    counterStore: createFileCounterStore(path), fetchImpl: async () => { restartedCalls++; return usageCompletion(900); } });
+  assert.equal((await second.ask()).status, 200);
+  assert.equal((await second.ask()).status, 429);
+  assert.equal(restartedCalls, 1);
+});
+
+test('corrupt or foreign counter files start empty instead of crashing or trusting them', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'mio-counters-'));
+  const path = join(directory, 'counters.json');
+  for (const content of ['{broken', '[]', '{"day":1}', JSON.stringify({ ...emptyCounters(), dayTokens: -5 }),
+    JSON.stringify({ ...emptyCounters(), dayTokens: 1.5 })]) {
+    writeFileSync(path, content);
+    assert.deepEqual(createFileCounterStore(path).load(), emptyCounters());
+  }
+  assert.deepEqual(createFileCounterStore(join(directory, 'missing.json')).load(), emptyCounters());
+});
+
+test('a failing counter store blocks provider traffic instead of spending unrecorded quota', async t => {
+  const store = { ...createMemoryCounterStore(), save() { throw new Error('disk full'); } };
+  const f = await fixture(t, { counterStore: store });
+  const response = await f.ask();
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: 'budget_store_failed' });
+  assert.equal(f.calls.length, 0);
+});
+
+test('the token cap is bounded and optional', () => {
+  const env = { GROQ_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'qwen/qwen3.8-27b' };
+  for (const value of [undefined, '', '0']) assert.equal(loadConfig({ ...env, MIO_TOKENS_PER_DAY: value }).tokensPerDay, null);
+  assert.equal(loadConfig({ ...env, MIO_TOKENS_PER_DAY: '190000' }).tokensPerDay, 190000);
+  for (const value of ['-1', '1.5', 'many', '1000001']) assert.throws(() => loadConfig({ ...env, MIO_TOKENS_PER_DAY: value }));
 });

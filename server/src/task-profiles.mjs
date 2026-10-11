@@ -1,7 +1,7 @@
 import { providerProfile } from './provider.mjs';
 
 export const TASK_IDS = Object.freeze(['ask', 'everyday', 'lesson']);
-const PROFILE_FIELDS = new Set(['provider', 'model', 'adapterOptions', 'baseURL', 'compatibility']);
+const PROFILE_FIELDS = new Set(['provider', 'model', 'adapterOptions']);
 const plainObject = value => value !== null && typeof value === 'object' && !Array.isArray(value)
   && [Object.prototype, null].includes(Object.getPrototypeOf(value));
 const credentialShapedIdentifier = value => /^(?:sk[-_]|gsk_|AIza|nvapi-)/iu.test(value);
@@ -27,23 +27,14 @@ function effectiveTaskConfig(config, task) {
   if (!plainObject(override) || Object.keys(override).some(key => !PROFILE_FIELDS.has(key))) {
     return { configurationError: 'task_profile_invalid' };
   }
-  const provider = Object.hasOwn(override, 'provider') ? override.provider : config.provider ?? 'openai';
+  const provider = Object.hasOwn(override, 'provider') ? override.provider : config.provider ?? 'groq';
   const model = Object.hasOwn(override, 'model') ? override.model : config.model;
   if (!safeProviderIdentifier(provider) || !safeModelIdentifier(model)) return { configurationError: 'task_profile_invalid' };
-  // Historical global endpoint hints remain backward compatible. An explicit
-  // task override must not promise an endpoint assertion its adapter ignores.
-  if (provider !== 'custom' && ['baseURL', 'compatibility'].some(field => Object.hasOwn(override, field))) {
-    return { configurationError: 'provider_options_incompatible' };
-  }
-  const inherited = provider === (config.provider ?? 'openai') && model === config.model;
   const effective = { ...config, provider, model };
-  // Adapter defaults may inherit within a provider and are revalidated for the
-  // selected model. An endpoint assertion belongs to the exact provider/model.
-  for (const field of ['adapterOptions', 'baseURL', 'compatibility']) {
-    if (Object.hasOwn(override, field)) effective[field] = override[field];
-    else if (field === 'adapterOptions' ? provider !== (config.provider ?? 'openai') : !inherited) delete effective[field];
-  }
-  if (provider !== (config.provider ?? 'openai')) effective.apiKey = config.providerSecrets?.[provider];
+  // Adapter options may inherit within a provider and are revalidated for the selected model.
+  if (Object.hasOwn(override, 'adapterOptions')) effective.adapterOptions = override.adapterOptions;
+  else if (provider !== (config.provider ?? 'groq')) delete effective.adapterOptions;
+  if (provider !== (config.provider ?? 'groq')) effective.apiKey = config.providerSecrets?.[provider];
   delete effective.taskProfiles;
   delete effective.providerSecrets;
   return { config: effective, configurationError: null };
@@ -52,7 +43,7 @@ function effectiveTaskConfig(config, task) {
 export function taskConfigurationIdentifiers(config, task) {
   const profiles = profileOverrides(config);
   const override = profiles && plainObject(profiles[task]) ? profiles[task] : {};
-  return { provider: safeProviderIdentifier(Object.hasOwn(override, 'provider') ? override.provider : config.provider ?? 'openai'),
+  return { provider: safeProviderIdentifier(Object.hasOwn(override, 'provider') ? override.provider : config.provider ?? 'groq'),
     model: safeModelIdentifier(Object.hasOwn(override, 'model') ? override.model : config.model) };
 }
 

@@ -2,25 +2,27 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
 import { createMioServer, loadConfig } from '../src/server.mjs';
+import { createMemoryCounterStore } from '../src/state-store.mjs';
 
 const token = 'fixture_gateway_token_01234567890123456789';
-const env = { MIO_AI_PROVIDER: 'openai', MIO_AI_MODEL: 'gpt-6-luna', OPENAI_API_KEY: 'fixture-openai',
-  GROQ_API_KEY: 'fixture-groq', MIO_GATEWAY_TOKEN: token, MIO_REQUESTS_PER_MINUTE: '60', MIO_REQUESTS_PER_DAY: '100' };
+const MODEL = 'qwen/qwen3.8-27b';
+const env = { MIO_AI_MODEL: MODEL, GROQ_API_KEY: 'fixture-groq', MIO_GATEWAY_TOKEN: token,
+  MIO_REQUESTS_PER_MINUTE: '60', MIO_REQUESTS_PER_DAY: '100' };
 const approved = { question: 'Syntetiskt godkänt prov', context: [] };
 const auth = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 function completion(request) {
   const text = JSON.stringify({ answer: 'Syntetiskt svar' });
-  return Response.json(request.response_format
-    ? { model: request.model, choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: text } }],
-      usage: { prompt_tokens: 7, completion_tokens: 3, completion_tokens_details: { reasoning_tokens: 0 } } }
-    : { model: request.model, status: 'completed', output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }],
-      usage: { input_tokens: 7, output_tokens: 3, output_tokens_details: { reasoning_tokens: 0 } } },
-    { headers: { 'x-request-id': 'fixture-upstream-request' } });
+  return Response.json({ model: request.model, choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: text } }],
+    usage: { prompt_tokens: 7, completion_tokens: 3, completion_tokens_details: { reasoning_tokens: 0 } } },
+  { headers: { 'x-request-id': 'fixture-upstream-request' } });
 }
 async function fixture(t, patch = {}, options = {}) {
   const calls = []; let reservations = 0;
   const config = loadConfig({ ...env, ...patch });
-  const server = createMioServer({ config, readQuota: () => ({ limit: 100, remaining: 100, resetAt: "2026-10-03T00:00:00.000Z" }), reserveBudget: () => { reservations++; return true; },
+  // Every reservation persists the counters before provider traffic; counting saves observes it.
+  const memory = createMemoryCounterStore();
+  const counterStore = { load: memory.load, save: value => { reservations++; memory.save(value); } };
+  const server = createMioServer({ config, counterStore,
     fetchImpl: async (url, request) => { const body = JSON.parse(request.body); calls.push({ url, request, body }); return completion(body); }, ...options });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
@@ -29,8 +31,8 @@ async function fixture(t, patch = {}, options = {}) {
     { method: 'POST', headers: { ...auth, ...headers }, body: JSON.stringify(approved) }) };
 }
 
-test('ask uses its selected provider secret and exact approved input without fallback', async t => {
-  const f = await fixture(t, { MIO_AI_TASK_PROFILES: JSON.stringify({ ask: { provider: 'groq', model: 'qwen/qwen3.8-27b' } }) });
+test('ask uses the Groq secret and exact approved input without fallback', async t => {
+  const f = await fixture(t);
   const response = await f.ask();
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { answer: 'Syntetiskt svar' });
@@ -46,7 +48,7 @@ test('ask uses its selected provider secret and exact approved input without fal
 });
 
 test('invalid selected task is rejected before quota and provider traffic', async t => {
-  const f = await fixture(t, { MIO_AI_TASK_PROFILES: JSON.stringify({ ask: { provider: 'openai', model: 'gpt-4.1-2099-99-99' } }) });
+  const f = await fixture(t, { MIO_AI_TASK_PROFILES: JSON.stringify({ ask: { provider: 'openai', model: 'gpt-4.1' } }) });
   const response = await f.ask();
   assert.equal(response.status, 422);
   assert.equal((await response.json()).error, 'task_configuration_invalid');
@@ -69,7 +71,7 @@ test('protected model-free status and stale revision never reserve quota or star
 });
 
 test('budget store failure is distinct and cannot trigger provider traffic', async t => {
-  const f = await fixture(t, {}, { reserveBudget: () => { throw new Error('private arbitrary store failure'); } });
+  const f = await fixture(t, {}, { counterStore: { ...createMemoryCounterStore(), save: () => { throw new Error('private arbitrary store failure'); } } });
   const response = await f.ask();
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: 'budget_store_failed' });
@@ -86,7 +88,7 @@ for (const [status, category] of [[401, 'provider_authentication'], [402, 'provi
 }
 
 test('local daily capacity is observed without changing reservations or counters', async t => {
-  const f = await fixture(t, {}, { reserveBudget: undefined, readQuota: undefined });
+  const f = await fixture(t, {});
   const status = () => fetch(`${f.base}/v2/status`, { headers: auth }).then(response => response.json());
   assert.equal((await status()).quota.remaining, 100);
   assert.equal((await f.ask()).status, 200);
@@ -100,23 +102,23 @@ test('request snapshots use current task configuration and credential rotations 
   const f = await fixture(t, {}, { configurationForRequest: () => current });
   const discover = () => fetch(`${f.base}/v2/status`, { headers: auth }).then(response => response.json());
   const first = await discover();
-  const secondKey = 'fixture-rotated-openai';
-  current = loadConfig({ ...env, OPENAI_API_KEY: secondKey });
+  const secondKey = 'fixture-rotated-groq';
+  current = loadConfig({ ...env, GROQ_API_KEY: secondKey });
   assert.equal((await discover()).configurationRevision, first.configurationRevision, 'Secrets must not enter revision fingerprints');
   assert.equal((await f.ask({ 'X-Mio-Configuration-Revision': first.configurationRevision })).status, 200);
   assert.equal(f.calls.at(-1).request.headers.Authorization, `Bearer ${secondKey}`);
-  current = loadConfig({ ...env, MIO_AI_TASK_PROFILES: JSON.stringify({ ask: { provider: 'groq', model: 'qwen/qwen3.8-27b' } }) });
+  current = loadConfig({ ...env, MIO_TOKENS_PER_DAY: '190000' });
   const changed = await discover();
   assert.notEqual(changed.configurationRevision, first.configurationRevision);
   assert.equal((await f.ask({ 'X-Mio-Configuration-Revision': first.configurationRevision })).status, 409);
   assert.equal(f.calls.length, 1);
   assert.equal((await f.ask({ 'X-Mio-Configuration-Revision': changed.configurationRevision })).status, 200);
-  assert.equal(f.calls.at(-1).body.model, 'qwen/qwen3.8-27b');
+  assert.equal(f.calls.at(-1).body.model, MODEL);
 });
 
 for (const [variable, expected] of [['MIO_REQUESTS_PER_MINUTE', 'local_minute_limit'], ['MIO_REQUESTS_PER_DAY', 'local_day_limit']]) {
   test(`${variable} denial remains distinguishable`, async t => {
-    const f = await fixture(t, { [variable]: '1' }, { reserveBudget: undefined, readQuota: undefined });
+    const f = await fixture(t, { [variable]: '1' });
     assert.equal((await f.ask()).status, 200);
     const exhausted = await f.ask();
     assert.equal(exhausted.status, 429); assert.equal((await exhausted.json()).error, expected);
@@ -125,7 +127,7 @@ for (const [variable, expected] of [['MIO_REQUESTS_PER_MINUTE', 'local_minute_li
 }
 
 test('without a daily cap, status reports no quota and requests are limited only per minute', async t => {
-  const f = await fixture(t, { MIO_REQUESTS_PER_DAY: '', MIO_REQUESTS_PER_MINUTE: '2' }, { reserveBudget: undefined, readQuota: undefined });
+  const f = await fixture(t, { MIO_REQUESTS_PER_DAY: '', MIO_REQUESTS_PER_MINUTE: '2' });
   assert.equal((await fetch(`${f.base}/v2/status`, { headers: auth }).then(response => response.json())).quota, null);
   assert.equal((await f.ask()).status, 200); assert.equal((await f.ask()).status, 200);
   const limited = await f.ask();
@@ -133,10 +135,10 @@ test('without a daily cap, status reports no quota and requests are limited only
   assert.equal(f.calls.length, 2);
 });
 
-test('unknown external quota and malformed revisions never pretend capacity or start provider work', async t => {
-  const f = await fixture(t, {}, { readQuota: undefined });
+test('malformed revisions never start provider work or reserve quota', async t => {
+  const f = await fixture(t);
   const status = await fetch(`${f.base}/v2/status`, { headers: auth }).then(response => response.json());
-  assert.equal(status.quota.remaining, null); assert.equal(status.quota.resetAt, null);
+  assert.equal(status.quota.remaining, 100); assert.equal(status.quota.unit, 'requests');
   const response = await f.ask({ 'X-Mio-Configuration-Revision': 'secret\tvalue' });
   assert.equal(response.status, 400); assert.equal((await response.json()).error, 'invalid_configuration_revision');
   assert.equal(f.calls.length, 0); assert.equal(f.reservations(), 0);

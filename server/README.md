@@ -1,97 +1,92 @@
-# Mios privata text-AI-gateway
+# Mios privata AI-gateway
 
-Valfri server för godkända frågor, vardagsutdrag och detaljerade lektioner. Appens manuella innehåll kräver ingen text-AI. [Pianissimo](../transcription-server/README.md) är en separat privat GPU/Tailscale-tjänst; ljud skickas aldrig till denna gateway och ingen råljudsfil lagras.
+Gatewayen tar emot frågor, vardagsutdrag och lektionsdelar från appen och skickar dem till Groq. Den kör på din CachyOS-dator bredvid [Pianissimo](../transcription-server/README.md) och nås bara via Tailscale. Ljud skickas aldrig hit och ingen text sparas: den enda filen gatewayen skriver är en räknare med heltal.
 
-Arbetskopian har gemensam Node/Worker-execution, exakta modellprofiler och task-routing. Ingen publicering, verklig modellåtkomst, Xcode-build eller telefonacceptans följer av lokala tester. Den aktiva produktionsbundeln är äldre OpenAI-kod och måste ersättas innan NIM fungerar; [Cloudflare-guiden](cloudflare/README.md) beskriver publicering, read-back och separat sändningsgodkännande.
+Beslut 2026-10-11: gatewayen flyttade från Cloudflare till datorn, och Groq är enda leverantör. Den gamla Cloudflare-koden finns kvar i Git-historiken.
 
-## Verifiera utan modelltrafik
+## Installera på datorn (cirka 10 minuter)
 
-Stödd Node-version är **>=26.10.0 <27**, med 26.10.0 som testad miniminivå. Runtime använder inbyggda Node-moduler; `npm ci` installerar låsta verktyg för Worker-verifiering. Kör från valfri katalog, med rätt uttrycklig källsökväg:
+1. Skapa en gratis Groq-nyckel på <https://console.groq.com/keys>.
+2. Kör från repot, som din vanliga användare:
 
-```bash
-npm --prefix "$HOME/Documents/ChatGPT/Mio/server" ci
-npm --prefix "$HOME/Documents/ChatGPT/Mio/server" test
-WRANGLER_SEND_METRICS=false npm --prefix "$HOME/Documents/ChatGPT/Mio/server" run worker:test
-```
+   ```bash
+   ./server/install.sh
+   ```
 
-Worker-provet bygger med `--dry-run` och kör det faktiska paketet i lokal workerd/Miniflare, inklusive D1, taskprofiler, skyddad v2-status, revisionskontroll, deadline och avbrott. Providertransporten är syntetisk; inga modellnycklar eller inferensanrop används. Repoövergripande entry point:
+   Skriptet installerar `nodejs`, `qrencode`, `tailscale`, `curl` och `rsync` med pacman om de saknas. Det skapar tjänstekontot `mio-gateway`, frågar efter Groq-nyckeln (den syns inte när du klistrar in), startar systemd-tjänsten och kör `tailscale serve --bg --https=8443 http://127.0.0.1:8787`.
+3. Para telefonen:
 
-```bash
-python3 "$HOME/Documents/ChatGPT/Mio/scripts/verify.py"
-```
+   ```bash
+   mio-pair
+   ```
 
-Se [installation](../docs/INSTALLATION.md) för plattformsförutsättningar och [status](../docs/STATUS.md) för faktiskt utförda kontroller. Linux/portable Swift ersätter native microphone, converter, UIKit/Keychain och Apple-transportgränser; detta är inte Xcode eller iPhone.
+   Skanna QR-koden i Mio under Inställningar → Dator. `mio-pair --text` visar samma värden som text om kameran inte fungerar.
 
-## Konfiguration och egen Node-drift
+Kör `./server/install.sh` igen för att uppdatera; nyckel, token och räknare behålls. `./server/install.sh --ny-groq-nyckel` byter Groq-nyckeln utan att telefonen behöver paras om.
 
-[Leverantörskatalogen](PROVIDERS.md) anger exakt provider/model/Secret och separat verklig verifiering. Reasoning OFF, temperatur 0 och strikt schema är obligatoriskt. Nyckeln ligger serverägd; en separat `MIO_GATEWAY_TOKEN` används av appen. Access- och transkriptionstokens är andra hemligheter.
+### Var saker ligger
 
-För egen Node-drift kopieras bara gatewayens `server/src/*.mjs` och `server/package.json` till exempelvis `/opt/mio-gateway`. Skapa privat `.env` där, ägd av tjänsteanvändaren med 0600. Kopiera inte hela Mio-repot, Swift/Xcode, exporter, ljud, Git-historik, utvecklingsmiljö eller befintliga hemligheter. `env.example` beskriver globala värden; taskprofiler beskrivs nedan. Leverantörskonto/kostnadskontroll och betrodd HTTPS behövs.
+| Sökväg | Innehåll |
+|---|---|
+| `/opt/mio-gateway/src/` | Gatewayens kod (bara `*.mjs`), ägd av root |
+| `/etc/mio-gateway/gateway.env` | Groq-nyckel, gatewaytoken och gränser; root, 0600 |
+| `/var/lib/mio-gateway/counters.json` | Minut- och dygnsräknare (bara heltal); 0600 |
+| `/etc/systemd/system/mio-gateway.service` | Härdad tjänst: ingen root, skrivskyddat system, 384 MB minne |
+| `/usr/local/bin/mio-pair` | Visar QR-koden för parning; sparar ingenting |
 
-Generera gatewaytoken lokalt och spara privat; den får inte vara samma värde som providerkey:
+Felsökning: `systemctl status mio-gateway`, `journalctl -u mio-gateway -n 50` och `curl http://127.0.0.1:8787/health`. Loggen innehåller aldrig frågor, svar, nycklar eller tokens.
 
-```bash
-node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"
-```
+## Parningskoden
 
-Starta med explicita paths, även genom systemd/processhanterare:
-
-```bash
-node --env-file=/opt/mio-gateway/.env /opt/mio-gateway/src/server.mjs
-curl --fail --max-time 5 http://127.0.0.1:8787/health
-```
-
-Node binder `127.0.0.1:8787`; betrodd HTTPS-proxy på samma värd krävs för telefonen. [Caddy-exemplet](Caddyfile.example) begränsar body och exponerar inte Node-porten. Undvik body/Authorization-/URL-loggning och kör en begränsad tjänsteanvändare. Processens minut/dygnsräknare nollställs vid omstart och delas inte mellan flera Node-processer; leverantörens kostnadsgräns behövs också. [Cloudflare-alternativet](cloudflare/README.md) återanvänder beständiga D1-räknare.
-
-Ogiltig gatewaytoken eller numeriska säkerhetsgränser blockerar Node-start. En felaktig modell/provider/options/secret spärrar berörd task men hindrar inte modellfri skyddad discovery för annars giltig gatewaykonfiguration. Worker kan även ge skyddad konfigurationsstatus när globala genereringsinställningar är ogiltiga.
-
-## Task-profiler och status
-
-`MIO_AI_PROVIDER`/`MIO_AI_MODEL` är global default. Valfri `MIO_AI_TASK_PROFILES` är JSON med `ask`, `everyday`, `lesson`, exempelvis:
+QR-koden innehåller kompakt JSON:
 
 ```json
-{"ask":{"provider":"openai","model":"gpt-4.1-mini"},"lesson":{"provider":"nvidia","model":"deepseek-ai/deepseek-v4.1-flash"}}
+{"mio":1,"aiURL":"https://dator.tailnet.ts.net:8443","aiToken":"…","transcriptionURL":"https://dator.tailnet.ts.net","transcriptionToken":"…"}
 ```
 
-Saknad override ärver global konfiguration. Skild provider använder sin designated serversecret, aldrig en global nyckel från annan provider. Tillåtna profilfält är provider, model, validerade adapterOptions samt custom-kontraktets baseURL/compatibility. Felaktig task spärras explicit; ingen request-time fallback. Alla aliases/snapshots och schema-dialekter finns i matrisen. Legacy `MIO_OPENAI_MODEL` läses endast för OpenAI-konfiguration när det nya namnet saknas.
+`transcriptionURL` och `transcriptionToken` är `null` när Pianissimo inte är installerat än. Appen sparar tokens i nyckelringen. Koden visas bara i terminalen; stäng den efteråt.
 
-`GET /health` provar process/Worker, inte providercredentials. Access ska skydda all extern Worker-trafik. `GET /v1/status` bevarar äldre klientkontrakt. Ny **`GET /v2/status`** kräver gatewaytoken och eventuell Access, gör inget modellanrop och reserverar ingen kvot. Svaret innehåller:
+## Groq och gränser
 
-- `protocolVersion:2`, `release` och 64 hextecken `configurationRevision`.
-- `tasks.ask/everyday/lesson`: configured, provider, model, promptVersion, capabilities, fast configurationError eller null.
-- `quota`: `null` när ingen dagsgräns är satt; annars limit, remaining och resetAt, där de två sista kan vara null när läsning inte kan bevisas. D1-läsningen är tidsbegränsad och ändrar inga räknare.
+| Värde | Inställning | Varför |
+|---|---|---|
+| Modell | `qwen/qwen3.8-27b` | Enda granskade modellen: stöder `reasoning_effort: "none"` och strikt JSON-schema |
+| `MIO_REQUESTS_PER_MINUTE` | 3 (högst 60) | Gratisnivån tillåter 8 000 token per minut; en lektionsdel är några tusen token |
+| `MIO_TOKENS_PER_DAY` | 190 000 (högst 1 000 000, tomt = av) | Gratisnivån tillåter 200 000 token per dygn; marginalen täcker avrundning |
+| `MIO_REQUESTS_PER_DAY` | tomt (av) | Valfri extra gräns per UTC-dygn |
+| `MIO_LESSON_INTERVAL_SECONDS` | 60 (60–3600) | Minsta tid mellan lektionsdelar |
 
-Configured betyder granskad lokal konfiguration, inte giltiga providercredentials, saldo, modellåtkomst eller kvalitet. Revisionen binds till offentliga profil-/policy-/gränsval och endpointidentitet utan att exponera URL eller secretfingerprint; giltig secretrotation byter inte revision. Discovery accepterar bounded okända provider-/capabilitynamn, men kontrollerar de förmågor vald task kräver.
+Räknarna sparas i `counters.json` efter varje reservation, så en omstart nollställer dem inte. Tokenräknaren använder Groqs rapporterade förbrukning. Är dygnets tokens slut svarar gatewayen 429 `local_token_limit` med `Retry-After` till nästa UTC-midnatt, och appen visar när AI fungerar igen. Groqs egna 429-svar skickas vidare med deras `Retry-After`; gatewayen försöker aldrig själv igen.
 
-Nya klienter skickar den observerade revisionen som `X-Mio-Configuration-Revision` vid varje AI-POST. Ändrad revision ger **409 före body/kvot/providertrafik**, kräver ny preview eller manuell återaktivering och ger ingen automatisk retry. Äldre klienter utan header behåller kontraktet. Appens lyckade discoverycache är 30 sekunder och binds till anslutning/credentials/revision; inställningar, authfel och 409 invalidierar den. Kvarvarande kvot är ett ögonblicksvärde, inte reservation eller modellprov.
+Varje anrop kräver temperatur 0, `reasoning_effort: "none"`, strikt JSON-schema och inga verktyg. Svar med resonemang, verktygsanrop, refusal eller avkortning avvisas, och varje svar valideras innan appen får det. Ingen tyst reserv-modell eller reserv-leverantör finns.
 
-## Genereringskontrakt och gränser
+### Lägga till en leverantör senare
 
-Alla genereringsrutter kräver `Authorization: Bearer <gatewaytoken>`, JSON och inga Content-Encoding/redirects. Okända bodyfält avvisas. Servern skickar exakt godkänd payload som användarinnehåll samt fasta taskinstruktioner/schema. Resultatet valideras oberoende efter provider-normalisering; AI kan aldrig utföra systemåtgärder.
+`src/model-profiles.mjs` har en leverantörssöm. En ny leverantör (till exempel Anthropic) kräver en post i `PROVIDERS`, en granskad modell i `reviewedModel` med dokumentationskällor, en adapter i `src/adapters.mjs` om API-formatet skiljer sig, och en nyckel i `gateway.env`. Ett leverantörsprefix eller en OpenAI-kompatibel adress räcker aldrig som bevis.
+
+## API
+
+Alla genereringsrutter kräver `Authorization: Bearer <gatewaytoken>` och JSON utan Content-Encoding. Okända fält avvisas.
 
 | Rutt | Indata och validerat resultat |
 |---|---|
-| `/v1/ask` | Fråga + explicit valda context-utdrag → endast answer, tillfälligt i appen |
-| `/v1/analyze` | Äldre mode/timeZone/fragments-kontrakt → grundade candidates/highlights/uncertainties |
-| `/v2/analyze` | Endast everyday; nya fragments, högst en minut contextFragments, priorDecisions och contextLimited → candidates med explicit nullable replacesID |
-| `/v1/lesson-notes` | Endast lesson, högst 3500 byte källtext → plan/task-kandidater, detaljerade sections med citat och serverägd metadata |
+| `GET /health` | `{"status":"ok"}`, utan token; provar bara processen |
+| `GET /v1/status`, `GET /v2/status` | Konfiguration, kapacitet och `configurationRevision`; inget modellanrop, ingen kvot |
+| `POST /v1/ask` | Fråga + valda utdrag → endast `answer` |
+| `POST /v1/analyze` | Äldre analyskontrakt → grundade candidates/highlights/uncertainties |
+| `POST /v2/analyze` | Vardagsutdrag med kontext → candidates med `replacesID` |
+| `POST /v1/lesson-notes` | Högst 3 500 byte källtext → plan/task-kandidater och detaljerade sections med citat |
 
-Fråga är högst 2000 UTF-8-byte, sex context-utdrag, 200 byte etikett/4000 byte text per utdrag och sammanlagt 10000 byte kontext. Analys har 1–8 fragment, högst 4000 byte per fragment och sammanlagt 10000; v2-kontext högst 4000 byte och tolv tidigare beslut. Body är högst 20000 byte och har separat **5 s** deadline. Fråga begär högst 1000 output-tokens; övriga uppgifter 3000. Frågesvaret är högst 16000 byte text. Upstream-envelope är högst 65536 byte, även för fel.
+`/v2/status` svarar med `quota: {limit, remaining, resetAt, unit}` där `unit` är `tokens` eller `requests`, eller `quota: null` utan dygnsgräns. Klienter skickar den observerade revisionen som `X-Mio-Configuration-Revision`; en ändrad konfiguration ger 409 `configuration_changed` före kvot och modellanrop.
 
-Hela operationen efter body begränsas till **40 s**, inklusive kvotreservation, fetch, bounded bodyläsning, parsing och domänvalidering. Deadline skiljs från klientavbrott. Sena D1-reservationer kan ha förbrukat kvot men får aldrig starta senare inferens eller osäker refund. Slots/listeners frigörs på alla utgångar. Node och Worker använder samma executionpolicy med separat faktisk Worker-runtimecoverage.
+Gränser: fråga högst 2 000 byte, sex utdrag och 10 000 byte kontext. Analys 1–8 fragment. Body högst 20 000 byte med 5 s deadline. Hela anropet högst 40 s. Två samtidiga anrop. Svar från Groq högst 65 536 byte.
 
-Fyra genereringsrutter delar `MIO_REQUESTS_PER_MINUTE` (högst 60; medföljande konfiguration 20, under NIM:s 40/min) och två samtidiga anrop per instans. `MIO_REQUESTS_PER_DAY` är valfri: tom eller `0` betyder ingen dagsgräns (beslut 2026-10-05), annars ett heltal 1–1 000 000 per UTC-dygn. Ett ogiltigt värde ger 503 `gateway_not_configured`. Konfigurationsrevisionen innehåller även gatewayns release, så varje ny publicering ger 409 `configuration_changed` en gång och kräver ny granskning/aktivering i appen. En D1-kvotkontroll som överskrider deadline ger 503 `budget_store_failed`, inte `upstream_timeout`. Workern kräver kompatibilitetsflaggan `enable_request_signal` för att klientavbrott ska nå gatewayn. Lektionsintervallet är 60–3600 s, normalt minst 60 s även efter lång status-/modellväntan. Frågor, vardagsanalys och lektioner delar kvot. Misstänkt timeout/avbrott får inte automatiskt skickas om eftersom kostnad/kvot kan ha uppstått.
+## Verifiera utan modelltrafik
 
-## Diagnostik, samtycke och lektioner
+Node 26.10 eller senare i 26-serien. Gatewayen har inga beroenden utöver Node.
 
-Fasta felkategorier skiljer gatewayauth, providercredentials/konto, modell/parametrar, refusal/truncation, providerkvot, lokal minut/dag/concurrency, budget-store, timeout och transport. Retry-After normaliseras från bounded sekunder eller HTTP-datum. Inga råa providerfel återges.
+```bash
+cd server && npm ci --ignore-scripts && npm test
+```
 
-Svar kan ha säkra `X-Mio-Release/Provider/Model/Prompt-Version/Request-ID/Configuration-Revision` och valfri returned-model/upstream-request-ID/numerisk usage. Konfigurerad modell och faktiskt returnerad modell hålls isär. Text, credentials, fulla URL:er och råa felobjekt loggas inte; D1 innehåller bara räknare. `store:false` begärs i Responses-adaptrarna, men leverantörens övriga datavillkor gäller ändå.
-
-Enskild fråga har exakt preview/Ja och tillfälligt svar. Explicit lokal granskning/sparande som anteckning använder befintligt contentlager, stabilt ID och inga extra modellfrågor; ingen implicit svarshistorik. Löpande analys kräver aktivt samtycke, återställs vid ny process och tar endast nya vardagsutdrag samt godkända lektioner. All sändning använder minsta bounded kontext. Mikrofon och privat transkription är egna status-/styrflöden.
-
-Detaljerade lektionsdelar sparas atomiskt med källcitat och modell/promptmetadata. Kopiering sammanställer dem lokalt utan extra AI. Äldre highlights räknas inte som färdiga detaljerade anteckningar. Avbrott/omstart behåller färdiga delar; fortsättning kräver manuellt val. Valfria lokala källrevisioner visar aktuell/äldre/okänd efter rättning, bevarar original/citat/egna anteckningar och ändrar inte serverpayloaden. Rättat material skickas aldrig automatiskt igen.
-
-## Nästa externa grind
-
-Efter lokala kontroller: jämför exakta kod-/bundle-/releasevärden och produktionsinställningar, få uttrycklig publiceringsbegäran, bevara Worker/D1/Secrets/Access och read-verifiera aktiv version samt autentiserad v2-status. Kontrollera negativa Access/gatewayauth och alternativa adresser. Först efter separat sändningsgodkännande körs [tre syntetiska modellprov](PROVIDERS.md#separat-godkänt-syntetiskt-modellprov). Därefter behövs matching Xcode/XCTest/IPA, installation och iPhone-acceptans. [Cloudflare-guiden](cloudflare/README.md) beskriver den konkreta ordningen.
+Testerna använder en syntetisk Groq-transport; ingen nyckel eller riktig modelltrafik behövs. Ett riktigt prov mot Groq med syntetisk svensk text görs först när gatewayen kör på datorn.
