@@ -1150,7 +1150,7 @@ private struct ContentItemRow: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: item.kind.symbolName)
                 .font(.title3)
-                .foregroundStyle(item.isCompleted ? Color.green : Color.accentColor)
+                .foregroundStyle(item.isCompleted ? Color.green : MioTheme.tint)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 5) {

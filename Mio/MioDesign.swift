@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// The week-planner world: a violet-tinted ground, plain reading panels on top, one violet
 /// tint for controls. Liquid Glass stays on system bars and controls; panels never use it.
@@ -7,18 +6,11 @@ enum MioTheme {
     static let ground = Color("MioGround")
     static let surface = Color("MioSurface")
     static let ribbon = Color("MioRibbon")
-    static let tint = Color.accentColor
+    /// Named asset, not `Color.accentColor`: the environment's accent resolved to system blue
+    /// in the 2026-10-11 simulator build, while this asset is the violet the design needs.
+    static let tint = Color("AccentColor")
     static let swedish = Locale(identifier: "sv_SE")
     static let panelRadius: CGFloat = 22
-
-    /// Large navigation titles ("v. 41") use SF Rounded and still scale with Dynamic Type.
-    @MainActor static func useRoundedLargeTitles() {
-        // 34 pt is the default large-title size; UIFontMetrics scales it to the user's text size.
-        let base = UIFont.systemFont(ofSize: 34, weight: .bold)
-        guard let rounded = base.fontDescriptor.withDesign(.rounded) else { return }
-        let font = UIFontMetrics(forTextStyle: .largeTitle).scaledFont(for: UIFont(descriptor: rounded, size: 34))
-        UINavigationBar.appearance().largeTitleTextAttributes = [.font: font]
-    }
 }
 
 extension View {

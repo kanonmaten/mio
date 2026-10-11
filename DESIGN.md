@@ -12,7 +12,7 @@ colors:
   dusk-ribbon: "#322750"
 typography:
   display:
-    fontFamily: "SF Pro Rounded"
+    fontFamily: "SF Pro Display"
     fontSize: "34pt (largeTitle, skalas med Dynamic Type)"
     fontWeight: 700
     lineHeight: "41pt"
@@ -115,12 +115,12 @@ components:
 
 Mio ser ut som en svensk veckoalmanacka, inte som en widgetpanel. Veckonumret ("v. 41") är sidans största text, och de sju dagarna Mån–Sön organiserar allt under det: nästa sak, det som väntar på granskning, dagens morgon- eller kvällsöversikt och tolv veckors användning. Ingen hjältekort-över-rutnät-uppställning; ordningen är almanackans.
 
-Världen är en violett tonad mark (blek lila i ljust läge, djup nattviolett i mörkt) med vanliga, ogenomskinliga läsytor ovanpå. En enda mättad violett ton bär kontroller, markeringar och framsteg. Liquid Glass hör till systemets kontroller och navigering – flikfältet, den runda Fånga-knappen, lyssningsfältet, inställningspanelen och de framträdande knapparna – och aldrig till anteckningar, transkript eller listor. Typografin är Apples egen: SF Pro i textstilar som skalas med Dynamic Type, och SF Rounded för siffror som ska kännas som en almanacka (veckonumret och datumsiffrorna).
+Världen är en violett tonad mark (blek lila i ljust läge, djup nattviolett i mörkt) med vanliga, ogenomskinliga läsytor ovanpå. En enda mättad violett ton bär kontroller, markeringar och framsteg. Liquid Glass hör till systemets kontroller och navigering – flikfältet, den runda Fånga-knappen, lyssningsfältet, inställningspanelen och de framträdande knapparna – och aldrig till anteckningar, transkript eller listor. Typografin är Apples egen: SF Pro i textstilar som skalas med Dynamic Type, och SF Rounded för datumsiffrorna i veckoraden, så att de känns som en almanacka.
 
 Tätheten är låg och lugn: få val per vy, korta svenska rader, framsteg som syns utan att skuldbelägga. Lyssnandet är diskret i rummet – en liten prick och ett ord, inget rött, ingen vågform.
 
 **Key Characteristics:**
-- Veckonummer i SF Rounded som stor titel; datum och sju dagceller direkt under.
+- Veckonummer som systemets stora titel; datum och sju dagceller direkt under.
 - Violett mark, vanliga paneler med 22 pt kontinuerliga hörn, inga skuggor.
 - En ton för allt interaktivt; tillståndsfärger bara för luckor, varningar och fel.
 - Glas bara på kontroller och navigering; läsytor är alltid ogenomskinliga.
@@ -146,13 +146,13 @@ En enfärgad violett värld: mark, yta och band är tonade varianter av samma ny
 
 ## Typography
 
-**Display Font:** SF Pro Rounded (systemets `.rounded`-design)
+**Display Font:** SF Pro (systemets stora navigeringstitel)
 **Body Font:** SF Pro Text (systemfonten via textstilar)
 
-**Character:** Apples egna textstilar för all läsning, med SF Rounded reserverat för almanackans siffror. Rundningen ger veckonumret och datumen en mjuk, tryckt-kalender-känsla utan att införa en främmande font.
+**Character:** Apples egna textstilar för all läsning, med SF Rounded reserverat för veckoradens datumsiffror. Rundningen ger datumen en mjuk, tryckt-kalender-känsla utan att införa en främmande font.
 
 ### Hierarchy
-- **Display** (bold, 34 pt largeTitle, rundad): navigeringens stora titel, främst "v. 41" på Hem. Sätts globalt via `MioTheme.useRoundedLargeTitles()` och skalas med `UIFontMetrics`.
+- **Display** (bold, 34 pt largeTitle): navigeringens stora systemtitel, främst "v. 41" på Hem. Den skalas med Dynamic Type; en UIKit-ändring till SF Rounded prövades och togs bort, eftersom den inte slog igenom och kunde störa accentfärgen.
 - **Headline** (semibold, title3): `MioSectionTitle` ovanför paneler ("Nästa", "I dag", "Tolv veckor"), markerad som rubrik för VoiceOver.
 - **Title** (semibold, headline): radens huvudtext i paneler ("3 att granska", "dagar med Mio"), datumraden under titeln (i sekundär färg) och knappetiketter.
 - **Body** (regular/medium, body): radtitlar (`MioItemRow`, medium), tomlägesrader (sekundär färg).
@@ -161,7 +161,7 @@ En enfärgad violett värld: mark, yta och band är tonade varianter av samma ny
 - **Day numeral** (medium, title3, rundad, tabellsiffror): datumsiffran i dagcellen; bold för i dag.
 
 ### Named Rules
-**The Rounded Numerals Rule.** SF Rounded används för almanackans siffror – veckonummer och datum – och inte för brödtext eller rubriker.
+**The Rounded Numerals Rule.** SF Rounded används för veckoradens datumsiffror och inte för brödtext eller rubriker.
 
 **The Text Style Rule.** Storlekar anges som textstilar (`.title3`, `.subheadline` …), aldrig som fasta punktvärden, så att Dynamic Type når de största storlekarna.
 
@@ -205,7 +205,7 @@ Formspråket är kontinuerliga rundade rektanglar (`style: .continuous`) i fyra 
 - `MioPanel` är den enda läsytan på Hem. Granskningsraden är en hel panel som länk (ikon i tonen, "3 att granska" i headline, "sparade till senare" i sekundär färg, avslutande chevron i tertiär färg).
 
 ### Navigation
-- Systemets `TabView` med SF Symbols och tonen som markering; Fånga som separat rund knapp. Stora navigeringstitlar i SF Rounded. Verktygsfältet bär "Fråga Mio" till vänster och inställningar till höger.
+- Systemets `TabView` med SF Symbols och tonen som markering; Fånga som femte flik med sökrollen; systemet avgör om den visas som separat rund knapp (i simulatorn för iOS 27 hamnade den i raden). Stora navigeringstitlar i systemets stil. Verktygsfältet bär "Fråga Mio" till vänster och inställningar till höger.
 
 ### Veckoband (signaturkomponent)
 Sju `MioDayCell` med måndag först. Varje cell: veckodagsbokstav (caption semibold, versal, sekundär – tonen när dagen är vald), datumsiffra (title3 rundad, tabellsiffror, sekundär för framtida dagar), och tre 5 pt prickar som fylls i tonen efter aktivitetsnivå 0–3 (ofyllda med 18 % ton). Minsta höjd 76 pt. I dag har 2 pt ring i tonen; vald dag fylls med tonen på 16 %. Hela cellen är en knapp med ett samlat VoiceOver-namn ("söndag 11 oktober, i dag, 3 saker").
@@ -233,5 +233,5 @@ Medvetet diskret: 8 pt prick (ton när den lyssnar, orange vid avbrott, annars s
 - **Don't** lägg Liquid Glass, material eller skuggor på anteckningar, transkript, listor eller paneler.
 - **Don't** inför en andra accentfärg eller använd orange, rött eller grönt för annat än varning, fel och klart.
 - **Don't** gör lyssningsfältet iögonfallande: inget rött, ingen vågform, ingen pulserande animation där.
-- **Don't** använd SF Rounded för brödtext eller rubriker; den hör till veckonummer och datumsiffror.
+- **Don't** använd SF Rounded för brödtext eller rubriker; den hör till veckoradens datumsiffror.
 - **Don't** ange fasta punktstorlekar för text som ska skalas med Dynamic Type.

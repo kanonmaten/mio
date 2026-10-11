@@ -144,7 +144,7 @@
     "typographyMeta": {
       "display": {
         "displayName": "Veckonummer",
-        "purpose": "Stor navigeringstitel i SF Rounded, främst \"v. 41\"."
+        "purpose": "Stor navigeringstitel i systemets stil, främst \"v. 41\"."
       },
       "headline": {
         "displayName": "Sektionsrubrik",

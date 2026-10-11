@@ -110,9 +110,15 @@ struct MioHomeView: View {
                          : MioTimeText.describe(item.scheduledAt, relativeTo: .now, calendar: day.calendar))
             case .none where server.isEmpty:
                 // Unpaired, pairing is the one real next step, so it leads instead of "Klart för i dag".
-                Label("Para datorn för text och AI.", systemImage: "desktopcomputer")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Text("Para datorn för text och AI.")
+                    } else {
+                        Label("Para datorn för text och AI.", systemImage: "desktopcomputer")
+                    }
+                }
+                .font(.body)
+                .foregroundStyle(.secondary)
                 Button(action: openSettings) {
                     Text("Para")
                         .font(.headline)
