@@ -263,8 +263,8 @@ struct MioStoreMigrator: Sendable {
             return .useLegacyFiles(message: Self.saveMessage)
         }
 
-        var marker = MioStoreMigrationMarker(state: .verified, migratedAt: now(), counts: expected)
-        do { try files.writeMarker(marker) } catch {
+        var written = MioStoreMigrationMarker(state: .verified, migratedAt: now(), counts: expected)
+        do { try files.writeMarker(written) } catch {
             // Without a marker the next launch replaces the store from the legacy files again,
             // so this launch must keep writing to those files or its changes would be lost.
             MioLog.error(.storage, "migration marker write failed")
@@ -274,8 +274,8 @@ struct MioStoreMigrator: Sendable {
         MioLog.notice(.storage, "migration verified", value: expected.sessions)
         do {
             try files.moveLegacyFilesToBackup()
-            marker.state = .backedUp
-            try files.writeMarker(marker)
+            written.state = .backedUp
+            try files.writeMarker(written)
         } catch {
             MioLog.error(.storage, "legacy backup move failed")
         }
