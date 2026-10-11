@@ -40,3 +40,5 @@ __pycache__/
 
 # Claude Code agent worktrees
 .claude/worktrees/
+.impeccable/questions/
+.impeccable/config.local.json
