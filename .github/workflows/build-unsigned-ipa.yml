@@ -307,6 +307,22 @@ jobs:
           retention-days: 14
           compression-level: 0
 
+      - name: Skriv små skärmbilder i loggen
+        # Artifact downloads can be unreachable from review sandboxes; small JPEGs in base64
+        # between markers let a reviewer rebuild them from the job log. Simulator only, no user data.
+        if: always()
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          for png in "$RUNNER_TEMP"/Mio-screenshots/*.png; do
+            [ -f "$png" ] || continue
+            name="$(basename "$png" .png)"
+            sips -s format jpeg -s formatOptions 55 -Z 1000 "$png" --out "$RUNNER_TEMP/$name.jpg" >/dev/null
+            echo "MIO-SHOT-BEGIN $name"
+            base64 -i "$RUNNER_TEMP/$name.jpg" | fold -w 3000
+            echo "MIO-SHOT-END $name"
+          done
+
       - name: Spara native diagnostik även vid fel
         if: always()
         uses: actions/upload-artifact@v7

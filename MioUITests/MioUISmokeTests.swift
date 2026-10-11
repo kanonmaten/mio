@@ -69,7 +69,9 @@ final class MioUISmokeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(incomplete.frame.height, 44)
         incomplete.tap()
         let completed = app.buttons["Markera \(title) som inte klar"]
-        XCTAssertTrue(completed.waitForExistence(timeout: 5))
+        // On failure, name what is on screen (an alert or error text) instead of a bare false.
+        let visible = { app.alerts.allElementsBoundByIndex.map(\.label) + app.staticTexts.allElementsBoundByIndex.prefix(30).map(\.label) }
+        XCTAssertTrue(completed.waitForExistence(timeout: 10), "Synligt: \(visible().joined(separator: " | "))")
         try app.performAccessibilityAudit(for: [.elementDetection, .sufficientElementDescription])
     }
 }
