@@ -5,7 +5,7 @@ Mio ska hjälpa en användare att fånga och ordna sin dag: lektioner, antecknin
 ## Produktregler
 
 - **Användaren styr:** tydlig lyssningsstatus, På/Av, paus och radering. När Mio är av används inte mikrofonen; manuellt innehåll fungerar fortfarande.
-- **Privat och användarstyrt:** svensk transkription på egen Pianissimo-server via Tailscale; Mio-detektion och lagring på telefonen. Ljudöverföring bara under användarstartad session, högst 60 s ljud i RAM vid avbrott och inga ljudfiler. Text-AI kräver separat godkännande.
+- **Privat och användarstyrt:** svensk transkription på egen Pianissimo-server via Tailscale; Mio-detektion och lagring på telefonen. Ljudöverföring bara under användarstartad session, högst 60 s ljud i RAM vid avbrott och inga ljudfiler. Text-AI går via användarens egen gateway på datorn, är på när datorn är parad och kan pausas.
 - **Bekräfta före åtgärd:** automatiskt föreslagna planer, uppgifter och minnen är förslag tills användaren godkänner dem. Kalenderposter skapas aldrig tyst.
 - **Diskret återkoppling:** vibration och kort fråga; inget oombett tal. Ja godkänner, Nej glömmer och Inte nu sparar en väntande fråga lokalt.
 - **Synliga minnen:** användaren kan granska, ändra och glömma. Ingen dold profilering eller påstådd kunskap om hur användaren känner.
@@ -15,11 +15,11 @@ Mio ska hjälpa en användare att fånga och ordna sin dag: lektioner, antecknin
 
 | Del | Helhetsbyggets omfattning | Kontroll |
 |---|---|---|
-| Mio | Lokal session, text, serverstatus, paus/stopp samt lokala frågor/förslag | Granskning med Ja/Nej/Inte nu; Enskilda AI-frågor kräver sändningsgodkännande; löpande tolkning kräver aktiverat läge |
+| Hem | Veckoplaneraren: veckonummer, veckans dagar, en tydlig nästa sak, antal att granska, dagens morgon- eller kvällsöversikt och tolv veckors aktivitet | Härlett från lokala data; bara antal, ingen text i aktivitetsrutnätet |
+| Fånga | Lokal session, text, serverstatus, paus/stopp, AI-paus samt lokala frågor/förslag; separat rund knapp i flikfältet | Granskning med Ja/Nej/Inte nu; enskilda frågor skickas direkt men svaret valideras; AI kan pausas |
 | Lektioner | Separat läge pausar vardags-Mio; AI skriver detaljerade kopierbara anteckningar samt separata läxförslag | Originaltext och tider bevaras; AI-utkast har textunderlag |
-| Kalender | Lokala planer och bekräftade systemkalenderkopior | Inga tysta åtgärder eller dold synk |
+| Kalender | Lokala planer per veckonummer och bekräftade systemkalenderkopior | Inga tysta åtgärder eller dold synk |
 | Anteckningar | Anteckningar, uppgifter och uttryckliga minnen | Synliga, redigerbara, raderbara |
-| Morgon | Dagens lokala översikt, kvällsläge, alarm och dagliga notiser | Lokal dataöversikt, ingen påstådd semantisk AI-sammanfattning |
 
 Måendecheckar ska vara frivilliga och förslag tydligt märkta. Mio ersätter inte lärare, vård eller professionell rådgivning. Funktionerna planeras i [roadmapen](ROADMAP.md); faktisk verifiering finns i [status](STATUS.md).
 
@@ -36,3 +36,9 @@ En lektion är ett eget fångstläge med en separat knapp. Vardags-Mio pausas un
 Mio ska bevara detaljerade lektionsanteckningar: förklaringar, begrepp, exempel, arbetssteg och läxor. Användaren kopierar dem till valfri vanlig AI för vidare lärande. Presentationer, frågekort och avancerade undervisningsupplägg ingår inte i Mio. En lektion kan ta flera minuter att bearbeta; utförlighet följer innehållet, inte ett visst sidantal.
 
 AI-leverantör och kompatibel modell byts i Cloudflare, utan modellväljare i appen. Reasoning ska vara av, temperatur 0 och svaren strikt strukturerade. Modeller som inte uppfyller kraven stoppas. Förslag blir inte handlingar utan användarens Ja.
+
+## Veckoplaneraren, 2026-10-11
+
+Användaren valde designen veckoplaneraren: violett grund, vanliga läsytor för anteckningar, transkript och listor, och Liquid Glass bara på flikfält och knappar. Appen har fyra flikar, Hem, Lektioner, Kalender och Anteckningar, och en separat rund mikrofonknapp, Fånga. Morgon-fliken är borta; morgon- och kvällsöversikten finns på Hem. Varje skärm ska ha en tydlig nästa sak.
+
+Samma dag flyttade AI-gatewayen från Cloudflare till användarens dator bredvid Pianissimo, med Groq som enda leverantör. Modell byts på datorn, fortfarande utan modellväljare i appen. Reasoning av, temperatur 0 och strikt schema gäller som förut.

@@ -219,7 +219,9 @@ def main():
     with tempfile.TemporaryDirectory(prefix="mio-capture-recovery-") as temporary:
         directory = Path(temporary)
         program = directory / "capture.swift"
-        program.write_text(BOUNDARY + policy_source() + source + TESTS)
+        # The text-free logger is portable; on Linux its os.Logger branch compiles out.
+        log_source = (ROOT / "Mio/Services/MioLog.swift").read_text().replace("import Foundation\n", "")
+        program.write_text(BOUNDARY + policy_source() + log_source + source + TESTS)
         executable = directory / "capture-tests"
         result = subprocess.run(
             [swiftc, "-swift-version", "5", "-strict-concurrency=complete", "-warn-concurrency",

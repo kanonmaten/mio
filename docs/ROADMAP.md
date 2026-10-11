@@ -8,14 +8,19 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 
 | Område | Implementerad omfattning | Verifieringsgräns |
 |---|---|---|
-| Privat fångst | Privat Pianissimo via Tailscale, begränsade nätomförsök, Mio-detektion, paus/stopp och tidsatta luckor; ingen automatisk mikrofonstart | Fysisk telefon krävs för kvalitet, bakgrund och batteri |
+| Privat fångst | Privat Pianissimo via Tailscale, begränsade nätomförsök, Mio-detektion, paus/stopp och tidsatta luckor; automatisk omstart efter ljudavbrott men aldrig efter användarens paus/stopp | Fysisk telefon krävs för kvalitet, bakgrund och batteri |
 | Innehåll | Fem manuella typer, sökning, redigering, uppgiftsstatus, export/radering | Ren installation och lagring provas på verklig telefon |
 | Assistent | Lokala kommandoförslag och aktiverad AI-tolkning av vanligt samtal; Ja/Nej/Inte nu | Modellkvalitet måste provas; innehåll och datum godkänns manuellt |
 | Lektioner | Separat lektionsläge pausar vardags-Mio; detaljerade delar, manuell fortsättning, kopiering och källrevisioner via godkänd AI | Originaltext/tidsbevis bevaras; äldre/okänt underlag märks, rättningar skickas inte automatiskt |
 | Kalender | Användarbekräftad fristående kalenderkopia | Ingen bakgrundssynk eller läsning av hela kalendern |
 | Alarm/notiser | AlarmKit, engångs-/veckoalarm, postpåminnelse, morgon-/kvällsnotis | Behörighet och leverans måste provas på telefon |
-| Dagen | Lokal morgon- och kvällsöversikt; godkända notiser öppnar rätt lokal vy | Notiser har opaka ID:n utan privata rubriker; ingen molnsammanfattning |
-| AI | Godkänd fråga eller aktiverad löpande tolkning via serverprofiler; anslutning/kapacitet; explicit spara ett svar som anteckning | Av från början; modellfri status bevisar inte leverantörsåtkomst eller kvalitet |
+| Gränssnitt | Veckoplaneraren (2026-10-11): fyra flikar och Fånga, lyssningsrad ovanför flikfältet (iOS 26.1+), Fråga Mio med upp till tre lokala förslag | Läsbarhet, Dynamic Type, mörkt läge, Reduce Motion/Transparency och iPhone 13-layout måste provas på telefon |
+| Hem | Veckonummer, veckans dagar, Nästa, antal att granska, morgon-/kvällsöversikt (kväll från kl. 17) och tolv veckors aktivitet; morgon-/kvällsnotiser öppnar Hem | Härlett från lokala data; notiser har opaka ID:n utan privata rubriker; ingen molnsammanfattning |
+| AI | Gateway på datorn med Groq; löpande tolkning samlad högst var femte minut, enskilda frågor utan förhandsgranskning; anslutning/kvot; explicit spara ett svar som anteckning | På när datorn är parad och kan pausas; modellfri status bevisar inte leverantörsåtkomst eller kvalitet |
+
+## Gateway på datorn och veckoplaneraren, 2026-10-11
+
+AI-gatewayen kör nu på användarens dator med Groq ([beslut](DECISIONS.md#ai-gatewayen-på-datorn-med-groq-2026-10-11)); Cloudflare-avsnitten nedan är historik. Nedmontering av den publicerade Cloudflare-gatewayen och byte av den gamla Groq-nyckeln kräver separat godkännande. Appen får designen veckoplaneraren ([beslut](DECISIONS.md#veckoplaneraren-2026-10-11)). Nästa steg: Linuxgrinden och Swift-grinden i GitHub för exakt commit, därefter IPA och telefonprov enligt [helhetstestet](TESTPLAN_HELHET.md).
 
 ## Textleverantör, 2026-10-05
 

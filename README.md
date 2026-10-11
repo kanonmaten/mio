@@ -2,20 +2,21 @@
 
 Privat SwiftUI-app för iOS 26+ (första testtelefon iPhone 16 Pro, senare även iPhone 13): privat svensk transkription via Pianissimo på egen CachyOS-dator, anteckningar, planering och en diskret vardagsassistent. Ingen App Store-distribution.
 
-**Aktuellt helhetsbygge: 0.9.0 — ej släppt.** Pianissimo-, bakgrunds-, inställnings- och AI-/lektionsändringar i arbetskopian är ännu inte Xcode-byggda eller publicerade; den befintliga build 5 innehåller dem inte. Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
+**Aktuellt helhetsbygge: 0.9.0 — ej släppt.** Design-, Pianissimo-, bakgrunds-, inställnings- och AI-/lektionsändringar i arbetskopian är ännu inte Xcode-byggda eller publicerade; den befintliga build 5 innehåller dem inte. Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
 
 [Planen för tillförlitlighet](PLAN.md) styr 0.9.0; [status](docs/STATUS.md) visar verifierat läge och återstående acceptansprov.
 
 ## Funktioner
 
-- **Native gränssnitt:** Liquid Glass för sessionskontroller, systemnavigation och flikar; semantiska läsytor, Dynamic Type och minskad rörelse.
-- **Mio:** transkription via Tailscale, manuell fortsättning efter paus/ljudavbrott, Mio-tilltal och förslag med **Ja / Nej / Inte nu**. Mikrofon, transkriptionsanslutning och text-AI visas separat. Förslag granskas med versionskontroll; en senare komplettering kräver ny granskning och bevarar dina utkaständringar.
+- **Veckoplaneraren (design vald 2026-10-11):** violett grund, vanliga läsytor och Liquid Glass bara på flikfält och knappar; Dynamic Type och minskad rörelse. Fyra flikar, **Hem, Lektioner, Kalender, Anteckningar**, och en separat rund mikrofonknapp, **Fånga**, längst till höger i flikfältet.
+- **Hem:** veckonumret som rubrik, veckans sju dagar (tryck på en dag, pilarna byter vecka, **I dag** går tillbaka), **Nästa** med en enda åtgärd, **N att granska**, dagens översikt med Morgon/Kväll (kväll från kl. 17) och ett rutnät över tolv veckor som bara räknar aktivitet. Morgon- och kvällsnotiser öppnar Hem.
+- **Fånga:** transkription via Tailscale, automatisk omstart efter ljudavbrott (aldrig efter din paus eller ditt stopp), Mio-tilltal och förslag med **Ja / Nej / Inte nu**. Mikrofon, transkriptionsanslutning och text-AI visas separat. Förslag granskas med versionskontroll; en senare komplettering kräver ny granskning och bevarar dina utkaständringar.
 - **Lektioner:** separat Starta lektion-knapp pausar vardags-Mio. AI kan skriva detaljerade, kopierbara anteckningar efter avslut, med separata läxförslag. Färdiga delar sparas för manuell fortsättning efter avbrott. Anteckningar visar om källtexten är aktuell, äldre eller saknar revisionsunderlag. En rättning ändrar inte sparade delar och skickar inget automatiskt. Äldre sessioner, manuella tidsintervall och råtext finns under Historik och råtext.
-- **Kalender:** lokala planer och användarbekräftade kopior till Apple Kalender.
+- **Kalender:** lokala planer grupperade per veckonummer och användarbekräftade kopior till Apple Kalender.
 - **Anteckningar:** sökbara anteckningar, uppgifter och synliga uttryckliga minnen.
-- **Morgon/Kväll:** lokal dagsöversikt, avklarade uppgifter, sessioner och lektioner; uppdatering vid foreground, dag-/tidszonsbyte och generella dagliga notiser som öppnar dagens översikt.
+- **Lyssningsraden:** ovanför flikfältet medan en session pågår (iOS 26.1+), med en diskret prick, kort status och paus/fortsätt; tryck för Fånga. På iOS 26.0 visar Live Activity läget.
 - **Alarm och påminnelser:** AlarmKit-alarm, återkommande veckodagar och lokala notiser. Behörigheter begärs först när du sparar en systemåtgärd.
-- **Valfri AI:** aktivera löpande analys av nya textutdrag för planer/uppgifter utan Mio-tilltal, eller ställ en enskild fråga med förhandsgranskning. Av vid appstart. Ett modellfritt anslutningsprov visar autentisering, protokoll, release, uppgiftsprofiler och delad kapacitet; det bevisar inte leverantörsbehörighet eller modellkvalitet. Modellen väljs på servern (nu Groq med Qwen 3.8 27B, se [katalogen](server/README.md)), med reasoning av, temperatur 0 och strikt schema. Ändrad konfiguration kräver ny granskning/aktivering. Alla uppgifter delar en minutgräns; någon dagsgräns finns bara om servern sätter en.
+- **AI:** på när datorn är parad (beslut 2026-10-11) och kan pausas på Fånga eller under Inställningar → AI. Nya textutdrag analyseras löpande för planer/uppgifter utan Mio-tilltal, samlat högst var femte minut. **Fråga Mio** (knapp på Hem och Fånga) skickar en enskild fråga direkt och visar upp till tre färdiga frågor som bara fyller i textfältet. Ett modellfritt anslutningsprov visar autentisering, protokoll, release, uppgiftsprofiler och kvot; det bevisar inte leverantörsbehörighet eller modellkvalitet. Gatewayen kör på din dator med Groq och Qwen 3.8 27B ([gatewayguiden](server/README.md)), med reasoning av, temperatur 0 och strikt schema. Gränserna är tre anrop per minut och 190 000 token per dygn.
 - **Tillfälligt AI-svar:** granska och redigera svaret innan du uttryckligen sparar det som en vanlig lokal anteckning. Ingen frågehistorik, extra AI-komprimering eller systemåtgärd skapas av svaret.
 - Lokal versionsmärkt JSON-export och återupptagbar radering av appdata, egna alarm/notiser och serveranslutningar. Raderingsfel visas med nästa steg. Inget råljud sparas.
 
@@ -26,7 +27,7 @@ Utan AI används en enkel lokal kommandogrammatik. Med aktiverad AI kan även va
 1. Läs [användarguiden](docs/ANVANDNING.md) och sätt upp [Pianissimo, systemd och Tailscale](transcription-server/README.md).
 2. Bygg och installera enligt [installation](docs/INSTALLATION.md). Linux kan inte bygga iOS-appen.
 3. Kör [verifieringen](docs/INSTALLATION.md#verifiera-före-bygge) och [helhetstestet](docs/TESTPLAN_HELHET.md) med syntetiska data, inklusive mätprotokollet, före vardagsanvändning.
-4. Om du vill använda moln-AI: följ [Cloudflare-guiden](server/README.md) (leverantör, tokens, Access och publicering), eller [serverguiden](server/README.md) för egen värd. Manuella poster fungerar utan server. Ljudtranskription kräver din Pianissimo-dator.
+4. För AI: installera gatewayen på datorn och para telefonen med QR-koden enligt [gatewayguiden](server/README.md). Manuella poster fungerar utan dator. Ljudtranskription kräver din Pianissimo-dator.
 
 ## Utveckling
 
@@ -42,6 +43,6 @@ Läs [CLAUDE.md](CLAUDE.md) (instruktioner för Claude Code), [vision](docs/PROD
 
 ## Integritet och kompatibilitet
 
-Lyssningen startas av dig. Ljudet skickas då till din privata server, med högst 60 s ljud i telefonens RAM och inga ljudfiler. Inställningar nås via kugghjulet på varje flik. Spela bara in andra med tydligt samtycke och enligt lokala regler. Exporter kan innehålla känslig text och ska förvaras privat utanför repot. Kalenderkopior kan synkas via ditt kalenderkonto; molnfrågor skickas bara efter ditt godkännande.
+Lyssningen startas av dig. Ljudet skickas då till din privata server, med högst 60 s ljud i telefonens RAM och inga ljudfiler. Inställningar finns i en panel som glider in från höger. Spela bara in andra med tydligt samtycke och enligt lokala regler. Exporter kan innehålla känslig text och ska förvaras privat utanför repot. Kalenderkopior kan synkas via ditt kalenderkonto. När AI är på skickas text via din dator till Groq; förslag sparas först efter ditt Ja.
 
-Appidentiteten är `app.mio.assistant`. De tre domänlagren är `Mio/content-v1.json`, `Mio/sessions.json` och `Mio/assistant-v1.json`; därtill finns textfri `Mio/diagnostics-v1.json` och en liten ID-baserad raderingsjournal, `Mio/operations-v1.json`. Se [datamodellen](docs/DATAMODELL.md) för skydd, export och återhämtning. Det är en ren installation utan migrering från prototyperna. Projekt, app-target, scheme och produkt heter **Mio**; versionsnumret ligger separat i Xcode.
+Appidentiteten är `app.mio.assistant`. Sessioner, innehåll och assistentdata ligger i SwiftData (`Mio/store/Mio.store`), migrerat en gång från `content-v1.json`, `sessions.json` och `assistant-v1.json`; textfri `Mio/diagnostics-v1.json`, `Mio/metrickit-v1.json` och den ID-baserade raderingsjournalen `Mio/operations-v1.json` är kvar som JSON. Se [datamodellen](docs/DATAMODELL.md) för skydd, export och återhämtning. Ingen data migreras från prototyperna. Projekt, app-target, scheme och produkt heter **Mio**; versionsnumret ligger separat i Xcode.

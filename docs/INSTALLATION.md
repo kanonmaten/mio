@@ -1,6 +1,6 @@
 # Bygga och installera Mio
 
-Det nya bygget kräver även [CachyOS/Pianissimo/Tailscale-installation](../transcription-server/README.md). Återanslut Tailscale efter SideStore/LocalDevVPN och kontrollera servern i Mio. Ingen ny IPA har byggts för arbetskopian.
+Det nya bygget kräver även [CachyOS/Pianissimo/Tailscale-installation](../transcription-server/README.md) och, för AI, [gatewayen på samma dator](../server/README.md). Återanslut Tailscale efter SideStore/LocalDevVPN och kontrollera servern i Mio. Ingen ny IPA har byggts för arbetskopian.
 
 Första testtelefon: iPhone 16 Pro. iPhone 13 provas senare. Lägsta iOS-version: 26.0; Xcode 27 och iOS 27 SDK används för bygget. Aktuellt helhetsbygge: **0.9.0, ej släppt**. [Status](STATUS.md) visar vad som faktiskt har byggts och provats.
 
@@ -14,7 +14,7 @@ Huvudvägen är **GitHub Actions → osignerad IPA → SideStore**. Koden kan re
 2. Öppna repots **Actions → Bygg Mio IPA → Run workflow** och välj branch.
 3. Workflowen använder ett jobb med etiketten `xcode-27`: osignerad Release med iOS 27 SDK, separat strikt concurrencydiagnostik, XCTest inklusive tre UI-smokeprov på en tillgänglig iOS 27-simulator och IPA-validering. Kontrollera faktisk tilldelad runner, Xcode-/SDK-version, simulator, diagnostik och slutresultat för samma commit. En runneretikett eller köad körning bevisar inte att miljön är tillgänglig. Bygget kontrollerar att appens lägsta iOS-version är 26.0.
 4. Hämta artifacten **Mio-IPA**. Packa upp artifact-ZIP en gång; behåll själva IPA:n orörd. Innehåll: `Mio-unsigned.ipa` och `Mio-buildinfo.txt`. Artifacts sparas enligt workflowen i 14 dagar.
-5. Behåll bygginformationen med commit, körnings-ID, verktygsversioner och SHA-256 samt test-/diagnostikloggarna. Registrera gatewayens separata release/bundeldigest och konfigurationsrevision för AI-proven. Flytta IPA:n till Filer på iPhone via en betrodd privat filväg.
+5. Behåll bygginformationen med commit, körnings-ID, verktygsversioner och SHA-256 samt test-/diagnostikloggarna. Registrera gatewayens separata release och konfigurationsrevision för AI-proven. Flytta IPA:n till Filer på iPhone via en betrodd privat filväg.
 6. Installera som **ny app** med bundle identifier `app.mio.assistant`. Prototypen är redan raderad och dess data migreras inte. Vid framtida uppdateringar av denna app behålls den nya identiteten och ditt signeringskonto.
 7. Anslut iPhone till Wi-Fi och LocalDevVPN. Öppna **SideStore → My Apps → +** och välj IPA:n.
 8. Öppna Mio och kör [helhetstestet](TESTPLAN_HELHET.md), med ren första start och persistens först. Prova enligt [mätprotokollet](TESTPLAN_HELHET.md#mätprotokoll-och-resultatmall) på iPhone 16 Pro och därefter iPhone 13, med exakt iOS-version. iOS 27-bygge och simulatorresultat bevisar inte funktion på iOS 26 eller 27 i fysisk telefon. Kör privat Pianissimo och de dokumenterade ljud-/nät-/långproven; äldre Apple-prov är historik.
@@ -47,13 +47,13 @@ Kräver en Mac som stöder vald Xcode-version och telefonens iOS. Kontrollera [A
 6. Välj scheme **Mio**, fysisk iPhone och **Product → Run** (`⌘R`). Godkänn utvecklarcertifikatet i telefonens **VPN och enhetshantering** om det krävs.
 7. Välj en iPhone-simulator och kör **Product → Test** (`⌘U`) för XCTest. Byt tillbaka till telefonen för verkligt ljudtest.
 
-Tester finns i `MioTests/`: modeller, actorägda lagringspatchar, workflow, förslag, lektioner, avbrott, återupptagbar radering, export och Mio-detektion. `MioUITests/` innehåller tre mindre native smoke-/tillgänglighetsprov. Säkra server-/Worker-/Python-/portableprov körs via [verifieringen](#verifiera-före-bygge). Projektets `Info.plist` innehåller bakgrundsläget `audio`; mikrofonen kräver ändå nytt användartryck efter avbrott/reset/tvångsavslutning. Simulatorns ljudbeteende ersätter inte fysisk telefon.
+Tester finns i `MioTests/`: modeller, actorägda lagringspatchar, workflow, förslag, lektioner, avbrott, återupptagbar radering, export och Mio-detektion. `MioUITests/` innehåller tre mindre native smoke-/tillgänglighetsprov. Säkra gateway-/Python-/portableprov körs via [verifieringen](#verifiera-före-bygge). Projektets `Info.plist` innehåller bakgrundsläget `audio`; efter avbrott och reset startar Mio mikrofonen igen själv, men efter tvångsavslutning krävs ett nytt användartryck. Simulatorns ljudbeteende ersätter inte fysisk telefon.
 
 ## Första körning och felsökning
 
 | Situation | Åtgärd |
 |---|---|
-| Första start | Gå igenom fem flikar, spara/testa privat transkriptionsanslutning och tillåt mikrofonen vid uttrycklig sessionsstart |
+| Första start | Gå igenom de fyra flikarna och Fånga, para datorn och tillåt mikrofonen vid uttrycklig sessionsstart |
 | Transkription offline | Följ Pianissimo-guiden: dator vaken, systemd redo, Tailscale på båda enheterna, rätt HTTPS-adress/token. Build 5 kan inte använda ljudservern |
 | Mikrofon nekad | Aktivera Mio under **Integritet och säkerhet → Mikrofon** |
 | Texten stannar efter ljudavbrott/ljudvägsbyte | Mio ska starta om mikrofonen själv eller visa notisen "Tryck för att fortsätta lyssna". Annars: kontrollera mikrofon-/transkriptionsstatus, välj Fortsätt och spara observationen med textfri händelselogg |
@@ -68,13 +68,13 @@ Spela bara in personer som tydligt samtycker och följ lokala regler. Använd sy
 
 ## Användning och valfri server
 
-Efter installation: följ [användarguiden](ANVANDNING.md). AI är avstängd från början och kräver [separat serverkonfiguration](../server/README.md); ingen leverantörsnyckel ska anges i iPhone-appen. Testa text-AI-anslutningen utan modelltrafik före en fråga. Statusprovet visar konfiguration och autentisering, inte verifierad modellåtkomst/kvalitet. Alarm och notiser begär egna tillstånd först vid Spara. Kalenderkopior granskas och sparas i Apples editor.
+Efter installation: följ [användarguiden](ANVANDNING.md). AI kräver [gatewayen på din dator](../server/README.md), installerad med `server/install.sh` och parad med QR-koden från `mio-pair`; därefter är AI på tills du pausar den. Ingen leverantörsnyckel ska anges i iPhone-appen. Mio gör en kontroll utan modelltrafik efter parningen. Statusprovet visar konfiguration och autentisering, inte verifierad modellåtkomst/kvalitet. Alarm och notiser begär egna tillstånd först vid Spara. Kalenderkopior granskas och sparas i Apples editor.
 
 ## Leverantörsbyte och ny lektionsvy
 
-Arbetskopians utökning är inte med i build 5 ovan. Publicera först den avsedda gatewaybundeln med kompatibel konfiguration efter godkännande, läsverifiera aktiv release och skyddad status, bygg därefter aktuell apprevision i Xcode/Actions och installera dess IPA. Höj byggnumret inför den nya distribuerade builden. Nya AI-flöden kräver skyddad `/v2/status` och dess observerade konfigurationsrevision; detaljerade lektioner använder `/v1/lesson-notes`. Gamla klienters v1-rutter behålls, men det gör inte en gammal gateway kompatibel med den nya klienten. Verkliga syntetiska modellanrop kräver separat sändningsgodkännande.
+Arbetskopians utökning är inte med i build 5 ovan. Uppdatera först gatewayen på datorn med `./server/install.sh`, kontrollera aktiv release och skyddad status utan modelltrafik, bygg därefter aktuell apprevision i Xcode/Actions och installera dess IPA. Höj byggnumret inför den nya distribuerade builden. Nya AI-flöden kräver skyddad `/v2/status` och dess observerade konfigurationsrevision; detaljerade lektioner använder `/v1/lesson-notes`. Gamla klienters v1-rutter behålls, men det gör inte en gammal gateway kompatibel med den nya klienten. Verkliga syntetiska modellanrop kräver separat sändningsgodkännande.
 
-När båda är uppdaterade görs modell-/leverantörsbyte per serveruppgift enligt [Cloudflare-guiden](../server/README.md), utan modellväljare eller ytterligare IPA. Slå av AI under bytet, gör det modellfria anslutningsprovet igen och granska en ny sändning/aktivering. Ett 409-konfigurationsfel skickar inte om frågan automatiskt. Hemligheter kopieras aldrig till repot. Pianissimo installeras separat enligt driftguidens uttryckliga källsökvägar: endast låsta paketfiler/Python-kod går till `/opt/mio-transcription`, systemd-unit separat; hela Mio-repot eller utvecklingsmiljön ska inte kopieras.
+När båda är uppdaterade görs modell-/leverantörsbyte på datorn enligt [gatewayguiden](../server/README.md), utan modellväljare eller ytterligare IPA. Groq är tills vidare enda leverantör. Pausa AI under bytet, gör det modellfria anslutningsprovet igen och granska en ny sändning/aktivering. Ett 409-konfigurationsfel skickar inte om frågan automatiskt. Hemligheter kopieras aldrig till repot. Pianissimo installeras separat enligt driftguidens uttryckliga källsökvägar: endast låsta paketfiler/Python-kod går till `/opt/mio-transcription`, systemd-unit separat; hela Mio-repot eller utvecklingsmiljön ska inte kopieras.
 
 ## Verifiera före bygge
 
@@ -91,7 +91,7 @@ python3 "$mio_repo_directory/scripts/verify.py"
 | Grind | Täcker | Täcker inte |
 |---|---|---|
 | Struktur | Projektidentitet, targets, länkar, integritets-/konfigurationsregler, workflowinställningar | SwiftUI/iOS-bygge |
-| Node och Worker | Gateway, adaptrar, routing, kvot, deadlines och det byggda Worker-paketet med fixtures | Nyckel, modellåtkomst, modellkvalitet, aktiv Access/D1 |
+| Node-gateway | Gateway, Groq-adapter, routing, kvot och sparade räknare, deadlines med fixtures | Nyckel, modellåtkomst, modellkvalitet, installerad tjänst och Tailscale på datorn |
 | Privat transkriptions-API | Låst Pythonmiljö, API/cache/deadline med fake-backend | Pianissimo, GPU, svensk kvalitet |
 | Portable Swift, capture recovery, strikt concurrency | Modeller, actorpatchar, workflows, återhämtning | AVFoundation, Keychain, URLSession, UIKit/SwiftUI, iOS-filskydd |
 | Långhistorik (valfri) | Syntetisk session-store: kodning, patchskrivning, processminne | iPhone, ljud, batteri |
@@ -100,4 +100,4 @@ Resultat: `PASS (Linux synthetic gates)`, `FAIL` (exitkod 1) eller `UNAVAILABLE`
 
 Native: workflowen **Bygg Mio IPA** kör concurrencydiagnostik, Release, XCTest med tre UI-smokeprov och IPA-validering. På en Mac kan concurrencygrinden köras direkt med `python3 scripts/verify_concurrency.py --native --log /tmp/mio-native-concurrency.log`. Bevara loggar, `.xcresult`, körnings-URL och `Mio-buildinfo.txt`.
 
-Gatewaypublicering och verkliga syntetiska modellanrop kräver var sitt uttryckligt godkännande. Loggar får bara innehålla textfri diagnostik; källtext, frågor, svar, råljud, tokens, fulla adresser och privata exporter hör inte hemma i loggar eller repo.
+Verkliga syntetiska modellanrop kräver uttryckligt godkännande. Loggar får bara innehålla textfri diagnostik; källtext, frågor, svar, råljud, tokens, fulla adresser och privata exporter hör inte hemma i loggar eller repo.

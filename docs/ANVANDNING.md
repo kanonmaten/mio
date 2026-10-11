@@ -4,7 +4,7 @@ Detta är guiden för helhetsbygget 0.9.0. Koden behöver först byggas och inst
 
 ## Första gången
 
-Öppna de fem flikarna. Du kan skriva manuella poster direkt, utan mikrofon, notiser eller AI. **Inställningar → Så använder du Mio** innehåller en kort guide i appen.
+Flikfältet har fyra flikar, **Hem**, **Lektioner**, **Kalender** och **Anteckningar**, och längst till höger en rund mikrofonknapp, **Fånga**. Knappen öppnar Fånga men startar aldrig mikrofonen själv. Du kan skriva manuella poster direkt, utan mikrofon, notiser eller AI. **Inställningar → Så använder du Mio** innehåller en kort guide i appen.
 
 Alla inställningar finns i en panel som glider in från höger: tryck kugghjulet uppe till höger eller svep in från skärmens högra kant. Stäng med **Klar**, ett tryck utanför eller ett svep åt höger. Panelen är en enda sida med avsnitten Dator, AI, Lektioner, Påminnelser, Mio, Integritet och data samt Om.
 
@@ -16,8 +16,8 @@ Mikrofon, transkriptionsanslutning och text-AI visas separat. En aktiv mikrofon 
 
 ## Fånga och ordna
 
-1. Tryck **Starta Mio** och tillåt mikrofonen. Paus/stopp stänger mikrofonen.
-2. AI är på när datorn är parad. Säg exempelvis ”Vi ses på biblioteket på tisdag klockan 15”; Mio-tilltal behövs inte. Nytt vardagstal samlas och skickas högst var femte minut. Granska förslagen i inkorgen.
+1. Öppna **Fånga**, tryck **Starta Mio** och tillåt mikrofonen. Paus/stopp stänger mikrofonen. Medan en session pågår visar lyssningsraden ovanför flikfältet en diskret prick och läget (**Lyssnar**, **Lektion** eller **Pausad**) med paus/fortsätt; tryck på raden för att öppna Fånga. Raden kräver iOS 26.1; på 26.0 visar Live Activity läget.
+2. AI är på när datorn är parad. Säg exempelvis ”Vi ses på biblioteket på tisdag klockan 15”; Mio-tilltal behövs inte. Nytt vardagstal samlas och skickas högst var femte minut. Granska förslagen via **N att granska** på Hem.
 3. Tryck **Starta lektion**, ange ämne och starta. Vardags-Mio pausas. Ljudet transkriberas privat på din dator; texten sparas lokalt utan ljudfil.
 4. Välj **Avsluta lektionen**. Med AI aktiverad bearbetas texten i delar till huvudpunkter, exempel och läxförslag. Läs dem i **Lektioner**, öppna Textunderlag för att kontrollera citatet. AI kan missa eller misstolka viktigt innehåll.
 5. Tryck **Fortsätt Mio** för att återuppta den pausade vardagslyssningen. Mikrofonen startar inte automatiskt efter lektionen.
@@ -34,7 +34,7 @@ Säg till exempel:
 - **Mio, planera tandläkaren.**
 - **Mio, kom ihåg att jag föredrar blå pennor.**
 
-Tydliga Mio-kommandon blir lokala frågor i **Mio → Förslag att granska**. Vanlig konversation blir inte automatiskt ett minne. Du kan även använda plusknappen i inkorgen för att skriva ett förslag själv, eller **Hitta lokala Mio-förslag** inne i en sparad session.
+Tydliga Mio-kommandon blir lokala frågor i inkorgen **Förslag**, som du öppnar med **N att granska** på Hem. Vanlig konversation blir inte automatiskt ett minne. Du kan även använda plusknappen i inkorgen för att skriva ett förslag själv, eller **Hitta lokala Mio-förslag** inne i en sparad session.
 
 Öppna frågan och kontrollera **typ, rubrik, text, datum och tid**. Lokala kommandon tolkar inte datum. AI kan föreslå en tid, men du måste markera att datum och tid är kontrollerade före Ja för AI-planer/uppgifter. Om klockslag saknas ber Mio dig välja det.
 
@@ -54,6 +54,8 @@ Markera uppgifter klara eller öppna dem igen. Synliga minnen kan ändras och ra
 
 ## Kalender och påminnelser
 
+**Kalender** visar kommande planer grupperade per vecka, till exempel **Den här veckan · v. 41** och **Nästa vecka · v. 42**. **Lektioner** visar veckonumret vid varje lektion.
+
 Skapa först en plan i **Kalender** eller en uppgift i **Anteckningar**. Öppna den sparade posten:
 
 - **Lägg en kopia i Kalender:** granska uppgifterna i Apples editor och spara eller avbryt. Kontrollera kalender, start/slut och eventuell notifiering där. Kopian är fristående och kan synkas via kalenderkontot.
@@ -64,15 +66,22 @@ Skapa först en plan i **Kalender** eller en uppgift i **Anteckningar**. Öppna 
 
 Under **Inställningar → Påminnelser** kan du skapa fristående alarm, välja veckodagar, se kommande notiser och ta bort dem. Låsskärmen visar generell Mio-text. Prova ett alarm ett par minuter framåt innan du förlitar dig på det.
 
-## Morgon och kväll
+## Hem
 
-**Morgon** visar dagens planer, uppgifter och sådant som ligger kvar sedan tidigare. Byt till **Kväll** för avklarade uppgifter, anteckningar och dagens sessions-/lektionstal. Välj datum för en annan dag.
+Hem är veckoplaneraren. Rubriken är veckonumret, till exempel **v. 41**. Under den finns veckans sju dagar, med i dag inringad och små streck för hur mycket som hänt. Tryck på en dag för att se den, byt vecka med pilarna och tryck **I dag** för att komma tillbaka.
 
-Översikten räknar och visar sparat innehåll lokalt och uppdateras när du återvänder till appen, vid dagbyte och ändrad tidszon. En uttryckligen vald historisk dag behålls vid vanlig uppdatering. Dagliga påminnelser för morgon och kväll ställs in under **Inställningar → Påminnelser**; de visar generell text och öppnar dagens motsvarande översikt. En postnotis öppnar den lokala posten; om den är raderad går du säkert tillbaka till dagsfliken. Ingen notisöppning startar mikrofon, AI eller en systemåtgärd.
+- **Nästa** visar en enda sak att göra i dag, eller **Starta Mio** när inget är planerat.
+- **N att granska** öppnar förslagsinkorgen.
+- Dagens översikt har **Morgon** och **Kväll**. Morgon visar planer, uppgifter och sådant som ligger kvar sedan tidigare. Kväll visar avklarade uppgifter, anteckningar och dagens antal sessioner och lektioner. Från kl. 17 visar Hem kvällen.
+- **Tolv veckor** är ett rutnät över dagar då du använt Mio. Det räknar bara sessioner och poster och läser ingen text.
+
+**Fråga Mio** finns uppe till vänster på Hem och Fånga.
+
+Översikten räknar och visar sparat innehåll lokalt och uppdateras när du återvänder till appen, vid dagbyte och ändrad tidszon. En uttryckligen vald historisk dag behålls vid vanlig uppdatering. Dagliga påminnelser för morgon och kväll ställs in under **Inställningar → Påminnelser**; de visar generell text och öppnar Hem med morgon- respektive kvällsöversikten. En postnotis öppnar den lokala posten; om den är raderad går du säkert tillbaka till Hem. Ingen notisöppning startar mikrofon, AI eller en systemåtgärd; undantaget är **Tryck för att fortsätta lyssna**, som öppnar Fånga och fortsätter en session du själv startat.
 
 ## AI
 
-AI är på från början när datorn är parad (beslut 2026-10-11) och startar när appen öppnas. Pausa med reglaget på Mio-fliken eller under **Inställningar → AI**; pausen sparas tills du slår på AI igen. Ingen text skickas medan AI är pausad.
+AI är på från början när datorn är parad (beslut 2026-10-11) och startar när appen öppnas. Pausa med reglaget på **Fånga** eller under **Inställningar → AI**; pausen sparas tills du slår på AI igen. Ingen text skickas medan AI är pausad.
 
 - **Vardag:** nytt vardagstal samlas och skickas högst var femte minut, så att en dags lyssning ryms i Groqs gratiskvot (200 000 token per dygn). Paus/stopp skickar redan fångad text direkt.
 - **Lektioner:** delarna skickas med minst 60 sekunder emellan.
@@ -81,7 +90,7 @@ AI är på från början när datorn är parad (beslut 2026-10-11) och startar n
 
 **Kontrollera anslutningen** under Dator och **AI → Kapacitet och uppgifter** gör modellfria statusanrop: gatewayversion, profiler och återstående dagskvot. De bevisar inte modellens svarskvalitet.
 
-**Enskilda frågor:** öppna **Mio → Fråga Mio med AI**, skriv frågan, välj vid behov enstaka poster eller sessionsutdrag och tryck **Skicka frågan**. Frågan skickas direkt utan förhandsgranskning; svaret valideras innan det visas. Svaret kan innehålla fel och utför inga åtgärder. Det försvinner när du lämnar vyn om du inte väljer **Granska och spara som anteckning**. En skickad fråga kan inte återkallas.
+**Enskilda frågor:** tryck **Fråga Mio** på Hem eller Fånga. Upp till tre färdiga frågor, byggda på telefonen från senaste lektionen och nästa plan eller uppgift, kan fylla i textfältet; inget skickas förrän du själv skickar. Skriv eller ändra frågan, välj vid behov enstaka poster eller sessionsutdrag och tryck **Skicka frågan**. Frågan skickas direkt utan förhandsgranskning; svaret valideras innan det visas. Svaret kan innehålla fel och utför inga åtgärder. Det försvinner när du lämnar vyn om du inte väljer **Granska och spara som anteckning**. En skickad fråga kan inte återkallas.
 
 ## Exportera och radera
 

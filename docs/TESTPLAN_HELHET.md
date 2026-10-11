@@ -15,7 +15,7 @@ Gäller helhetsbygget 0.9.0. Alla telefonprov nedan är instruktioner, inte kör
 | ID | Gör så här | Förväntat |
 |---|---|---|
 | H01 | Öppna en ren installation. Skapa en manuell post och en kort session, stoppa och starta om appen. | Data finns kvar efter omstart. Ingen mikrofon eller molnfråga startas av sig själv. |
-| H02 | Öppna alla fem flikar. Skapa anteckning, uppgift, plan, uttryckligt minne och tidslinjepost. Prova tom rubrik. | Giltiga poster sparas, tom rubrik avvisas. Svensk sökning `ovning` hittar `Övning`. |
+| H02 | Öppna de fyra flikarna Hem, Lektioner, Kalender och Anteckningar samt den runda knappen Fånga. Skapa anteckning, uppgift, plan, uttryckligt minne och tidslinjepost. Prova tom rubrik. | Fånga öppnas utan att mikrofonen startar. Giltiga poster sparas, tom rubrik avvisas. Svensk sökning `ovning` hittar `Övning`. Kalender grupperar kommande planer per veckonummer. |
 | H03 | Starta session, säg ”Vi arbetar med procent. Mio, anteckna att vi behöver öva mer.” | Svensk text visas. Förslaget syns i inkorgen. I förgrunden kan Mio ge vibration. Ingen post eller systemåtgärd skapas ännu. |
 | H04 | Säg ”Mio, påminn mig att ta med boken”, ”Mio, planera tandläkaren” och ”Mio, kom ihåg att jag föredrar blå pennor”. | Förslag får rätt typ. Datumet måste väljas i granskningen; fri text skapar ingen dold tidsbokning. |
 | H05 | Ändra rubrik och tid på ett förslag; välj Ja. Välj Inte nu på ett annat och Nej på ett tredje. Öppna om sessionen och välj Hitta lokala Mio-förslag. | Exakt en godkänd post. Uppskjuten fråga finns kvar efter omstart. Avvisat förslag återkommer inte från samma textdel. Originaltranskript finns kvar. |
@@ -24,11 +24,13 @@ Gäller helhetsbygget 0.9.0. Alla telefonprov nedan är instruktioner, inte kör
 | H08 | Öppna sparad plan → Lägg en kopia i Kalender. Avbryt första gången; spara andra gången. | Bara den sparade kopian finns i vald kalender. Mio läser inte hela kalendern. Ändrad lokal plan ändrar inte kalenderkopian. |
 | H09 | Skapa en postpåminnelse två minuter framåt och lås telefonen. Öppna notisen vid kall och varm appstart; prova även en raderad post. | Tillstånd efterfrågas vid Spara. Generell text, endast opakt ID i rutten. Befintlig post öppnas; raderad post ger säker fallback. Ingen mikrofon-/AI-/systemåtgärd startas. |
 | H10 | Skapa ett alarm två minuter framåt. Lås telefonen och prova även med Fokus/tyst läge. Stoppa alarmet; skapa och ta bort ett veckoalarm. | Systemalarmet visas/ljuder enligt telefonens AlarmKit-beteende. Stoppa och avbryt fungerar. Inga privata posttexter på låsskärmen. |
-| H11 | Skapa dagens plan, öppen uppgift och avklarad uppgift. Öppna Morgon/Kväll och välj historiskt datum. Prova foreground över midnatt, flera dagars uppehåll och tidszonsbyte, samt öppna daglig notis. | Dagens listor uppdateras; historiskt datum bevaras vid vanlig uppdatering. Daglig notis öppnar dagens rätta period. Klarstatus/notislista stämmer; inga automatiska mikrofonstarter. |
+| H11 | Skapa dagens plan, öppen uppgift och avklarad uppgift. Öppna Hem, växla Morgon/Kväll och välj en tidigare dag i veckoraden. Öppna Hem före och efter kl. 17. Prova foreground över midnatt, flera dagars uppehåll och tidszonsbyte, samt öppna morgon- och kvällsnotis. | Dagens listor uppdateras; vald dag bevaras vid vanlig uppdatering. Hem visar kväll från kl. 17. Notisen öppnar Hem med rätt period. Klarstatus/notislista stämmer; inga automatiska mikrofonstarter. |
 | H12 | Slå på flygplansläge. Skapa, sök, redigera och radera lokal data. | Manuella funktioner fungerar; servertranskription visar offline och aktiv session begränsar ljudkön. AI misslyckas begripligt utan automatisk retry. |
 | H13 | Skapa lokal export. Inspektera privat JSON. | `schemaVersion: 2`, `content`, `sessions`, `assistant` och `diagnostics` finns. Original och correctedText är separata. Inga ljuddata, token eller API-nycklar. |
 | H14 | Radera en post med alarm/notis. Radera en session med lektioner/förslag och kopplad manuell post. | Postens systemåtgärder avbryts. Sessionsdata, dess lektioner och förslag försvinner; manuell post finns kvar utan trasig sessionskoppling. Kalenderkopior finns kvar separat. |
 | H15 | Med enbart testdata: Radera all lokal data och starta om. | Tre domänlager och diagnostik är borta/tomma, egna alarm/notiser borta, båda anslutningarna glömda och AI av. Raderingsjournalen tas bort först när stegen är klara. Ingen sen återkoppling återskapar data. Delade filer/kalenderkopior hanteras där de finns. |
+| H16 | På Hem: tryck på olika dagar i veckoraden, byt vecka med pilarna och tryck I dag. Skapa poster och en kort session och jämför tolvveckorsrutnätet. | Rubriken visar rätt svenskt veckonummer (ISO 8601, även vid årsskifte). Vald dag styr översikten; I dag går tillbaka. Rutnätet och veckoradens streck visar bara aktivitet för rätt dagar, ingen text. Nästa visar högst en sak. Fråga Mio visar högst tre förslag som bara fyller i fältet. |
+| H17 | Starta Mio, lämna Fånga och byt flik. Pausa och fortsätt från raden ovanför flikfältet, tryck på raden, stoppa. Prova iOS 26.1 eller senare och, om möjligt, 26.0. | Raden syns bara medan en session pågår, med prick och kort status (Lyssnar, Lektion, Pausad). Paus/fortsätt fungerar och ett tryck öppnar Fånga. Raden är diskret och läsbar med VoiceOver. På 26.0 finns ingen rad; Live Activity visar läget. |
 
 ## Pianissimo, återanslutning och bakgrund
 
@@ -57,7 +59,7 @@ Gäller den privata Pianissimo-kedjan ([installation](../transcription-server/RE
 | T19 | Batteriprov 60 min, sedan 3–4 h; iPhone 16 Pro och därefter 13 | Dokumentera faktisk batteriåtgång, temperatur, app-RAM, server-GPU och luckor. Ingen garanti om heldag före mätning |
 | T20 | Modelluppdatering/rollback med samma API; negativt tailnet-grantprov | Appen behöver inte byggas om; metadata ändras, rätt identitet/token krävs, serverport endast loopback |
 
-Kör även H01–H15 och relevanta AI-/lektions-/Access-prov ovan. Gröna Python-/Node-tester eller en lyckad GPU-laddning ersätter inte Xcode-kompilering, XCTest, svenskt tal eller enhetsprov.
+Kör även H01–H17 och relevanta AI-/lektionsprov ovan. Gröna Python-/Node-tester eller en lyckad GPU-laddning ersätter inte Xcode-kompilering, XCTest, svenskt tal eller enhetsprov.
 
 Använd [mätprotokollet](#mätprotokoll-och-resultatmall) för känt svenskt facit, delgränser, sample-/requestantal, nät-/datoromstart samt jämförbara batteri-/värme-/latensvärden. Resultat är separata för iPhone 16 Pro/iPhone 13 och varje exakt iOS-/app-/modellrevision; ingen förbättring tillskrivs koden utan jämförbart mätunderlag.
 
@@ -65,16 +67,16 @@ Bakgrundsavbrott i äldre export visade `Session activation failed`, men exakt o
 
 ## AI-prov efter egen serverkonfiguration
 
-Använd [serverguiden](../server/README.md) och den granskade [leverantörsmatrisen](../server/README.md). Verkliga modellanrop kan kosta pengar och kräver separat godkänd syntetisk sändning med uttryckligt vald profil. Kör först den modellfria lokala sviten. Ett statusanrop eller godkänt wire-fixtureprov bevisar inte providerbehörighet, interna modellparametrar eller svensk kvalitet.
+Använd [gatewayguiden](../server/README.md); gatewayen kör på din dator med Groq. Sedan beslutet 2026-10-11 är AI på när datorn är parad och enskilda frågor skickas direkt. Verkliga modellanrop kan kosta pengar och kräver separat godkänd syntetisk sändning med uttryckligt vald profil. Kör först den modellfria lokala sviten. Ett statusanrop eller godkänt wire-fixtureprov bevisar inte providerbehörighet, interna modellparametrar eller svensk kvalitet.
 
 | ID | Prov | Förväntat |
 |---|---|---|
-| AI01 | Ny installation eller glömd anslutning. Öppna AI-vyn utan att aktivera. | Molnet är av. Inga nätanrop sker vid visning eller konfigurationssparning. |
-| AI02 | Ange HTTPS-server och separat gatewaytoken; aldrig leverantörsnyckeln i appen. Testa text-AI-anslutningen, slå på, skriv fråga och välj litet syntetiskt utdrag. | Modellfri status visar autentisering, protokoll/release och profiler. Urval börjar tomt; preview visar exakt fråga, etiketter, utdrag, mottagare och fryst profil/revision. Originalet ändras inte. |
-| AI03 | Avbryt preview, öppna igen och skicka uttryckligen. | Status-GET kan ha utförts, men Avbryt skickar ingen fråga/källtext till modell. Skicka ger ett tillfälligt svar utan automatisk lokal post, historik eller systemåtgärd. |
-| AI04 | Säg ”Mio, fråga varför himlen är blå”. Välj Inte nu, öppna senare och gå vidare till AI-granskning. | Röstfrågan stannar lokalt i inkorgen tills du väljer att skicka. Ingen kontext följer med automatiskt. Fel/avbryt lämnar frågan väntande; lyckat svar avför den. |
-| AI05 | Prova fel token, frånkopplat nät, för långt utdrag och en server som svarar med redirect. Avbryt även medan svar inväntas. | Begripliga fel; ingen credential/privat text skickas till redirectmål; ingen automatisk retry eller sent svar efter avbryt. |
-| AI06 | Glöm anslutningen och försök igen. Radera all lokal data medan andra vyer tidigare varit öppna. | Molnet är avstängt. Inga gamla frågor/utdrag eller svar ligger kvar i öppen AI-vy; token ingår aldrig i export. |
+| AI01 | Ny installation utan parning. Öppna Hem, Fånga och Fråga Mio. | AI är av tills datorn är parad; Hem visar "Para datorn". Inga nätanrop sker vid visning. |
+| AI02 | Para med QR-koden från `mio-pair` (aldrig leverantörsnyckeln i appen). Öppna Fråga Mio, välj ett förslag eller skriv en fråga och ett litet syntetiskt utdrag, tryck Skicka. | Parningen gör en modellfri kontroll. Förslaget fyller bara i fältet. Urvalet börjar tomt; frågan skickas utan förhandsgranskning först vid Skicka. Svaret valideras och originalet ändras inte. |
+| AI03 | Skicka en fråga och tryck Avbryt medan svaret inväntas. Skicka sedan igen. | Avbrott ger inget sent svar. Lyckat svar är tillfälligt, utan automatisk post, historik eller systemåtgärd. |
+| AI04 | Säg ”Mio, fråga varför himlen är blå”. Välj Inte nu, öppna senare via "att granska" på Hem och skicka. | Röstfrågan stannar lokalt i inkorgen tills du skickar den. Ingen kontext följer med automatiskt. Fel/avbryt lämnar frågan väntande; lyckat svar avför den. |
+| AI05 | Prova fel token, frånkopplat nät, för långt utdrag, en server som svarar med redirect och slut på dygnets token. | Begripliga fel; fel token ber dig para om. Ingen privat text skickas till redirectmål. Tokenstopp visar när AI fortsätter. Ingen automatisk retry efter avbryt. |
+| AI06 | Pausa AI på Fånga, kontrollera Hem, slå på igen. Radera all lokal data medan Fråga Mio varit öppen. | Pausen sparas och inga anrop görs under den. Efter radering ligger inga frågor, utdrag eller svar kvar; token ingår aldrig i export. |
 
 ## Felvägar och tillgänglighet
 
@@ -106,7 +108,7 @@ Dessa prov gäller den nya koden, inte tidigare build 3. Registrera byggnummer o
 
 | ID | Prov | Förväntat |
 |---|---|---|
-| A07 | Konfigurera anslutning men aktivera inte analysläget | Inga automatiska AI-anrop. Enskilda frågor kräver fortfarande sändningspreview |
+| A07 | Para datorn och låt AI vara på. Prata vardagligt i tio minuter. | Vardagstext skickas samlat högst var femte minut. Förslag kräver Ja; enskilda frågor skickas utan förhandsgranskning. |
 | A08 | Aktivera mitt i vardag/lektion; återuppta pausad vardag | Endast nya vardagsutdrag skickas. Äldre dagtext följer inte med. Sparad historisk lektion kräver separat godkännande |
 | A09 | ”Vi ses på biblioteket på tisdag klockan 15” utan Mio | Planförslag efter analyserat utdrag, korrekt tidszon/datum, exakt citat. Ja kräver tidsgranskning; ingen kalenderpost skapas automatiskt |
 | A10 | ”Jag måste lämna boken i morgon” samt ”Mio, påminn mig om att ta med boken” | AI kan föreslå första uppgiften utan påhittat klockslag; andra fungerar även lokalt. Kontrollera flera uppgifter i samma textdel |
@@ -119,11 +121,11 @@ Bedöm kvalitetsproven separat: vad sades, vad transkriberades, vad valde modell
 
 ## Utbytbar AI och detaljerade anteckningar — nya prov, ej körda på iPhone
 
-Kör först [verifieringen](INSTALLATION.md#verifiera-före-bygge). Node och det faktiska Worker-paketet använder syntetiska leverantörssvar; Python använder fake-backend. Inga betalda modellanrop görs. Verkliga modellprov nedan kräver separat godkänd sändning, uttryckligt vald kompatibel profil och tillgänglig kvot/saldo.
+Kör först [verifieringen](INSTALLATION.md#verifiera-före-bygge). Node-gatewayen använder syntetiska leverantörssvar; Python använder fake-backend. Inga betalda modellanrop görs. Verkliga modellprov nedan kräver separat godkänd sändning, uttryckligt vald kompatibel profil och tillgänglig kvot/saldo.
 
 | ID | Prov | Förväntat |
 |---|---|---|
-| P01 | Uppdaterad gateway: byt till NVIDIA NIM enligt [Cloudflare-guiden](../server/README.md), fråga 2 + 2 | Samma appadress/token fungerar; korrekt svar. Kontrollera verklig kvot, svarstid och att inga reasoning-tokens används |
+| P01 | Gateway på datorn med Groq enligt [gatewayguiden](../server/README.md), fråga 2 + 2 | Parad adress/token fungerar; korrekt svar. Kontrollera verklig kvot, svarstid och att inga reasoning-tokens används |
 | P02 | Välj en nekad modell, exempelvis `z-ai/glm-5.3` hos NIM (tänker alltid) | Begripligt kompatibilitetsfel före modelltrafik; inget tyst byte av modell/parametrar |
 | P03 | Byt till annan katalogmodell på annan leverantör | Ny hemlighet används, gamla leverantörsnyckeln används inte. Prova fråga, vardagsförslag och lektion separat; registrera vald modell och promptversion |
 | P04 | Utlös 429 med låg testgräns (`MIO_REQUESTS_PER_MINUTE=1` eller en tillfällig `MIO_REQUESTS_PER_DAY`) | AI stannar, väntetid visas, Pianissimo-transkription fortsätter. Inga automatiska återförsök |
@@ -136,7 +138,9 @@ Kör först [verifieringen](INSTALLATION.md#verifiera-före-bygge). Node och det
 
 De nya XCTest-fallen kontrollerar delbudget, dokumentordning/ofullständig kopia, bakåtkompatibel lagring, schemafält, källor, återupptagning och avbrytbar väntetakt. De måste köras i Xcode för aktuell revision.
 
-## Access och tokenrotation — nya prov, ej körda på iPhone
+## Access och tokenrotation — historik
+
+Cloudflare Access är borttaget ur appen och repot sedan 2026-10-11, så AC01–AC05 körs inte längre. Tokenrotation provas i stället genom ny parning med `mio-pair`.
 
 | ID | Prov | Förväntat |
 |---|---|---|
@@ -180,7 +184,7 @@ Dessa prov gäller den aktuella arbetskopian. Förena verkliga repositories/work
 | R11 | Frågesvar → lämna vyn; explicit redigera/Spara anteckning, dubbelspara efter senare redigering och framkalla filfel | Ingen automatisk post/historik. Explicit `.note` använder stabilt ID, inget extra AI-anrop/systemåtgärd. Fel behåller manuellt utkast; senare redigering skrivs inte över |
 | R12 | Ändra/glöm konfiguration eller radera medan preview/svar/draft är öppet; svar efter ändring utan resetnotis | Default-workflow kontrollerar aktuell konfiguration före/efter transport. Ogiltigt draft/late answer används inte och startar inget nytt anrop |
 | R13 | Rätta källtext efter sparad lektionsdel; äldre post utan revisionsmetadata; avbryt efter första del/starta om/kopiera | Aktuell/äldre/okänd aktualitet är ärlig. Delar/citat/redigeringar/ordning bevaras. Kopia varnar för saknade delar/luckor/källa; ingen automatisk rättningssändning |
-| R14 | Native fem flikar, tre separata tillstånd, morgon/kväll/inställningar och namngiven uppgiftsknapp | Tre UI-smokeprov + fysisk VoiceOver/stor text/mörkt/Minska rörelse/genomskinlighet; minst 44-punkters tryckyta även i iPhone 13-layout |
+| R14 | Native fyra flikar och Fånga, tre separata tillstånd, Hem med morgon/kväll, inställningspanelen, lyssningsraden och namngiven uppgiftsknapp | Tre UI-smokeprov + fysisk VoiceOver/stor text/mörkt/Minska rörelse/genomskinlighet; minst 44-punkters tryckyta även i iPhone 13-layout |
 | R15 | Flera längre syntetiska historier och ett jämförbart fysiskt ljud-/batteriprov | Mät verklig JSON-avkodning/kodning/atomisk patchskrivning/RAM separat från converter/requestantal/GPU/telefonlatens/värme/batteri. Ingen databas- eller kvalitetsvinst påstås från green tests |
 
 För Linux-/native-kommandon, se [verifieringen](INSTALLATION.md#verifiera-före-bygge); för mätning, se [mätprotokollet](#mätprotokoll-och-resultatmall) nedan. Modellverktyg, genererad streaming, automatisk handling, råljudsfiler, cloud STT, Apple-/CPU-fallback och tyst mikrofonåterstart ingår inte och ska inte markeras som implementerade funktioner.
@@ -210,13 +214,13 @@ Skriv inte tokens, Apple-uppgifter, privata serveradresser eller hemliga konfigu
 
 | Prov | Förväntan och bevis |
 |---|---|
-| Första start/Keychain | AI börjar avstängd. Privat STT-/gateway-/Access-konfiguration hålls åtskild. Nekad mikrofonåtkomst visas begripligt; läsning av sparat innehåll kräver ingen mikrofonstart |
+| Första start/Keychain | Utan parning skickas ingen AI-text; efter parning är AI på tills du pausar. STT- och gatewaytokens hålls åtskilda. Nekad mikrofonåtkomst visas begripligt; läsning av sparat innehåll kräver ingen mikrofonstart |
 | URLSession/privat nät | HTTPS och privat Tailscaleväg fungerar; redirect avvisas. Offline, avbrott, avbruten fråga och för stor/ogiltig respons avslutar rätt operation. Sen respons återstartar inte mikrofon eller sparar fel fråga |
 | Filskydd/export | Kontrollera skapandets Data Protection på faktisk iOS-enhet, fil-/katalogskydd och backupundantag. Två exporter får olika namn; en fil som delas skrivs inte över. Misslyckat skydd eller exportborttagning ger synligt fel |
 | Radering/återstart | Radera tre domänlager, diagnostik, interna exporter och båda anslutningarna. Prova delvis fel med kontrollerad felinjektion i verifieringsmiljö: journalen återupptar samma avsikt, visar retry/blockerat läge och öppnar inte nytt mikrofon-/AI-arbete. Förstör inte privata verkliga data för felinjektion |
 | EventKit/AlarmKit/notiser | Prova Kalender Spara/Avbryt, alarm-/påminnelsebehörighet och avbokning. AI-svar kan inte utlösa dessa åtgärder; lokala förslag kräver granskning och Ja |
-| Notisnavigation | Från kall och varm app öppnas rätt post eller morgon/kväll först efter laddade lager. Raderad/saknad post ger begriplig fallback. Låsskärmen visar generisk text och payload endast opaka ID:n. Trycket startar ingen inspelning, AI eller systemåtgärd |
-| Dag/tidszon | Prova förgrund efter midnatt, tidszonsbyte och betydande klockändring. Följande Idag byter dag; ett valt historiskt datum bevaras. En morgon-/kvällsnotis öppnar dagens vy |
+| Notisnavigation | Från kall och varm app öppnas rätt post, eller Hem med morgon/kväll, först efter laddade lager. Raderad/saknad post ger begriplig fallback till Hem. Låsskärmen visar generisk text och payload endast opaka ID:n. Trycket startar ingen ny inspelning, AI eller systemåtgärd; "Tryck för att fortsätta lyssna" öppnar Fånga och fortsätter bara en session du själv startat |
+| Dag/tidszon | Prova förgrund efter midnatt, tidszonsbyte och betydande klockändring. Följande Idag byter dag; ett valt historiskt datum bevaras. En morgon-/kvällsnotis öppnar Hem för i dag |
 | Tillgänglighet | VoiceOver läser upp uppgiftsnamn och åtgärd. Prova minst 44 × 44 punkters träffyta, större Dynamic Type, mörkt läge, Minska rörelse och Minska genomskinlighet; särskilt iPhone 13, ark och tangentbord |
 
 Tre native UI-smokeprov kompletterar matrisen, men ersätter inte fysisk VoiceOver eller dessa systemgränser. Filskydd/Keychain/AlarmKit på verklig telefon ska ha eget resultat även om simulatorn är grön.

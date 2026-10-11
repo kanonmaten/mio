@@ -2,6 +2,29 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Veckoplaneraren, 2026-10-11
+
+Användarbeslut 2026-10-11: appen får designen veckoplaneraren. Ersätter de fem flikarna Mio, Lektioner, Kalender, Anteckningar och Morgon.
+
+- **Utseende:** violett grund, vanliga läsytor för anteckningar, transkript och listor, och Liquid Glass bara på flikfält och knappar.
+- **Flikar:** Hem, Lektioner, Kalender och Anteckningar, plus Fånga som separat rund mikrofonknapp längst till höger (iOS 26-flik med rollen `.search`). Fånga ersätter Mio-fliken och startar aldrig mikrofonen bara för att den öppnas. Morgon-fliken är borta; morgon- och kvällsöversikten ligger på Hem (kväll från kl. 17), och morgon-/kvällsnotiser öppnar Hem.
+- **Hem:** veckonumret som rubrik, veckans sju dagar, Nästa, antal att granska, dagens översikt och ett rutnät över tolv veckor. Veckor följer svensk ISO 8601-regel (måndag först, vecka 1 innehåller årets första torsdag). Aktiviteten räknas lokalt ur sessioner och poster och lagras inte; bara antal, ingen text.
+- **Lyssningsraden** ovanför flikfältet använder `tabViewBottomAccessory(isEnabled:)`, som kräver iOS 26.1; på 26.0 visar Live Activity och Fånga läget. Den är medvetet diskret: en prick och kort status, ingen röd färg eller vågform.
+- **Fråga Mio** öppnas från Hem och Fånga och visar upp till tre frågor byggda på telefonen. Ett tryck fyller bara i fältet.
+
+Ej verifierat på telefon: läsbarhet på violett grund i ljust och mörkt läge, största Dynamic Type, Reduce Motion/Transparency, iPhone 13-layouten och lyssningsraden.
+
+## AI-gatewayen på datorn med Groq, 2026-10-11
+
+Användarbeslut 2026-10-11. Ersätter Cloudflare Worker, D1 och Access (beslut 2026-09-27 och 2026-09-29) och NVIDIA NIM (2026-10-05).
+
+- Node-gatewayen kör på användarens CachyOS-dator bredvid Pianissimo, bakom `tailscale serve --https=8443`. `server/install.sh` installerar tjänsten och `mio-pair` visar parningskoden. Leverantörsnyckeln finns bara på datorn.
+- Groq `qwen/qwen3.8-27b` är enda leverantör tills appen är bekräftad fungerande. Leverantörssömmen finns kvar så att Anthropic kan läggas till senare. Inget tyst byte av modell eller leverantör.
+- Installationen sätter 190 000 token per dygn (under gratisnivåns 200 000) och tre anrop per minut. Räknarna sparas på disk och överlever omstart.
+- Worker-, D1- och Access-koden är borttagen ur repot. Nedmontering av de publicerade Cloudflare-resurserna och byte av den gamla Groq-nyckeln kräver separat godkännande.
+
+Avvägning: datorn måste vara igång för AI, precis som för transkription, men inget konto hos Cloudflare och ingen publik adress behövs. Inget riktigt Groq-anrop är gjort ännu.
+
 ## En parning, AI alltid på och samlade vardagsutskick, 2026-10-11
 
 Användarbeslut (helhetsplanen 2026-10-11, avsnitt D och E). Ersätter "AI av vid start", "Tillåt molnfrågor", förhandsgranskning före varje fråga och Cloudflare Access i appen.
