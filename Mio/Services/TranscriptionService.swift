@@ -149,6 +149,8 @@ private final class TranscriptionRedirectGuard: NSObject, URLSessionDataDelegate
     }
 }
 
+private struct TranscriptionSessionEnded: Decodable {}
+
 /// Credentials belong to one immutable origin. Neither cookies, disk cache nor redirects are used.
 final class TranscriptionClient: TranscriptionTransport, @unchecked Sendable {
     private let session: URLSession
@@ -179,8 +181,14 @@ final class TranscriptionClient: TranscriptionTransport, @unchecked Sendable {
         // URLSession owns transport bytes; no suspended application task captures the chunk/request.
         return Task { try await operation.decoded(TranscriptionReply.self) }
     }
-    private func start(path: String, chunk: AudioChunk?) -> TranscriptionOperation {
+    func endSession(_ sessionID: UUID) async {
+        // 204 surfaces as a non-200 error from the response guard; any outcome is fine here.
+        let operation = start(path: "v1/sessions/\(sessionID.uuidString)", chunk: nil, method: "DELETE")
+        _ = try? await operation.decoded(TranscriptionSessionEnded.self)
+    }
+    private func start(path: String, chunk: AudioChunk?, method: String? = nil) -> TranscriptionOperation {
         var request = URLRequest(url: connection.origin.appendingPathComponent(path))
+        if let method { request.httpMethod = method; request.timeoutInterval = 5 }
         request.setValue("Bearer \(connection.token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let chunk {

@@ -41,10 +41,14 @@ struct TranscriptionHealth: Decodable, Sendable {
     let maxSeconds: Int
     let maxBytes: Int
 
+    /// Pause-cut chunks reach 1 + 22 + 1 s, exactly API v1's 24 s / 768,044-byte limit.
+    static let requiredSeconds = 24
+    static let requiredBytes = 768_044
+
     func validate() throws {
         guard apiVersion == 1, status == "ready", metadata.isValid,
               serverVersion.utf8.count <= 100, sampleRate == 16_000, channels == 1,
-              encoding == "pcm_s16le_wav", maxSeconds >= 22, maxBytes >= 704_044
+              encoding == "pcm_s16le_wav", maxSeconds >= Self.requiredSeconds, maxBytes >= Self.requiredBytes
         else { throw TranscriptionError.incompatible }
     }
 }
@@ -53,6 +57,45 @@ struct TranscriptionWord: Codable, Hashable, Sendable {
     let text: String
     let start: Double
     let end: Double
+    /// Additive in API v1: a session-local speaker number 1–4, never an identity.
+    var speaker: Int? = nil
+
+    private enum CodingKeys: String, CodingKey { case text, start, end, speaker }
+}
+
+extension TranscriptionWord {
+    /// Declared in an extension so the memberwise initializer remains available.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        text = try values.decode(String.self, forKey: .text)
+        start = try values.decode(Double.self, forKey: .start)
+        end = try values.decode(Double.self, forKey: .end)
+        // Speaker labels are optional evidence: absent, null, malformed or out-of-range
+        // values become nil and never reject an otherwise valid transcript.
+        let decoded: Int? = try? values.decodeIfPresent(Int.self, forKey: .speaker)
+        speaker = decoded.flatMap { MioSpeakerLabel.range.contains($0) ? $0 : nil }
+    }
+
+    /// Consecutive words of one speaker. Unlabelled words stay in the current turn, so a
+    /// reply without speaker labels yields exactly one run, as before.
+    static func speakerRuns(_ words: [TranscriptionWord]) -> [MioSpeakerRun] {
+        var runs: [MioSpeakerRun] = []
+        for word in words {
+            if let last = runs.indices.last,
+               word.speaker == nil || runs[last].speaker == nil || runs[last].speaker == word.speaker {
+                runs[last].words.append(word)
+                if runs[last].speaker == nil { runs[last].speaker = word.speaker }
+            } else {
+                runs.append(MioSpeakerRun(speaker: word.speaker, words: [word]))
+            }
+        }
+        return runs
+    }
+}
+
+struct MioSpeakerRun: Hashable, Sendable {
+    var speaker: Int?
+    var words: [TranscriptionWord]
 }
 
 struct TranscriptionReply: Decodable, Sendable {
@@ -237,10 +280,15 @@ struct AudioChunk: Sendable, Identifiable {
     }
 }
 
-/// Twenty-second cores with one second of context. Origin is captured once per audio epoch;
-/// a real capture gap starts another epoch, so missing audio is never compressed out of time.
+/// Pause-cut cores of 8–22 s with one second of context on each available side. Origin is
+/// captured once per audio epoch; a real capture gap starts another epoch, so missing audio
+/// is never compressed out of time. At most 23 s plus one tap is retained between cuts.
 struct AudioChunkAssembler: Sendable {
     private var bytes = Data()
+    /// Mean-square energy per 20 ms frame of `bytes`; the buffer start stays frame-aligned
+    /// because every cut lands on a frame and the kept context is 50 frames.
+    private var energies: [Double] = []
+    private let detector: SpeechPauseDetector
     private var offset: Int64 = 0
     private var coreStart = 0
     private var origin: Date?
@@ -250,7 +298,9 @@ struct AudioChunkAssembler: Sendable {
     private(set) var sequence = 0
     let sessionID: UUID
 
-    init(sessionID: UUID) { self.sessionID = sessionID }
+    init(sessionID: UUID, detector: SpeechPauseDetector = SpeechPauseDetector()) {
+        self.sessionID = sessionID; self.detector = detector
+    }
 
     var expiresAt: TimeInterval? { bytes.isEmpty ? nil : uptime + 60 }
     var retainedSamples: Int { bytes.count / 2 }
@@ -275,8 +325,10 @@ struct AudioChunkAssembler: Sendable {
             if let captureEpoch { epoch = captureEpoch }
         }
         bytes.append(pcm)
-        while bytes.count / 2 >= coreStart + 21 * 16_000 {
-            chunks.append(take(coreEnd: coreStart + 20 * 16_000, end: coreStart + 21 * 16_000))
+        energies += SpeechPauseDetector.frameEnergies(bytes, from: energies.count)
+        let frame = SpeechPauseDetector.frameSamples
+        while let end = detector.coreEnd(energies: energies, coreStart: coreStart / frame) {
+            chunks.append(take(coreEnd: end * frame, end: end * frame + 16_000))
         }
         return chunks
     }
@@ -296,6 +348,7 @@ struct AudioChunkAssembler: Sendable {
         sequence += 1
         let discard = max(0, coreEnd - 16_000)
         bytes.removeFirst(discard * 2)
+        energies.removeFirst(min(energies.count, discard / SpeechPauseDetector.frameSamples))
         offset += Int64(discard)
         origin = origin?.addingTimeInterval(Double(discard) / 16_000)
         uptime += Double(discard) / 16_000
@@ -305,7 +358,7 @@ struct AudioChunkAssembler: Sendable {
 
     private mutating func reset() {
         offset += Int64(bytes.count / 2)
-        bytes.removeAll(keepingCapacity: false); coreStart = 0; origin = nil
+        bytes.removeAll(keepingCapacity: false); energies.removeAll(); coreStart = 0; origin = nil
         // Sequence remains unique across interruptions in this pipeline.
     }
 }

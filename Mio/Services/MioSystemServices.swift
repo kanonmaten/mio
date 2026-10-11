@@ -322,6 +322,38 @@ final class MioSystemServices {
 
     static func reminderID(for itemID: UUID) -> String { "mio.reminder.\(itemID.uuidString)" }
 
+    /// Outside the "mio." prefix so it never appears among the user's reminders.
+    static let resumeListeningID = "app.mio.capture.resume-listening"
+
+    /// Fallback when iOS refused a background microphone restart. Generic text only; it is
+    /// delivered immediately and replaced rather than stacked. Failures stay silent because
+    /// the session's event log already records the interruption.
+    func handleResumeNotice(_ notice: MioResumeNotice) async {
+        switch notice {
+        case .prepare:
+            let status = await notificationCenter.notificationSettings().authorizationStatus
+            notificationStatus = status
+            guard status == .notDetermined else { return }
+            _ = try? await notificationCenter.requestAuthorization(options: [.alert, .sound, .badge])
+            notificationStatus = await notificationCenter.notificationSettings().authorizationStatus
+        case .post:
+            let status = await notificationCenter.notificationSettings().authorizationStatus
+            guard status == .authorized || status == .provisional else { return }
+            let route = MioNotificationRoute.resumeListening
+            let content = UNMutableNotificationContent()
+            content.title = "Mio"
+            content.body = route.notificationBody
+            content.userInfo = route.userInfo
+            content.sound = .default
+            notificationCenter.removeDeliveredNotifications(withIdentifiers: [Self.resumeListeningID])
+            try? await notificationCenter.add(UNNotificationRequest(identifier: Self.resumeListeningID,
+                                                                   content: content, trigger: nil))
+        case .withdraw:
+            notificationCenter.removePendingNotificationRequests(withIdentifiers: [Self.resumeListeningID])
+            notificationCenter.removeDeliveredNotifications(withIdentifiers: [Self.resumeListeningID])
+        }
+    }
+
     private func rememberAlarmIDs(_ ids: Set<UUID>) {
         knownAlarmIDs = ids
         if ids.isEmpty {

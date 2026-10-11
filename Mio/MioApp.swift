@@ -48,6 +48,9 @@ struct MioApp: App {
             }
         }
         liveActivity.start()
+        capture.onResumeNotice = { notice in
+            Task { await MioSystemServices.shared.handleResumeNotice(notice) }
+        }
     }
 
     var body: some Scene {

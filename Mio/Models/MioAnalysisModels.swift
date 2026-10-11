@@ -24,7 +24,9 @@ struct MioAnalysisFragment: Codable, Hashable, Sendable {
         var parts: [String] = []
         var part = ""
         var bytes = 0
-        for character in segment.displayText {
+        // Who said what, as neutral numbers: custom speaker names stay on the phone.
+        let speaker = segment.speaker.map { "\(MioSpeakerLabel.defaultName($0)): " } ?? ""
+        for character in speaker + segment.displayText {
             let count = String(character).utf8.count
             if bytes + count > 3_500, !part.isEmpty {
                 parts.append(part); part = ""; bytes = 0
