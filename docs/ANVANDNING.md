@@ -21,7 +21,7 @@ Mikrofon, transkriptionsanslutning och text-AI visas separat. En aktiv mikrofon 
 5. Tryck **Fortsätt Mio** för att återuppta den pausade vardagslyssningen. Mikrofonen startar inte automatiskt efter lektionen.
 6. **Lektioner → Historik och råtext** innehåller tidigare sessioner, manuella poster, texträttningar och äldre manuell lektionsindelning. Inga tidigare data är borttagna.
 
-Spela bara in andra med tydligt samtycke och enligt lokala regler. Paus/stopp ska släcka iOS mikrofonindikator. Långvarig drift med låst skärm behöver verifieras på din telefon; tvångsavslutning startar aldrig om lyssningen automatiskt.
+Spela bara in andra med tydligt samtycke och enligt lokala regler. Talarmärkningen på din dator analyserar rösterna för att skilja talare åt (talare 1–4). Det sker bara i datorns RAM och raderas när sessionen avslutas eller efter 10 minuter, men det är ändå en analys av andras röster: berätta det när du ber om samtycke, och stäng av den på servern (`MIO_SPEAKER_LABELS=0`) om någon inte vill. Paus/stopp ska släcka iOS mikrofonindikator. Långvarig drift med låst skärm behöver verifieras på din telefon; tvångsavslutning startar aldrig om lyssningen automatiskt.
 
 ## Be Mio föreslå något
 
