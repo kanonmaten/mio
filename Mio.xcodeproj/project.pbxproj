@@ -89,6 +89,7 @@
 		DE6CAC7E119EEAFC37CBA935 /* MioNavigationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29BF2CD0484E98171C51AF2F /* MioNavigationModels.swift */; };
 		B8F77AD627419B4D668AD0EE /* MioNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BC303EFAC6F5046776374C9 /* MioNavigationTests.swift */; };
 		DE5160000000000000000102 /* MioWeekPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5160000000000000000002 /* MioWeekPlannerTests.swift */; };
+		DE5160000000000000000107 /* MioSwiftDataContentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5160000000000000000007 /* MioSwiftDataContentTests.swift */; };
 		B20000000000000000000001 /* MioUISmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000010 /* MioUISmokeTests.swift */; };
 		DA7A00000000000000000101 /* MioStores.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000001 /* MioStores.swift */; };
 		DA7A00000000000000000102 /* MioStoreMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000002 /* MioStoreMigration.swift */; };
@@ -235,6 +236,7 @@
 		29BF2CD0484E98171C51AF2F /* MioNavigationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioNavigationModels.swift; sourceTree = "<group>"; };
 		3BC303EFAC6F5046776374C9 /* MioNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioNavigationTests.swift; sourceTree = "<group>"; };
 		DE5160000000000000000002 /* MioWeekPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWeekPlannerTests.swift; sourceTree = "<group>"; };
+		DE5160000000000000000007 /* MioSwiftDataContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSwiftDataContentTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000010 /* MioUISmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioUISmokeTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000011 /* MioUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MioUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA7A00000000000000000001 /* MioStores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioStores.swift; sourceTree = "<group>"; };
@@ -388,6 +390,7 @@
 			children = (
 				3BC303EFAC6F5046776374C9 /* MioNavigationTests.swift */,
 				DE5160000000000000000002 /* MioWeekPlannerTests.swift */,
+				DE5160000000000000000007 /* MioSwiftDataContentTests.swift */,
 				8F454690D9B3D7668EF7FEEF /* MioConnectionDiscoveryTests.swift */,
 				C6527737C6BF0A133F69F73F /* MioLessonFreshnessTests.swift */,
 				10BECAB802EC614EBF60D94A /* MioAnswerNoteTests.swift */,
@@ -658,6 +661,7 @@
 			files = (
 				B8F77AD627419B4D668AD0EE /* MioNavigationTests.swift in Sources */,
 				DE5160000000000000000102 /* MioWeekPlannerTests.swift in Sources */,
+				DE5160000000000000000107 /* MioSwiftDataContentTests.swift in Sources */,
 				B73F74418CD0ACA336491565 /* MioConnectionDiscoveryTests.swift in Sources */,
 				38D01045939486BD185502FA /* MioLessonFreshnessTests.swift in Sources */,
 				0AF2B0538ABAAFBB1FA854A0 /* MioAnswerNoteTests.swift in Sources */,

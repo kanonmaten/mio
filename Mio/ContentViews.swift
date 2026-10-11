@@ -343,6 +343,7 @@ struct NotesTabView: View {
     @State private var filter: NotesFilter = .all
     @State private var editorRoute: ContentEditorRoute?
     @State private var pendingDeletion: MioContentItem?
+    @State private var completionError: String?
 
     var body: some View {
         NavigationStack {
@@ -379,6 +380,8 @@ struct NotesTabView: View {
                                                 id: item.id,
                                                 isCompleted: !item.isCompleted
                                             )
+                                            // A failed save or alarm cancellation must not look like a dead tap.
+                                            completionError = contentModel.errorMessage
                                         }
                                     } label: {
                                         Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
@@ -443,6 +446,14 @@ struct NotesTabView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(deletionOutcome?.message ?? "Försök igen.")
+        }
+        .alert("Kunde inte ändra uppgiften", isPresented: Binding(
+            get: { completionError != nil },
+            set: { if !$0 { completionError = nil; contentModel.errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(completionError ?? "Försök igen.")
         }
         .sheet(item: $editorRoute) { route in
             ContentEditorView(
