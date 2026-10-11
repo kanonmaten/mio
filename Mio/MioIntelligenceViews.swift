@@ -44,7 +44,7 @@ struct LessonLibraryView: View {
                         } label: {
                             VStack(alignment: .leading) {
                                 Text(session.title ?? "Lektion").font(.headline)
-                                Text(session.endedAt == nil ? "Pågår · vardags-Mio är pausat" : session.startedAt.formatted())
+                                Text(session.endedAt == nil ? "Pågår · vardags-Mio är pausat" : lessonDate(session.startedAt))
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }
@@ -57,9 +57,17 @@ struct LessonLibraryView: View {
                     Text("Tidigare transkript och manuella poster finns kvar i historiken. AI får bara text som fångas medan AI är på.")
                 }
             }
+            .mioListGround()
             .navigationTitle("Lektioner")
             .toolbar { MioSettingsToolbar() }
         }
+    }
+
+    /// "v. 41 · tis 6 okt 09:15"
+    private func lessonDate(_ date: Date) -> String {
+        let week = MioWeekPlanner.weekNumber(of: date, calendar: .autoupdatingCurrent)
+        let text = date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute().locale(MioTheme.swedish))
+        return "v. \(week) · \(text)"
     }
 }
 
@@ -171,6 +179,7 @@ struct LessonDetailView: View {
                 }
             } else { Text("Lektionen finns inte längre.") }
         }
+        .mioListGround()
         .navigationTitle(session?.title ?? "Lektion")
         .onChange(of: assistant.analyses) { _, _ in copied = false }
         .onChange(of: session?.title) { _, _ in copied = false }

@@ -88,3 +88,22 @@ final class MioWeekPlannerTests: XCTestCase {
         XCTAssertEqual(MioDayPhase.at(date("2026-10-09T01:00:00Z"), calendar: calendar), .evening)
     }
 }
+
+final class MioSuggestedQuestionsTests: XCTestCase {
+    func testQuestionsUseTheLatestLessonAndNextItemAndStayShort() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Stockholm")!
+        let now = ISO8601DateFormatter().date(from: "2026-10-09T10:00:00Z")!
+        let task = MioContentItem(kind: .task, title: "Läxa i matte\nsidan 40", createdAt: now, scheduledAt: now.addingTimeInterval(3600))
+        let questions = MioSuggestedQuestions.make(content: [task], lessonTitles: ["  ", "Procent"], now: now, calendar: calendar)
+        XCTAssertEqual(questions, [
+            "Förklara det viktigaste från Procent enkelt.",
+            "Hjälp mig dela upp Läxa i matte i små steg.",
+            "Hjälp mig planera kvällen i små steg.",
+        ])
+        let long = String(repeating: "a", count: 80)
+        let trimmed = MioSuggestedQuestions.make(content: [], lessonTitles: [long], now: now, calendar: calendar)
+        XCTAssertEqual(trimmed.first, "Förklara det viktigaste från \(String(repeating: "a", count: 60))… enkelt.")
+        XCTAssertEqual(MioSuggestedQuestions.make(content: [], lessonTitles: [], now: now, calendar: calendar).count, 1)
+    }
+}

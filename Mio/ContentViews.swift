@@ -61,6 +61,7 @@ struct TimelineTabView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .mioListGround()
             .navigationTitle("Tidslinje")
             .searchable(text: $searchText, prompt: "Sök i innehåll och sessioner")
             .toolbar {
@@ -174,9 +175,10 @@ struct CalendarTabView: View {
                     )
                     .listRowBackground(Color.clear)
                 } else {
-                    if !upcomingPlans.isEmpty {
-                        Section("Kommande") {
-                            ForEach(upcomingPlans) { plan in
+                    // Upcoming plans are grouped by Swedish week number, like a paper planner.
+                    ForEach(upcomingWeeks, id: \.monday) { week in
+                        Section(weekTitle(week.monday)) {
+                            ForEach(week.plans) { plan in
                                 planRow(plan)
                             }
                         }
@@ -192,6 +194,7 @@ struct CalendarTabView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .mioListGround()
             .navigationTitle("Kalender")
             .toolbar { MioSettingsToolbar() }
             .searchable(text: $searchText, prompt: "Sök bland planer")
@@ -256,6 +259,27 @@ struct CalendarTabView: View {
                 }
                 return $0.id.uuidString < $1.id.uuidString
             }
+    }
+
+    private var upcomingWeeks: [(monday: Date, plans: [MioContentItem])] {
+        var weeks: [(monday: Date, plans: [MioContentItem])] = []
+        for plan in upcomingPlans {
+            let monday = MioWeekPlanner.startOfWeek(containing: plan.scheduledAt, calendar: day.calendar)
+            if let last = weeks.indices.last, weeks[last].monday == monday {
+                weeks[last].plans.append(plan)
+            } else {
+                weeks.append((monday: monday, plans: [plan]))
+            }
+        }
+        return weeks
+    }
+
+    private func weekTitle(_ monday: Date) -> String {
+        let number = MioWeekPlanner.weekNumber(of: monday, calendar: day.calendar)
+        let thisWeek = MioWeekPlanner.startOfWeek(containing: day.startOfToday, calendar: day.calendar)
+        if monday == thisWeek { return "Den här veckan · v. \(number)" }
+        if let next = day.calendar.date(byAdding: .day, value: 7, to: thisWeek), monday == next { return "Nästa vecka · v. \(number)" }
+        return "v. \(number)"
     }
 
     private var earlierPlans: [MioContentItem] {
@@ -392,6 +416,7 @@ struct NotesTabView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .mioListGround()
             .navigationTitle("Anteckningar")
             .toolbar { MioSettingsToolbar() }
             .searchable(text: $searchText, prompt: "Sök i anteckningar och uppgifter")

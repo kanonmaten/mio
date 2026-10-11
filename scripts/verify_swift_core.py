@@ -57,6 +57,7 @@ SOURCES = [
     "Mio/Models/MioListeningActivityMapping.swift",
     "Mio/Models/MioLessonNotesProgress.swift",
     "Mio/Models/MioWeekPlanner.swift",
+    "Mio/Models/MioSuggestedQuestions.swift",
 ]
 TESTS = [
     "MioTests/MioCloudTests.swift",

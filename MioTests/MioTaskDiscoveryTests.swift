@@ -284,7 +284,8 @@ final class MioTaskDiscoveryTests: XCTestCase {
             }
             XCTAssertEqual(actualStatus, status); XCTAssertEqual(code, expected)
             let gateway = MioCloudService.httpFailure(response: response, body: Data(#"{"error":"unauthorized"}"#.utf8))
-            XCTAssertTrue(gateway.error.localizedDescription.contains("MIO_GATEWAY_TOKEN"))
+            // Gateway token failures point to re-pairing (the PC gateway since 2026-10-11).
+            XCTAssertTrue(gateway.error.localizedDescription.contains("mio-pair"))
             let arbitrary = MioCloudService.httpFailure(response: response, body: Data("private arbitrary body".utf8))
             guard case .serverStatus(status) = arbitrary.error else { return XCTFail("No arbitrary error is promoted") }
         }

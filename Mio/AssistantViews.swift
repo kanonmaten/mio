@@ -1,35 +1,5 @@
 import SwiftUI
 
-struct AssistantHubView: View {
-    @Environment(MioAssistantViewModel.self) private var assistant
-    let contentModel: MioContentViewModel
-    let sessionModel: MioViewModel
-
-    var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 14) {
-                NavigationLink {
-                    SuggestionInboxView(contentModel: contentModel, sessionModel: sessionModel)
-                } label: {
-                    Label("Förslag att granska (\(assistant.suggestions.count))", systemImage: "tray.full")
-                        .font(.headline)
-                }
-                Text("När AI är på kan Mio föreslå planer och uppgifter ur vanliga samtal. Mio-kommandon tolkas lokalt efter transkription via din dator. Kontrollera alltid innehåll, datum och tid.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Divider()
-                NavigationLink {
-                    CloudAssistantView(items: contentModel.items, sessions: sessionModel.allSessions)
-                } label: {
-                    Label("Fråga Mio med AI", systemImage: "bubble.left.and.text.bubble.right")
-                        .frame(minHeight: 44)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-}
-
 struct SuggestionInboxView: View {
     @Environment(MioAssistantViewModel.self) private var assistant
     let contentModel: MioContentViewModel

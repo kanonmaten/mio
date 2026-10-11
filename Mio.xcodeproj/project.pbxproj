@@ -103,6 +103,7 @@
 		BAC600000000000000000102 /* MioListeningActivityMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000002 /* MioListeningActivityMapping.swift */; };
 		BAC600000000000000000103 /* MioLessonNotesProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000003 /* MioLessonNotesProgress.swift */; };
 		DE5160000000000000000101 /* MioWeekPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5160000000000000000001 /* MioWeekPlanner.swift */; };
+		DE5160000000000000000106 /* MioSuggestedQuestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5160000000000000000006 /* MioSuggestedQuestions.swift */; };
 		BAC600000000000000000104 /* MioListeningAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000004 /* MioListeningAttributes.swift */; };
 		BAC600000000000000000105 /* MioLiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000005 /* MioLiveActivityController.swift */; };
 		BAC600000000000000000106 /* MioLessonNotesBackgroundTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000006 /* MioLessonNotesBackgroundTask.swift */; };
@@ -249,6 +250,7 @@
 		BAC600000000000000000002 /* MioListeningActivityMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioListeningActivityMapping.swift; sourceTree = "<group>"; };
 		BAC600000000000000000003 /* MioLessonNotesProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLessonNotesProgress.swift; sourceTree = "<group>"; };
 		DE5160000000000000000001 /* MioWeekPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWeekPlanner.swift; sourceTree = "<group>"; };
+		DE5160000000000000000006 /* MioSuggestedQuestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSuggestedQuestions.swift; sourceTree = "<group>"; };
 		BAC600000000000000000004 /* MioListeningAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioListeningAttributes.swift; sourceTree = "<group>"; };
 		BAC600000000000000000005 /* MioLiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLiveActivityController.swift; sourceTree = "<group>"; };
 		BAC600000000000000000006 /* MioLessonNotesBackgroundTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLessonNotesBackgroundTask.swift; sourceTree = "<group>"; };
@@ -345,6 +347,7 @@
 				BAC600000000000000000002 /* MioListeningActivityMapping.swift */,
 				BAC600000000000000000003 /* MioLessonNotesProgress.swift */,
 				DE5160000000000000000001 /* MioWeekPlanner.swift */,
+				DE5160000000000000000006 /* MioSuggestedQuestions.swift */,
 				F10000000000000000000010 /* MioContentModels.swift */,
 			);
 			path = Models;
@@ -642,6 +645,7 @@
 				BAC600000000000000000102 /* MioListeningActivityMapping.swift in Sources */,
 				BAC600000000000000000103 /* MioLessonNotesProgress.swift in Sources */,
 				DE5160000000000000000101 /* MioWeekPlanner.swift in Sources */,
+				DE5160000000000000000106 /* MioSuggestedQuestions.swift in Sources */,
 				BAC600000000000000000104 /* MioListeningAttributes.swift in Sources */,
 				BAC600000000000000000105 /* MioLiveActivityController.swift in Sources */,
 				BAC600000000000000000106 /* MioLessonNotesBackgroundTask.swift in Sources */,

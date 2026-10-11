@@ -3,6 +3,7 @@ import SwiftUI
 struct CloudAssistantView: View {
     let items: [MioContentItem]
     let sessions: [MioSession]
+    var suggestions: [String] = []
     var onAnswerReceived: (() -> Void)?
 
     @AppStorage(MioCloudSettings.serverKey) private var server = ""
@@ -19,9 +20,11 @@ struct CloudAssistantView: View {
     @State private var activeRequestID: UUID?
     @State private var ownInvalidationID: UUID?
 
-    init(items: [MioContentItem], sessions: [MioSession], initialQuestion: String = "", onAnswerReceived: (() -> Void)? = nil) {
+    init(items: [MioContentItem], sessions: [MioSession], initialQuestion: String = "", suggestions: [String] = [],
+         onAnswerReceived: (() -> Void)? = nil) {
         self.items = items
         self.sessions = sessions
+        self.suggestions = suggestions
         self.onAnswerReceived = onAnswerReceived
         _question = State(initialValue: initialQuestion)
     }
@@ -35,6 +38,14 @@ struct CloudAssistantView: View {
                 Section {
                     Text("Para datorn under Inställningar → Dator först.")
                     Button("Öppna inställningar") { openSettings() }
+                }
+            }
+
+            if question.isEmpty, answer == nil, !isAsking, !suggestions.isEmpty {
+                Section("Förslag") {
+                    ForEach(suggestions, id: \.self) { suggestion in
+                        Button(suggestion) { question = suggestion }
+                    }
                 }
             }
 

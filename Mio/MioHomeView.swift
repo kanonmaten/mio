@@ -307,10 +307,11 @@ struct MioAskSheet: View {
     let items: [MioContentItem]
     let sessions: [MioSession]
     @Environment(\.dismiss) private var dismiss
+    @Environment(MioDayContext.self) private var day
 
     var body: some View {
         NavigationStack {
-            CloudAssistantView(items: items, sessions: sessions)
+            CloudAssistantView(items: items, sessions: sessions, suggestions: suggestions)
                 .mioListGround()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -318,5 +319,10 @@ struct MioAskSheet: View {
                     }
                 }
         }
+    }
+
+    private var suggestions: [String] {
+        let lessons = sessions.filter { $0.isLesson && $0.endedAt != nil }.compactMap(\.title)
+        return MioSuggestedQuestions.make(content: items, lessonTitles: lessons, now: .now, calendar: day.calendar)
     }
 }
