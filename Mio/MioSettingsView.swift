@@ -115,6 +115,7 @@ struct MioSettingsView: View {
                 NavigationLink("Så använder du Mio") { MioGuideView() }
             }
             Section("Om Mio") {
+                NavigationLink("Diagnostik") { MioDiagnosticsView() }
                 LabeledContent("Version", value: "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
                 Text("Aktiv transkription kräver din dator och Tailscale. Ingen ljudfil sparas. Historik och diagnostik finns under Lektioner → Historik och råtext.")
                     .font(.footnote).foregroundStyle(.secondary)

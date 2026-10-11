@@ -231,6 +231,8 @@ struct MioDiagnosticsExport: Codable, Sendable {
     let timeZone: String
     let configuration: MioDiagnosticsConfiguration
     let journal: MioDiagnosticsSnapshot
+    /// Additive: on-device MetricKit payloads (no user text). Older exports omit it.
+    var metricReports: [MioMetricReport]? = nil
 
     init(configuration: MioDiagnosticsConfiguration, journal: MioDiagnosticsSnapshot) {
         appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"

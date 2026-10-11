@@ -47,7 +47,7 @@ final class MioViewModel {
 
     @ObservationIgnored private let diagnostics: MioDiagnosticsRepository
     @ObservationIgnored private var diagnosticsGeneration: UUID?
-    @ObservationIgnored private let repository: SessionRepository
+    @ObservationIgnored private let repository: any MioSessionStore
     @ObservationIgnored private let captureFactory: @MainActor (UUID, MioCaptureHandlers) throws -> any MioCapturePipeline
     @ObservationIgnored private var pipeline: (any MioCapturePipeline)?
     @ObservationIgnored private var repositoryGeneration: UUID?
@@ -66,7 +66,7 @@ final class MioViewModel {
     @ObservationIgnored private var preparationCancellationRequested = false
     @ObservationIgnored private var runtimeFailureTeardownInProgress = false
 
-    init(repository: SessionRepository = SessionRepository(), diagnostics: MioDiagnosticsRepository = .shared,
+    init(repository: any MioSessionStore = SessionRepository(), diagnostics: MioDiagnosticsRepository = .shared,
          captureFactory: @escaping @MainActor (UUID, MioCaptureHandlers) throws -> any MioCapturePipeline = { id, handlers in
              LiveTranscriptionPipeline(connection: try TranscriptionSettings.connection(), sessionID: id,
                  handlers: .init(result: handlers.result, status: handlers.status,

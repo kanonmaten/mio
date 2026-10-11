@@ -500,6 +500,7 @@ enum MioCloudService {
         event: inout MioDiagnosticEvent) async throws -> Data where Bytes.Element == UInt8 {
         guard let response = response as? HTTPURLResponse else { throw MioCloudError.invalidResponse }
         event.httpStatus = response.statusCode
+        if response.statusCode != 200 { MioLog.notice(.ai, "gateway http status", value: response.statusCode) }
         if (0...1_000_000_000).contains(response.expectedContentLength) {
             event.expectedResponseBytes = Int(response.expectedContentLength)
         }

@@ -21,45 +21,129 @@ enum MioAssistantRepositoryError: LocalizedError {
     }
 }
 
-/// Owns only proposals, lesson metadata and source identities, never raw audio.
-/// Mutations read this actor's cache after checking the external-file fingerprint,
-/// preserving concurrent work and refusing replacement of an unknown schema.
-actor MioAssistantRepository {
-    private let fileManager: FileManager
-    private let storageURL: URL
-    private var deletedSessionIDs: Set<UUID> = []
-    private var ignoreSessionsStartedThrough: Date?
-    private var cachedDocument: MioAssistantStoreDocument?
-    private var cachedFingerprint: MioFileStamp?
-    private var approvalClaims: [UUID: (claim: MioSuggestionApprovalClaim, wasClosed: Bool)] = [:]
+/// Persistence boundary for the assistant document. One storage object is owned and
+/// called by exactly one repository actor.
+protocol MioAssistantStorage: AnyObject {
+    func stamp() throws -> MioFileStamp?
+    /// Nil means that nothing has been stored yet. Unknown schemas throw and are never replaced.
+    func read() throws -> MioAssistantStoreDocument?
+    /// `previous` is the last state this owner read or wrote; nil requests a full replacement.
+    func write(_ document: MioAssistantStoreDocument, replacing previous: MioAssistantStoreDocument?) throws
+    func erase() throws
+}
 
-    init(fileManager: FileManager = .default, storageURL: URL? = nil) {
+final class MioJSONAssistantStorage: MioAssistantStorage {
+    private let fileManager: FileManager
+    let storageURL: URL
+
+    init(storageURL: URL, fileManager: FileManager) {
+        self.storageURL = storageURL
         self.fileManager = fileManager
-        let applicationSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-            .first ?? fileManager.temporaryDirectory
-        self.storageURL = storageURL ?? applicationSupport
-            .appendingPathComponent("Mio", isDirectory: true)
-            .appendingPathComponent("assistant-v1.json", isDirectory: false)
     }
 
-    func loadDocument() throws -> MioAssistantStoreDocument {
-        let fingerprint = try fileFingerprint()
-        if let cachedDocument, fingerprint == cachedFingerprint { return cachedDocument }
-        // A replaced fixture must be validated even if the previous file was valid.
-        cachedDocument = nil
-        cachedFingerprint = nil
-        guard let fingerprint else {
-            let document = MioAssistantStoreDocument()
-            cachedDocument = document
-            return document
-        }
+    func stamp() throws -> MioFileStamp? {
+        try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
+    }
+
+    func read() throws -> MioAssistantStoreDocument? {
+        guard fileManager.fileExists(atPath: storageURL.path) else { return nil }
         let data = try Data(contentsOf: storageURL)
         struct SchemaHeader: Decodable { let schemaVersion: Int }
         let header = try Self.decoder.decode(SchemaHeader.self, from: data)
         guard header.schemaVersion == MioAssistantStoreDocument.currentSchemaVersion else {
             throw MioAssistantRepositoryError.unsupportedSchemaVersion(header.schemaVersion)
         }
-        let document = try Self.decoder.decode(MioAssistantStoreDocument.self, from: data)
+        return try Self.decoder.decode(MioAssistantStoreDocument.self, from: data)
+    }
+
+    func write(_ document: MioAssistantStoreDocument, replacing previous: MioAssistantStoreDocument?) throws {
+        let data = try Self.encoder.encode(document)
+        try MioProtectedFileWriter.write(data, to: storageURL, fileManager: fileManager)
+    }
+
+    func erase() throws {
+        if fileManager.fileExists(atPath: storageURL.path) {
+            try fileManager.removeItem(at: storageURL)
+        }
+    }
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
+    private static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+}
+
+/// Owns only proposals, lesson metadata and source identities, never raw audio.
+/// Mutations read this actor's cache after checking the external-file fingerprint,
+/// preserving concurrent work and refusing replacement of an unknown schema.
+actor MioAssistantRepository {
+    private let core: MioAssistantRepositoryCore
+
+    init(fileManager: FileManager = .default, storageURL: URL? = nil) {
+        let applicationSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+            .first ?? fileManager.temporaryDirectory
+        let resolvedURL = storageURL ?? applicationSupport
+            .appendingPathComponent("Mio", isDirectory: true)
+            .appendingPathComponent("assistant-v1.json", isDirectory: false)
+        core = MioAssistantRepositoryCore(storage: MioJSONAssistantStorage(storageURL: resolvedURL, fileManager: fileManager))
+    }
+
+    func loadDocument() throws -> MioAssistantStoreDocument { try core.loadDocument() }
+    func invalidateCache() { core.invalidateCache() }
+    func claimSuggestion(id: UUID, expectedRevision: Int) throws -> MioSuggestionApprovalClaim {
+        try core.claimSuggestion(id: id, expectedRevision: expectedRevision)
+    }
+    func releaseApproval(_ claim: MioSuggestionApprovalClaim) throws { try core.releaseApproval(claim) }
+    func completeApproval(_ claim: MioSuggestionApprovalClaim) throws { try core.completeApproval(claim) }
+    func reconcileAcceptedContent(id: UUID) throws { try core.reconcileAcceptedContent(id: id) }
+    func addSuggestion(_ suggestion: MioSuggestion) throws { try core.addSuggestion(suggestion) }
+    @discardableResult
+    func detectSuggestions(in session: MioSession, now: Date = .now) throws -> Int {
+        try core.detectSuggestions(in: session, now: now)
+    }
+    @discardableResult
+    func applyAnalysis(_ result: MioAnalysisResult, request: MioAnalysisRequest, session: MioSession) throws -> Int {
+        try core.applyAnalysis(result, request: request, session: session)
+    }
+    func deferSuggestion(id: UUID, now: Date = .now) throws { try core.deferSuggestion(id: id, now: now) }
+    func removeSuggestion(id: UUID) throws { try core.removeSuggestion(id: id) }
+    func saveLesson(_ lesson: MioLesson, session: MioSession) throws { try core.saveLesson(lesson, session: session) }
+    func deleteLesson(id: UUID) throws { try core.deleteLesson(id: id) }
+    func deleteSessionData(sessionID: UUID) throws { try core.deleteSessionData(sessionID: sessionID) }
+    func deleteAll(now: Date = .now) throws { try core.deleteAll(now: now) }
+}
+
+/// Assistant rules shared by the JSON and SwiftData actors; owned and serialized by one actor.
+final class MioAssistantRepositoryCore {
+    private let storage: any MioAssistantStorage
+    private var deletedSessionIDs: Set<UUID> = []
+    private var ignoreSessionsStartedThrough: Date?
+    private var cachedDocument: MioAssistantStoreDocument?
+    private var cachedFingerprint: MioFileStamp?
+    private var approvalClaims: [UUID: (claim: MioSuggestionApprovalClaim, wasClosed: Bool)] = [:]
+
+    init(storage: any MioAssistantStorage) {
+        self.storage = storage
+    }
+
+    func loadDocument() throws -> MioAssistantStoreDocument {
+        let fingerprint = try storage.stamp()
+        if let cachedDocument, fingerprint == cachedFingerprint { return cachedDocument }
+        // A replaced fixture must be validated even if the previous file was valid.
+        cachedDocument = nil
+        cachedFingerprint = nil
+        guard let document = try storage.read() else {
+            let document = MioAssistantStoreDocument()
+            cachedDocument = document
+            return document
+        }
         try validate(document)
         cachedDocument = document
         cachedFingerprint = fingerprint
@@ -315,9 +399,7 @@ actor MioAssistantRepository {
         ignoreSessionsStartedThrough = max(ignoreSessionsStartedThrough ?? now, now)
         approvalClaims = [:]
         invalidateCache()
-        if fileManager.fileExists(atPath: storageURL.path) {
-            try fileManager.removeItem(at: storageURL)
-        }
+        try storage.erase()
     }
 
     private func isDeleted(_ session: MioSession) -> Bool {
@@ -349,25 +431,9 @@ actor MioAssistantRepository {
 
     private func write(_ document: MioAssistantStoreDocument) throws {
         try validate(document)
-        let data = try Self.encoder.encode(document)
-        try MioProtectedFileWriter.write(data, to: storageURL, fileManager: fileManager)
+        // The cache equals the last persisted document, so storage may write only the difference.
+        try storage.write(document, replacing: cachedDocument)
         cachedDocument = document
-        cachedFingerprint = try fileFingerprint()
+        cachedFingerprint = try storage.stamp()
     }
-
-    private func fileFingerprint() throws -> MioFileStamp? {
-        try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
-    }
-
-    private static let encoder: JSONEncoder = {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }()
-
-    private static let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
-    }()
 }

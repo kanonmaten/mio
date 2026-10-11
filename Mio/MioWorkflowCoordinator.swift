@@ -44,7 +44,7 @@ final class MioWorkflowCoordinator {
          journal: MioDeletionJournal = MioDeletionJournal(), diagnostics: MioDiagnosticsRepository = .shared,
          systemActions: MioSystemActionPort? = nil, questions: MioQuestionWorkflow? = nil,
          clearCredentials: (@MainActor () throws -> Void)? = nil,
-         pendingLessonDefaults: UserDefaults = .standard) {
+         pendingLessonDefaults: UserDefaults = .standard, metrics: MioMetricArchive = .shared) {
         self.pendingLessonDefaults = pendingLessonDefaults
         let systemActions = systemActions ?? .native
         let maintenance = MioMaintenanceState.shared
@@ -93,7 +93,7 @@ final class MioWorkflowCoordinator {
                 guard let id = operation.targetID else { return .failure("Sessionens identifierare saknas.") }
                 return await assistant.deleteSessionDataOutcome(sessionID: id, ignoreMaintenance: true)
             case .diagnostics:
-                do { try await diagnostics.deleteAll(); return .success }
+                do { try await diagnostics.deleteAll(); try await metrics.deleteAll(); return .success }
                 catch { return .failure("Kunde inte radera diagnostikjournalen. Försök igen.") }
             }
         })

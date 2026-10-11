@@ -14,54 +14,133 @@ enum MioContentRepositoryError: LocalizedError {
     }
 }
 
+/// Persistence boundary for content items. One storage object is owned and called by
+/// exactly one repository actor.
+protocol MioContentStorage: AnyObject {
+    func stamp() throws -> MioFileStamp?
+    /// Nil means that nothing has been stored yet. Unknown schemas throw and are never replaced.
+    func read() throws -> [MioContentItem]?
+    /// `previous` is the last state this owner read or wrote; nil requests a full replacement.
+    func write(_ items: [MioContentItem], replacing previous: [MioContentItem]?) throws
+    func erase() throws
+}
+
+final class MioJSONContentStorage: MioContentStorage {
+    private let fileManager: FileManager
+    let storageURL: URL
+
+    init(storageURL: URL, fileManager: FileManager) {
+        self.storageURL = storageURL
+        self.fileManager = fileManager
+    }
+
+    func stamp() throws -> MioFileStamp? {
+        try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
+    }
+
+    func read() throws -> [MioContentItem]? {
+        guard fileManager.fileExists(atPath: storageURL.path) else { return nil }
+        let data = try Data(contentsOf: storageURL)
+        let document = try Self.decoder.decode(MioContentStoreDocument.self, from: data)
+        guard document.schemaVersion == MioContentStoreDocument.currentSchemaVersion else {
+            throw MioContentRepositoryError.unsupportedSchemaVersion(document.schemaVersion)
+        }
+        return document.items
+    }
+
+    func write(_ items: [MioContentItem], replacing previous: [MioContentItem]?) throws {
+        let data = try Self.encoder.encode(MioContentStoreDocument(items: items))
+        try MioProtectedFileWriter.write(data, to: storageURL, fileManager: fileManager)
+    }
+
+    func erase() throws {
+        if fileManager.fileExists(atPath: storageURL.path) {
+            try fileManager.removeItem(at: storageURL)
+        }
+    }
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
+    private static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+}
+
 /// Stores manually created content separately from transcription sessions. Raw audio is never accepted or stored by this repository.
 actor MioContentRepository {
-    private let fileManager: FileManager
-    private let storageURL: URL
-    private let exportDirectoryURL: URL
-    private var cachedItems: [MioContentItem]?
-    private var cachedStamp: MioFileStamp?
+    private let core: MioContentRepositoryCore
 
     init(
         fileManager: FileManager = .default,
         storageURL: URL? = nil,
         exportDirectoryURL: URL? = nil
     ) {
-        self.fileManager = fileManager
         let applicationSupport = fileManager.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first ?? fileManager.temporaryDirectory
         // This persisted path is independent of the app version and project name.
-        self.storageURL = storageURL ?? applicationSupport
+        let resolvedURL = storageURL ?? applicationSupport
             .appendingPathComponent("Mio", isDirectory: true)
             .appendingPathComponent("content-v1.json", isDirectory: false)
+        core = MioContentRepositoryCore(storage: MioJSONContentStorage(storageURL: resolvedURL, fileManager: fileManager),
+                                        fileManager: fileManager, exportDirectoryURL: exportDirectoryURL)
+    }
+
+    func loadItems() throws -> [MioContentItem] { try core.loadItems() }
+    func upsert(_ item: MioContentItem) throws -> [MioContentItem] { try core.upsert(item) }
+    func delete(id: UUID) throws -> [MioContentItem] { try core.delete(id: id) }
+    func saveApprovedIfAbsent(_ item: MioContentItem) throws -> [MioContentItem] { try core.saveApprovedIfAbsent(item) }
+    func unlinkSession(id: UUID) throws -> [MioContentItem] { try core.unlinkSession(id: id) }
+    func deleteAll() throws { try core.deleteAll() }
+    func removeTemporaryExports() throws { try core.removeTemporaryExports() }
+    func makeExportFile(
+        content: [MioContentItem],
+        sessions: [MioSession],
+        assistant: MioAssistantStoreDocument? = nil,
+        diagnostics: MioDiagnosticsExport? = nil
+    ) throws -> URL {
+        try core.makeExportFile(content: content, sessions: sessions, assistant: assistant, diagnostics: diagnostics)
+    }
+}
+
+/// Content rules shared by the JSON and SwiftData actors; owned and serialized by one actor.
+final class MioContentRepositoryCore {
+    private let fileManager: FileManager
+    private let storage: any MioContentStorage
+    private let exportDirectoryURL: URL
+    private var cachedItems: [MioContentItem]?
+    private var cachedStamp: MioFileStamp?
+
+    init(storage: any MioContentStorage, fileManager: FileManager = .default, exportDirectoryURL: URL? = nil) {
+        self.fileManager = fileManager
+        self.storage = storage
         self.exportDirectoryURL = exportDirectoryURL ?? fileManager.temporaryDirectory
             .appendingPathComponent("Mio-exports", isDirectory: true)
     }
 
     func loadItems() throws -> [MioContentItem] {
-        let currentStamp = try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
+        let currentStamp = try storage.stamp()
         if let cachedItems, currentStamp == cachedStamp {
             return cachedItems
         }
 
         cachedItems = nil; cachedStamp = nil
 
-        guard fileManager.fileExists(atPath: storageURL.path) else {
+        guard let items = try storage.read() else {
             cachedItems = []
             return []
         }
-
-        let data = try Data(contentsOf: storageURL)
-        let document = try Self.decoder.decode(MioContentStoreDocument.self, from: data)
-        guard document.schemaVersion == MioContentStoreDocument.currentSchemaVersion else {
-            throw MioContentRepositoryError.unsupportedSchemaVersion(document.schemaVersion)
-        }
-        guard Set(document.items.map(\.id)).count == document.items.count else {
+        guard Set(items.map(\.id)).count == items.count else {
             throw MioContentRepositoryError.duplicateIdentity
         }
-        let sortedItems = MioContentItem.timelineSorted(document.items)
+        let sortedItems = MioContentItem.timelineSorted(items)
         cachedItems = sortedItems
         cachedStamp = currentStamp
         return sortedItems
@@ -105,9 +184,7 @@ actor MioContentRepository {
     }
 
     func deleteAll() throws {
-        if fileManager.fileExists(atPath: storageURL.path) {
-            try fileManager.removeItem(at: storageURL)
-        }
+        try storage.erase()
         try removeTemporaryExports()
         cachedItems = []; cachedStamp = nil
     }
@@ -147,29 +224,15 @@ actor MioContentRepository {
     }
 
     private func write(_ items: [MioContentItem]) throws {
-        let document = MioContentStoreDocument(items: items)
-        let data = try Self.encoder.encode(document)
-        try MioProtectedFileWriter.write(data, to: storageURL, fileManager: fileManager)
+        try storage.write(items, replacing: cachedItems)
         cachedItems = items
-        cachedStamp = try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
+        cachedStamp = try storage.stamp()
     }
-
-    private static let encoder: JSONEncoder = {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }()
 
     private static let exportEncoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         return encoder
-    }()
-
-    private static let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
     }()
 }

@@ -168,6 +168,7 @@ final class MicrophoneCapture: AudioCapturing, @unchecked Sendable {
         switch notification {
         case let .interruption(rawType, rawOptions):
             guard let raw = rawType, let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+            MioLog.notice(.capture, "audio session interruption type", value: Int(raw))
             if type == .began {
                 interrupted = true
                 tearDownEngine(); event(.interruptionBegan)

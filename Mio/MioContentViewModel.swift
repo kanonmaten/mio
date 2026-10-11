@@ -9,14 +9,16 @@ final class MioContentViewModel {
     var isPreparingExport = false
     private(set) var stateRevision: UInt64 = 0
 
-    @ObservationIgnored private let repository: MioContentRepository
+    @ObservationIgnored private let repository: any MioContentStore
     @ObservationIgnored private let diagnostics: MioDiagnosticsRepository
+    @ObservationIgnored private let metrics: MioMetricArchive
     @ObservationIgnored private let systemActions: MioSystemActionPort
     @ObservationIgnored private var hasBootstrapped = false
 
-    init(repository: MioContentRepository = MioContentRepository(), diagnostics: MioDiagnosticsRepository = .shared,
-         systemActions: MioSystemActionPort? = nil) {
+    init(repository: any MioContentStore = MioContentRepository(), diagnostics: MioDiagnosticsRepository = .shared,
+         systemActions: MioSystemActionPort? = nil, metrics: MioMetricArchive = .shared) {
         self.repository = repository; self.diagnostics = diagnostics; self.systemActions = systemActions ?? .native
+        self.metrics = metrics
     }
 
     func bootstrap() async {
@@ -117,8 +119,10 @@ final class MioContentViewModel {
                 analysisEnabled: MioDiagnosticsRuntime.analysisEnabled,
                 serverConfigured: (try? MioCloudSettings.endpoint(for: MioCloudSettings.serverAddress)) != nil,
                 accessConfigured: MioCloudSettings.usesAccess)
+            var diagnosticsExport = MioDiagnosticsExport(configuration: configuration, journal: journal)
+            diagnosticsExport.metricReports = await metrics.reports()
             let exported = try await repository.makeExportFile(content: content, sessions: sessions, assistant: assistant,
-                diagnostics: MioDiagnosticsExport(configuration: configuration, journal: journal))
+                diagnostics: diagnosticsExport)
             exportURL = exported
             let result = publish(.success)
             if journal.storageStatus != .available {

@@ -24,11 +24,109 @@ enum SessionRepositoryError: LocalizedError {
     }
 }
 
+/// Persistence boundary for the session register. One storage object is owned and called
+/// by exactly one repository actor, so implementations need no locking of their own.
+protocol MioSessionStorage: AnyObject {
+    /// Changes when the persisted register may differ from the actor's cache.
+    func stamp() throws -> MioFileStamp?
+    /// Nil means that nothing has been stored yet.
+    func read() throws -> [MioSession]?
+    /// `previous` is the last state this owner read or wrote; nil requests a full replacement.
+    func write(_ sessions: [MioSession], replacing previous: [MioSession]?) throws
+    func erase() throws
+}
+
+/// The legacy whole-file JSON register, kept for the Linux tests and as the fallback when
+/// the one-time SwiftData migration refuses an unknown legacy schema.
+final class MioJSONSessionStorage: MioSessionStorage {
+    private let fileManager: FileManager
+    let storageURL: URL
+
+    init(storageURL: URL, fileManager: FileManager) {
+        self.storageURL = storageURL
+        self.fileManager = fileManager
+    }
+
+    func stamp() throws -> MioFileStamp? {
+        try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
+    }
+
+    func read() throws -> [MioSession]? {
+        guard fileManager.fileExists(atPath: storageURL.path) else { return nil }
+        let data = try Data(contentsOf: storageURL)
+        return try Self.decoder.decode([MioSession].self, from: data)
+    }
+
+    func write(_ sessions: [MioSession], replacing previous: [MioSession]?) throws {
+        let data = try Self.encoder.encode(sessions)
+        try MioProtectedFileWriter.write(data, to: storageURL, fileManager: fileManager)
+    }
+
+    func erase() throws {
+        if fileManager.fileExists(atPath: storageURL.path) {
+            try fileManager.removeItem(at: storageURL)
+        }
+    }
+
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
+    private static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+}
+
 /// Stores protected transcript diagnostics inside the app sandbox. Raw audio is never stored;
 /// shareable exports are temporary files and persistent sessions are excluded from backup.
 actor SessionRepository {
+    private let core: SessionRepositoryCore
+
+    init(fileManager: FileManager = .default, storageURL: URL? = nil, exportDirectoryURL: URL? = nil) {
+        let applicationSupport = fileManager.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        ).first ?? fileManager.temporaryDirectory
+        let resolvedURL = storageURL ?? applicationSupport
+            .appendingPathComponent("Mio", isDirectory: true)
+            .appendingPathComponent("sessions.json", isDirectory: false)
+        core = SessionRepositoryCore(storage: MioJSONSessionStorage(storageURL: resolvedURL, fileManager: fileManager),
+                                     fileManager: fileManager, exportDirectoryURL: exportDirectoryURL)
+    }
+
+    func loadSessions() throws -> [MioSession] { try core.loadSessions() }
+    func operationGeneration() -> UUID { core.operationGeneration() }
+    func operationToken(for id: UUID, generation expectedGeneration: UUID) throws -> SessionOperationToken {
+        try core.operationToken(for: id, generation: expectedGeneration)
+    }
+    @discardableResult
+    func saveCaptureCheckpoint(_ session: MioSession, token: SessionOperationToken) throws -> MioSession {
+        try core.saveCaptureCheckpoint(session, token: token)
+    }
+    @discardableResult
+    func updateMetadata(id: UUID, title: String?, note: String?, token: SessionOperationToken) throws -> MioSession {
+        try core.updateMetadata(id: id, title: title, note: note, token: token)
+    }
+    @discardableResult
+    func correctTranscript(sessionID: UUID, segmentID: UUID, text: String,
+                           token: SessionOperationToken) throws -> MioSession {
+        try core.correctTranscript(sessionID: sessionID, segmentID: segmentID, text: text, token: token)
+    }
+    func delete(id: UUID) throws { try core.delete(id: id) }
+    func removeTemporaryExports() throws { try core.removeTemporaryExports() }
+    @discardableResult
+    func deleteAll() throws -> UUID { try core.deleteAll() }
+    func makeExportFile(for session: MioSession) throws -> URL { try core.makeExportFile(for: session) }
+}
+
+/// Repository rules shared by the JSON and SwiftData actors. The owning actor serializes
+/// every call; one instance must never be reachable from two actors.
+final class SessionRepositoryCore {
     private let fileManager: FileManager
-    private let storageURL: URL
+    private let storage: any MioSessionStorage
     private let exportDirectoryURL: URL
     private var cachedSessions: [MioSession]?
     private var cachedStamp: MioFileStamp?
@@ -36,33 +134,25 @@ actor SessionRepository {
     private var sessionGenerations: [UUID: UUID] = [:]
     private var deletedSessionIDs: Set<UUID> = []
 
-    init(fileManager: FileManager = .default, storageURL: URL? = nil, exportDirectoryURL: URL? = nil) {
+    init(storage: any MioSessionStorage, fileManager: FileManager = .default, exportDirectoryURL: URL? = nil) {
         self.fileManager = fileManager
-        let applicationSupport = fileManager.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        ).first ?? fileManager.temporaryDirectory
-        self.storageURL = storageURL ?? applicationSupport
-            .appendingPathComponent("Mio", isDirectory: true)
-            .appendingPathComponent("sessions.json", isDirectory: false)
+        self.storage = storage
         self.exportDirectoryURL = exportDirectoryURL ?? fileManager.temporaryDirectory
             .appendingPathComponent("Mio-exports", isDirectory: true)
     }
 
     func loadSessions() throws -> [MioSession] {
-        let currentStamp = try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
+        let currentStamp = try storage.stamp()
         if let cachedSessions, currentStamp == cachedStamp {
             return cachedSessions
         }
 
         cachedSessions = nil; cachedStamp = nil
 
-        guard fileManager.fileExists(atPath: storageURL.path) else {
+        guard let sessions = try storage.read() else {
             cachedSessions = []
             return []
         }
-
-        let data = try Data(contentsOf: storageURL)
-        let sessions = try Self.decoder.decode([MioSession].self, from: data)
         try validate(sessions)
         cachedSessions = sessions
         cachedStamp = currentStamp
@@ -161,9 +251,7 @@ actor SessionRepository {
         generation = UUID(); sessionGenerations = [:]
         // This removes app-owned storage and temporary exports. Copies already shared to
         // Files, mail or another app are outside this sandbox and cannot be recalled here.
-        if fileManager.fileExists(atPath: storageURL.path) {
-            try fileManager.removeItem(at: storageURL)
-        }
+        try storage.erase()
         try removeTemporaryExports()
         cachedSessions = []; cachedStamp = nil; deletedSessionIDs = []
         return generation
@@ -186,10 +274,10 @@ actor SessionRepository {
 
     private func write(_ sessions: [MioSession]) throws {
         try validate(sessions)
-        let data = try Self.encoder.encode(sessions)
-        try MioProtectedFileWriter.write(data, to: storageURL, fileManager: fileManager)
+        // The cache equals the last persisted register, so storage may write only the difference.
+        try storage.write(sessions, replacing: cachedSessions)
         cachedSessions = sessions
-        cachedStamp = try MioProtectedFileWriter.fileStamp(for: storageURL, fileManager: fileManager)
+        cachedStamp = try storage.stamp()
     }
 
     private func requireCurrent(_ token: SessionOperationToken, id: UUID) throws {
@@ -287,12 +375,6 @@ actor SessionRepository {
         guard Set(values.map(\.id)).count == values.count else { throw SessionRepositoryError.duplicateIdentity }
     }
 
-    private static let encoder: JSONEncoder = {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }()
-
     private static let exportEncoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -300,11 +382,6 @@ actor SessionRepository {
         return encoder
     }()
 
-    private static let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
-    }()
 }
 
 private extension String {

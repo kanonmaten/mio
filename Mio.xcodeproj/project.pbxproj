@@ -77,6 +77,15 @@
 		DE6CAC7E119EEAFC37CBA935 /* MioNavigationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29BF2CD0484E98171C51AF2F /* MioNavigationModels.swift */; };
 		B8F77AD627419B4D668AD0EE /* MioNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BC303EFAC6F5046776374C9 /* MioNavigationTests.swift */; };
 		B20000000000000000000001 /* MioUISmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000010 /* MioUISmokeTests.swift */; };
+		DA7A00000000000000000101 /* MioStores.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000001 /* MioStores.swift */; };
+		DA7A00000000000000000102 /* MioStoreMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000002 /* MioStoreMigration.swift */; };
+		DA7A00000000000000000103 /* MioLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000003 /* MioLog.swift */; };
+		DA7A00000000000000000104 /* MioMetricArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000004 /* MioMetricArchive.swift */; };
+		DA7A00000000000000000105 /* MioSwiftDataStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000005 /* MioSwiftDataStore.swift */; };
+		DA7A00000000000000000106 /* MioStoreBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000006 /* MioStoreBootstrap.swift */; };
+		DA7A00000000000000000107 /* MioMetricKitSubscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000007 /* MioMetricKitSubscriber.swift */; };
+		DA7A00000000000000000108 /* MioDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000008 /* MioDiagnosticsView.swift */; };
+		DA7A00000000000000000109 /* MioStoreMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000009 /* MioStoreMigrationTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -168,6 +177,15 @@
 		3BC303EFAC6F5046776374C9 /* MioNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioNavigationTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000010 /* MioUISmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioUISmokeTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000011 /* MioUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MioUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DA7A00000000000000000001 /* MioStores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioStores.swift; sourceTree = "<group>"; };
+		DA7A00000000000000000002 /* MioStoreMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioStoreMigration.swift; sourceTree = "<group>"; };
+		DA7A00000000000000000003 /* MioLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLog.swift; sourceTree = "<group>"; };
+		DA7A00000000000000000004 /* MioMetricArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioMetricArchive.swift; sourceTree = "<group>"; };
+		DA7A00000000000000000005 /* MioSwiftDataStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSwiftDataStore.swift; sourceTree = "<group>"; };
+		DA7A00000000000000000006 /* MioStoreBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioStoreBootstrap.swift; sourceTree = "<group>"; };
+		DA7A00000000000000000007 /* MioMetricKitSubscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioMetricKitSubscriber.swift; sourceTree = "<group>"; };
+		DA7A00000000000000000008 /* MioDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioDiagnosticsView.swift; sourceTree = "<group>"; };
+		DA7A00000000000000000009 /* MioStoreMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioStoreMigrationTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -207,6 +225,7 @@
 				0A18B1159BDC8C4D2A4D05B8 /* MioQuestionWorkflow.swift */,
 				51D98E4D669FDBD52C4BE861 /* MioWorkflowCoordinator.swift */,
 				E608AC3345DCF13A1578AB9F /* MioSettingsView.swift */,
+				DA7A00000000000000000008 /* MioDiagnosticsView.swift */,
 				ED186F304655079D8F88FE48 /* MioIntelligenceViews.swift */,
 				8176C1E54D96C9B75DA141FB /* MioAnalysisCoordinator.swift */,
 				24832E2A9856E255C6684632 /* SystemIntegrationViews.swift */,
@@ -250,6 +269,13 @@
 				6461AE686184A3C58543D736 /* MioConnectionDiscovery.swift */,
 				2E84D8E8D4B2A52880078CD3 /* MioSystemActionPort.swift */,
 				A93EFB73120D205AD59D4CCD /* MioProtectedFileWriter.swift */,
+				DA7A00000000000000000007 /* MioMetricKitSubscriber.swift */,
+				DA7A00000000000000000006 /* MioStoreBootstrap.swift */,
+				DA7A00000000000000000005 /* MioSwiftDataStore.swift */,
+				DA7A00000000000000000004 /* MioMetricArchive.swift */,
+				DA7A00000000000000000003 /* MioLog.swift */,
+				DA7A00000000000000000002 /* MioStoreMigration.swift */,
+				DA7A00000000000000000001 /* MioStores.swift */,
 				0E35F7B9A7AD09365385626A /* MioDeletionJournal.swift */,
 				7A755BDC203D363DFA5588BC /* MioDiagnosticsRepository.swift */,
 				9089093008C57C04D98E1592 /* MicrophoneCapture.swift */,
@@ -285,6 +311,7 @@
 				F6B8DACEF0C8BBA46788A5F1 /* MioSessionRepositoryTests.swift */,
 				6B152EE97327E606E06BAF0D /* MioCoordinatorContextTests.swift */,
 				53E1A3C379F46FAAA309BE16 /* MioDiagnosticsTests.swift */,
+				DA7A00000000000000000009 /* MioStoreMigrationTests.swift */,
 				BBC64BB56B77E17AF2B9FD3E /* MioContextTests.swift */,
 				17A0AE12F82CB09B580F9530 /* TranscriptionTests.swift */,
 				07B84A3FF8701FEC2ABC19DE /* MioAnalysisTests.swift */,
@@ -433,6 +460,13 @@
 				F58A321D693629C81E917EAB /* MioQuestionWorkflow.swift in Sources */,
 				AFCA1338FEA831B5E034129A /* MioSystemActionPort.swift in Sources */,
 				F83F95401AB51D11201504C9 /* MioProtectedFileWriter.swift in Sources */,
+				DA7A00000000000000000107 /* MioMetricKitSubscriber.swift in Sources */,
+				DA7A00000000000000000106 /* MioStoreBootstrap.swift in Sources */,
+				DA7A00000000000000000105 /* MioSwiftDataStore.swift in Sources */,
+				DA7A00000000000000000104 /* MioMetricArchive.swift in Sources */,
+				DA7A00000000000000000103 /* MioLog.swift in Sources */,
+				DA7A00000000000000000102 /* MioStoreMigration.swift in Sources */,
+				DA7A00000000000000000101 /* MioStores.swift in Sources */,
 				3811BD819D858D9DD27918D6 /* MioDeletionJournal.swift in Sources */,
 				8B81E9E52688E4EA406AD3DC /* MioOperationOutcome.swift in Sources */,
 				6B213A829FB7FDC5AE05B36A /* MioWorkflowCoordinator.swift in Sources */,
@@ -443,6 +477,7 @@
 				2AB599C7C465DCC094CBF0E3 /* TranscriptionService.swift in Sources */,
 				39AE1A5047493CDFA0DE88ED /* TranscriptionModels.swift in Sources */,
 				078A1A7F0C88C0ADBEAB143E /* MioSettingsView.swift in Sources */,
+				DA7A00000000000000000108 /* MioDiagnosticsView.swift in Sources */,
 				5D2BCAEF461598A056EA31C7 /* MioIntelligenceViews.swift in Sources */,
 				3814826E9154155841DCF3FC /* MioAnalysisCoordinator.swift in Sources */,
 				FDEAE468A9D0E2963EBB439A /* MioAnalysisModels.swift in Sources */,
@@ -490,6 +525,7 @@
 				4E6C35138E3E995A9476AAAC /* MioSessionRepositoryTests.swift in Sources */,
 				3E2DCEDB4573BF11B74F5D70 /* MioCoordinatorContextTests.swift in Sources */,
 				00A25152A54ACE2CD1F5817B /* MioDiagnosticsTests.swift in Sources */,
+				DA7A00000000000000000109 /* MioStoreMigrationTests.swift in Sources */,
 				867F68B153C9430EACEBC14B /* MioContextTests.swift in Sources */,
 				88CD40B7A267228C84FEE551 /* TranscriptionTests.swift in Sources */,
 				C168CEE7244CBC9C6D1CEBD3 /* MioAnalysisTests.swift in Sources */,

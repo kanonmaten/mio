@@ -12,7 +12,7 @@ final class MioAssistantViewModel {
     private(set) var isBusy = false
     private(set) var stateRevision: UInt64 = 0
 
-    @ObservationIgnored private let repository: MioAssistantRepository
+    @ObservationIgnored private let repository: any MioAssistantStore
     @ObservationIgnored private var hasBootstrapped = false
     @ObservationIgnored private var processedSources: Set<MioProcessedSource> = []
     @ObservationIgnored private var lastRefreshRequest = 0
@@ -20,7 +20,7 @@ final class MioAssistantViewModel {
     @ObservationIgnored private var isDeletingAll = false
     @ObservationIgnored private var activeOperations = 0
 
-    init(repository: MioAssistantRepository = MioAssistantRepository()) {
+    init(repository: any MioAssistantStore = MioAssistantRepository()) {
         self.repository = repository
     }
 
@@ -77,7 +77,7 @@ final class MioAssistantViewModel {
         }
         defer { MioMaintenanceState.shared.endWrite() }
         do {
-            let count = try await repository.detectSuggestions(in: session)
+            let count = try await repository.detectSuggestions(in: session, now: .now)
             // Storage success is authoritative even if refreshing presentation fails.
             do { try await refresh() }
             catch { errorMessage = "Kommandona sparades, men listan kunde inte uppdateras. Försök läsa den igen." }
@@ -109,7 +109,7 @@ final class MioAssistantViewModel {
     }
 
     func deferSuggestionOutcome(id: UUID) async -> MioOperationOutcome {
-        await changeOutcome { try await self.repository.deferSuggestion(id: id) }
+        await changeOutcome { try await self.repository.deferSuggestion(id: id, now: .now) }
     }
 
     @discardableResult
@@ -212,7 +212,7 @@ final class MioAssistantViewModel {
         sessionsBeingDeleted.formUnion(suggestions.compactMap(\.sessionID))
         sessionsBeingDeleted.formUnion(lessons.map(\.sessionID))
         sessionsBeingDeleted.formUnion(processedSources.map(\.sessionID))
-        return await changeOutcome(ignoreMaintenance: ignoreMaintenance) { try await self.repository.deleteAll() }
+        return await changeOutcome(ignoreMaintenance: ignoreMaintenance) { try await self.repository.deleteAll(now: .now) }
     }
 
     func lessons(for sessionID: UUID) -> [MioLesson] {
