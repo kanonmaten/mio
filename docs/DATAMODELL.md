@@ -53,7 +53,7 @@ iOS är källa för AlarmKit-alarm och lokala notiser. Postalarm använder poste
 
 Notisens `userInfo` innehåller endast `mioRoute` (`post`, `morning`, `evening`) och, för post, ett opakt `mioPostID`-UUID. Låsskärmtexten är generell. Extra nycklar/ogiltiga rutter avvisas. En pending rutt hålls till lokala lager har lästs; borttagen post ger säker fallback till dagsfliken. Rutt, flikval och vald översiktsdag är tillfälligt presentationstillstånd och startar aldrig mikrofon eller AI.
 
-AI-aktivering och HTTPS-adress finns i egna UserDefaults. Separat gatewaytoken lagras i Keychain under `app.mio.assistant.cloud-gateway`, endast tillgänglig på upplåst aktuell enhet. Leverantörens API-nyckel finns enbart på servern. Frågeutkast/svar i AI-vyn är tillfälliga och sparas inte som historik. Uppskjutna inkorgsfrågor finns i assistentlagret.
+AI-valet (`mio.ai.enabled`, saknas = på; ersätter `mio.cloud.enabled` som tas bort vid uppgradering) och gatewayens HTTPS-adress (`mio.cloud.server`) finns i egna UserDefaults, liksom `mio.consent.recordingNoticeShown` och engångsmarkeringen `mio.cloud.legacyAccessRemoved.v1`. Gatewaytoken lagras i Keychain under `app.mio.assistant.cloud-gateway` som `{"token":…}` utan Access-par (2026-10-11; äldre Access-uppgifter skrivs om eller raderas en gång), endast tillgänglig på upplåst aktuell enhet. Båda adresserna och tokens kommer från samma parning; ingen QR-kod eller bild sparas. Leverantörens API-nyckel finns enbart på servern. Frågeutkast/svar i AI-vyn är tillfälliga och sparas inte som historik. Uppskjutna inkorgsfrågor finns i assistentlagret.
 
 ## Export och radering
 
@@ -103,7 +103,7 @@ Detaljerade delar analyserar den visningstext som fanns vid sändningen. Senare 
 
 Nya `MioLesson` och detaljerade `MioAnalysisRecord` kan ha valfria `sourceRevisions`: segment-ID och den `correctionRevision` som hörde till underlaget. Revisionsmetadata stannar lokalt och ändrar inte serverns källtextkontrakt. Original utan rättning har källrevision 0; en äldre rättning utan revisionsbevis är okänd. Källjämförelse visar **aktuell**, **äldre** eller **okänd**. Äldre poster utan metadata anges aldrig som verifierat aktuella. Sparade delar, användarredigeringar, citat och ordning bevaras även om en rättning ändrar antal textfragment. Kopiering märker ofullständigt arbete, ljudluckor och äldre/okänt källunderlag. Rättning ger ingen automatisk omanalys eller ny molnsändning.
 
-## Molnanslutning med Access, 2026-09-29
+## Molnanslutning med Access, 2026-09-29 (ersatt 2026-10-11)
 
 Keychain-posten `app.mio.assistant.cloud-gateway` / `gateway-token` innehåller efter nästa sparning ett JSON-objekt med gatewaytoken och valfritt Access-par. Äldre post med enbart tokensträng kan läsas. Alla hemligheter uppdateras i en Keychain-skrivning med `WhenUnlockedThisDeviceOnly`, ingår aldrig i export och raderas tillsammans vid glömd anslutning/fullständig radering. Ändrad server kräver att hemligheter anges igen. Anslutningens jämförelse inkluderar Access-paret vid förhandsgranskning. Sparning/radering skickar samma återställningsnotis som tidigare och stoppar pågående analys. Inga innehållsscheman ändras.
 
@@ -142,4 +142,4 @@ Sessioner, innehåll och assistentdata ligger i en SwiftData-databas, `Mio/store
 
 `diagnostics-v1.json` ligger kvar som fil. Raderingsjournalen `operations-v1.json` och generationsspärrarna behålls: de skyddar mot sena fångst-callbacks efter radering och täcker steg utanför databasen (alarm, notiser, nycklar). Exporten är oförändrad JSON.
 
-**MetricKit och loggning.** En `MXMetricManagerSubscriber` sparar Apples textfria JSON-rapporter i `Mio/metrickit-v1.json` (högst 40, 3 MB, 30 dagar; okänt schema skrivs inte över). Sidan Inställningar → Om Mio → Diagnostik visar datum, typ och en sifferbaserad sammanfattning med dela/kopiera; rapporterna ingår i exporten och raderas med diagnostiken. `os.Logger` (subsystem `app.mio.assistant`, kategorierna `capture`, `transcription`, `ai`, `storage`) loggar bara fasta meddelanden och heltal, aldrig användartext.
+**MetricKit och loggning.** En `MXMetricManagerSubscriber` sparar Apples textfria JSON-rapporter i `Mio/metrickit-v1.json` (högst 40, 3 MB, 30 dagar; okänt schema skrivs inte över). Sidan Inställningar → Om → Diagnostik visar datum, typ och en sifferbaserad sammanfattning med dela/kopiera; rapporterna ingår i exporten och raderas med diagnostiken. `os.Logger` (subsystem `app.mio.assistant`, kategorierna `capture`, `transcription`, `ai`, `storage`) loggar bara fasta meddelanden och heltal, aldrig användartext.

@@ -19,10 +19,10 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
             text: "Syntetiskt underlag.", containsMio: false)]), assistant: helper)
         for _ in 0..<10_000 { if !coordinator.isWorking && !coordinator.enabled { break }; await Task.yield() }
         XCTAssertFalse(coordinator.enabled)
-        XCTAssertNotEqual(coordinator.status, "AI-tolkning är av. Inga fler utdrag skickas.",
+        XCTAssertNotEqual(coordinator.status, "AI är pausad. Inga fler utdrag skickas.",
                           "A silently changed connection needs a fresh activation notice")
         XCTAssertNotEqual(coordinator.errorMessage, MioCloudError.network.localizedDescription
-            + " Aktivera läget igen när problemet är löst. Inget automatiskt omförsök görs.",
+            + " AI startar igen nästa gång du öppnar Mio, eller med Starta AI igen i Inställningar.",
                           "A failure from the old connection must not be shown")
         XCTAssertTrue(coordinator.errorMessage?.localizedCaseInsensitiveContains("anslutning") == true)
         XCTAssertTrue(helper.analyses.isEmpty)
@@ -63,16 +63,16 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
     }
 
     @MainActor
-    func testIncompleteSpeechWaitsAtMost120SecondsAndRequestsV2() async throws {
+    func testEverydayTextWaitsForFiveMinuteBatchAndRequestsV2() async throws {
         let assistant = assistant(self)
         var clock = Date.now
         let start = clock
         var waits: [TimeInterval] = []
-        let sent = expectation(description: "Incomplete speech reaches hard deadline")
+        let sent = expectation(description: "Everyday text is sent when its batch window closes")
         let connection = MioCloudConnection(endpoint: URL(string: "https://example.invalid/v1/ask")!, token: "synthetic")
         let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true }, prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { request, _ in
             XCTAssertTrue(request.usesContextContract)
-            XCTAssertEqual(clock.timeIntervalSince(start), 120, accuracy: 0.01)
+            XCTAssertEqual(clock.timeIntervalSince(start), 300, accuracy: 0.01)
             XCTAssertEqual(request.fragments.map(\.text), ["Vi ses på biblioteket"])
             XCTAssertEqual(request.queueSize, 1)
             sent.fulfill()
@@ -82,7 +82,7 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
         let segment = TranscriptSegment(createdAt: clock, text: "Vi ses på biblioteket", containsMio: false)
         coordinator.observe(MioSession(transcripts: [segment]), assistant: assistant)
         await fulfillment(of: [sent], timeout: 2)
-        XCTAssertEqual(waits, [60, 20, 20, 20])
+        XCTAssertEqual(waits, [300])
         coordinator.disable()
         XCTAssertFalse(MioDiagnosticsRuntime.analysisEnabled)
     }
@@ -278,35 +278,38 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
     }
 
     @MainActor
-    func testQuotaPauseUsesServerRetryAfterAndNeverResumesAutomatically() async throws {
+    func testShortQuotaPauseKeepsTextAndResumesAfterRetryAfter() async throws {
         let assistant = assistant(self)
         var clock = Date.now
         let start = clock
-        var sends = 0
+        var sends: [Date] = []
         let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
             prepareConnection: { try await syntheticPreparedConnection($0, task: $1) },
-            send: { _, _ in sends += 1; throw MioCloudError.gatewayRateLimited(.localMinuteLimit, 9) },
+            send: { request, _ in
+                sends.append(clock)
+                if sends.count == 1 { throw MioCloudError.gatewayRateLimited(.localMinuteLimit, 9) }
+                XCTAssertEqual(request.fragments.map(\.text), ["Syntetiskt underlag."])
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            },
             wait: { clock.addTimeInterval($0) }, now: { clock })
         try await coordinator.enable(existingSessions: [])
         coordinator.observe(MioSession(transcripts: [TranscriptSegment(createdAt: clock, text: "Syntetiskt underlag.", containsMio: false)]), assistant: assistant)
-        for _ in 0..<10_000 { if !coordinator.enabled { break }; await Task.yield() }
-        XCTAssertFalse(coordinator.enabled)
-        XCTAssertEqual(coordinator.pausedUntil, start.addingTimeInterval(69))
-        do { try await coordinator.enable(existingSessions: []); XCTFail("Must wait before explicit continuation") }
-        catch MioCloudError.rateLimited(9) {} catch { XCTFail("Unexpected error \(error)") }
-        clock.addTimeInterval(10)
-        for _ in 0..<100 { await Task.yield() }
-        XCTAssertFalse(coordinator.enabled)
-        XCTAssertEqual(sends, 1)
-        try await coordinator.enable(existingSessions: [])
-        XCTAssertTrue(coordinator.enabled)
+        for _ in 0..<20_000 { if coordinator.sentBatches == 1 || !coordinator.enabled { break }; await Task.yield() }
+        XCTAssertTrue(coordinator.enabled, "A quota pause must not switch AI off")
+        XCTAssertEqual(coordinator.sentBatches, 1)
+        XCTAssertEqual(sends.count, 2)
+        XCTAssertEqual(coordinator.pausedUntil, start.addingTimeInterval(309))
+        // The retry honours Retry-After and the minute spacing after the failed call.
+        XCTAssertGreaterThanOrEqual(sends[1].timeIntervalSince(sends[0]), 60)
+        XCTAssertGreaterThanOrEqual(sends[1], start.addingTimeInterval(309))
         coordinator.disable()
     }
 
     @MainActor
-    func testUnknownDayResetStillUsesServerRetryAfterForManualContinuation() async throws {
+    func testTokenLimitPausesUntilRetryAfterAndSkipsTextMeanwhile() async throws {
         let assistant = assistant(self)
         var clock = Date.now
+        var sentTexts: [String] = []
         let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
             prepareConnection: { connection, _ in
                 var selected = connection
@@ -314,17 +317,31 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
                 let valid = syntheticGatewayStatus()
                 let status = MioGatewayStatusV2(protocolVersion: valid.protocolVersion, release: valid.release,
                     configurationRevision: valid.configurationRevision, tasks: valid.tasks,
-                    quota: .init(limit: 100, remaining: nil, resetAt: nil))
+                    quota: .init(limit: 190_000, remaining: nil, resetAt: nil))
                 return .init(connection: selected, status: status)
-            }, send: { _, _ in throw MioCloudError.gatewayRateLimited(.localDayLimit, 123) },
+            }, send: { request, _ in
+                sentTexts += request.fragments.map(\.text)
+                if sentTexts.count == 1 { throw MioCloudError.gatewayRateLimited(.localTokenLimit, 3_600) }
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            },
             wait: { clock.addTimeInterval($0) }, now: { clock })
         try await coordinator.enable(existingSessions: [])
-        coordinator.observe(MioSession(transcripts: [TranscriptSegment(createdAt: clock, text: "Syntetiskt underlag.", containsMio: false)]), assistant: assistant)
-        for _ in 0..<10_000 { if !coordinator.enabled { break }; await Task.yield() }
-        XCTAssertFalse(coordinator.enabled)
-        XCTAssertEqual(coordinator.pausedUntil, clock.addingTimeInterval(123))
-        do { try await coordinator.enable(existingSessions: []); XCTFail("Manual continuation must respect the known server delay") }
-        catch MioCloudError.rateLimited(123) {} catch { XCTFail("Unexpected error \(error)") }
+        var session = MioSession(transcripts: [TranscriptSegment(createdAt: clock, text: "Före gränsen.", containsMio: false)])
+        coordinator.observe(session, assistant: assistant)
+        for _ in 0..<20_000 { if coordinator.pausedUntil != nil && !coordinator.isWorking { break }; await Task.yield() }
+        let deadline = try XCTUnwrap(coordinator.pausedUntil)
+        XCTAssertEqual(deadline.timeIntervalSince(clock), 3_600, accuracy: 0.01)
+        XCTAssertTrue(coordinator.enabled)
+        XCTAssertTrue(coordinator.status.contains("AI fortsätter kl."))
+        session.transcripts.append(TranscriptSegment(createdAt: clock.addingTimeInterval(5), text: "Under pausen.", containsMio: false))
+        coordinator.observe(session, assistant: assistant)
+        for _ in 0..<200 { await Task.yield() }
+        XCTAssertEqual(sentTexts, ["Före gränsen."], "Text during a long quota pause stays local and is not queued")
+        clock = deadline.addingTimeInterval(1)
+        session.transcripts.append(TranscriptSegment(createdAt: clock, text: "Efter pausen.", containsMio: false))
+        coordinator.observe(session, assistant: assistant)
+        for _ in 0..<20_000 { if sentTexts.count == 2 { break }; await Task.yield() }
+        XCTAssertEqual(sentTexts, ["Före gränsen.", "Efter pausen."])
         coordinator.disable()
     }
 

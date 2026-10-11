@@ -5,22 +5,15 @@ struct CloudAssistantView: View {
     let sessions: [MioSession]
     var onAnswerReceived: (() -> Void)?
 
-    @AppStorage("mio.cloud.enabled") private var isEnabled = false
+    @AppStorage(MioCloudSettings.serverKey) private var server = ""
     @Environment(\.openMioSettings) private var openSettings
     @Environment(MioWorkflowCoordinator.self) private var workflow
-    @State private var serverAddress = ""
-    @State private var newToken = ""
-    @State private var useAccess = false
-    @State private var accessClientID = ""
-    @State private var accessClientSecret = ""
-    @State private var settingsMessage: String?
     @State private var question = ""
     @State private var drafts: [CloudContextDraft] = []
     @State private var showPicker = false
-    @State private var preview: CloudRequestPreview?
     @State private var answer: String?
     @State private var answerNoteReview: MioAnswerNoteDraft?
-    @State private var isPreparingPreview = false
+    @State private var isPreparing = false
     @State private var errorMessage: String?
     @State private var requestTask: Task<Void, Never>?
     @State private var activeRequestID: UUID?
@@ -34,12 +27,15 @@ struct CloudAssistantView: View {
     }
 
     private var isAsking: Bool { activeRequestID != nil }
+    private var isPaired: Bool { !server.isEmpty }
 
     var body: some View {
         Form {
-            Section {
-                if !isEnabled { Text("Tillåt först text-AI under Inställningar → AI-assistent.") }
-                Button("Öppna AI-inställningar") { openSettings() }
+            if !isPaired {
+                Section {
+                    Text("Para datorn under Inställningar → Dator först.")
+                    Button("Öppna inställningar") { openSettings() }
+                }
             }
 
             Section("Din fråga") {
@@ -80,20 +76,16 @@ struct CloudAssistantView: View {
 
             Section {
                 if isAsking {
-                    ProgressView(isPreparingPreview ? "Kontrollerar text-AI-anslutningen…" : "Väntar på svar…")
+                    ProgressView(isPreparing ? "Kontrollerar AI-gatewayen …" : "Väntar på svar …")
                     Button("Avbryt frågan", role: .cancel) { cancelRequest() }
                     Text("En redan skickad fråga kan inte återkallas. Servern försöker avbryta när anslutningen stängs.")
                         .font(.footnote).foregroundStyle(.secondary)
                 } else {
-                    Button("Granska innan du skickar") { preparePreview() }
-                        .disabled(!isEnabled || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    if !isEnabled {
-                        Text("Slå på Tillåt molnfrågor i Inställningar för att kunna granska en fråga. AI-tolkning behöver inte vara på.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    } else if question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text("Skriv en fråga i Din fråga för att kunna granska den.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
+                    Button("Skicka frågan", systemImage: "paperplane") { send() }
+                        .disabled(!isPaired || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("mio.question.send")
+                    Text("Bara frågan och vald kontext skickas, via din dator till Groq. Inget ljud och ingen annan historik följer med.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
                 if let errorMessage {
                     Label(errorMessage, systemImage: "exclamationmark.triangle")
@@ -114,11 +106,7 @@ struct CloudAssistantView: View {
         }
         .navigationTitle("Fråga Mio AI")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { loadSettings() }
-        .onDisappear { clearConversation(); newToken = ""; accessClientID = ""; accessClientSecret = "" }
-        .onChange(of: isEnabled) { _, enabled in
-            if !enabled { clearConversation() }
-        }
+        .onDisappear { clearConversation() }
         .onChange(of: workflow.questions.generation) { _, generation in
             if generation == ownInvalidationID {
                 ownInvalidationID = nil
@@ -129,15 +117,10 @@ struct CloudAssistantView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: MioCloudSettings.didResetNotification)) { _ in
-            loadSettings()
-            settingsMessage = nil
             clearConversation()
         }
         .sheet(item: $answerNoteReview) { draft in MioAnswerNoteReviewView(draft: draft) }
         .sheet(isPresented: $showPicker) { contextPicker }
-        .sheet(item: $preview) { candidate in
-            CloudRequestPreviewView(preview: candidate) { send(candidate) }
-        }
     }
 
     private var contextPicker: some View {
@@ -202,76 +185,49 @@ struct CloudAssistantView: View {
         drafts.append(CloudContextDraft(id: id, label: label, text: text))
     }
 
-    private func loadSettings() {
-        serverAddress = MioCloudSettings.serverAddress
-        useAccess = MioCloudSettings.usesAccess
-        newToken = ""
-        accessClientID = ""
-        accessClientSecret = ""
-    }
-
-    private func preparePreview() {
+    /// Questions send at once (user decision 2026-10-11); the gateway status check and the
+    /// strict validation of the answer stay. The same send also covers re-sending after an error.
+    private func send() {
+        guard !isAsking else { return }
+        let request = MioCloudRequest(question: question, context: drafts.map { MioCloudContext(label: $0.label, text: $0.text) })
+        let connection: MioCloudConnection
         do {
-            guard newToken.isEmpty, accessClientID.isEmpty, accessClientSecret.isEmpty,
-                  useAccess == MioCloudSettings.usesAccess,
-                  (try? MioCloudSettings.endpoint(for: serverAddress))
-                    == (try? MioCloudSettings.endpoint(for: MioCloudSettings.serverAddress))
-            else { throw MioCloudError.changedConfiguration }
-            let request = MioCloudRequest(question: question, context: drafts.map { MioCloudContext(label: $0.label, text: $0.text) })
             _ = try request.validatedData()
-            let connection = try MioCloudSettings.connection()
-            let generation = workflow.questions.generation
-            let requestID = UUID()
-            activeRequestID = requestID
-            isPreparingPreview = true
-            errorMessage = nil
-            requestTask = Task {
-                defer {
-                    if activeRequestID == requestID { activeRequestID = nil; requestTask = nil; isPreparingPreview = false }
-                }
-                do {
-                    let prepared = try await MioConnectionDiscovery.shared.prepare(connection: connection, task: .ask)
-                    guard !Task.isCancelled, activeRequestID == requestID, workflow.questions.generation == generation else { return }
-                    preview = CloudRequestPreview(request: request, connection: prepared.connection, status: prepared.status, generation: generation)
-                } catch {
-                    guard !Task.isCancelled, activeRequestID == requestID, workflow.questions.generation == generation else { return }
-                    MioConnectionDiscovery.shared.handle(error: error)
-                    errorMessage = error.localizedDescription
-                }
-            }
-        } catch { errorMessage = error.localizedDescription }
-    }
-
-    private func send(_ candidate: CloudRequestPreview) {
-        preview = nil
-        do {
-            var reviewedConnection = candidate.connection
-            reviewedConnection.observedConfigurationRevision = nil
-            guard try MioCloudSettings.connection() == reviewedConnection else { throw MioCloudError.changedConfiguration }
+            connection = try MioCloudSettings.connection()
         } catch {
             errorMessage = error.localizedDescription
             return
         }
-        guard !isAsking else { return }
+        let generation = workflow.questions.generation
         let requestID = UUID()
         activeRequestID = requestID
+        isPreparing = true
         answer = nil
         answerNoteReview = nil
         errorMessage = nil
         requestTask = Task {
-            let result = await workflow.questions.sendApproved(candidate.request, connection: candidate.connection,
-                                                               expectedGeneration: candidate.generation)
-            guard !Task.isCancelled, activeRequestID == requestID,
-                  workflow.questions.generation == candidate.generation else { return }
+            defer {
+                if activeRequestID == requestID { activeRequestID = nil; requestTask = nil; isPreparing = false }
+            }
+            let prepared: MioPreparedConnection
+            do {
+                prepared = try await MioConnectionDiscovery.shared.prepare(connection: connection, task: .ask)
+            } catch {
+                guard !Task.isCancelled, activeRequestID == requestID, workflow.questions.generation == generation else { return }
+                MioConnectionDiscovery.shared.handle(error: error)
+                errorMessage = error.localizedDescription
+                return
+            }
+            guard !Task.isCancelled, activeRequestID == requestID, workflow.questions.generation == generation else { return }
+            isPreparing = false
+            let result = await workflow.questions.sendApproved(request, connection: prepared.connection,
+                                                               expectedGeneration: generation)
+            guard !Task.isCancelled, activeRequestID == requestID, workflow.questions.generation == generation else { return }
             if result.outcome.isSuccess, let received = result.answer {
                 answer = received
                 onAnswerReceived?()
             } else if result.outcome != .cancelled {
                 errorMessage = result.outcome.message
-            }
-            if activeRequestID == requestID {
-                activeRequestID = nil
-                requestTask = nil
             }
         }
     }
@@ -286,12 +242,11 @@ struct CloudAssistantView: View {
         requestTask?.cancel()
         requestTask = nil
         activeRequestID = nil
-        isPreparingPreview = false
+        isPreparing = false
     }
 
     private func clearConversation(invalidateWorkflow: Bool = true) {
         cancelRequest(invalidateWorkflow: invalidateWorkflow)
-        preview = nil
         question = ""
         drafts = []
         answer = nil
@@ -305,54 +260,6 @@ private struct CloudContextDraft: Identifiable {
     var label: String
     var text: String
 }
-
-private struct CloudRequestPreview: Identifiable {
-    let id = UUID()
-    let request: MioCloudRequest
-    let connection: MioCloudConnection
-    let status: MioGatewayStatusV2
-    let generation: UUID
-}
-
-private struct CloudRequestPreviewView: View {
-    @Environment(\.dismiss) private var dismiss
-    let preview: CloudRequestPreview
-    let send: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Mottagare") {
-                    Text(preview.connection.endpoint.absoluteString).textSelection(.enabled)
-                    Text("Frågeprofil: \(preview.status.tasks.ask.provider) · \(preview.status.tasks.ask.model)")
-                    Text("Gatewayrelease: \(preview.status.release)").font(.caption)
-                    Text("Serverns konfiguration är kontrollerad. Leverantörens behörighet och modellens kvalitet har inte provats av den här kontrollen.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Text("Din server vidarebefordrar texten till den AI-leverantör och eventuell mellanliggande gateway som du valt i serverinställningarna. Servern använder sin egen API-nyckel och anropet kan kosta pengar.")
-                }
-                Section("Exakt fråga som skickas") { Text(verbatim: preview.request.question).textSelection(.enabled) }
-                Section("Exakt vald kontext som skickas") {
-                    if preview.request.context.isEmpty { Text("Ingen kontext.") }
-                    ForEach(Array(preview.request.context.enumerated()), id: \.offset) { _, context in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(verbatim: context.label).bold()
-                            Text(verbatim: context.text).textSelection(.enabled)
-                        }
-                    }
-                }
-                Section {
-                    Text("Skicka bara text som du får dela. Inget ljud, andra poster, teknisk sessionsdiagnostik eller tidigare frågor följer med. Den separata åtkomsttokenen skickas skyddat till din server för inloggning.")
-                    Text("Mio-servern sparar inga frågor eller svar. Vald AI-leverantör och eventuell mellanliggande gateway behandlar texten enligt sina datavillkor. Granska villkoren när du byter leverantör.")
-                    Button("Ja, skicka denna fråga till molnet", action: send)
-                        .buttonStyle(.borderedProminent)
-                }
-            }
-            .navigationTitle("Granska och godkänn")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Avbryt") { dismiss() } } }
-        }
-    }
-}
-
 
 private struct MioAnswerNoteReviewView: View {
     @Environment(\.dismiss) private var dismiss

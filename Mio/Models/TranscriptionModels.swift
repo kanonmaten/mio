@@ -374,7 +374,7 @@ enum TranscriptionError: LocalizedError, Sendable {
     }
     var errorDescription: String? {
         switch self {
-        case .notConfigured: "Konfigurera transkriptionsservern i Inställningar först."
+        case .notConfigured: "Para datorn under Inställningar → Dator först."
         case .invalidAddress: "Ange serverns privata HTTPS-adress som slutar med .ts.net, utan sökväg."
         case .invalidToken: "Ange en åtkomsttoken med 32–256 bokstäver, siffror, bindestreck eller understreck."
         case .keychain: "Åtkomsttoken kunde inte läsas eller sparas säkert. Lås upp telefonen och försök igen."

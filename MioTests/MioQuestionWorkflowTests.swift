@@ -33,12 +33,11 @@ final class MioQuestionWorkflowTests: XCTestCase {
 
 
     @MainActor
-    func testDefaultQuestionCannotSendWhenCurrentConnectionIsDisabled() async throws {
-        let previous = UserDefaults.standard.object(forKey: MioCloudSettings.enabledKey)
-        UserDefaults.standard.set(false, forKey: MioCloudSettings.enabledKey)
+    func testDefaultQuestionCannotSendWhenThePCIsNotPaired() async throws {
+        let previous = UserDefaults.standard.object(forKey: MioCloudSettings.serverKey)
+        UserDefaults.standard.removeObject(forKey: MioCloudSettings.serverKey)
         defer {
-            if let previous { UserDefaults.standard.set(previous, forKey: MioCloudSettings.enabledKey) }
-            else { UserDefaults.standard.removeObject(forKey: MioCloudSettings.enabledKey) }
+            if let previous { UserDefaults.standard.set(previous, forKey: MioCloudSettings.serverKey) }
         }
         var requests = 0
         let questions = MioQuestionWorkflow( send: { _, _ in requests += 1; return "Får inte visas" })

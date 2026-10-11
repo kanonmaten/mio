@@ -84,195 +84,82 @@ struct CaptureGapsView: View {
     }
 }
 
+/// The content of the single settings panel: one scrolling page in a fixed section order.
 struct MioSettingsView: View {
     let model: MioViewModel
     let contentModel: MioContentViewModel
-    @Environment(\.dismiss) private var dismiss
     @AppStorage("mio.feedback.haptics") private var haptics = true
     var body: some View {
         Form {
+            MioComputerSection(model: model)
+            MioAISettingsSection(model: model)
             Section {
-                NavigationLink { TranscriptionSettingsView(model: model) } label: {
-                    Label("Transkription · \(model.connectionState.title)", systemImage: "network")
+                Text("Starta en lektion under Lektioner. Vardags-Mio pausas under tiden. När du avslutar skriver AI detaljerade anteckningar i sparade delar, med minst en minut mellan delarna. Ofullständiga anteckningar märks och fortsätter senare.")
+                    .font(.footnote)
+                Text("Historik och råtext finns under fliken Lektioner.").font(.footnote).foregroundStyle(.secondary)
+            } header: { Text("Lektioner") }
+            Section("Påminnelser") {
+                NavigationLink { SystemRemindersView() } label: {
+                    Label("Alarm, notiser och dagliga påminnelser", systemImage: "alarm")
                 }
-                NavigationLink { AnalysisSettingsView(model: model, content: contentModel) } label: {
-                    Label("AI-assistent", systemImage: "sparkles")
-                }
-                NavigationLink { MioAIConnectionStatusView(model: model) } label: {
-                    Label("AI-anslutning och kapacitet", systemImage: "checkmark.shield")
-                }
-            } header: { Text("Anslutningar") } footer: {
-                Text("Ljud går till din Pianissimo-server. Valfri text-AI använder en separat anslutning och ett separat godkännande.")
             }
-            Section("Mio och återkoppling") {
+            Section {
                 Toggle("Diskreta vibrationer", isOn: $haptics)
-                Text("Mikrofonen startas av dig. Efter paus trycker du Fortsätt. Vid nätavbrott återansluter en aktiv session automatiskt; högst 60 sekunder ljud behålls i minnet.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                NavigationLink { MioGuideView() } label: { Label("Så använder du Mio", systemImage: "questionmark.circle") }
+            } header: { Text("Mio") } footer: {
+                Text("Mikrofonen startas av dig. Vid nätavbrott återansluter en aktiv session automatiskt; högst 60 sekunder ljud behålls i minnet.")
             }
-            Section {
-                NavigationLink("Integritet, export och radering") { MioPrivacySettingsView(model: model, contentModel: contentModel) }
-                NavigationLink("Alarm, notiser och behörigheter") { SystemRemindersView() }
-                NavigationLink("Så använder du Mio") { MioGuideView() }
+            Section("Integritet och data") {
+                NavigationLink("Export, radering och behörigheter") { MioPrivacySettingsView(model: model, contentModel: contentModel) }
             }
-            Section("Om Mio") {
-                NavigationLink("Diagnostik") { MioDiagnosticsView() }
+            Section("Om") {
                 LabeledContent("Version", value: "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
-                Text("Aktiv transkription kräver din dator och Tailscale. Ingen ljudfil sparas. Historik och diagnostik finns under Lektioner → Historik och råtext.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                NavigationLink("Diagnostik") { MioDiagnosticsView() }
             }
         }
+        // The panel's glass chrome shows between plain rows; with Reduce Transparency it is solid.
+        .scrollContentBackground(.hidden)
+        .toolbar(.hidden, for: .navigationBar)
         .navigationTitle("Inställningar")
-        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Klart") { dismiss() } } }
     }
 }
 
-struct TranscriptionSettingsView: View {
+/// Settings → AI: the persisted on/pause switch (on by default once paired) and its live state.
+struct MioAISettingsSection: View {
     let model: MioViewModel
-    @State private var address = TranscriptionSettings.address
-    @State private var token = ""
-    @State private var message: String?
-    @State private var error: String?
-    @State private var testing = false
-    @State private var hasToken = TranscriptionSettings.hasToken
-    @State private var testTask: Task<Void, Never>?
-    private var canEdit: Bool { [.off, .paused, .failed, .unavailable].contains(model.runState) }
+    @Environment(MioAnalysisCoordinator.self) private var analysis
+    @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
+    @AppStorage(MioCloudSettings.serverKey) private var server = ""
+    @State private var isStarting = false
+
     var body: some View {
-        Form {
-            Section("Din Pianissimo-server") {
-                TextField("https://dator.tailnet.ts.net", text: $address)
-                    .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .accessibilityLabel("Transkriptionsserverns HTTPS-adress")
-                SecureField("Ny token · tomt behåller sparad", text: $token)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                Label(hasToken ? "Token finns sparad" : "Ingen token sparad", systemImage: hasToken ? "key.fill" : "key")
-                Button("Spara anslutning") {
-                    do {
-                        try TranscriptionSettings.save(address: address, token: token)
-                        address = TranscriptionSettings.address; token = ""; hasToken = true
-                        message = "Åtkomsttoken och serveradress sparade på telefonen. Testa anslutningen separat."
-                        error = nil; MioFeedback.success()
-                    } catch { self.error = error.localizedDescription; message = nil }
-                }
-                Button("Glöm transkriptionsanslutningen", role: .destructive) {
-                    do {
-                        try TranscriptionSettings.reset(); address = ""; token = ""; hasToken = false
-                        message = "Transkriptionsanslutningen är borttagen."; error = nil
-                    } catch { self.error = error.localizedDescription }
-                }
-            }
-            .disabled(!canEdit || testing)
-            if !canEdit { Section { Text("Pausa eller stoppa Mio innan du ändrar anslutningen.") } }
-            Section("Anslutningskontroll · inget ljud skickas") {
-                Button {
-                    testing = true; error = nil; message = nil
-                    testTask = Task {
-                        defer { testing = false }
-                        do {
-                            try await model.testTranscriptionConnection()
-                            guard !Task.isCancelled else { return }
-                            message = "Anslutningen verifierad. Modellen är redo."; MioFeedback.success()
-                        } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
+        Section {
+            Toggle("AI", isOn: $aiEnabled)
+                .disabled(server.isEmpty)
+                .accessibilityIdentifier("mio.ai.enabled")
+            if server.isEmpty {
+                Text("Para datorn först.").foregroundStyle(.secondary)
+            } else {
+                Text(analysis.errorMessage ?? analysis.status).font(.footnote)
+                if aiEnabled, !analysis.enabled {
+                    Button {
+                        isStarting = true
+                        Task {
+                            await analysis.resumeIfWanted(existingSessions: { model.allSessions })
+                            isStarting = false
+                        }
+                    } label: {
+                        if isStarting { ProgressView("Startar AI …") } else { Text("Starta AI igen") }
                     }
-                } label: {
-                    if testing { ProgressView("Kontrollerar servern …") }
-                    else { Label("Testa sparad anslutning", systemImage: "network") }
+                    .disabled(isStarting)
                 }
-                .disabled(testing || !token.isEmpty || address != TranscriptionSettings.address || !hasToken || !canEdit)
-                LabeledContent("Server", value: model.connectionState.title)
-                if let date = model.connectionCheckedAt { LabeledContent("Senast verifierad", value: date.formatted()) }
-                if let version = model.serverVersion { LabeledContent("Serverversion", value: version) }
-                if let metadata = model.serverMetadata {
-                    LabeledContent("Modell", value: metadata.model)
-                    LabeledContent("Revision", value: metadata.revision)
-                    LabeledContent("Motor", value: metadata.backend)
-                }
-                if let message { Label(message, systemImage: "checkmark.circle").foregroundStyle(.green) }
-                if let error { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
             }
-            Section("Tailscale och integritet") {
-                Text("Anslut iPhone till samma tailnet som datorn. Aktivera VPN On Demand i Tailscale för Wi-Fi och mobilnät. Mio kontrollerar serverns nåbarhet; det kan inte läsa Tailscales interna VPN-status.")
-                Text("Starta Mio eller Starta lektion godkänner ljudöverföring till denna server tills du pausar eller stoppar. Ingen ljudfil sparas. Bara senaste 60 sekunderna kan räddas vid ett längre avbrott.")
-                Text("Efter SideStore-förnyelse med LocalDevVPN: återanslut Tailscale och testa servern här.")
-                Link("Tailscales guide för iPhone", destination: URL(string: "https://tailscale.com/docs/features/client/ios-vpn-on-demand")!)
-            }
-            .font(.footnote)
+            NavigationLink("Kapacitet och uppgifter") { MioAIConnectionStatusView(model: model) }
+        } header: {
+            Text("AI")
+        } footer: {
+            Text("Vardagstal skickas samlat högst var femte minut, så att en dag ryms i Groqs gratiskvot. Frågor skickas direkt. Förslag sparas först när du väljer Ja. Pausen gäller tills du slår på AI igen.")
         }
-        .navigationTitle("Transkription")
-        .onDisappear { token = ""; testTask?.cancel() }
-    }
-}
-
-struct CloudConnectionSettingsView: View {
-    @AppStorage(MioCloudSettings.enabledKey) private var isEnabled = false
-    @State private var serverAddress = MioCloudSettings.serverAddress
-    @State private var newToken = ""
-    @State private var useAccess = MioCloudSettings.usesAccess
-    @State private var accessClientID = ""
-    @State private var accessClientSecret = ""
-    @State private var settingsMessage: String?
-    @State private var errorMessage: String?
-    var body: some View {
-        Form {
-            Section {
-                Toggle("Tillåt molnfrågor", isOn: $isEnabled)
-                Text(isEnabled
-                     ? "Enskilda frågor kräver granskning och Skicka. Löpande textanalys aktiveras separat under AI-assistent."
-                     : "Avstängt. Ingen text skickas till text-AI. Ljudtranskription har en separat anslutning.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Din text-AI-server") {
-                TextField("https://mio.example.se", text: $serverAddress)
-                    .keyboardType(.URL)
-                    .textContentType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .accessibilityLabel("Serverns HTTPS-adress")
-                SecureField("Ny åtkomsttoken eller tomt för att behålla", text: $newToken)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                Toggle("Använd Cloudflare Access", isOn: $useAccess)
-                if useAccess {
-                    SecureField("Access Client ID", text: $accessClientID)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    SecureField("Access Client Secret", text: $accessClientSecret)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    Text("Hämta paret från din service token i Cloudflare Zero Trust. Båda tomma behåller sparade värden på samma server. Stäng av och spara för att ta bort dem från telefonen.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                Button("Spara anslutning") { saveSettings() }
-                Button("Glöm anslutning och stäng av", role: .destructive) { forgetConnection() }
-                if let settingsMessage { Text(settingsMessage).font(.footnote) }
-                Text("Åtkomsttoken är samma hemliga värde som MIO_GATEWAY_TOKEN på din Worker. Klistra in värdet utan Bearer eller citattecken. Efter rotation behöver det nya värdet sparas här också. Leverantörens API-nyckel hör bara hemma på servern. Att spara gör inget nätanrop.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let errorMessage { Section { Label(errorMessage, systemImage: "exclamationmark.triangle").foregroundStyle(.red) } }
-        }
-        .navigationTitle("Anslutning för text-AI")
-        .onChange(of: isEnabled) { _, _ in MioConnectionDiscovery.shared.invalidate() }
-        .onDisappear { newToken = ""; accessClientID = ""; accessClientSecret = "" }
-    }
-    private func saveSettings() {
-        do {
-            try MioCloudSettings.save(serverAddress: serverAddress, newToken: newToken, useAccess: useAccess,
-                                      clientID: accessClientID, clientSecret: accessClientSecret)
-            serverAddress = MioCloudSettings.serverAddress
-            newToken = ""; accessClientID = ""; accessClientSecret = ""
-            settingsMessage = "Åtkomsttoken och anslutning sparade. Ingen anslutningskontroll har gjorts."
-            errorMessage = nil; MioFeedback.success()
-        } catch { errorMessage = error.localizedDescription; settingsMessage = nil }
-    }
-    private func forgetConnection() {
-        do {
-            try MioCloudSettings.reset(); serverAddress = ""; newToken = ""
-            accessClientID = ""; accessClientSecret = ""; useAccess = false
-            settingsMessage = "Text-AI-anslutningen är borttagen."; errorMessage = nil
-        } catch { errorMessage = error.localizedDescription }
     }
 }
 
@@ -280,7 +167,6 @@ struct MioAIConnectionStatusView: View {
     let model: MioViewModel
     @Environment(MioAnalysisCoordinator.self) private var analysis
     @Environment(MioAssistantViewModel.self) private var assistant
-    @AppStorage(MioCloudSettings.enabledKey) private var cloudEnabled = false
     @State private var discovery = MioConnectionDiscovery.shared
     @State private var checkTask: Task<Void, Never>?
     @State private var localError: String?
@@ -296,7 +182,7 @@ struct MioAIConnectionStatusView: View {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         if context.date < pausedUntil {
                             HStack { Text("Vänta minst"); Text(pausedUntil, style: .timer) }
-                        } else { Text("Väntan är över. Aktivera AI manuellt när du vill fortsätta.") }
+                        } else { Text("Väntan är över. AI fortsätter automatiskt.") }
                     }
                     .font(.footnote)
                 }
@@ -314,16 +200,16 @@ struct MioAIConnectionStatusView: View {
                     }
                 } label: {
                     if discovery.isChecking { ProgressView("Kontrollerar gatewayen …") }
-                    else { Label("Testa text-AI-anslutning", systemImage: "network") }
+                    else { Label("Kontrollera AI-gatewayen", systemImage: "network") }
                 }
-                .disabled(!cloudEnabled || discovery.isChecking)
+                .disabled(!MioCloudSettings.isPaired || discovery.isChecking)
                 .accessibilityIdentifier("mio.text-ai.connection-test")
                 if let date = discovery.lastCheckedAt { LabeledContent("Senast kontrollerad", value: date.formatted()) }
                 if let error = localError ?? discovery.errorMessage {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                 }
             } header: { Text("Skyddad anslutningskontroll") } footer: {
-                Text("Kontrollen skickar ingen fråga och använder ingen AI-kvot. Den visar gatewayens konfiguration. Leverantörens inloggning, modellåtkomst och svarskvalitet provas först vid ett separat godkänt anrop.")
+                Text("Kontrollen skickar ingen fråga och använder ingen AI-kvot. Den visar gatewayens konfiguration. Leverantörens inloggning, modellåtkomst och svarskvalitet provas först vid ett riktigt anrop.")
             }
             if let status = discovery.lastStatus {
                 Section("Gatewayåtkomst") {
@@ -364,7 +250,7 @@ struct MioAIConnectionStatusView: View {
                         let document = MioLessonDocument(session: session, records: assistant.analyses)
                         LabeledContent(session.title ?? "Lektion", value: "\(document.remainingRequestCount) AI-delar")
                     }
-                    Text("Beräknat från sparat underlag och redan färdiga delar. Ingen kvot är reserverad. Nya lektionsdelar skickas normalt tidigast efter 60 sekunder och kräver aktivt AI-läge.")
+                    Text("Beräknat från sparat underlag och redan färdiga delar. Ingen kvot är reserverad. Nya lektionsdelar skickas tidigast efter 60 sekunder och bara när AI är på.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
@@ -389,7 +275,7 @@ struct MioPrivacySettingsView: View {
         ScrollView {
             VStack(spacing: 16) {
                 PrivacyCard()
-                Button("Öppna mikrofonbehörighet i iPhones inställningar") { model.openAppSettings() }
+                Button("Öppna Mios behörigheter i iPhones inställningar") { model.openAppSettings() }
                 DataCard(model: model, contentModel: contentModel, showDeleteConfirmation: $showDeleteConfirmation)
                 if ![.off, .failed, .unavailable].contains(model.runState) {
                     Text("Avsluta sessionen innan du exporterar eller raderar all data.").font(.footnote)
@@ -405,7 +291,7 @@ struct MioPrivacySettingsView: View {
             Button("Radera permanent", role: .destructive) { Task { await deleteEverything() } }
             Button("Avbryt", role: .cancel) {}
         } message: {
-            Text("Sessioner, poster, förslag, lektioner, diagnostik och båda serveranslutningarna raderas. Mios alarm och notiser avbryts. Delade filer och kalenderkopior finns kvar där.")
+            Text("Sessioner, poster, förslag, lektioner, diagnostik och datorns parning raderas. Mios alarm och notiser avbryts. Delade filer och kalenderkopior finns kvar där.")
         }
     }
     private func deleteEverything() async {

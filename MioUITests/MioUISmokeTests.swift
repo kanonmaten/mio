@@ -37,7 +37,12 @@ final class MioUISmokeTests: XCTestCase {
         let settings = app.buttons["Inställningar"].firstMatch
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
-        XCTAssertTrue(app.navigationBars["Inställningar"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["mio.settings.panel"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Dator"].firstMatch.exists, "The panel starts with the Dator section")
+        let done = app.buttons["mio.settings.done"]
+        XCTAssertTrue(done.exists)
+        done.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["mio.settings.panel"].firstMatch.waitForNonExistence(timeout: 5))
     }
 
     @MainActor

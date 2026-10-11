@@ -115,10 +115,10 @@ final class MioContentViewModel {
         do {
             let journal = await diagnostics.snapshot()
             let configuration = MioDiagnosticsConfiguration(
-                cloudEnabled: UserDefaults.standard.bool(forKey: MioCloudSettings.enabledKey),
+                cloudEnabled: MioAIPreference.isEnabled(in: .standard),
                 analysisEnabled: MioDiagnosticsRuntime.analysisEnabled,
-                serverConfigured: (try? MioCloudSettings.endpoint(for: MioCloudSettings.serverAddress)) != nil,
-                accessConfigured: MioCloudSettings.usesAccess)
+                serverConfigured: MioCloudSettings.isPaired,
+                accessConfigured: false) // Cloudflare Access was removed; the field keeps the export schema.
             var diagnosticsExport = MioDiagnosticsExport(configuration: configuration, journal: journal)
             diagnosticsExport.metricReports = await metrics.reports()
             let exported = try await repository.makeExportFile(content: content, sessions: sessions, assistant: assistant,

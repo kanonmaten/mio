@@ -31,42 +31,32 @@ struct MioCloudRequest: Codable, Equatable, Sendable {
 struct MioCloudConnection: Equatable, Sendable {
     let endpoint: URL
     let token: String
-    var access: MioAccessCredentials? = nil
     var observedConfigurationRevision: String? = nil
 
     func hasSameCredentials(as other: Self) -> Bool {
-        endpoint == other.endpoint && token == other.token && access == other.access
+        endpoint == other.endpoint && token == other.token
     }
 }
 
-struct MioAccessCredentials: Codable, Equatable, Sendable {
-    let clientID: String
-    let clientSecret: String
-
-    func validate() throws {
-        for value in [clientID, clientSecret] {
-            guard (1...512).contains(value.utf8.count), value.utf8.allSatisfy({
-                (65...90).contains($0) || (97...122).contains($0)
-                    || (48...57).contains($0) || [45, 46, 95].contains($0)
-            }) else { throw MioCloudError.invalidAccess }
-        }
-    }
-}
-
-// One Keychain item keeps the gateway and Access credentials in sync on failed saves.
+/// The gateway token's Keychain item. Older versions stored a raw token, then JSON that could
+/// also hold Cloudflare Access secrets; decoding ignores those and `hasLegacyAccess` finds them.
 struct MioCloudCredentials: Codable, Equatable {
     let token: String
-    var access: MioAccessCredentials? = nil
 
     static func decode(_ data: Data) throws -> Self {
         if data.first == 123 { return try JSONDecoder().decode(Self.self, from: data) }
         guard let token = String(data: data, encoding: .utf8) else { throw MioCloudError.keychain }
         return Self(token: token) // Existing installations stored only the gateway token.
     }
+
+    static func hasLegacyAccess(_ data: Data) -> Bool {
+        guard data.first == 123, let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return Set(object.keys) != ["token"]
+    }
 }
 
 enum MioCloudError: LocalizedError {
-    case disabled, invalidServer, invalidToken, invalidAccess, keychain, invalidQuestion, invalidContext
+    case disabled, notPaired, invalidServer, invalidToken, keychain, invalidQuestion, invalidContext
     case changedConfiguration, invalidResponse, oversizedResponse, network
     case incompatibleGateway
     case gateway(Int, MioGatewayErrorCode)
@@ -76,14 +66,14 @@ enum MioCloudError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .disabled: "Molnfrågor är avstängda."
+        case .disabled: "AI är pausad."
+        case .notPaired: "Para datorn under Inställningar → Dator först."
         case .invalidServer: "Ange serverns HTTPS-adress utan sökväg, inloggning, frågetecken eller fragment, till exempel https://mio.example.se."
         case .invalidToken: "Ange serverns separata åtkomsttoken: 32–256 bokstäver, siffror, bindestreck eller understreck. Använd aldrig en leverantörs API-nyckel i appen. Vid byte av server krävs en ny token."
-        case .invalidAccess: "Ange både Client ID och Client Secret från Cloudflare Access. Lämna båda tomma för att behålla ett sparat par på samma server."
         case .keychain: "Kunde inte läsa eller ändra de skyddade anslutningsuppgifterna. Lås upp telefonen och försök igen."
         case .invalidQuestion: "Skriv en fråga på högst 2 000 UTF-8-byte. Svenska bokstäver kan ta flera byte."
         case .invalidContext: "Välj högst sex utdrag. Varje rubrik får vara högst 200 byte, varje text 4 000 byte och all vald kontext 10 000 byte. Tomma utdrag behöver tas bort eller fyllas i."
-        case .changedConfiguration: "Inställningarna ändrades. Förhandsgranska frågan igen."
+        case .changedConfiguration: "Anslutningen till datorn ändrades. Försök igen."
         case .invalidResponse: "Servern gav inget fullständigt läsbart svar. Försök med en kortare fråga."
         case .oversizedResponse: "Serverns svar var för stort och avbröts."
         case .network: "Kunde inte nå servern. Kontrollera internet, HTTPS-adressen och serverns konfiguration. Inget nytt försök görs automatiskt."
@@ -102,7 +92,8 @@ enum MioCloudError: LocalizedError {
             case .providerRefusal: "AI-leverantören avstod från att besvara underlaget. Inget innehåll har godkänts från svaret."
             case .providerTruncated: "AI-svaret avbröts innan det var fullständigt. Inget innehåll har godkänts från svaret."
             case .localMinuteLimit: "Mios gemensamma minutgräns är nådd. Vänta och fortsätt manuellt senare."
-            case .localDayLimit: "Mios gemensamma dagsgräns är nådd. Fortsätt manuellt efter nästa återställning."
+            case .localDayLimit: "Mios gemensamma dagsgräns är nådd. AI fortsätter efter nästa återställning."
+            case .localTokenLimit: "Dagens AI-token är slut. AI fortsätter efter nästa återställning."
             case .localConcurrencyLimit: "Servern behandlar redan så många AI-anrop som tillåts. Vänta och fortsätt manuellt senare."
             case .localRequestLimit: "Mios gemensamma AI-kvot nekade anropet. Vänta och fortsätt manuellt senare."
             case .providerQuota: "AI-leverantörens kvot är nådd. Kontrollera kontot och fortsätt manuellt senare."
@@ -117,9 +108,9 @@ enum MioCloudError: LocalizedError {
             }
         case .serverStatus(let status):
             switch status {
-            case 401, 403: "Servern nekade åtkomst. Kontrollera MIO_GATEWAY_TOKEN och, om Access används, Client ID, Client Secret och Service Auth-policyn."
-            case 300...399: "Servern hänvisade till en annan adress. För Cloudflare Access behövs en Service Auth-policy och rätt service token; webbinloggning fungerar inte i Mio."
-            case 422: "Modellen stöder inte Mios krav: reasoning av, temperatur 0 och strikt JSON-schema. Kontrollera modellvalet i Cloudflare."
+            case 401, 403: "Datorn nekade åtkomst. Para om med en ny kod från mio-pair."
+            case 300...399: "Servern hänvisade till en annan adress. Mio följer inte omdirigeringar; para om med en ny kod från mio-pair."
+            case 422: "Modellen stöder inte Mios krav: reasoning av, temperatur 0 och strikt JSON-schema. Kontrollera modellvalet på datorn."
             case 429: "Serverns frågegräns är nådd. Vänta och försök senare."
             case 504: "Svaret tog för lång tid. Försök senare med en kortare fråga."
             default: "Servern kunde inte besvara frågan. Kontrollera servern och försök senare."
@@ -130,12 +121,14 @@ enum MioCloudError: LocalizedError {
 
 @MainActor
 enum MioCloudSettings {
-    static let enabledKey = "mio.cloud.enabled"
     static let serverKey = "mio.cloud.server"
     static let didResetNotification = Notification.Name("MioCloudSettingsDidReset")
     private static let service = "app.mio.assistant.cloud-gateway"
+    private static let legacyAccessRemovedKey = "mio.cloud.legacyAccessRemoved.v1"
 
     static var serverAddress: String { UserDefaults.standard.string(forKey: serverKey) ?? "" }
+    /// Paired means an AI gateway origin is saved; the token itself is checked on use.
+    static var isPaired: Bool { (try? endpoint(for: serverAddress)) != nil }
 
     static func endpoint(for address: String) throws -> URL {
         let clean = address.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -149,57 +142,74 @@ enum MioCloudSettings {
         return origin.appendingPathComponent("v1").appendingPathComponent("ask")
     }
 
-    static var usesAccess: Bool { (try? readCredentials().access) != nil }
-
-    static func updatedCredentials(previous: MioCloudCredentials?, newToken: String,
-                                   useAccess: Bool, clientID: String, clientSecret: String) throws -> MioCloudCredentials {
-        let token = newToken.isEmpty ? previous?.token ?? "" : newToken
-        try validateToken(token)
-        let access: MioAccessCredentials?
-        if !useAccess {
-            access = nil
-        } else if clientID.isEmpty && clientSecret.isEmpty, let saved = previous?.access {
-            access = saved
-        } else {
-            access = MioAccessCredentials(clientID: clientID, clientSecret: clientSecret)
+    /// Saves one PC pairing: the AI gateway and, when present, Pianissimo. A pairing without
+    /// transcription keeps an existing Pianissimo connection on the same PC and forgets one on
+    /// another host. Tokens stay in the Keychain; nothing else stores them.
+    static func savePairing(_ payload: MioPairingPayload) throws {
+        try save(serverAddress: payload.aiOrigin.absoluteString, token: payload.aiToken)
+        if let origin = payload.transcriptionOrigin, let token = payload.transcriptionToken {
+            try TranscriptionSettings.save(address: origin.absoluteString, token: token)
+        } else if let saved = try? TranscriptionSettings.origin(TranscriptionSettings.address),
+                  saved.host != payload.aiOrigin.host {
+            try TranscriptionSettings.reset()
         }
-        try access?.validate()
-        return MioCloudCredentials(token: token, access: access)
+        MioAIPreference.setEnabled(true, in: .standard)
     }
 
-    static func save(serverAddress: String, newToken: String, useAccess: Bool = false,
-                     clientID: String = "", clientSecret: String = "") throws {
+    static func save(serverAddress: String, token: String) throws {
         let endpoint = try endpoint(for: serverAddress)
         let normalizedOrigin = endpoint.deletingLastPathComponent().deletingLastPathComponent().absoluteString
-        let sameServer = (try? self.endpoint(for: self.serverAddress)) == endpoint
-        // Never carry credentials to a changed origin, even when the form is blank.
-        let needsPrevious = newToken.isEmpty || (useAccess && clientID.isEmpty && clientSecret.isEmpty)
-        let previous = sameServer && needsPrevious ? try readCredentials() : nil
-        let credentials = try updatedCredentials(previous: previous, newToken: newToken,
-                                                 useAccess: useAccess, clientID: clientID, clientSecret: clientSecret)
-        try writeCredentials(credentials)
+        try validateToken(token)
+        try writeCredentials(MioCloudCredentials(token: token))
         UserDefaults.standard.set(normalizedOrigin, forKey: serverKey)
         MioConnectionDiscovery.shared.invalidate()
         NotificationCenter.default.post(name: didResetNotification, object: nil)
     }
 
     static func connection() throws -> MioCloudConnection {
-        guard UserDefaults.standard.bool(forKey: enabledKey) else { throw MioCloudError.disabled }
+        guard !serverAddress.isEmpty else { throw MioCloudError.notPaired }
         let endpoint = try endpoint(for: serverAddress)
         let credentials = try readCredentials()
         try validateToken(credentials.token)
-        try credentials.access?.validate()
-        return MioCloudConnection(endpoint: endpoint, token: credentials.token, access: credentials.access)
+        return MioCloudConnection(endpoint: endpoint, token: credentials.token)
     }
 
-    /// Disable first even if Keychain deletion fails. Credentials are never part of exports.
+    /// Forget the pairing first even if Keychain deletion fails. Credentials are never part of exports.
     static func reset() throws {
-        UserDefaults.standard.removeObject(forKey: enabledKey)
         UserDefaults.standard.removeObject(forKey: serverKey)
         MioConnectionDiscovery.shared.invalidate()
         NotificationCenter.default.post(name: didResetNotification, object: nil)
         let status = SecItemDelete(keychainQuery as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw MioCloudError.keychain }
+    }
+
+    /// One-time upgrade step: Cloudflare Access is gone (2026-10-11). Rewrites the gateway item
+    /// without stored Access secrets and drops the old "Tillåt molnfrågor" switch. Retried on the
+    /// next launch while the Keychain is locked.
+    static func removeLegacyAccessOnce() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: legacyAccessRemovedKey) else { return }
+        if defaults.object(forKey: MioAIPreference.enabledKey) == nil, !serverAddress.isEmpty {
+            // A gateway saved before QR pairing existed starts paused; pairing the PC switches AI on.
+            MioAIPreference.setEnabled(false, in: defaults)
+        }
+        defaults.removeObject(forKey: MioAIPreference.legacyCloudEnabledKey)
+        var query = keychainQuery
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { defaults.set(true, forKey: legacyAccessRemovedKey); return }
+        guard status == errSecSuccess, let data = result as? Data else { return }
+        if MioCloudCredentials.hasLegacyAccess(data) {
+            if let credentials = try? MioCloudCredentials.decode(data) {
+                guard (try? writeCredentials(credentials)) != nil else { return }
+            } else {
+                guard SecItemDelete(keychainQuery as CFDictionary) == errSecSuccess else { return }
+                defaults.removeObject(forKey: serverKey)
+            }
+        }
+        defaults.set(true, forKey: legacyAccessRemovedKey)
     }
 
     private static var keychainQuery: [String: Any] {
@@ -209,13 +219,7 @@ enum MioCloudSettings {
     }
 
     private static func validateToken(_ token: String) throws {
-        let lowercased = token.lowercased()
-        guard (32...256).contains(token.utf8.count),
-              !["sk-", "sk_", "gsk_", "aiza"].contains(where: lowercased.hasPrefix),
-              token.utf8.allSatisfy({
-                  (65...90).contains($0) || (97...122).contains($0)
-                      || (48...57).contains($0) || $0 == 45 || $0 == 95
-              }) else { throw MioCloudError.invalidToken }
+        guard MioPairingPayload.isValidToken(token) else { throw MioCloudError.invalidToken }
     }
 
     private static func readCredentials() throws -> MioCloudCredentials {
@@ -249,7 +253,7 @@ enum MioCloudService {
 
     static func statusV2(connection: MioCloudConnection, transport: ByteTransport? = nil) async throws -> MioGatewayStatusV2 {
         let origin = connection.endpoint.deletingLastPathComponent().deletingLastPathComponent()
-        let target = MioCloudConnection(endpoint: origin.appendingPathComponent("v2/status"), token: connection.token, access: connection.access)
+        let target = MioCloudConnection(endpoint: origin.appendingPathComponent("v2/status"), token: connection.token)
         do {
             return try await perform(operation: .statusV2, connection: target, body: { Data() }, method: "GET",
                                      transport: transport) { try MioGatewayStatusV2.decode($0) }
@@ -270,7 +274,7 @@ enum MioCloudService {
 
     static func status(connection: MioCloudConnection, transport: ByteTransport? = nil) async throws -> MioGatewayStatus {
         let origin = connection.endpoint.deletingLastPathComponent().deletingLastPathComponent()
-        let target = MioCloudConnection(endpoint: origin.appendingPathComponent("v1/status"), token: connection.token, access: connection.access)
+        let target = MioCloudConnection(endpoint: origin.appendingPathComponent("v1/status"), token: connection.token)
         do {
             return try await perform(operation: .status, connection: target, body: { Data() }, method: "GET", transport: transport) { try MioGatewayStatus.decode($0) }
         } catch MioCloudError.serverStatus(404) { throw MioCloudError.incompatibleGateway }
@@ -281,7 +285,7 @@ enum MioCloudService {
         let contextContract = payload.mode == .everyday && payload.usesContextContract
         let origin = connection.endpoint.deletingLastPathComponent().deletingLastPathComponent()
         let route = payload.mode == .lesson ? "v1/lesson-notes" : contextContract ? "v2/analyze" : "v1/analyze"
-        let target = MioCloudConnection(endpoint: origin.appendingPathComponent(route), token: connection.token, access: connection.access,
+        let target = MioCloudConnection(endpoint: origin.appendingPathComponent(route), token: connection.token,
             observedConfigurationRevision: connection.observedConfigurationRevision)
         var event = MioDiagnosticEvent(operation: payload.mode == .lesson ? .lessonNotes : contextContract ? .analyzeContext : .analyze)
         event.newFragmentCount = payload.fragments.count
@@ -399,16 +403,11 @@ enum MioCloudService {
     }
 
     static func makeRequest(_ body: Data, connection: MioCloudConnection, method: String = "POST") throws -> URLRequest {
-        try connection.access?.validate()
         var request = URLRequest(url: connection.endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Bearer \(connection.token)", forHTTPHeaderField: "Authorization")
-        if let access = connection.access {
-            request.setValue(access.clientID, forHTTPHeaderField: "CF-Access-Client-Id")
-            request.setValue(access.clientSecret, forHTTPHeaderField: "CF-Access-Client-Secret")
-        }
         if method == "POST", let revision = connection.observedConfigurationRevision {
             guard MioGatewayMetadata.revision(revision) != nil else { throw MioCloudError.changedConfiguration }
             request.setValue(revision, forHTTPHeaderField: "X-Mio-Configuration-Revision")
@@ -442,7 +441,8 @@ enum MioCloudService {
         let code = response.mimeType == "application/json" ? gatewayCode(from: body) : nil
         if response.statusCode == 429 {
             let bounded = retryAfterSeconds(response.value(forHTTPHeaderField: "Retry-After"), now: now) ?? 60
-            if let code, [.localMinuteLimit, .localDayLimit, .localConcurrencyLimit, .localRequestLimit, .providerQuota].contains(code) {
+            if let code, [.localMinuteLimit, .localDayLimit, .localTokenLimit, .localConcurrencyLimit, .localRequestLimit,
+                          .providerQuota].contains(code) {
                 return (.gatewayRateLimited(code, bounded), code, bounded)
             }
             return (.rateLimited(bounded), code, bounded)

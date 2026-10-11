@@ -12,8 +12,7 @@ struct ContentView: View {
     @Environment(MioNavigationCoordinator.self) private var navigation
     @Environment(MioDayContext.self) private var day
     @State private var storesLoaded = false
-    @AppStorage(MioCloudSettings.enabledKey) private var cloudEnabled = false
-    @AppStorage(MioCloudSettings.serverKey) private var cloudServer = ""
+    @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
 
     var body: some View {
         @Bindable var navigation = navigation
@@ -41,19 +40,9 @@ struct ContentView: View {
         .tint(.indigo)
         .disabled(maintenance.blocksWork)
         .environment(\.openMioSettings, { showSettings = true })
-        .sheet(isPresented: $showSettings, onDismiss: resolveNotificationRoute) {
-            NavigationStack { MioSettingsView(model: model, contentModel: contentModel) }
+        .mioSettingsPanel(isPresented: $showSettings, onDismiss: resolveNotificationRoute) {
+            MioSettingsView(model: model, contentModel: contentModel)
                 .disabled(maintenance.blocksWork)
-                .safeAreaInset(edge: .top) {
-                    if maintenance.recoveryBlocked { WorkflowRecoveryBanner(workflow: workflow) }
-                }
-                .overlay {
-                    if maintenance.isDeleting || maintenance.isSnapshotting {
-                        ProgressView(maintenance.isDeleting ? "Raderar lokal data…" : "Förbereder lokal export…")
-                            .padding(24)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    }
-                }
         }
         .sheet(item: $navigation.presentedPost) { post in
             MioNotificationPostView(postID: post.id, contentModel: contentModel, sessionModel: model)
@@ -76,22 +65,26 @@ struct ContentView: View {
             }
         }
         .task {
+            MioCloudSettings.removeLegacyAccessOnce()
             await workflow.bootstrap()
             storesLoaded = true
             resolveNotificationRoute()
+            resumeAI()
         }
         .onChange(of: scenePhase) { _, newPhase in
             model.handleScenePhase(newPhase)
-            if newPhase == .active { day.refresh(); resolveNotificationRoute() }
+            if newPhase == .active { day.refresh(); resolveNotificationRoute(); resumeAI() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in day.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange).receive(on: RunLoop.main)) { _ in day.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in day.refresh() }
         .onChange(of: navigation.pendingRoute) { _, _ in resolveNotificationRoute() }
         .onChange(of: maintenance.blocksWork) { _, blocked in if !blocked { resolveNotificationRoute() } }
-        .onChange(of: cloudEnabled) { _, enabled in if !enabled { workflow.cloudConfigurationChanged() } }
-        .onChange(of: cloudServer) { _, _ in workflow.cloudConfigurationChanged() }
-        .onReceive(NotificationCenter.default.publisher(for: MioCloudSettings.didResetNotification)) { _ in workflow.cloudConfigurationChanged() }
+        .onChange(of: aiEnabled) { _, enabled in if enabled { resumeAI() } else { workflow.analysis.disable() } }
+        .onReceive(NotificationCenter.default.publisher(for: MioCloudSettings.didResetNotification)) { _ in
+            workflow.cloudConfigurationChanged()
+            resumeAI()
+        }
         .onChange(of: assistant.stateRevision) { _, _ in workflow.invalidateExportIfSourcesChanged() }
         .onChange(of: model.stateRevision) { _, _ in workflow.invalidateExportIfSourcesChanged() }
         .onChange(of: contentModel.stateRevision) { _, _ in
@@ -103,6 +96,13 @@ struct ContentView: View {
     private func notificationDestination(_ id: UUID) -> MioAppTab? {
         guard let item = contentModel.item(id: id) else { return nil }
         return item.kind == .plan ? .calendar : .notes
+    }
+
+    /// AI is on by default once paired (user decision 2026-10-11): start it at launch, on return
+    /// to the foreground and after pairing changes, unless the user paused it.
+    private func resumeAI() {
+        guard storesLoaded, !maintenance.blocksWork else { return }
+        Task { await workflow.analysis.resumeIfWanted(existingSessions: { model.allSessions }) }
     }
 
     private func resolveNotificationRoute() {
@@ -278,30 +278,38 @@ private struct StatusHeader: View {
 private struct TextAIStateCard: View {
     @Environment(MioAnalysisCoordinator.self) private var analysis
     @Environment(MioWorkflowCoordinator.self) private var workflow
-    @AppStorage(MioCloudSettings.enabledKey) private var cloudEnabled = false
+    @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
+    @AppStorage(MioCloudSettings.serverKey) private var server = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Text-AI · \(state)", systemImage: "text.bubble")
-                .font(.subheadline.weight(.medium))
-            Text(analysis.errorMessage ?? analysis.status)
-                .font(.caption).foregroundStyle(.secondary)
-            Text("Mikrofon och transkription har egna tillstånd. Frågor skickas efter din granskning.")
+            // Quick pause; the choice is saved and also shown under Inställningar → AI.
+            Toggle(isOn: $aiEnabled) {
+                Label("AI · \(state)", systemImage: "text.bubble")
+                    .font(.subheadline.weight(.medium))
+            }
+            .disabled(server.isEmpty)
+            .accessibilityIdentifier("mio.text-ai-toggle")
+            Text(server.isEmpty ? "Para datorn under Inställningar → Dator." : analysis.errorMessage ?? analysis.status)
                 .font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mio.text-ai-state")
     }
 
     private var state: String {
-        if !cloudEnabled { return "Avstängd" }
+        if server.isEmpty { return "Inte parad" }
+        if !aiEnabled { return "Pausad" }
         if workflow.questions.isSending { return "Fråga skickad" }
-        if analysis.isWorking { return "Analyserar godkända utdrag" }
-        if analysis.enabled { return "Löpande analys aktiverad" }
-        return "Enskilda godkända frågor"
+        if let pausedUntil = analysis.pausedUntil, pausedUntil > .now {
+            return "Fortsätter kl. \(pausedUntil.formatted(date: .omitted, time: .shortened))"
+        }
+        if analysis.isWorking { return "Arbetar" }
+        if analysis.enabled { return "På" }
+        return "Startar inte"
     }
 }
 
@@ -409,7 +417,7 @@ struct PrivacyCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 PrivacyLine(symbol: "iphone", text: "När du startar Mio skickas mikrofonljud privat via Tailscale till din Pianissimo-server. Text och tidsstämplar sparas på telefonen.")
                 PrivacyLine(symbol: "waveform.slash", text: "Ljud finns endast tillfälligt i minnet. Vid serveravbrott behålls högst 60 sekunder; äldre tal markeras som saknat. Inga ljudfiler sparas.")
-                PrivacyLine(symbol: "cloud", text: "Text-AI är valfri och avstängd från början. Enskilda frågor kräver granskning före Skicka. Löpande analys kräver separat aktivering och använder bara nytt godkänt textunderlag.")
+                PrivacyLine(symbol: "cloud", text: "AI är på när datorn är parad och kan pausas. Nytt vardagstal skickas samlat högst var femte minut via din dator till Groq. Förslag sparas först när du väljer Ja.")
                 PrivacyLine(symbol: "mic.slash", text: "Paus och stopp stänger mikrofonen. Redan fångat ljud kan transkriberas under högst 15 sekunder; du kan avbryta väntan.")
                 PrivacyLine(symbol: "person.2.slash", text: "Testa kontrollerat. Spela inte in andra, en lektion eller en arbetsplats utan tydligt tillstånd och enligt lokala regler.")
             }

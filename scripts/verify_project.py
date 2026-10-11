@@ -127,6 +127,7 @@ def main():
             info = plistlib.load(file)
         check(bool(info.get('NSMicrophoneUsageDescription')), 'Mikrofonens behörighetstext')
         check(bool(info.get('NSAlarmKitUsageDescription')), 'AlarmKits behörighetstext')
+        check(bool(info.get('NSCameraUsageDescription')), 'Kamerans behörighetstext för QR-parning')
         check(info.get('UIBackgroundModes') == ['audio'], 'Bakgrundsläget audio bevarat')
         check(info.get('NSSupportsLiveActivities') is True, 'Live Activity tillåten')
         check(info.get('BGTaskSchedulerPermittedIdentifiers') == ['app.mio.assistant.lesson-notes.*'],

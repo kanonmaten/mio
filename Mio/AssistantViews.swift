@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct AssistantHubView: View {
-    @Environment(\.openMioSettings) private var openSettings
     @Environment(MioAssistantViewModel.self) private var assistant
     let contentModel: MioContentViewModel
     let sessionModel: MioViewModel
@@ -15,29 +14,14 @@ struct AssistantHubView: View {
                     Label("Förslag att granska (\(assistant.suggestions.count))", systemImage: "tray.full")
                         .font(.headline)
                 }
-                Text("Med AI-tolkning aktiverad kan Mio föreslå planer och uppgifter ur vanliga samtal. Mio-kommandon tolkas lokalt efter transkription via din server. Kontrollera alltid innehåll, datum och tid.")
+                Text("När AI är på kan Mio föreslå planer och uppgifter ur vanliga samtal. Mio-kommandon tolkas lokalt efter transkription via din dator. Kontrollera alltid innehåll, datum och tid.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Divider()
-                Button { openSettings() } label: {
-                    Label("AI-assistent och inställningar", systemImage: "gear").frame(minHeight: 44)
-                }
                 NavigationLink {
                     CloudAssistantView(items: contentModel.items, sessions: sessionModel.allSessions)
                 } label: {
                     Label("Fråga Mio med AI", systemImage: "bubble.left.and.text.bubble.right")
-                        .frame(minHeight: 44)
-                }
-                NavigationLink {
-                    SystemRemindersView()
-                } label: {
-                    Label("Alarm och påminnelser", systemImage: "alarm")
-                        .frame(minHeight: 44)
-                }
-                NavigationLink {
-                    MioGuideView()
-                } label: {
-                    Label("Så använder du Mio", systemImage: "questionmark.circle")
                         .frame(minHeight: 44)
                 }
             }
@@ -60,7 +44,7 @@ struct SuggestionInboxView: View {
                     .foregroundStyle(.secondary)
             }
             if assistant.suggestions.isEmpty {
-                ContentUnavailableView("Inga väntande frågor", systemImage: "checkmark.bubble", description: Text("Aktivera AI-tolkning för förslag ur vanliga samtal, använd ett lokalt Mio-kommando eller skriv med plusknappen."))
+                ContentUnavailableView("Inga väntande frågor", systemImage: "checkmark.bubble", description: Text("När AI är på kommer förslag ur vanliga samtal hit. Du kan också använda ett lokalt Mio-kommando eller skriva med plusknappen."))
             }
             suggestionSection("Att granska", state: .pending)
             suggestionSection("Inte nu", state: .deferred)
@@ -547,7 +531,6 @@ struct DailyOverviewView: View {
             overviewSection("Dagens uppgifter", items: briefing.tasks)
             overviewSection("Kvar sedan tidigare", items: briefing.overdueTasks)
             Section {
-                NavigationLink { SystemRemindersView() } label: { Label("Alarm och dagliga påminnelser", systemImage: "alarm") }
                 NavigationLink { SuggestionInboxView(contentModel: contentModel, sessionModel: sessionModel) } label: {
                     Label("Väntande frågor (\(assistant.suggestions.count))", systemImage: "tray")
                 }
@@ -597,7 +580,7 @@ struct MioGuideView: View {
         List {
             Section("Börja här") {
                 Text("Skapa anteckningar, uppgifter, planer och egna minnen med plusknappen i flikarna. Allt detta fungerar utan mikrofon eller AI.")
-                Text("Konfigurera Pianissimo-server och Tailscale under Inställningar → Transkription. Starta Mio skickar ljud till din dator för svensk text. Starta Mio för vardagslyssning. Starta lektion pausar vardags-Mio och samlar lektionsunderlag separat. Paus och stopp stänger mikrofonen. Historik och rättningar finns under Lektioner → Historik och råtext.")
+                Text("Para din dator under Inställningar → Dator: kör mio-pair på datorn och skanna QR-koden. Starta Mio skickar ljud till din dator för svensk text. Starta Mio för vardagslyssning. Starta lektion pausar vardags-Mio och samlar lektionsunderlag separat. Paus och stopp stänger mikrofonen. Historik och rättningar finns under Lektioner → Historik och råtext.")
             }
             Section("Tilltala Mio") {
                 Text("Mio, anteckna att vi arbetar med procent.")
@@ -610,10 +593,10 @@ struct MioGuideView: View {
             }
             Section("Planera dagen") {
                 Text("Öppna en sparad plan eller uppgift för att skapa en separat systempåminnelse eller ett alarm. En plan kan också kopieras till Apple Kalender i dess redigeringsruta. Kalenderkopior synkas inte tillbaka till Mio.")
-                Text("Morgon visar dagens planer och uppgifter. Byt till Kväll för avklarade uppgifter, anteckningar och dagens sessioner. Alarm och dagliga påminnelser ställs in separat.")
+                Text("Morgon visar dagens planer och uppgifter. Byt till Kväll för avklarade uppgifter, anteckningar och dagens sessioner. Alarm och dagliga påminnelser finns under Inställningar → Påminnelser.")
             }
-            Section("Valfri AI") {
-                Text("Konfigurera din server först. Aktivera sedan AI-tolkning om du vill att nya textutdrag analyseras löpande för planer och uppgifter utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Läget är av vid appstart; alla föreslagna poster kräver Ja. Enskilda AI-frågor har en separat förhandsvisning före Skicka.")
+            Section("AI") {
+                Text("AI är på när datorn är parad. Nytt vardagstal skickas samlat högst var femte minut och kan ge förslag på planer och uppgifter utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Alla föreslagna poster kräver Ja. Frågor skickas direkt. Pausa AI på Mio-fliken eller under Inställningar → AI; pausen sparas.")
             }
             Section("Din kontroll") {
                 Text("Inget råljud sparas. Spela bara in andra med tydligt samtycke och enligt lokala regler. Du kan ändra och radera synliga minnen i Anteckningar.")

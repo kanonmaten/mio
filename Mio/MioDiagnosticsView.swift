@@ -33,7 +33,7 @@ struct MioDiagnosticsView: View {
                 .padding(.vertical, 4)
             }
             Section {
-                Text("Rapporterna kommer från iOS (MetricKit) och innehåller tider, minne, CPU, disk och anropsstackar, aldrig text från Mio. De sparas högst 30 dagar på telefonen och ingår i exporten.")
+                Text("Rapporterna kommer från iOS (MetricKit) och innehåller tider, minne, CPU, disk och anropsstackar, aldrig text från Mio. De sparas högst 30 dagar på telefonen och ingår i exporten. Diagnostik per session finns under Lektioner → Historik och råtext.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }

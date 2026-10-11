@@ -23,6 +23,11 @@ final class MioAnalysisCoordinator {
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var activeSessionID: UUID?
     @ObservationIgnored private var lastSentAt: Date?
+    /// Start of the everyday batch currently being sent; see `MioAnalysisSchedule`.
+    @ObservationIgnored private var windowOpenedAt: Date?
+    @ObservationIgnored private var isStarting = false
+    @ObservationIgnored private var resumeRequested = false
+    @ObservationIgnored private let isWanted: @MainActor () -> Bool
     @ObservationIgnored private var lessonInterval: TimeInterval = 60
     @ObservationIgnored private var deletedSessionIDs: Set<UUID> = []
     @ObservationIgnored private let loadConnection: @MainActor () throws -> MioCloudConnection
@@ -46,7 +51,10 @@ final class MioAnalysisCoordinator {
             try await MioCloudService.analyze($0, connection: $1)
         },
         wait: @escaping @MainActor (TimeInterval) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
-        now: @escaping @MainActor () -> Date = { .now }
+        now: @escaping @MainActor () -> Date = { .now },
+        isWanted: @escaping @MainActor () -> Bool = {
+            MioAIPreference.shouldRun(paired: MioCloudSettings.isPaired, defaults: .standard)
+        }
     ) {
         self.loadConnection = loadConnection
         self.configurationMatches = configurationMatches
@@ -54,6 +62,7 @@ final class MioAnalysisCoordinator {
         self.send = send
         self.wait = wait
         self.now = now
+        self.isWanted = isWanted
     }
 
     private struct Work {
@@ -66,12 +75,30 @@ final class MioAnalysisCoordinator {
         var isFinal = false
     }
 
+    /// Starts analysis when the PC is paired and AI is not paused: at launch, on return to the
+    /// foreground and after re-pairing. Overlapping calls coalesce into one activation, and an
+    /// activation superseded by a newer request is retried instead of reported.
+    func resumeIfWanted(existingSessions: () -> [MioSession]) async {
+        resumeRequested = true
+        guard !isStarting else { return }
+        isStarting = true
+        defer { isStarting = false }
+        while resumeRequested {
+            resumeRequested = false
+            guard !enabled, isWanted() else { continue }
+            do { try await enable(existingSessions: existingSessions()) }
+            catch {
+                if resumeRequested || !isWanted() || error is CancellationError { continue }
+                errorMessage = error.localizedDescription
+                status = "AI kunde inte starta. Lokal transkription fortsätter; AI provas igen när du öppnar Mio."
+            }
+        }
+    }
+
     /// Consent follows capture time, including delayed transcription callbacks.
+    /// A known server wait (Retry-After) survives re-activation; the worker honours it.
     func enable(existingSessions: [MioSession], task: MioAITaskID = .everyday) async throws {
         guard !MioMaintenanceState.shared.blocksWork else { throw MioCloudError.disabled }
-        if let pausedUntil, pausedUntil > now() {
-            throw MioCloudError.rateLimited(min(86_400, max(1, Int(ceil(pausedUntil.timeIntervalSince(now()))))))
-        }
         let selected = try loadConnection()
         disable()
         let token = generation
@@ -82,12 +109,13 @@ final class MioAnalysisCoordinator {
         }
         connection = prepared.connection
         quotaResetAt = prepared.status.quota?.resetAt.flatMap(MioAnalysisResult.parseDate)
-        pausedUntil = nil
+        if let pausedUntil, pausedUntil <= now() { self.pausedUntil = nil }
         for session in existingSessions { observed[session.id] = Set(session.transcripts.map(\.id)) }
         consentStartedAt = now()
         enabled = true
         MioDiagnosticsRuntime.analysisEnabled = true
-        status = "AI-tolkning på: nya textutdrag analyseras ungefär en gång per minut."
+        status = pausedUntil.map { "AI fortsätter kl. \($0.formatted(date: .omitted, time: .shortened))." }
+            ?? "AI är på: nytt vardagstal skickas samlat högst var femte minut."
         errorMessage = nil
     }
 
@@ -97,11 +125,12 @@ final class MioAnalysisCoordinator {
         queue.removeAll(); observed.removeAll(); eligible.removeAll(); latestSessions.removeAll()
         continuityStarts.removeAll(); endingSessionIDs.removeAll()
         connection = nil; activeSessionID = nil
-        // A server-imposed wait survives disable/re-enable; re-saving settings must not bypass it.
+        // A server-imposed wait and the batch window survive disable/re-enable;
+        // pausing or re-pairing must not bypass them.
         quotaResetAt = nil
         enabled = false; isWorking = false
         MioDiagnosticsRuntime.analysisEnabled = false
-        status = "AI-tolkning är av. Inga fler utdrag skickas."
+        status = "AI är pausad. Inga fler utdrag skickas."
     }
 
     func pauseEveryday(assistant: MioAssistantViewModel) {
@@ -155,6 +184,11 @@ final class MioAnalysisCoordinator {
         let known = observed[session.id] ?? []
         let fresh = session.transcripts.filter { !known.contains($0.id) && Self.captured($0, after: max(consentStartedAt, boundary)) }
         observed[session.id, default: []].formUnion(session.transcripts.map(\.id))
+        if let pausedUntil, MioAnalysisSchedule.dropsEverydayWork(pausedUntil: pausedUntil, now: now()) {
+            // A long quota pause skips this text; it stays local and is not later used as context.
+            continuityStarts[session.id] = now()
+            return
+        }
         eligible[session.id, default: []].formUnion(fresh.map(\.id))
         guard !fresh.isEmpty else { return }
         let processed = assistant.analyzedFragmentIDs(for: session.id)
@@ -242,25 +276,38 @@ final class MioAnalysisCoordinator {
         startWorker(assistant: assistant)
     }
 
-    private func waitForEverydayBoundary(token: UUID) async throws {
-        while generation == token, let work = queue.first, work.request.mode == .everyday {
-            let age = max(now().timeIntervalSince(work.enqueuedAt), work.waited)
-            let text = work.request.fragments.last?.text.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let unquoted = text.trimmingCharacters(in: CharacterSet(charactersIn: "\"”»'’ "))
-            let complete = unquoted.last.map { ".?!…".contains($0) } ?? false
-            let full = work.request.fragments.count >= 5 || work.request.fragments.reduce(0, { $0 + $1.text.utf8.count }) >= 6_000
-            let delay: TimeInterval
-            if age < 60, !work.isFinal { delay = 60 - age }
-            else if !work.isFinal, !complete, !full, age < 120 { delay = min(20, 120 - age) }
-            else { return }
-            status = "Samlar nästa textdel för bättre sammanhang …"
-            try await waitFor(delay, token: token)
-            try Task.checkCancellation()
-            // Injected waits may complete immediately in tests; elapsed wait still has a finite budget.
-            for index in queue.indices where queue[index].request.mode == .everyday && queue[index].enqueuedAt <= work.enqueuedAt {
-                queue[index].waited += delay
-            }
+    /// One wait until the schedule allows the head of the queue. Text arriving meanwhile is
+    /// merged into queued everyday work, which is what batches it.
+    private func waitUntilDue(token: UUID) async throws {
+        guard generation == token, let work = queue.first else { return }
+        let input = MioAnalysisSchedule.Input(kind: work.request.mode == .lesson ? .lesson : .everyday,
+            enqueuedAt: work.enqueuedAt, isFinal: work.isFinal, lastSentAt: lastSentAt, windowOpenedAt: windowOpenedAt,
+            lessonInterval: lessonInterval, pausedUntil: pausedUntil)
+        let current = now()
+        let delay = MioAnalysisSchedule.nextSendTime(input, now: current).timeIntervalSince(current)
+        guard delay > 0 else { return }
+        if pausedUntil.map({ $0 <= current }) ?? true {
+            status = work.request.mode == .lesson ? "Väntar mellan lektionsdelar för att begränsa förbrukningen …"
+                : "Samlar vardagstext. Nästa AI-utskick sker inom fem minuter."
         }
+        try await waitFor(delay, token: token)
+        try Task.checkCancellation()
+    }
+
+    private func pause(until deadline: Date, after error: Error) {
+        pausedUntil = deadline
+        if MioAnalysisSchedule.dropsEverydayWork(pausedUntil: deadline, now: now()) {
+            queue.removeAll { $0.request.mode == .everyday }
+            eligible.removeAll()
+            for id in continuityStarts.keys { continuityStarts[id] = now() }
+        }
+        let reason = switch error as? MioCloudError {
+        case .network?: "Datorn svarar inte."
+        case .gatewayRateLimited(.localTokenLimit, _)?: "Dagens AI-token är slut."
+        default: "AI-gränsen är nådd."
+        }
+        errorMessage = nil
+        status = "\(reason) AI fortsätter kl. \(deadline.formatted(date: .omitted, time: .shortened))."
     }
 
     private func waitFor(_ seconds: TimeInterval, token: UUID) async throws {
@@ -285,15 +332,7 @@ final class MioAnalysisCoordinator {
                 while self.enabled, self.generation == token, !self.queue.isEmpty {
                     try Task.checkCancellation()
                     self.workerMode = self.queue.first?.request.mode
-                    try await self.waitForEverydayBoundary(token: token)
-                    if let last = self.lastSentAt {
-                        let interval: TimeInterval = self.queue.first?.request.mode == .lesson ? self.lessonInterval : 60
-                        let remaining = interval - self.now().timeIntervalSince(last)
-                        if remaining > 0 {
-                            self.status = "Väntar mellan AI-anrop för att begränsa förbrukningen …"
-                            try await self.waitFor(remaining, token: token)
-                        }
-                    }
+                    try await self.waitUntilDue(token: token)
                     await MioMaintenanceState.shared.waitForExclusive()
                     try Task.checkCancellation()
                     guard self.generation == token, !MioMaintenanceState.shared.blocksWork,
@@ -301,46 +340,61 @@ final class MioAnalysisCoordinator {
                     else { throw MioCloudError.changedConfiguration }
                     guard !self.queue.isEmpty else { break }
                     let work = self.queue.removeFirst()
-                    let prepared = try await self.prepareConnection(connection, work.request.mode == .lesson ? .lesson : .everyday)
-                    try Task.checkCancellation()
-                    guard self.enabled, self.generation == token, self.configurationMatches(connection),
-                          prepared.connection.observedConfigurationRevision == connection.observedConfigurationRevision else {
-                        throw MioCloudError.gateway(409, .configurationChanged)
-                    }
-                    self.quotaResetAt = prepared.status.quota?.resetAt.flatMap(MioAnalysisResult.parseDate)
-                    let session = work.request.mode == .everyday ? (self.latestSessions[work.session.id] ?? work.session) : work.session
-                    var request = work.request
-                    if request.mode == .everyday {
-                        request = try MioEverydayContext.request(fragments: request.fragments, session: session,
-                            eligibleSegmentIDs: work.eligibleSegmentIDs, continuityStartedAt: work.continuityStartedAt,
-                            decisions: assistant.analysisDecisions)
-                        if session.captureGaps?.contains(where: { $0.endedAt == work.continuityStartedAt }) == true {
-                            request.contextLimited = true
-                        }
-                    }
-                    request.queueSize = self.queue.count + 1
-                    self.workerMode = request.mode; self.activeSessionID = session.id; self.isWorking = true
-                    self.status = request.mode == .lesson ? "AI skriver detaljerade lektionsanteckningar …" : "AI granskar senaste textutdraget …"
-                    self.lastSentAt = self.now()
-                    let result: MioAnalysisResult
                     do {
-                        // Transport may perform a slow status preflight before model access.
-                        // A full minute after completion conservatively spaces actual model calls.
-                        defer { self.lastSentAt = self.now() }
-                        result = try await self.send(request, prepared.connection)
+                        let prepared = try await self.prepareConnection(connection, work.request.mode == .lesson ? .lesson : .everyday)
+                        try Task.checkCancellation()
+                        guard self.enabled, self.generation == token, self.configurationMatches(connection),
+                              prepared.connection.observedConfigurationRevision == connection.observedConfigurationRevision else {
+                            throw MioCloudError.gateway(409, .configurationChanged)
+                        }
+                        self.quotaResetAt = prepared.status.quota?.resetAt.flatMap(MioAnalysisResult.parseDate)
+                        let session = work.request.mode == .everyday ? (self.latestSessions[work.session.id] ?? work.session) : work.session
+                        var request = work.request
+                        if request.mode == .everyday {
+                            request = try MioEverydayContext.request(fragments: request.fragments, session: session,
+                                eligibleSegmentIDs: work.eligibleSegmentIDs, continuityStartedAt: work.continuityStartedAt,
+                                decisions: assistant.analysisDecisions)
+                            if session.captureGaps?.contains(where: { $0.endedAt == work.continuityStartedAt }) == true {
+                                request.contextLimited = true
+                            }
+                        }
+                        request.queueSize = self.queue.count + 1
+                        self.workerMode = request.mode; self.activeSessionID = session.id; self.isWorking = true
+                        self.status = request.mode == .lesson ? "AI skriver detaljerade lektionsanteckningar …" : "AI granskar senaste textutdraget …"
+                        if request.mode == .everyday, self.windowOpenedAt.map({ work.enqueuedAt > $0 }) ?? true {
+                            self.windowOpenedAt = self.now()
+                        }
+                        self.lastSentAt = self.now()
+                        let result: MioAnalysisResult
+                        do {
+                            // Transport may perform a slow status preflight before model access.
+                            // A full minute after completion conservatively spaces actual model calls.
+                            defer { self.lastSentAt = self.now() }
+                            result = try await self.send(request, prepared.connection)
+                        }
+                        // A temporary export barrier must queue an already completed result,
+                        // then recheck consent/deletion before admitting its local write.
+                        await MioMaintenanceState.shared.waitForExclusive()
+                        try Task.checkCancellation()
+                        guard self.enabled, self.generation == token, !MioMaintenanceState.shared.blocksWork else { return }
+                        guard self.configurationMatches(connection) else { throw MioCloudError.changedConfiguration }
+                        if let metadata = result.metadata { self.lessonInterval = TimeInterval(metadata.lessonIntervalSeconds) }
+                        let count = try await assistant.applyAnalysis(result, request: request, session: session)
+                        self.activeSessionID = nil; self.sentBatches += 1
+                        self.status = "Senast analyserat \(self.now().formatted(date: .omitted, time: .shortened)). \(count) nya förslag."
+                        if request.mode == .lesson { self.status = MioLessonDocument(session: session, records: assistant.analyses).progress }
+                        self.isWorking = false
+                    } catch {
+                        // Quota, rate limits and an unreachable PC pause instead of stopping AI.
+                        guard self.generation == token, !(error is CancellationError), self.configurationMatches(connection),
+                              let deadline = MioAnalysisSchedule.retryDeadline(after: error, now: self.now(),
+                                                                                quotaResetAt: self.quotaResetAt)
+                        else { throw error }
+                        MioConnectionDiscovery.shared.handle(error: error)
+                        self.queue.insert(work, at: 0)
+                        self.isWorking = false; self.activeSessionID = nil
+                        self.pause(until: deadline, after: error)
                     }
-                    // A temporary export barrier must queue an already completed result,
-                    // then recheck consent/deletion before admitting its local write.
-                    await MioMaintenanceState.shared.waitForExclusive()
-                    try Task.checkCancellation()
-                    guard self.enabled, self.generation == token, !MioMaintenanceState.shared.blocksWork else { return }
-                    guard self.configurationMatches(connection) else { throw MioCloudError.changedConfiguration }
-                    if let metadata = result.metadata { self.lessonInterval = TimeInterval(metadata.lessonIntervalSeconds) }
-                    let count = try await assistant.applyAnalysis(result, request: request, session: session)
-                    self.activeSessionID = nil; self.sentBatches += 1
-                    self.status = "Senast analyserat \(self.now().formatted(date: .omitted, time: .shortened)). \(count) nya förslag."
-                    if request.mode == .lesson { self.status = MioLessonDocument(session: session, records: assistant.analyses).progress }
-                    self.isWorking = false
                 }
             } catch is CancellationError {
                 // Explicit cancellation rejects every late response before persistence.
@@ -349,19 +403,12 @@ final class MioAnalysisCoordinator {
                     guard let connection = self.connection, self.configurationMatches(connection) else {
                         MioConnectionDiscovery.shared.invalidate()
                         self.disable()
-                        self.errorMessage = "Serveranslutningen ändrades. Granska den och aktivera text-AI igen."
-                        self.status = "Text-AI stoppades eftersom serveranslutningen ändrades."
+                        self.errorMessage = "Anslutningen till datorn ändrades. AI startar igen när parningen är klar."
+                        self.status = "AI stoppades eftersom anslutningen till datorn ändrades."
                         return
                     }
                     MioConnectionDiscovery.shared.handle(error: error)
-                    var deadline: Date?
-                    if case let MioCloudError.rateLimited(seconds) = error { deadline = self.now().addingTimeInterval(TimeInterval(seconds)) }
-                    if case let MioCloudError.gatewayRateLimited(code, seconds) = error {
-                        let retryDeadline = self.now().addingTimeInterval(TimeInterval(seconds))
-                        deadline = code == .localDayLimit ? max(self.quotaResetAt ?? retryDeadline, retryDeadline) : retryDeadline
-                    }
                     self.fail(error.localizedDescription)
-                    self.pausedUntil = deadline
                 }
             }
         }
@@ -369,7 +416,7 @@ final class MioAnalysisCoordinator {
 
     private func fail(_ message: String) {
         disable()
-        errorMessage = message + " Aktivera läget igen när problemet är löst. Inget automatiskt omförsök görs."
-        status = "AI-tolkning stoppad. Lokal transkription fortsätter."
+        errorMessage = message + " AI startar igen nästa gång du öppnar Mio, eller med Starta AI igen i Inställningar."
+        status = "AI stoppad. Lokal transkription fortsätter."
     }
 }

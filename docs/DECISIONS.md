@@ -2,6 +2,17 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## En parning, AI alltid på och samlade vardagsutskick, 2026-10-11
+
+Användarbeslut (helhetsplanen 2026-10-11, avsnitt D och E). Ersätter "AI av vid start", "Tillåt molnfrågor", förhandsgranskning före varje fråga och Cloudflare Access i appen.
+
+- **Parning:** en QR-kod från `mio-pair` (`{"mio":1,"aiURL","aiToken","transcriptionURL"|null,"transcriptionToken"|null}`) ersätter två separata inställningar. Skanning med VisionKit `DataScannerViewController` (bara QR) efter `isSupported`/`isAvailable`; fyra manuella fält som reserv. Parsern (`MioPairingPayload`) är portabel och strikt: okända nycklar, annan version, http, sökväg/fråga/användare och felaktiga token avvisas. Förkastat: AVFoundation-metadata direkt (mer egen kod) och kamerabibliotek (beroende).
+- **AI på som standard** när datorn är parad (`mio.ai.enabled`, saknas = på). Pausen sparas. Enskilda frågor skickas utan förhandsgranskning; varje svar valideras ändå och förslag kräver Ja. En uppgradering med sparad gammal server startar pausad, så inget skickas till en gammal Cloudflare-gateway utan att användaren väljer det.
+- **Utskick:** vardagstext samlas i fönster om fem minuter (`MioAnalysisSchedule`), så att en dags lyssning ryms i Groqs 200 000 token per dygn; lektionsdelar behåller minst 60 s. 429 med `Retry-After` (även `local_token_limit`, `local_day_limit` till kvotens återställning) och nätfel (5 min) pausar och fortsätter automatiskt. Vid paus längre än fem minuter hoppas vardagstalet under pausen över i stället för att köas.
+- **Inställningar** i en panel från höger med Liquid Glass bara på ramen; raderna är vanliga grupperade rader.
+
+Källor: [DataScannerViewController](https://developer.apple.com/documentation/visionkit/datascannerviewcontroller), [DataScannerViewControllerDelegate](https://developer.apple.com/documentation/visionkit/datascannerviewcontrollerdelegate), [glassEffect(_:in:)](https://developer.apple.com/documentation/swiftui/view/glasseffect(_:in:)), [accessibilityAction(_:_:)](https://developer.apple.com/documentation/swiftui/view/accessibilityaction(_:_:)). Ej verifierat på telefon: skanningen, kamerafrågan, kantsvepet bredvid listors svepåtgärder, VoiceOver-fokus och femminutersfönstret i verklig drift.
+
 ## Fångst på telefonen: återstart, rundupptagning, pausdelar och talare, 2026-10-11
 
 Användarbeslut 2026-10-11 som ersätter regeln "ingen automatisk mikrofonåterstart" från 2026-09-29.

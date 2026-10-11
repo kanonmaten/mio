@@ -142,9 +142,8 @@ final class MioTaskDiscoveryTests: XCTestCase {
         XCTAssertNil(try MioCloudService.makeRequest(body, connection: connection).value(forHTTPHeaderField: "X-Mio-Configuration-Revision"))
     }
 
-    func testProtectedStatusV2UsesReadOnlyRouteAndPreservesAccessAuthentication() async throws {
+    func testProtectedStatusV2UsesReadOnlyRouteWithBearerToken() async throws {
         var connection = connection()
-        connection.access = .init(clientID: "fixture.access", clientSecret: "fixture_secret")
         connection.observedConfigurationRevision = String(repeating: "b", count: 64)
         let transport = DiscoveryTransport(data: try fixture())
         let status = try await MioCloudService.statusV2(connection: connection, transport: { try await transport.send($0) })
@@ -156,7 +155,7 @@ final class MioTaskDiscoveryTests: XCTestCase {
         XCTAssertNil(sent.httpBody)
         XCTAssertNil(sent.value(forHTTPHeaderField: "X-Mio-Configuration-Revision"))
         XCTAssertEqual(sent.value(forHTTPHeaderField: "Authorization"), "Bearer fixture_gateway")
-        XCTAssertEqual(sent.value(forHTTPHeaderField: "CF-Access-Client-Secret"), "fixture_secret")
+        XCTAssertNil(sent.value(forHTTPHeaderField: "CF-Access-Client-Secret"))
     }
 
     func testStatusV2EnforcesStreamBodyLimitAndDoesNotFallBackToLegacy() async throws {
