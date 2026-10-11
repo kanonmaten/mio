@@ -8,9 +8,9 @@ Detta är guiden för helhetsbygget 0.9.0. Koden behöver först byggas och inst
 
 Öppna kugghjulet på valfri flik → **Transkription**. Spara din privata `https://…ts.net`-adress och token, se sparbekräftelsen och testa anslutningen. Datorn måste vara igång med Pianissimo och Tailscale; iPhone ska vara ansluten till samma tailnet. Följ [driftguiden](../transcription-server/README.md). Det finns ingen Apple-talmodell att installera i det nya bygget.
 
-**Ansluten** visar senast lyckade kontakt. **Ansluter** visas under anslutningskontroll. Vid **Offline** försöker en aktiv session igen automatiskt; högst 60 s ljud kan vänta i RAM. Äldre ljud tappas med synlig lucka. Efter stopp kan du behöva Testa anslutning för en färsk kontroll. iOS-ljudavbrott kan kräva Fortsätt; efter appens tvångsavslutning startas aldrig mikrofonen automatiskt.
+**Ansluten** visar senast lyckade kontakt. **Ansluter** visas under anslutningskontroll. Vid **Offline** försöker en aktiv session igen automatiskt; högst 60 s ljud kan vänta i RAM. Äldre ljud tappas med synlig lucka. Efter stopp kan du behöva Testa anslutning för en färsk kontroll. Efter ett iOS-ljudavbrott startar Mio mikrofonen igen själv; efter appens tvångsavslutning startas den aldrig automatiskt.
 
-Mikrofon, transkriptionsanslutning och text-AI visas separat. En aktiv mikrofon kan alltså fånga ljud medan servern är offline. Vid paus/stopp stängs mikrofonen först; redan fångad sluttext kan avslutas under högst 15 sekunder, fortfarande inom ljudets ursprungliga 60-sekundsgräns. Du kan avbryta väntan. Efter ljudavbrott, ljudvägsbyte eller reset väljer du själv Fortsätt när iOS tillåter; inte heller en tidsvald paus startar mikrofonen automatiskt.
+Mikrofon, transkriptionsanslutning och text-AI visas separat. En aktiv mikrofon kan alltså fånga ljud medan servern är offline. Vid paus/stopp stängs mikrofonen först; redan fångad sluttext kan avslutas under högst 15 sekunder, fortfarande inom ljudets ursprungliga 60-sekundsgräns. Du kan avbryta väntan. Efter samtal, Siri, ljudvägsbyte eller reset startar Mio mikrofonen igen av sig själv och markerar luckan i transkriptet. Nekar iOS det i bakgrunden får du notisen "Tryck för att fortsätta lyssna"; Mio fortsätter när appen öppnas. Nekas det på skärmen, eller efter tre omstarter på en minut, väljer du Fortsätt. Din egen paus eller ditt stopp ångras aldrig automatiskt, inte heller en tidsvald paus.
 
 ## Fånga och ordna
 
@@ -21,7 +21,7 @@ Mikrofon, transkriptionsanslutning och text-AI visas separat. En aktiv mikrofon 
 5. Tryck **Fortsätt Mio** för att återuppta den pausade vardagslyssningen. Mikrofonen startar inte automatiskt efter lektionen.
 6. **Lektioner → Historik och råtext** innehåller tidigare sessioner, manuella poster, texträttningar och äldre manuell lektionsindelning. Inga tidigare data är borttagna.
 
-Spela bara in andra med tydligt samtycke och enligt lokala regler. Paus/stopp ska släcka iOS mikrofonindikator. Långvarig drift med låst skärm behöver verifieras på din telefon; tvångsavslutning startar aldrig om lyssningen automatiskt.
+Spela bara in andra med tydligt samtycke och enligt lokala regler. Talarmärkningen på din dator analyserar rösterna för att skilja talare åt (talare 1–4). Det sker bara i datorns RAM och raderas när sessionen avslutas eller efter 10 minuter, men det är ändå en analys av andras röster: berätta det när du ber om samtycke, och stäng av den på servern (`MIO_SPEAKER_LABELS=0`) om någon inte vill. Paus/stopp ska släcka iOS mikrofonindikator. Långvarig drift med låst skärm behöver verifieras på din telefon; tvångsavslutning startar aldrig om lyssningen automatiskt.
 
 ## Be Mio föreslå något
 

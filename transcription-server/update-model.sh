@@ -43,12 +43,14 @@ PY
 set_revision "$latest"
 systemctl restart mio-transcription.service
 if MIO_EXPECT_REVISION="$latest" "$script_dir/check.sh" --wait; then
-    # Keep only the active revision; each one is about 2.5 GB.
-    as_service - "$latest" <<'PY'
+    # Keep only the active Pianissimo revision (about 2.5 GB each). Other repos in
+    # the cache, such as the pinned speaker model, are left untouched.
+    as_service - "$model_id" "$latest" <<'PY'
 import sys
 from huggingface_hub import scan_cache_dir
 info = scan_cache_dir()
-old = [rev.commit_hash for repo in info.repos for rev in repo.revisions if rev.commit_hash != sys.argv[1]]
+old = [rev.commit_hash for repo in info.repos if repo.repo_id == sys.argv[1]
+       for rev in repo.revisions if rev.commit_hash != sys.argv[2]]
 if old:
     info.delete_revisions(*old).execute()
 PY

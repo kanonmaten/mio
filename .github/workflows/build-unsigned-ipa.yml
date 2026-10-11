@@ -50,6 +50,7 @@ jobs:
           test -f Mio/ContentViews.swift
           plutil -lint Mio/Info.plist
           plutil -lint Mio/PrivacyInfo.xcprivacy
+          plutil -lint MioWidgets/Info.plist
 
       - name: Diagnostisera strikt concurrency i det riktiga iOS-targetet
         # Diagnostic gate: warnings are recorded and uploaded, but do not block the IPA
@@ -217,6 +218,13 @@ jobs:
           test -f "$APP_PATH/PrivacyInfo.xcprivacy"
           test "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PATH/Info.plist")" = "$MINIMUM_IOS_VERSION"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")" = "app.mio.assistant"
+          # The Live Activity extension must ship inside the app; SideStore signs it as a second app ID.
+          WIDGET_PATH="$APP_PATH/PlugIns/MioWidgets.appex"
+          test -x "$WIDGET_PATH/MioWidgets"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$WIDGET_PATH/Info.plist")" = "app.mio.assistant.widgets"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$WIDGET_PATH/Info.plist")" = "com.apple.widgetkit-extension"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$WIDGET_PATH/Info.plist")" = \
+            "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")"
 
           rm -rf "$RUNNER_TEMP/Payload"
           mkdir -p "$RUNNER_TEMP/Payload"

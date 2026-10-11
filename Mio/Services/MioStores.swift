@@ -16,6 +16,9 @@ protocol MioSessionStore: Sendable {
     @discardableResult
     func correctTranscript(sessionID: UUID, segmentID: UUID, text: String,
                            token: SessionOperationToken) async throws -> MioSession
+    @discardableResult
+    func renameSpeaker(sessionID: UUID, speaker: Int, name: String,
+                       token: SessionOperationToken) async throws -> MioSession
     func delete(id: UUID) async throws
     func removeTemporaryExports() async throws
     @discardableResult
@@ -100,6 +103,10 @@ struct MioDeferredSessionStore: MioSessionStore {
     func correctTranscript(sessionID: UUID, segmentID: UUID, text: String,
                            token: SessionOperationToken) async throws -> MioSession {
         try await store().correctTranscript(sessionID: sessionID, segmentID: segmentID, text: text, token: token)
+    }
+    func renameSpeaker(sessionID: UUID, speaker: Int, name: String,
+                       token: SessionOperationToken) async throws -> MioSession {
+        try await store().renameSpeaker(sessionID: sessionID, speaker: speaker, name: name, token: token)
     }
     func delete(id: UUID) async throws { try await store().delete(id: id) }
     func removeTemporaryExports() async throws { try await store().removeTemporaryExports() }

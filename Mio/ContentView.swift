@@ -540,6 +540,10 @@ private struct TranscriptCard: View {
                                 Text(segment.createdAt.formatted(date: .omitted, time: .standard))
                                     .font(.caption.monospacedDigit())
                                     .foregroundStyle(.secondary)
+                                if let speaker = segment.speaker {
+                                    Text(session.speakerName(for: speaker))
+                                        .font(.caption.weight(.semibold))
+                                }
                                 if segment.containsMio {
                                     Text("MIO")
                                         .font(.caption2.bold())

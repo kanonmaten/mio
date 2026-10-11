@@ -26,6 +26,12 @@
 	<string>Mio använder mikrofonen när du startar Mio eller en lektion. Ljudet skickas privat via Tailscale till din Pianissimo-server för svensk text. Ingen ljudfil sparas.</string>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Mio använder alarm bara när du själv sparar ett alarm. Du kan granska och ta bort Mios alarm i appen.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>app.mio.assistant.lesson-notes.*</string>
+	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

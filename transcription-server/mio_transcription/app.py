@@ -3,25 +3,62 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 import hmac
+import logging
 import os
 import re
 import time
+from uuid import UUID
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from .core import (Chunk, MAX_BYTES, MAX_RESPONSE_BYTES, RATE, RequestError, decode_wave,
                    validate_backend_words, validate_backend_metadata)
+from .preprocess import float_to_pcm, pcm_to_float, preprocess
+from .speakers import SpeakerLabeler, strip_speakers
+
+log = logging.getLogger("mio_transcription")
 
 
-def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._exit, cache_ttl=90):
+def env_flag(name, default):
+    value = os.environ.get(name, "").strip().lower()
+    if not value:
+        return default
+    if value in ("1", "true", "on", "ja"):
+        return True
+    if value in ("0", "false", "off", "nej"):
+        return False
+    raise ValueError(f"{name} must be 1 or 0")
+
+
+def default_diarizer():
+    """Sortformer when enabled and configured; otherwise None with one log line."""
+    if not env_flag("MIO_SPEAKER_LABELS", True):
+        log.warning("Talarmärkning avstängd (MIO_SPEAKER_LABELS=0).")
+        return None
+    from .speakers import SortformerDiarizer
+    try:
+        return SortformerDiarizer()
+    except ValueError:
+        log.warning("Talarmärkning avstängd: MIO_DIARIZATION_REVISION saknas eller är ogiltig. Kör install.sh.")
+        return None
+
+
+def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._exit, cache_ttl=90,
+               diarizer=None, preprocessing=None, speaker_ttl=600, speaker_clock=time.monotonic):
     token = token if token is not None else os.environ.get("MIO_TRANSCRIPTION_TOKEN", "")
     if not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", token):
         raise ValueError("Set a 32-256 character MIO_TRANSCRIPTION_TOKEN")
+    preprocessing = env_flag("MIO_PREPROCESS", True) if preprocessing is None else preprocessing
     if backend is None:
         from .backend import Pianissimo
         backend = Pianissimo()
+        if diarizer is None:
+            diarizer = default_diarizer()
+    labeler = SpeakerLabeler(diarizer, ttl=speaker_ttl, clock=speaker_clock) if diarizer else None
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="inference")
-    state = {"status": "loading", "busy": False}
+    # Speaker model loading must never delay or block transcription readiness.
+    side_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="speaker-load")
+    state = {"status": "loading", "busy": False, "preprocess_warned": False}
     cache = OrderedDict()
     jobs = set()
 
@@ -29,6 +66,8 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
         try:
             await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(executor, backend.load), 300)
             state["status"] = "ready" if backend.is_ready() else "loading"
+            if labeler:
+                side_executor.submit(labeler.load)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -43,6 +82,8 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
             for key in list(cache):
                 if time.monotonic() - cache[key][0] >= cache_ttl:
                     del cache[key]
+            if labeler:
+                labeler.sessions.expire()
 
     @asynccontextmanager
     async def lifespan(app):
@@ -52,9 +93,12 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
         task.cancel()
         cleanup.cancel()
         cache.clear()
+        if labeler:
+            labeler.sessions.clear()
         for job in jobs:
             job.cancel()
         executor.shutdown(wait=False, cancel_futures=True)
+        side_executor.shutdown(wait=False, cancel_futures=True)
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -84,19 +128,39 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
         authenticate(request)
         return JSONResponse({"apiVersion": 1, "serverVersion": "1.0.0", "status": state["status"],
                              "metadata": metadata(), "sampleRate": RATE, "channels": 1,
-                             "encoding": "pcm_s16le_wav", "maxSeconds": 24, "maxBytes": MAX_BYTES},
+                             "encoding": "pcm_s16le_wav", "maxSeconds": 24, "maxBytes": MAX_BYTES,
+                             "preprocessing": preprocessing,
+                             "speakerLabels": labeler.status if labeler else "off"},
                             status_code=200 if ready() else 503,
                             headers={"Cache-Control": "no-store"})
+
+    def run_inference(chunk, pcm):
+        """Runs on the single inference thread: preprocess, ASR, optional speakers."""
+        audio = pcm_to_float(pcm)
+        model_pcm = pcm
+        if preprocessing:
+            try:
+                audio = preprocess(audio)
+                model_pcm = float_to_pcm(audio)
+            except Exception as error:  # cleanup is an enhancement, never a reason to drop speech
+                if not state["preprocess_warned"]:
+                    state["preprocess_warned"] = True
+                    log.warning("Förbehandling misslyckades (%s); originalljudet används.", type(error).__name__)
+        words = validate_backend_words(backend.transcribe(model_pcm), len(pcm) // 2)
+        return labeler.label(chunk, audio, words) if labeler else words
 
     async def infer(key, fingerprint, chunk, pcm):
         try:
             words = await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(
-                executor, backend.transcribe, pcm), inference_timeout)
-            words = validate_backend_words(words, len(pcm) // 2)
+                executor, run_inference, chunk, pcm), inference_timeout)
             result = {"apiVersion": 1, "sessionID": chunk.session_id, "chunkID": chunk.chunk_id,
                       "sequence": chunk.sequence, "startSample": chunk.start_sample,
                       "words": words, "metadata": metadata()}
             body = JSONResponse(result).body
+            if len(body) > MAX_RESPONSE_BYTES and labeler:
+                # Speaker labels are optional; text within the cap must still arrive.
+                result["words"] = strip_speakers(words)
+                body = JSONResponse(result).body
             if len(body) > MAX_RESPONSE_BYTES:
                 raise RequestError(502, "model_result_too_large")
             cache[key] = (time.monotonic(), fingerprint, body)
@@ -166,5 +230,19 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
         finally:
             if not handed_off:
                 state["busy"] = False
+
+    @app.delete("/v1/sessions/{session_id}")
+    async def end_session(session_id: str, request: Request):
+        """Optional: ends a session's speaker state and its cached text answers now."""
+        authenticate(request)
+        try:
+            session_id = str(UUID(session_id))
+        except ValueError:
+            raise RequestError(400, "invalid_session") from None
+        if labeler:
+            labeler.sessions.end(session_id)
+        for key in [key for key in cache if key[0] == session_id]:
+            del cache[key]
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
     return app

@@ -60,6 +60,9 @@ struct TranscriptSegment: Identifiable, Codable, Hashable, Sendable {
     var sourceChunkID: UUID? = nil
     var timingValidity: AudioTimingValidity? = nil
     var correctionRevision: Int? = nil
+    /// Server speaker number (1–4) for this turn; nil in older data or without labels.
+    /// Part of the original evidence; display names live in `MioSession.speakerNames`.
+    var speaker: Int? = nil
 
     init(
         id: UUID = UUID(),
@@ -185,8 +188,21 @@ struct MioSession: Identifiable, Codable, Hashable, Sendable {
     var captureGaps: [CaptureGap]? = nil
     /// Ordering for repository mutations; absent in older sessions.
     var mutationRevision: UInt64? = nil
+    /// Display-only speaker names keyed by speaker number; segments are never rewritten.
+    var speakerNames: [Int: String]? = nil
 
     var isLesson: Bool { captureMode == .lesson }
+
+    func speakerName(for speaker: Int) -> String {
+        MioSpeakerLabel.displayName(for: speaker, names: speakerNames)
+    }
+
+    /// The speaker label to show above a segment: only where the speaker changes.
+    func speakerLabel(at index: Int) -> String? {
+        guard transcripts.indices.contains(index), let speaker = transcripts[index].speaker else { return nil }
+        if index > 0, transcripts[index - 1].speaker == speaker { return nil }
+        return speakerName(for: speaker)
+    }
 
     init(
         id: UUID = UUID(),
@@ -344,6 +360,74 @@ enum PipelineEvent: Sendable {
     case interruptionEnded(shouldResume: Bool)
     case routeChanged(String)
     case mediaServicesReset
+    /// The capture tried to restart the microphone by itself and iOS refused (for example
+    /// because the app is in the background). The engine stays down and the gap stays open.
+    case restartFailed(String)
+}
+
+/// Speaker labels are session-local numbers from the PC, never identities.
+enum MioSpeakerLabel {
+    static let range = 1...4
+    static let maximumNameLength = 40
+
+    static func defaultName(_ speaker: Int) -> String { "Talare \(speaker)" }
+
+    static func displayName(for speaker: Int, names: [Int: String]?) -> String {
+        names?[speaker] ?? defaultName(speaker)
+    }
+
+    /// A blank name, or the default label itself, removes the custom name.
+    static func renamed(_ names: [Int: String]?, speaker: Int, to name: String) -> [Int: String]? {
+        guard range.contains(speaker) else { return names }
+        var result = names ?? [:]
+        let clean = String(name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: .newlines).joined(separator: " ")
+            .prefix(maximumNameLength))
+        if clean.isEmpty || clean == defaultName(speaker) {
+            result[speaker] = nil
+        } else {
+            result[speaker] = clean
+        }
+        return result.isEmpty ? nil : result
+    }
+}
+
+/// When Mio restarts the microphone by itself (user decision 2026-10-11, replacing the
+/// 2026-09-29 rule). A pause or stop by the user always wins: the capture then no longer exists.
+enum MioCaptureResumePolicy {
+    enum Decision: Equatable, Sendable {
+        /// Nothing to do: the user is not listening, or the interruption is still ongoing.
+        case none
+        /// Reactivate the audio session and restart the engine now.
+        case restart
+        /// iOS refused in the background: ask with a local notification and retry on foreground.
+        case notifyUser
+        /// iOS refused while Mio is on screen: pause visibly and let the user press Fortsätt.
+        case askInApp
+    }
+
+    static func decision(userWantsListening: Bool, interruptionOngoing: Bool,
+                         restartFailed: Bool, appIsActive: Bool) -> Decision {
+        guard userWantsListening, !interruptionOngoing else { return .none }
+        guard restartFailed else { return .restart }
+        return appIsActive ? .askInApp : .notifyUser
+    }
+
+    /// Bounds automatic restarts so a route or configuration loop falls back to the user.
+    static func allowsAutomaticRestart(previous: [TimeInterval], now: TimeInterval,
+                                       limit: Int = 3, window: TimeInterval = 60) -> Bool {
+        previous.filter { now - $0 < window }.count < limit
+    }
+}
+
+/// Local notification requests for the resume fallback; text only, no transcript content.
+enum MioResumeNotice: Equatable, Sendable {
+    /// Ask for notification permission while the user is starting Mio on screen.
+    case prepare
+    /// Post "Tryck för att fortsätta lyssna".
+    case post
+    /// Remove a delivered notification after listening resumed or ended.
+    case withdraw
 }
 
 enum MioError: LocalizedError {

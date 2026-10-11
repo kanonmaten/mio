@@ -115,6 +115,11 @@ actor SessionRepository {
                            token: SessionOperationToken) throws -> MioSession {
         try core.correctTranscript(sessionID: sessionID, segmentID: segmentID, text: text, token: token)
     }
+    @discardableResult
+    func renameSpeaker(sessionID: UUID, speaker: Int, name: String,
+                       token: SessionOperationToken) throws -> MioSession {
+        try core.renameSpeaker(sessionID: sessionID, speaker: speaker, name: name, token: token)
+    }
     func delete(id: UUID) throws { try core.delete(id: id) }
     func removeTemporaryExports() throws { try core.removeTemporaryExports() }
     @discardableResult
@@ -221,6 +226,18 @@ final class SessionRepositoryCore {
             if session.transcripts[index].displayText != priorDisplayText {
                 session.transcripts[index].correctionRevision = (session.transcripts[index].correctionRevision ?? 0) + 1
             }
+        }
+    }
+
+    /// A display layer like corrections: segment speaker numbers are original evidence.
+    @discardableResult
+    func renameSpeaker(sessionID: UUID, speaker: Int, name: String,
+                       token: SessionOperationToken) throws -> MioSession {
+        try mutateEndedSession(id: sessionID, token: token) { session in
+            guard session.transcripts.contains(where: { $0.speaker == speaker }) else {
+                throw SessionRepositoryError.missingSegment
+            }
+            session.speakerNames = MioSpeakerLabel.renamed(session.speakerNames, speaker: speaker, to: name)
         }
     }
 

@@ -44,6 +44,7 @@
 		C168CEE7244CBC9C6D1CEBD3 /* MioAnalysisTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07B84A3FF8701FEC2ABC19DE /* MioAnalysisTests.swift */; };
 		078A1A7F0C88C0ADBEAB143E /* MioSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E608AC3345DCF13A1578AB9F /* MioSettingsView.swift */; };
 		39AE1A5047493CDFA0DE88ED /* TranscriptionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A6F2E7E3BCC1BA458CB6DE7 /* TranscriptionModels.swift */; };
+		CA9700000000000000000001 /* SpeechPauseDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9700000000000000000002 /* SpeechPauseDetector.swift */; };
 		2AB599C7C465DCC094CBF0E3 /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 730AA95BAC0372A8529AA489 /* TranscriptionService.swift */; };
 		559519B2CEAA1291EECE15A9 /* MicrophoneCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9089093008C57C04D98E1592 /* MicrophoneCapture.swift */; };
 		88CD40B7A267228C84FEE551 /* TranscriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17A0AE12F82CB09B580F9530 /* TranscriptionTests.swift */; };
@@ -56,6 +57,8 @@
 		4E6C35138E3E995A9476AAAC /* MioSessionRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6B8DACEF0C8BBA46788A5F1 /* MioSessionRepositoryTests.swift */; };
 		84714A50316671868BE869B9 /* MioCaptureLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14F3DADCEB3A2E0DE78D67C1 /* MioCaptureLifecycleTests.swift */; };
 		6996DC1A802C0C7AA7513F08 /* AudioReliabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A9E76D63BCF9B7F981D8CDD /* AudioReliabilityTests.swift */; };
+		CA9700000000000000000003 /* MioSpeechPauseDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9700000000000000000004 /* MioSpeechPauseDetectorTests.swift */; };
+		CA9700000000000000000005 /* MioSpeakerAndResumeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9700000000000000000006 /* MioSpeakerAndResumeTests.swift */; };
 		6B213A829FB7FDC5AE05B36A /* MioWorkflowCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51D98E4D669FDBD52C4BE861 /* MioWorkflowCoordinator.swift */; };
 		8B81E9E52688E4EA406AD3DC /* MioOperationOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = B319D3E97C2658B526256C85 /* MioOperationOutcome.swift */; };
 		3811BD819D858D9DD27918D6 /* MioDeletionJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E35F7B9A7AD09365385626A /* MioDeletionJournal.swift */; };
@@ -86,6 +89,17 @@
 		DA7A00000000000000000107 /* MioMetricKitSubscriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000007 /* MioMetricKitSubscriber.swift */; };
 		DA7A00000000000000000108 /* MioDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000008 /* MioDiagnosticsView.swift */; };
 		DA7A00000000000000000109 /* MioStoreMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000009 /* MioStoreMigrationTests.swift */; };
+		BAC600000000000000000101 /* MioListeningActivityState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000001 /* MioListeningActivityState.swift */; };
+		BAC600000000000000000102 /* MioListeningActivityMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000002 /* MioListeningActivityMapping.swift */; };
+		BAC600000000000000000103 /* MioLessonNotesProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000003 /* MioLessonNotesProgress.swift */; };
+		BAC600000000000000000104 /* MioListeningAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000004 /* MioListeningAttributes.swift */; };
+		BAC600000000000000000105 /* MioLiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000005 /* MioLiveActivityController.swift */; };
+		BAC600000000000000000106 /* MioLessonNotesBackgroundTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000006 /* MioLessonNotesBackgroundTask.swift */; };
+		BAC600000000000000000107 /* MioWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000007 /* MioWidgets.swift */; };
+		BAC600000000000000000108 /* MioListeningActivityState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000001 /* MioListeningActivityState.swift */; };
+		BAC600000000000000000109 /* MioListeningAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000004 /* MioListeningAttributes.swift */; };
+		BAC60000000000000000010B /* MioBackgroundPresenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC60000000000000000000A /* MioBackgroundPresenceTests.swift */; };
+		BAC60000000000000000010A /* MioWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000009 /* MioWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -100,7 +114,28 @@
 		    isa = PBXContainerItemProxy; containerPortal = 010000000000000000000001; proxyType = 1;
 		    remoteGlobalIDString = A10000000000000000000001; remoteInfo = Mio;
 		};
+		BAC600000000000000000501 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 010000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BAC600000000000000000301;
+			remoteInfo = MioWidgets;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		BAC600000000000000000404 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				BAC60000000000000000010A /* MioWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		F10000000000000000000001 /* MioApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioApp.swift; sourceTree = "<group>"; };
@@ -143,6 +178,7 @@
 		07B84A3FF8701FEC2ABC19DE /* MioAnalysisTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioAnalysisTests.swift; sourceTree = "<group>"; };
 		E608AC3345DCF13A1578AB9F /* MioSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSettingsView.swift; sourceTree = "<group>"; };
 		3A6F2E7E3BCC1BA458CB6DE7 /* TranscriptionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionModels.swift; sourceTree = "<group>"; };
+		CA9700000000000000000002 /* SpeechPauseDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechPauseDetector.swift; sourceTree = "<group>"; };
 		730AA95BAC0372A8529AA489 /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		9089093008C57C04D98E1592 /* MicrophoneCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophoneCapture.swift; sourceTree = "<group>"; };
 		17A0AE12F82CB09B580F9530 /* TranscriptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionTests.swift; sourceTree = "<group>"; };
@@ -155,6 +191,8 @@
 		F6B8DACEF0C8BBA46788A5F1 /* MioSessionRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSessionRepositoryTests.swift; sourceTree = "<group>"; };
 		14F3DADCEB3A2E0DE78D67C1 /* MioCaptureLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioCaptureLifecycleTests.swift; sourceTree = "<group>"; };
 		5A9E76D63BCF9B7F981D8CDD /* AudioReliabilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioReliabilityTests.swift; sourceTree = "<group>"; };
+		CA9700000000000000000004 /* MioSpeechPauseDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSpeechPauseDetectorTests.swift; sourceTree = "<group>"; };
+		CA9700000000000000000006 /* MioSpeakerAndResumeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSpeakerAndResumeTests.swift; sourceTree = "<group>"; };
 		51D98E4D669FDBD52C4BE861 /* MioWorkflowCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWorkflowCoordinator.swift; sourceTree = "<group>"; };
 		B319D3E97C2658B526256C85 /* MioOperationOutcome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioOperationOutcome.swift; sourceTree = "<group>"; };
 		0E35F7B9A7AD09365385626A /* MioDeletionJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioDeletionJournal.swift; sourceTree = "<group>"; };
@@ -186,6 +224,16 @@
 		DA7A00000000000000000007 /* MioMetricKitSubscriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioMetricKitSubscriber.swift; sourceTree = "<group>"; };
 		DA7A00000000000000000008 /* MioDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioDiagnosticsView.swift; sourceTree = "<group>"; };
 		DA7A00000000000000000009 /* MioStoreMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioStoreMigrationTests.swift; sourceTree = "<group>"; };
+		BAC600000000000000000001 /* MioListeningActivityState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioListeningActivityState.swift; sourceTree = "<group>"; };
+		BAC600000000000000000002 /* MioListeningActivityMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioListeningActivityMapping.swift; sourceTree = "<group>"; };
+		BAC600000000000000000003 /* MioLessonNotesProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLessonNotesProgress.swift; sourceTree = "<group>"; };
+		BAC600000000000000000004 /* MioListeningAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioListeningAttributes.swift; sourceTree = "<group>"; };
+		BAC600000000000000000005 /* MioLiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLiveActivityController.swift; sourceTree = "<group>"; };
+		BAC600000000000000000006 /* MioLessonNotesBackgroundTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLessonNotesBackgroundTask.swift; sourceTree = "<group>"; };
+		BAC600000000000000000007 /* MioWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWidgets.swift; sourceTree = "<group>"; };
+		BAC60000000000000000000A /* MioBackgroundPresenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioBackgroundPresenceTests.swift; sourceTree = "<group>"; };
+		BAC600000000000000000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BAC600000000000000000009 /* MioWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MioWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -204,6 +252,7 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F20000000000000000000012 /* UI Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		BAC600000000000000000402 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -212,6 +261,7 @@
 			children = (
 				720000000000000000000001 /* MioUITests */,
 				710000000000000000000002 /* Mio */,
+				BAC600000000000000000201 /* MioWidgets */,
 				710000000000000000000005 /* MioTests */,
 				710000000000000000000006 /* Products */,
 			);
@@ -234,6 +284,9 @@
 				799A41C174B0A9B07F25C4C9 /* CloudAssistantView.swift */,
 				C458A62497B4E13F9DA9858C /* AssistantViews.swift */,
 				F10000000000000000000001 /* MioApp.swift */,
+				BAC600000000000000000004 /* MioListeningAttributes.swift */,
+				BAC600000000000000000005 /* MioLiveActivityController.swift */,
+				BAC600000000000000000006 /* MioLessonNotesBackgroundTask.swift */,
 				F10000000000000000000002 /* ContentView.swift */,
 				F10000000000000000000003 /* MioViewModel.swift */,
 				F10000000000000000000012 /* MioContentViewModel.swift */,
@@ -255,9 +308,13 @@
 				BB8197B5FDC22A62664EBC6D /* MioEverydayContext.swift */,
 				7506EB51EB2850B38809A00F /* MioDiagnosticsModels.swift */,
 				3A6F2E7E3BCC1BA458CB6DE7 /* TranscriptionModels.swift */,
+				CA9700000000000000000002 /* SpeechPauseDetector.swift */,
 				1AA777B6D2D5C06F62DFF3D3 /* MioAnalysisModels.swift */,
 				5DB135EA84D569A43919CE41 /* MioAssistantModels.swift */,
 				F10000000000000000000004 /* MioSessionModels.swift */,
+				BAC600000000000000000001 /* MioListeningActivityState.swift */,
+				BAC600000000000000000002 /* MioListeningActivityMapping.swift */,
+				BAC600000000000000000003 /* MioLessonNotesProgress.swift */,
 				F10000000000000000000010 /* MioContentModels.swift */,
 			);
 			path = Models;
@@ -307,6 +364,8 @@
 				31C0F7728FCC0E2DD0B55E9B /* MioProtectedFileWriterTests.swift */,
 				663E3AAD060B9FC15D704356 /* MioDeletionRecoveryTests.swift */,
 				5A9E76D63BCF9B7F981D8CDD /* AudioReliabilityTests.swift */,
+				CA9700000000000000000004 /* MioSpeechPauseDetectorTests.swift */,
+				CA9700000000000000000006 /* MioSpeakerAndResumeTests.swift */,
 				14F3DADCEB3A2E0DE78D67C1 /* MioCaptureLifecycleTests.swift */,
 				F6B8DACEF0C8BBA46788A5F1 /* MioSessionRepositoryTests.swift */,
 				6B152EE97327E606E06BAF0D /* MioCoordinatorContextTests.swift */,
@@ -321,6 +380,7 @@
 				F1000000000000000000000B /* MioWakeWordDetectorTests.swift */,
 				F1000000000000000000000C /* MioSessionModelsTests.swift */,
 				F10000000000000000000014 /* MioContentModelsTests.swift */,
+				BAC60000000000000000000A /* MioBackgroundPresenceTests.swift */,
 				F10000000000000000000015 /* MioContentRepositoryTests.swift */,
 			);
 			path = MioTests;
@@ -331,12 +391,22 @@
 			children = (
 				F20000000000000000000011 /* MioUITests.xctest */,
 				F1000000000000000000000D /* Mio.app */,
+				BAC600000000000000000009 /* MioWidgets.appex */,
 				F1000000000000000000000E /* MioTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
 		720000000000000000000001 /* MioUITests */ = {isa = PBXGroup; children = (F20000000000000000000010 /* MioUISmokeTests.swift */,); path = MioUITests; sourceTree = "<group>"; };
+		BAC600000000000000000201 /* MioWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				BAC600000000000000000007 /* MioWidgets.swift */,
+				BAC600000000000000000008 /* Info.plist */,
+			);
+			path = MioWidgets;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -347,10 +417,12 @@
 				910000000000000000000001 /* Sources */,
 				F20000000000000000000001 /* Frameworks */,
 				810000000000000000000001 /* Resources */,
+				BAC600000000000000000404 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				BAC600000000000000000601 /* PBXTargetDependency */,
 			);
 			name = Mio;
 			productName = Mio;
@@ -382,6 +454,23 @@
 		    name = MioUITests; productName = MioUITests; productReference = F20000000000000000000011;
 		    productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		BAC600000000000000000301 /* MioWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BAC600000000000000000703 /* Build configuration list for PBXNativeTarget "MioWidgets" */;
+			buildPhases = (
+				BAC600000000000000000401 /* Sources */,
+				BAC600000000000000000402 /* Frameworks */,
+				BAC600000000000000000403 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MioWidgets;
+			productName = MioWidgets;
+			productReference = BAC600000000000000000009 /* MioWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -405,6 +494,9 @@
 						CreatedOnToolsVersion = 26.0;
 						TestTargetID = A10000000000000000000001;
 					};
+					BAC600000000000000000301 = {
+						CreatedOnToolsVersion = 26.0;
+					};
 				};
 			};
 			buildConfigurationList = E10000000000000000000000 /* Build configuration list for PBXProject "Mio" */;
@@ -424,6 +516,7 @@
 				A20000000000000000000001 /* MioUITests */,
 				A10000000000000000000001 /* Mio */,
 				A10000000000000000000002 /* MioTests */,
+				BAC600000000000000000301 /* MioWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -446,6 +539,7 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		820000000000000000000001 /* UI Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		BAC600000000000000000403 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -476,6 +570,7 @@
 				559519B2CEAA1291EECE15A9 /* MicrophoneCapture.swift in Sources */,
 				2AB599C7C465DCC094CBF0E3 /* TranscriptionService.swift in Sources */,
 				39AE1A5047493CDFA0DE88ED /* TranscriptionModels.swift in Sources */,
+				CA9700000000000000000001 /* SpeechPauseDetector.swift in Sources */,
 				078A1A7F0C88C0ADBEAB143E /* MioSettingsView.swift in Sources */,
 				DA7A00000000000000000108 /* MioDiagnosticsView.swift in Sources */,
 				5D2BCAEF461598A056EA31C7 /* MioIntelligenceViews.swift in Sources */,
@@ -503,6 +598,12 @@
 				B1000000000000000000000E /* MioContentRepository.swift in Sources */,
 				B1000000000000000000000F /* MioContentViewModel.swift in Sources */,
 				B10000000000000000000010 /* ContentViews.swift in Sources */,
+				BAC600000000000000000101 /* MioListeningActivityState.swift in Sources */,
+				BAC600000000000000000102 /* MioListeningActivityMapping.swift in Sources */,
+				BAC600000000000000000103 /* MioLessonNotesProgress.swift in Sources */,
+				BAC600000000000000000104 /* MioListeningAttributes.swift in Sources */,
+				BAC600000000000000000105 /* MioLiveActivityController.swift in Sources */,
+				BAC600000000000000000106 /* MioLessonNotesBackgroundTask.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -521,6 +622,8 @@
 				042D945C53D7CEB8FA1D7ACA /* MioProtectedFileWriterTests.swift in Sources */,
 				EE4979DC605F26D74C8BCCA1 /* MioDeletionRecoveryTests.swift in Sources */,
 				6996DC1A802C0C7AA7513F08 /* AudioReliabilityTests.swift in Sources */,
+				CA9700000000000000000003 /* MioSpeechPauseDetectorTests.swift in Sources */,
+				CA9700000000000000000005 /* MioSpeakerAndResumeTests.swift in Sources */,
 				84714A50316671868BE869B9 /* MioCaptureLifecycleTests.swift in Sources */,
 				4E6C35138E3E995A9476AAAC /* MioSessionRepositoryTests.swift in Sources */,
 				3E2DCEDB4573BF11B74F5D70 /* MioCoordinatorContextTests.swift in Sources */,
@@ -536,10 +639,21 @@
 				B1000000000000000000000B /* MioSessionModelsTests.swift in Sources */,
 				B10000000000000000000011 /* MioContentModelsTests.swift in Sources */,
 				B10000000000000000000012 /* MioContentRepositoryTests.swift in Sources */,
+				BAC60000000000000000010B /* MioBackgroundPresenceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		920000000000000000000001 /* UI Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B20000000000000000000001 /* MioUISmokeTests.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		BAC600000000000000000401 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BAC600000000000000000107 /* MioWidgets.swift in Sources */,
+				BAC600000000000000000108 /* MioListeningActivityState.swift in Sources */,
+				BAC600000000000000000109 /* MioListeningAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -549,6 +663,11 @@
 			targetProxy = C10000000000000000000001 /* PBXContainerItemProxy */;
 		};
 		D20000000000000000000001 /* UI app dependency */ = {isa = PBXTargetDependency; target = A10000000000000000000001; targetProxy = C20000000000000000000001; };
+		BAC600000000000000000601 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BAC600000000000000000301 /* MioWidgets */;
+			targetProxy = BAC600000000000000000501 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -772,6 +891,60 @@
 		        LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks",);
 		    }; name = Release;
 		};
+		BAC600000000000000000701 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MioWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.9.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		BAC600000000000000000702 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MioWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.9.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -803,6 +976,15 @@
 			defaultConfigurationName = Release;
 		};
 		E20000000000000000000003 /* UI configuration list */ = {isa = XCConfigurationList; buildConfigurations = (E20000000000000000000001, E20000000000000000000002,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		BAC600000000000000000703 /* Build configuration list for PBXNativeTarget "MioWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BAC600000000000000000701 /* Debug */,
+				BAC600000000000000000702 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 	};
 	rootObject = 010000000000000000000001 /* Project object */;

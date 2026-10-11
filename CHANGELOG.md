@@ -1,5 +1,16 @@
 # Ändringslogg
 
+## Helhetsbygget 2026-10-11 (pågår)
+
+- Live Activity: nytt widgettillägg `MioWidgets` (`app.mio.assistant.widgets`, inbäddat i appens PlugIns) visar "Lyssnar · tid", "Pausad" eller "Avbrott" och antal ljudluckor på låsskärmen och i Dynamic Island. Tiden ritas av systemet, så rutan uppdateras bara vid paus, fortsättning, avbrott och nya luckor. Knapparna Pausa och Stopp är App Intents (`LiveActivityIntent`) som körs i appen; Fortsätt öppnar Mio. Ingen transkriptionstext visas. Kompilerat och SideStore-signerat tillägg är otestat.
+- Lektionsanteckningar efter "Avsluta lektion" (eller "Skapa eller fortsätt") visas som iOS 26 `BGContinuedProcessingTask` med iOS egen förloppsruta (klara textdelar av totalt), så arbetet kan fortsätta när du lämnar appen. Avbryter iOS eller du uppgiften stoppas bara den lektionens anteckningar; sparade delar finns kvar och resten återupptas automatiskt nästa gång AI är på, även efter omstart. Inget `processing`-bakgrundsläge lagt till (Apples dokumentation kräver det inte; otestat på telefon).
+- "Markera som klar" och radering av poster: AlarmKit- och notisborttagning samt läsning av alarmlistan körs nu utanför huvudtråden, så gränssnittet inte fryser (misstänkt orsak till UI-testhänget i körning #22–#23).
+- Nya portabla XCTest: Live Activity-tillståndet, förloppet för lektionsanteckningar, stopp av en lektions anteckningar och återupptagning efter omstart. `verify_project.py` kontrollerar widgettillägget och IPA-workflowen kräver `.appex` i paketet.
+- Fångst på telefonen: efter samtal, Siri, media reset eller ändrad ljudväg startar Mio mikrofonen igen av sig själv och markerar luckan, men aldrig efter din paus eller ditt stopp. Nekar iOS i bakgrunden visas notisen "Tryck för att fortsätta lyssna" och Mio fortsätter när appen öppnas. Högst tre automatiska omstarter per minut. Den inbyggda mikrofonen begär rundupptagning när den stöds.
+- Ljudet styckas vid naturliga pauser (8–22 s ägt ljud, 1 s kontext per sida, högst 24 s per begäran) med en energibaserad pausdetektor (`SpeechPauseDetector`, XCTest i Linux-grinden). Hälsokontrollen kräver nu 24 s/768 044 byte.
+- Talare: ord från PC:n kan ha `speaker` 1–4. Varje talarbyte blir ett eget textsegment, transkriptet visar "Talare 1/2/3" där talaren byts, och du kan byta namn på en talare i en avslutad session (bara visning, originalet ändras inte). AI ser "Talare N: " men aldrig egna namn. Stopp ber PC:n radera sessionens talarminne (`DELETE /v1/sessions/{id}`).
+- Inget av detta är kompilerat eller telefonprovat i denna ändring.
+
 ## AI-gatewayen flyttar till datorn med Groq, 2026-10-11
 
 - Gatewayen kör nu på din CachyOS-dator bredvid Pianissimo, bakom `tailscale serve --https=8443`. `server/install.sh` installerar allt: tjänstekonto, Groq-nyckel (dold inmatning, fil som bara root kan läsa), härdad systemd-tjänst och Tailscale. `mio-pair` visar en QR-kod med datorns adress och båda tokens; ingenting sparas.

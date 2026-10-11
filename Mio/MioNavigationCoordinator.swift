@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// Routes are held until local stores have loaded; opening a notification performs
-/// no model work, capture restart, or system action.
+/// no model work or system action. A capture restart comes from the app becoming active.
 @MainActor @Observable
 final class MioNavigationCoordinator {
     var selectedTab = MioAppTab.capture
@@ -34,6 +34,9 @@ final class MioNavigationCoordinator {
             selectedTab = .daily
             dailyPeriod = .evening
             onDailyRoute()
+        case .resumeListening:
+            // Becoming active retries the microphone in MioViewModel; this only shows it.
+            selectedTab = .capture
         }
     }
 

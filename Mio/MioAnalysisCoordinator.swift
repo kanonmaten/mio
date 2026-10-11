@@ -180,6 +180,24 @@ final class MioAnalysisCoordinator {
         startWorker(assistant: assistant)
     }
 
+    /// True while detailed-note parts for this lesson are queued or a lesson part is in
+    /// flight (a part leaves the queue before its connection check, hence the worker mode).
+    func hasPendingLessonNotes(sessionID: UUID) -> Bool {
+        enabled && (queue.contains { $0.session.id == sessionID && $0.request.mode == .lesson }
+            || activeSessionID == sessionID || (worker != nil && workerMode == .lesson))
+    }
+
+    /// Stops this lesson's detailed notes without turning AI off, e.g. when iOS ends the
+    /// continued-processing task. A part in flight is discarded; saved parts stay and the
+    /// rest can be queued again with summarizeLesson.
+    func stopLessonNotes(sessionID: UUID, assistant: MioAssistantViewModel) {
+        queue.removeAll { $0.session.id == sessionID && $0.request.mode == .lesson }
+        if workerMode == .lesson, activeSessionID == sessionID || activeSessionID == nil {
+            generation = UUID(); worker?.cancel(); worker = nil; workerMode = nil; isWaiting = false; isWorking = false; activeSessionID = nil
+            startWorker(assistant: assistant)
+        }
+    }
+
     private func enqueueEveryday(session: MioSession, fragments: [MioAnalysisFragment], boundary: Date, assistant: MioAssistantViewModel) {
         let waiting = queue.filter { $0.session.id == session.id && $0.request.mode == .everyday }
         queue.removeAll { $0.session.id == session.id && $0.request.mode == .everyday }

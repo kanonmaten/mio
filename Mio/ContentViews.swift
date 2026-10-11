@@ -805,6 +805,8 @@ struct SessionEditorView: View {
     @State private var savingSegmentID: UUID?
     @State private var isDeleting = false
     @State private var showDeleteConfirmation = false
+    @State private var renamingSpeaker: Int?
+    @State private var speakerNameDraft = ""
 
     var body: some View {
         Group {
@@ -829,6 +831,17 @@ struct SessionEditorView: View {
                 }
                 .navigationTitle(displayTitle(for: session))
                 .navigationBarTitleDisplayMode(.inline)
+                .alert("Byt namn på talare", isPresented: speakerRenameIsPresented) {
+                    TextField("Namn", text: $speakerNameDraft)
+                    Button("Spara") {
+                        // Dismissal clears renamingSpeaker before the task runs.
+                        let speaker = renamingSpeaker, name = speakerNameDraft
+                        Task { await saveSpeakerName(speaker, name: name) }
+                    }
+                    Button("Avbryt", role: .cancel) { renamingSpeaker = nil }
+                } message: {
+                    Text("Namnet visas bara på telefonen; AI ser bara \(MioSpeakerLabel.defaultName(renamingSpeaker ?? 1)). Lämna tomt för att återgå.")
+                }
             } else {
                 ContentUnavailableView(
                     "Sessionen finns inte",
@@ -905,15 +918,44 @@ struct SessionEditorView: View {
                 Text("Sessionen innehåller ingen färdig text.")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(session.transcripts) { segment in
+                ForEach(Array(session.transcripts.enumerated()), id: \.element.id) { index, segment in
+                    if let label = session.speakerLabel(at: index), let speaker = segment.speaker {
+                        speakerRow(label: label, speaker: speaker, isEditable: session.endedAt != nil)
+                    }
                     transcriptEditor(segment, isEditable: session.endedAt != nil)
                 }
             }
         } header: {
             Text("Transkript")
         } footer: {
-            Text("Originaltext, ljudtider och bakgrundsbevis ändras aldrig. En korrigering sparas separat i sessionen.")
+            Text("Originaltext, ljudtider, talarnummer och bakgrundsbevis ändras aldrig. Korrigeringar och talarnamn sparas separat i sessionen.")
         }
+    }
+
+    @ViewBuilder
+    private func speakerRow(label: String, speaker: Int, isEditable: Bool) -> some View {
+        HStack {
+            Label(label, systemImage: "person.wave.2")
+                .font(.subheadline.weight(.semibold))
+            Spacer()
+            if isEditable {
+                Button("Byt namn") {
+                    speakerNameDraft = sessionModel.session(id: sessionID)?.speakerNames?[speaker] ?? ""
+                    renamingSpeaker = speaker
+                }
+                .font(.subheadline)
+                .accessibilityLabel("Byt namn på \(label)")
+            }
+        }
+    }
+
+    private var speakerRenameIsPresented: Binding<Bool> {
+        Binding(get: { renamingSpeaker != nil }, set: { if !$0 { renamingSpeaker = nil } })
+    }
+
+    private func saveSpeakerName(_ speaker: Int?, name: String) async {
+        guard let speaker else { return }
+        _ = await sessionModel.renameSpeaker(sessionID: sessionID, speaker: speaker, name: name)
     }
 
     @ViewBuilder

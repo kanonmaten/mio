@@ -31,6 +31,10 @@ Förnya Mio och SideStore före den kostnadsfria signeringens sjudagarsgräns: W
 
 Pairing-filer, certifikat och Apple-uppgifter är känsliga och hör aldrig hemma i repot. Se [SideStores felsökning](https://docs.sidestore.io/docs/troubleshooting) och [FAQ](https://docs.sidestore.io/docs/faq) vid pairing- eller appgränsproblem.
 
+## Live Activity och widgettillägget (otestat)
+
+IPA:n innehåller nu tillägget `MioWidgets.appex` (`app.mio.assistant.widgets`) för låsskärmens och Dynamic Islands "Lyssnar"-ruta med Pausa/Fortsätt och Stopp. SideStore måste signera det som ett andra app-ID. Med ett gratiskonto räknas det mot gränsen för app-ID:n per vecka; att det fungerar med SideStore är ännu inte provat på telefonen. Om installationen misslyckas eller rutan aldrig syns: notera felet från SideStore och kontrollera **Inställningar → Mio → Live Activities**. "Fortsätt" öppnar Mio, eftersom iOS inte låter en app i bakgrunden starta mikrofonen.
+
 ## Alternativ: direkt med Xcode
 
 Kräver en Mac som stöder vald Xcode-version och telefonens iOS. Kontrollera [Apples kompatibilitetstabell](https://developer.apple.com/xcode/system-requirements); Monterey kan inte bygga detta projekt.
@@ -52,7 +56,7 @@ Tester finns i `MioTests/`: modeller, actorägda lagringspatchar, workflow, för
 | Första start | Gå igenom fem flikar, spara/testa privat transkriptionsanslutning och tillåt mikrofonen vid uttrycklig sessionsstart |
 | Transkription offline | Följ Pianissimo-guiden: dator vaken, systemd redo, Tailscale på båda enheterna, rätt HTTPS-adress/token. Build 5 kan inte använda ljudservern |
 | Mikrofon nekad | Aktivera Mio under **Integritet och säkerhet → Mikrofon** |
-| Texten stannar efter ljudavbrott/ljudvägsbyte | Kontrollera separat mikrofon-/transkriptionsstatus och välj Fortsätt när iOS tillåter. Spara observationen med textfri händelselogg; ingen automatisk mikrofonstart förväntas |
+| Texten stannar efter ljudavbrott/ljudvägsbyte | Mio ska starta om mikrofonen själv eller visa notisen "Tryck för att fortsätta lyssna". Annars: kontrollera mikrofon-/transkriptionsstatus, välj Fortsätt och spara observationen med textfri händelselogg |
 | Raderingen är delvis utförd | Följ bannertexten och välj Försök slutföra raderingen igen. Starta inte nya ändringar eller AI-sändningar medan återhämtningen är blockerad |
 | Stabilt Actions-jobb är rött | Spara första tydliga felet, stegets namn, körnings-URL och commit. Senare fel kan vara följdfel |
 | Xcode visar signeringsfel | Kontrollera Team och konto; byt inte appidentitet vid uppgradering |
