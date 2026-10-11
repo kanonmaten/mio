@@ -4,15 +4,15 @@ Senast uppdaterad **2026-10-11**. Helhetsbygge **0.9.0, ej släppt**. Den här f
 
 ## Aktuellt bygge: helhetsbygget 2026-10-11
 
-Pågår på `main`: gateway på datorn med Groq, Pianissimo med förbehandling och talarmärkning, pausstyrda ljuddelar, automatisk omstart av mikrofonen, Live Activity, fortsatt bearbetning av lektionsanteckningar, QR-parning, AI på som standard, inställningspanel och SwiftData. Omdesignen är inte gjord än.
+Klart på `main`: gateway på datorn med Groq, Pianissimo med förbehandling och talarmärkning, pausstyrda ljuddelar, automatisk omstart av mikrofonen, Live Activity, fortsatt bearbetning av lektionsanteckningar, QR-parning, AI på som standard, inställningspanel, SwiftData och den nya designen (veckoplaneraren, se [DESIGN.md](../DESIGN.md)).
 
 | Kontroll | Resultat |
 |---|---|
-| Gateway (Node 26.11.1, lokalt) | 95 av 95 tester godkända för `f420638`. Syntetisk Groq-transport, ingen riktig modelltrafik. |
-| Pianissimo (pytest, lokalt) | 82 av 82 godkända för `40164c3` med falska modeller. Riktig Sortformer, svensk talarkvalitet, GPU-minne och effekten av förbehandling är **inte provade**. |
-| Strukturkontroll | `verify_project.py`: 250 kontroller, 0 fel för `b024cf2`. |
-| Linux Swift-grind | Godkänd för `938281f` och `88515cf`. Underkänd för `b024cf2` (dubbel deklaration i lagringsmigreringen, rättad i `f821202`). `f821202` och senare **kunde inte köras**: GitHub startar inga jobb på grund av kontots betalning eller utgiftsgräns. |
-| Xcode (IPA-workflowen) | Körning #25 för `938281f`: strikt concurrency, Release-bygge med Live Activity-tillägget och kompilering av enhetstester godkända; testkörningen avbröts när #26 startades. #26 för `b024cf2` startade aldrig (samma betalningsstopp). **Ingen IPA för helhetsbygget finns än.** |
+| Gateway (Node 22.22, lokalt) | 95 av 95 tester godkända för `39e6d02`. Syntetisk Groq-transport, ingen riktig modelltrafik. Projektets fästa Node 26.10 fanns inte i molnmiljön. |
+| Pianissimo (pytest, lokalt) | 82 av 82 godkända för `39e6d02` med falska modeller. Riktig Sortformer, svensk talarkvalitet, GPU-minne och effekten av förbehandling är **inte provade**. |
+| Strukturkontroll | `verify_project.py`: 248 kontroller, 0 fel för `e7b41b8` och nästa revision. |
+| Linux Swift-grind | Godkänd för `7ec91e7`, `f96a4df`, `c10fd3e`, `75b58b8`, `8dc0025` och `e7b41b8`. |
+| Xcode (IPA-workflowen) | Körning #30 för `8dc0025`: strikt concurrency, Release-bygge med Live Activity-tillägget, alla enhetstester och UI-tester i simulatorn godkända, IPA skapad. Skärmbilderna visade att tonen blev systemblå; rättat i `e7b41b8`. Körning #31 för `e7b41b8`: bygge och enhetstester godkända, men UI-testet för att markera en uppgift klar överskred sin tidsgräns två gånger, eftersom simulatorn för iOS 27 rapporterade appen som upptagen i 60 s efter ett tryck. Orsaken är inte hittad; testets tidsgräns höjs i nästa revision. |
 | Telefon | Inget av helhetsbygget är installerat eller provat. |
 
 ## Verifierat på telefonen

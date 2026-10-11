@@ -51,6 +51,9 @@ final class MioUISmokeTests: XCTestCase {
 
     @MainActor
     func testTaskCompletionHasNamedAccessibleHitArea() throws {
+        // The iOS 27 simulator sometimes reports the app as busy for 60 s after a menu or tap
+        // (XCTest then continues), which alone used up the default two-minute allowance.
+        executionTimeAllowance = 240
         let app = XCUIApplication()
         let title = "Syntetisk uppgift \(UUID().uuidString.prefix(8))"
         app.launch()
