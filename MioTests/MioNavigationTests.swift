@@ -27,7 +27,7 @@ final class MioNavigationTests: XCTestCase {
         let id = UUID()
         let navigation = MioNavigationCoordinator()
         navigation.receive(.post(id))
-        XCTAssertEqual(navigation.selectedTab, .capture)
+        XCTAssertEqual(navigation.selectedTab, .home)
         XCTAssertNil(navigation.presentedPost)
         navigation.resolvePending { requested in requested == id ? .calendar : nil }
         XCTAssertEqual(navigation.selectedTab, .calendar)
@@ -44,11 +44,11 @@ final class MioNavigationTests: XCTestCase {
         XCTAssertEqual(navigation.presentedPost?.id, id)
         navigation.reconcile { _ in nil }
         XCTAssertNil(navigation.presentedPost)
-        XCTAssertEqual(navigation.selectedTab, .daily)
+        XCTAssertEqual(navigation.selectedTab, .home)
         navigation.receive(.post(id))
         navigation.resolvePending { _ in nil }
         XCTAssertNil(navigation.presentedPost)
-        XCTAssertEqual(navigation.selectedTab, .daily)
+        XCTAssertEqual(navigation.selectedTab, .home)
     }
 
     @MainActor
@@ -58,7 +58,7 @@ final class MioNavigationTests: XCTestCase {
         navigation.resolvePending { _ in .notes }
         navigation.receive(.evening)
         navigation.resolvePending { _ in nil }
-        XCTAssertEqual(navigation.selectedTab, .daily)
+        XCTAssertEqual(navigation.selectedTab, .home)
         XCTAssertEqual(navigation.dailyPeriod, .evening)
         XCTAssertNil(navigation.presentedPost)
         navigation.receive(.morning)

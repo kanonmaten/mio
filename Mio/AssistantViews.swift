@@ -499,82 +499,6 @@ private struct LessonEditorView: View {
     }
 }
 
-struct DailyOverviewView: View {
-    @Environment(MioAssistantViewModel.self) private var assistant
-    @Environment(MioDayContext.self) private var day
-    @Environment(MioNavigationCoordinator.self) private var navigation
-    let contentModel: MioContentViewModel
-    let sessionModel: MioViewModel
-
-    var body: some View {
-        @Bindable var navigation = navigation
-        List {
-            Section {
-                Picker("Översikt", selection: $navigation.dailyPeriod) {
-                    Text("Morgon").tag(MioDailyPeriod.morning)
-                    Text("Kväll").tag(MioDailyPeriod.evening)
-                }.pickerStyle(.segmented)
-                DatePicker("Dag", selection: Binding(get: { day.overviewDate }, set: { day.select($0) }), displayedComponents: .date)
-                Text(evening ? "Se tillbaka på det du har sparat och gjort." : "Här är dina sparade planer och uppgifter för dagen.")
-                    .foregroundStyle(.secondary)
-            }
-            if evening {
-                overviewSection("Avklarat", items: briefing.completedTasks)
-                overviewSection("Anteckningar och minnen", items: briefing.notes)
-                Section("Fångat under dagen") {
-                    Label("\(briefing.sessionCount) sessioner · \(briefing.lessonCount) lektioner", systemImage: "waveform")
-                    Text("Översikten räknar sparat innehåll. Den är inte en AI-sammanfattning av vad som sades.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-            }
-            overviewSection("Dagens planer", items: briefing.plans)
-            overviewSection("Dagens uppgifter", items: briefing.tasks)
-            overviewSection("Kvar sedan tidigare", items: briefing.overdueTasks)
-            Section {
-                NavigationLink { SuggestionInboxView(contentModel: contentModel, sessionModel: sessionModel) } label: {
-                    Label("Väntande frågor (\(assistant.suggestions.count))", systemImage: "tray")
-                }
-            }
-        }
-        .navigationTitle(evening ? "Kväll" : "Morgon")
-        .toolbar { MioSettingsToolbar() }
-    }
-
-    private var briefing: MioBriefing {
-        MioBriefing.make(content: contentModel.items, sessions: sessionModel.allSessions, lessons: assistant.lessons,
-                         date: day.overviewDate, calendar: day.calendar)
-    }
-
-    private var evening: Bool { navigation.dailyPeriod == .evening }
-
-    private func overviewSection(_ title: String, items: [MioContentItem]) -> some View {
-        Section(title) {
-            if items.isEmpty { Text("Inget sparat här.").foregroundStyle(.secondary) }
-            ForEach(items) { item in
-                HStack(alignment: .top, spacing: 12) {
-                    if item.kind == .task {
-                        Button {
-                            Task { await contentModel.setTaskCompleted(id: item.id, isCompleted: !item.isCompleted) }
-                        } label: {
-                            Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle").font(.title2)
-                                .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
-                        }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel(item.isCompleted ? "Markera \(item.title) som inte klar" : "Markera \(item.title) som klar")
-                            .accessibilityIdentifier("mio.task-completion.\(item.id.uuidString)")
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(item.title)
-                        Text(item.scheduledAt, format: .dateTime.day().month().hour().minute())
-                            .font(.caption).foregroundStyle(.secondary)
-                        if !item.body.isEmpty { Text(item.body).font(.subheadline).foregroundStyle(.secondary) }
-                    }
-                }
-            }
-        }
-    }
-}
-
 struct MioGuideView: View {
     var body: some View {
         List {
@@ -588,15 +512,15 @@ struct MioGuideView: View {
                 Text("Mio, planera tandläkaren.")
                 Text("Mio, kom ihåg att jag föredrar blå pennor.")
                 Text("Mio, fråga varför himlen är blå.")
-                Text("Använd kommandot i början av en mening. Gå sedan till Förslag och granska typ, text och tid. Lokala kommandon tolkar inte datum; även AI-tolkade tider måste granskas. Vibration ges när Mio upptäcks i förgrunden; i bakgrunden kan du behöva öppna appen för att se frågor.")
+                Text("Använd kommandot i början av en mening. Granska sedan förslaget från Hem: kontrollera typ, text och tid. Lokala kommandon tolkar inte datum; även AI-tolkade tider måste granskas. Vibration ges när Mio upptäcks i förgrunden; i bakgrunden kan du behöva öppna appen för att se frågor.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Planera dagen") {
                 Text("Öppna en sparad plan eller uppgift för att skapa en separat systempåminnelse eller ett alarm. En plan kan också kopieras till Apple Kalender i dess redigeringsruta. Kalenderkopior synkas inte tillbaka till Mio.")
-                Text("Morgon visar dagens planer och uppgifter. Byt till Kväll för avklarade uppgifter, anteckningar och dagens sessioner. Alarm och dagliga påminnelser finns under Inställningar → Påminnelser.")
+                Text("Hem visar veckan, nästa sak och dagens planer. Välj en dag i veckoraden för att se den. Byt till Kväll för avklarade uppgifter, anteckningar och dagens sessioner. Alarm och dagliga påminnelser finns under Inställningar → Påminnelser.")
             }
             Section("AI") {
-                Text("AI är på när datorn är parad. Nytt vardagstal skickas samlat högst var femte minut och kan ge förslag på planer och uppgifter utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Alla föreslagna poster kräver Ja. Frågor skickas direkt. Pausa AI på Mio-fliken eller under Inställningar → AI; pausen sparas.")
+                Text("AI är på när datorn är parad. Nytt vardagstal skickas samlat högst var femte minut och kan ge förslag på planer och uppgifter utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Alla föreslagna poster kräver Ja. Frågor skickas direkt. Pausa AI på Fånga eller under Inställningar → AI; pausen sparas.")
             }
             Section("Din kontroll") {
                 Text("Inget råljud sparas. Spela bara in andra med tydligt samtycke och enligt lokala regler. Du kan ändra och radera synliga minnen i Anteckningar.")

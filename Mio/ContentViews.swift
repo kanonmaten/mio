@@ -473,17 +473,6 @@ struct NotesTabView: View {
     }
 }
 
-struct MorningTabView: View {
-    @Bindable var contentModel: MioContentViewModel
-    @Bindable var sessionModel: MioViewModel
-
-    var body: some View {
-        NavigationStack {
-            DailyOverviewView(contentModel: contentModel, sessionModel: sessionModel)
-        }
-    }
-}
-
 struct MioNotificationPostView: View {
     let postID: UUID
     let contentModel: MioContentViewModel

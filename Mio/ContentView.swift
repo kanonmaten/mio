@@ -17,27 +17,27 @@ struct ContentView: View {
     var body: some View {
         @Bindable var navigation = navigation
         TabView(selection: $navigation.selectedTab) {
-            MioTabView(model: model, contentModel: contentModel)
-                .tabItem { Label("Mio", systemImage: "waveform.and.mic") }
-                .tag(MioAppTab.capture)
-
-            LessonLibraryView(model: model, content: contentModel)
-                .tabItem { Label("Lektioner", systemImage: "book") }
-                .tag(MioAppTab.lessons)
-
-            CalendarTabView(contentModel: contentModel, sessionModel: model)
-                .tabItem { Label("Kalender", systemImage: "calendar") }
-                .tag(MioAppTab.calendar)
-
-            NotesTabView(contentModel: contentModel, sessionModel: model)
-                .tabItem { Label("Anteckningar", systemImage: "note.text") }
-                .tag(MioAppTab.notes)
-
-            MorningTabView(contentModel: contentModel, sessionModel: model)
-                .tabItem { Label("Morgon", systemImage: "sunrise") }
-                .tag(MioAppTab.daily)
+            Tab("Hem", systemImage: "house", value: MioAppTab.home) {
+                MioHomeView(model: model, contentModel: contentModel)
+            }
+            Tab("Lektioner", systemImage: "book", value: MioAppTab.lessons) {
+                LessonLibraryView(model: model, content: contentModel)
+            }
+            Tab("Kalender", systemImage: "calendar", value: MioAppTab.calendar) {
+                CalendarTabView(contentModel: contentModel, sessionModel: model)
+            }
+            Tab("Anteckningar", systemImage: "note.text", value: MioAppTab.notes) {
+                NotesTabView(contentModel: contentModel, sessionModel: model)
+            }
+            // The separate round button at the trailing end of the tab bar (iOS 26). It opens Fånga;
+            // it never starts the microphone by itself.
+            Tab("Fånga", systemImage: "mic", value: MioAppTab.capture, role: .search) {
+                MioCaptureView(model: model, contentModel: contentModel)
+            }
         }
-        .tint(.indigo)
+        .tint(MioTheme.tint)
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .modifier(MioListeningAccessory(model: model))
         .disabled(maintenance.blocksWork)
         .environment(\.openMioSettings, { showSettings = true })
         .mioSettingsPanel(isPresented: $showSettings, onDismiss: resolveNotificationRoute) {
@@ -68,12 +68,13 @@ struct ContentView: View {
             MioCloudSettings.removeLegacyAccessOnce()
             await workflow.bootstrap()
             storesLoaded = true
+            followDayPhase()
             resolveNotificationRoute()
             resumeAI()
         }
         .onChange(of: scenePhase) { _, newPhase in
             model.handleScenePhase(newPhase)
-            if newPhase == .active { day.refresh(); resolveNotificationRoute(); resumeAI() }
+            if newPhase == .active { day.refresh(); followDayPhase(); resolveNotificationRoute(); resumeAI() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in day.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange).receive(on: RunLoop.main)) { _ in day.refresh() }
@@ -103,6 +104,12 @@ struct ContentView: View {
     private func resumeAI() {
         guard storesLoaded, !maintenance.blocksWork else { return }
         Task { await workflow.analysis.resumeIfWanted(existingSessions: { model.allSessions }) }
+    }
+
+    /// Hem shows the evening overview from 17:00; a morning or evening notification still wins.
+    private func followDayPhase() {
+        guard navigation.pendingRoute == nil else { return }
+        navigation.dailyPeriod = MioDayPhase.at(.now, calendar: day.calendar) == .evening ? .evening : .morning
     }
 
     private func resolveNotificationRoute() {
@@ -135,11 +142,11 @@ private struct WorkflowRecoveryBanner: View {
     }
 }
 
-private struct MioTabView: View {
+private struct MioCaptureView: View {
     @Environment(MioWorkflowCoordinator.self) private var workflow
     @Bindable var model: MioViewModel
     @Bindable var contentModel: MioContentViewModel
-    @State private var showDeleteConfirmation = false
+    @State private var showAsk = false
     @Environment(MioAssistantViewModel.self) private var assistant
     @Environment(MioMaintenanceState.self) private var maintenance
 
@@ -148,10 +155,12 @@ private struct MioTabView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     StatusHeader(model: model)
+                    ControlsCard(model: model)
+                    if let session = model.currentSession, session.endedAt == nil {
+                        LiveTranscriptCard(model: model, session: session)
+                    }
                     TranscriptionStatusView(model: model)
                     TextAIStateCard()
-                    ControlsCard(model: model)
-                    AssistantHubView(contentModel: contentModel, sessionModel: model)
                     if !workflow.pendingLessonIDs.isEmpty {
                         Card(title: "Lektionen behöver sparas färdigt", symbol: "exclamationmark.triangle") {
                             if let message = workflow.lastOutcome?.message { Text(message).font(.subheadline) }
@@ -177,7 +186,6 @@ private struct MioTabView: View {
                     if let session = model.currentSession {
                         DisclosureGroup("Transkription och diagnostik") {
                             CaptureGapsView(session: session)
-                            LiveTranscriptCard(model: model, session: session)
                             TranscriptCard(session: session)
                             SessionStatisticsCard(model: model, session: session)
                             EvidenceCard(session: session)
@@ -192,9 +200,17 @@ private struct MioTabView: View {
                 .frame(maxWidth: 680)
                 .padding()
             }
-            .background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle("Mio")
-            .toolbar { MioSettingsToolbar() }
+            .mioGround()
+            .navigationTitle("Fånga")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Fråga Mio", systemImage: "bubble.left.and.text.bubble.right") { showAsk = true }
+                }
+                MioSettingsToolbar()
+            }
+            .sheet(isPresented: $showAsk) {
+                MioAskSheet(items: contentModel.items, sessions: model.allSessions)
+            }
             .navigationBarTitleDisplayMode(.large)
         }
     }
@@ -242,8 +258,9 @@ private struct StatusHeader: View {
 
     private var statusColor: Color {
         switch model.runState {
-        case .listening: .green
-        case .paused, .preparing, .stopping, .interrupted: .orange
+        case .listening: MioTheme.tint
+        case .paused, .preparing, .stopping: .secondary
+        case .interrupted: .orange
         case .failed, .unavailable: .red
         case .off: .secondary
         }
@@ -295,7 +312,7 @@ private struct TextAIStateCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .background(MioTheme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mio.text-ai-state")
     }
@@ -321,7 +338,7 @@ private struct ControlsCard: View {
             VStack(spacing: 12) {
                 switch model.runState {
                 case .off, .failed, .unavailable:
-                    PrimaryActionButton(title: "Starta Mio", symbol: "mic.fill", color: .indigo) {
+                    PrimaryActionButton(title: "Starta Mio", symbol: "mic.fill", color: MioTheme.tint) {
                         model.beginListening()
                     }
 
@@ -374,7 +391,7 @@ private struct ControlsCard: View {
                     .controlSize(.large)
 
                 case .paused:
-                    PrimaryActionButton(title: model.isLessonActive ? "Fortsätt lektionen" : "Fortsätt Mio", symbol: "play.fill", color: .indigo) {
+                    PrimaryActionButton(title: model.isLessonActive ? "Fortsätt lektionen" : "Fortsätt Mio", symbol: "play.fill", color: MioTheme.tint) {
                         model.beginListening()
                     }
                     Button(role: .destructive) {
@@ -700,11 +717,11 @@ private struct FirstRunCard: View {
     var body: some View {
         Card(title: "Börja med Mio", symbol: "1.circle") {
             VStack(alignment: .leading, spacing: 9) {
-                Text("1. Öppna Inställningar och testa din transkriptionsserver. Starta sedan Mio och tillåt mikrofonen.")
+                Text("1. Para datorn under Inställningar → Dator. Starta sedan Mio och tillåt mikrofonen.")
                 Text("2. Säg svenska meningar och ordet Mio.")
-                Text("3. Prova ‘Mio, anteckna att vi arbetar med procent’. Se Förslag och välj Ja, Nej eller Inte nu.")
+                Text("3. Prova ‘Mio, anteckna att vi arbetar med procent’. Granska förslaget på Hem och välj Ja, Nej eller Inte nu.")
                 Text("4. Använd Starta lektion för lektionsläge. Historik och råtext finns under Lektioner.")
-                Text("5. Använd Morgon för dagens planer och Kväll för att se tillbaka.")
+                Text("5. Hem visar veckan, nästa sak och dagens planer. Från kl. 17 visar Hem vad du gjort.")
             }
             .font(.subheadline)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -759,7 +776,7 @@ private struct Card<Content: View>: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
+        .background(MioTheme.surface, in: RoundedRectangle(cornerRadius: MioTheme.panelRadius, style: .continuous))
     }
 }
 

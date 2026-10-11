@@ -1,7 +1,8 @@
 import Foundation
 
+/// Four sections plus the separate capture (mic) tab. Morgon and Kväll live on Hem.
 enum MioAppTab: String, Hashable, Sendable {
-    case capture, lessons, calendar, notes, daily
+    case home, lessons, calendar, notes, capture
 }
 
 enum MioDailyPeriod: String, Hashable, Sendable {

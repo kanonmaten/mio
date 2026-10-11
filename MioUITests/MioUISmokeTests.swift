@@ -5,16 +5,19 @@ import XCTest
 /// task through the ordinary local UI. Run in a test simulator; Linux cannot run it.
 final class MioUISmokeTests: XCTestCase {
     @MainActor
-    func testFiveNativeTabsAndIndependentActivityStates() throws {
+    func testFourTabsPlusCaptureButtonAndIndependentActivityStates() throws {
         let app = XCUIApplication()
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 10))
-        XCTAssertEqual(app.tabBars.buttons.count, 5)
-        for title in ["Lektioner", "Kalender", "Anteckningar", "Morgon", "Mio"] {
+        for title in ["Hem", "Lektioner", "Kalender", "Anteckningar"] {
             let tab = app.tabBars.buttons[title]
             XCTAssertTrue(tab.exists, "Missing native tab: \(title)")
             tab.tap()
         }
+        // The capture tab uses the separate trailing tab-bar button, so look it up app-wide.
+        let capture = app.buttons["Fånga"].firstMatch
+        XCTAssertTrue(capture.waitForExistence(timeout: 5))
+        capture.tap()
         XCTAssertTrue(app.descendants(matching: .any)["mio.microphone-state"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["mio.transcription-state"].firstMatch.exists)
         XCTAssertTrue(app.descendants(matching: .any)["mio.text-ai-state"].firstMatch.exists)
@@ -22,18 +25,19 @@ final class MioUISmokeTests: XCTestCase {
     }
 
     @MainActor
-    func testMorningEveningAndSettingsNavigation() {
+    func testHomeMorningEveningAndSettingsNavigation() {
         let app = XCUIApplication()
         app.launch()
-        XCTAssertTrue(app.tabBars.buttons["Morgon"].waitForExistence(timeout: 10))
-        app.tabBars.buttons["Morgon"].tap()
+        XCTAssertTrue(app.tabBars.buttons["Hem"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Hem"].tap()
+        XCTAssertTrue(app.buttons["Förra veckan"].waitForExistence(timeout: 5))
         let evening = app.segmentedControls.buttons["Kväll"]
         XCTAssertTrue(evening.waitForExistence(timeout: 5))
         evening.tap()
-        XCTAssertTrue(app.navigationBars["Kväll"].exists)
-        app.segmentedControls.buttons["Morgon"].tap()
-        XCTAssertTrue(app.navigationBars["Morgon"].exists)
-        app.tabBars.buttons["Mio"].tap()
+        XCTAssertTrue(evening.isSelected)
+        let morning = app.segmentedControls.buttons["Morgon"]
+        morning.tap()
+        XCTAssertTrue(morning.isSelected)
         let settings = app.buttons["Inställningar"].firstMatch
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
