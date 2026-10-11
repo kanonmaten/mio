@@ -10,9 +10,9 @@ Klart på `main`: gateway på datorn med Groq, Pianissimo med förbehandling och
 |---|---|
 | Gateway (Node 22.22, lokalt) | 95 av 95 tester godkända för `39e6d02`. Syntetisk Groq-transport, ingen riktig modelltrafik. Projektets fästa Node 26.10 fanns inte i molnmiljön. |
 | Pianissimo (pytest, lokalt) | 82 av 82 godkända för `39e6d02` med falska modeller. Riktig Sortformer, svensk talarkvalitet, GPU-minne och effekten av förbehandling är **inte provade**. |
-| Strukturkontroll | `verify_project.py`: 248 kontroller, 0 fel för `e7b41b8` och nästa revision. |
-| Linux Swift-grind | Godkänd för `7ec91e7`, `f96a4df`, `c10fd3e`, `75b58b8`, `8dc0025` och `e7b41b8`. |
-| Xcode (IPA-workflowen) | Körning #30 för `8dc0025`: strikt concurrency, Release-bygge med Live Activity-tillägget, alla enhetstester och UI-tester i simulatorn godkända, IPA skapad. Skärmbilderna visade att tonen blev systemblå; rättat i `e7b41b8`. Körning #31 för `e7b41b8`: bygge och enhetstester godkända, men UI-testet för att markera en uppgift klar överskred sin tidsgräns två gånger, eftersom simulatorn för iOS 27 rapporterade appen som upptagen i 60 s efter ett tryck. Orsaken är inte hittad; testets tidsgräns höjs i nästa revision. |
+| Strukturkontroll | `verify_project.py`: 249 kontroller, 0 fel för `72dbf43`. |
+| Linux Swift-grind | Godkänd för `7ec91e7`, `f96a4df`, `c10fd3e`, `75b58b8`, `8dc0025`, `e7b41b8` och `72dbf43`. |
+| Xcode (IPA-workflowen) | Körning #30 för `8dc0025`: strikt concurrency, Release-bygge med Live Activity-tillägget, alla enhetstester och UI-tester i simulatorn godkända, IPA skapad. Skärmbilderna visade att tonen blev systemblå; rättat i `e7b41b8`. Körning #31 för `e7b41b8`: bygge och enhetstester godkända, men UI-testet för att markera en uppgift klar överskred sin tidsgräns två gånger, eftersom simulatorn för iOS 27 rapporterade appen som upptagen i 60 s efter ett tryck. Orsaken är inte hittad; testets tidsgräns höjdes i `72dbf43`. **Körning #32 för `72dbf43`: allt godkänt** (strikt concurrency, Release-bygge med Live Activity-tillägget, enhetstester och tre UI-tester, skärmbilder med violett ton), IPA skapad: artefakten `Mio-IPA` (sha256 `8955fed6…c913`, version 0.9.0, bygge 5), [körning #32](https://github.com/kanonmaten/mio/actions/runs/38184332670). IPA-filens egen kontrollsumma står i `Mio-buildinfo.txt` i artefakten. |
 | Telefon | Inget av helhetsbygget är installerat eller provat. |
 
 ## Verifierat på telefonen
