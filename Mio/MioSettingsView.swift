@@ -128,6 +128,7 @@ struct MioSettingsView: View {
 struct MioAISettingsSection: View {
     let model: MioViewModel
     @Environment(MioAnalysisCoordinator.self) private var analysis
+    @Environment(MioAssistantViewModel.self) private var assistant
     @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
     @AppStorage(MioCloudSettings.serverKey) private var server = ""
     @State private var isStarting = false
@@ -145,7 +146,7 @@ struct MioAISettingsSection: View {
                     Button {
                         isStarting = true
                         Task {
-                            await analysis.resumeIfWanted(existingSessions: { model.allSessions })
+                            await analysis.resumeIfWanted(existingSessions: { model.allSessions }, assistant: assistant)
                             isStarting = false
                         }
                     } label: {

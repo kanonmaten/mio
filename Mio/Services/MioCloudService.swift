@@ -1,5 +1,8 @@
 import Foundation
 import Security
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct MioCloudContext: Codable, Equatable, Sendable {
     var label: String
@@ -176,6 +179,7 @@ enum MioCloudSettings {
 
     /// Forget the pairing first even if Keychain deletion fails. Credentials are never part of exports.
     static func reset() throws {
+        MioAIConsentLog.record(.off, at: .now, in: .standard)
         UserDefaults.standard.removeObject(forKey: serverKey)
         MioConnectionDiscovery.shared.invalidate()
         NotificationCenter.default.post(name: didResetNotification, object: nil)
@@ -212,10 +216,36 @@ enum MioCloudSettings {
         defaults.set(true, forKey: legacyAccessRemovedKey)
     }
 
-    private static var keychainQuery: [String: Any] {
+    static var keychainQuery: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: "gateway-token"]
+    }
+
+    /// False only while the phone's protected data is locked (`errSecInteractionNotAllowed`).
+    /// A locked Keychain is not a changed pairing and must never disable AI.
+    static var credentialsReadable: Bool {
+        var query = keychainQuery
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        return SecItemCopyMatching(query as CFDictionary, &result) != errSecInteractionNotAllowed
+    }
+
+    /// Returns once protected data is available again (the phone was unlocked).
+    static func waitUntilCredentialsReadable() async throws {
+        #if canImport(UIKit)
+        let name = UIApplication.protectedDataDidBecomeAvailableNotification
+        while !credentialsReadable {
+            // Re-check periodically too, in case the notification fired before we subscribed.
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { for await _ in NotificationCenter.default.notifications(named: name) { return } }
+                group.addTask { try await Task.sleep(for: .seconds(60)) }
+                try await group.next(); group.cancelAll()
+            }
+            try Task.checkCancellation()
+        }
+        #endif
     }
 
     private static func validateToken(_ token: String) throws {
@@ -237,7 +267,7 @@ enum MioCloudSettings {
     private static func writeCredentials(_ credentials: MioCloudCredentials) throws {
         let attributes: [String: Any] = [
             kSecValueData as String: try JSONEncoder().encode(credentials),
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
         var status = SecItemUpdate(keychainQuery as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
@@ -245,6 +275,27 @@ enum MioCloudSettings {
             status = SecItemAdd(query as CFDictionary, nil)
         }
         guard status == errSecSuccess else { throw MioCloudError.keychain }
+    }
+}
+
+/// Keychain items Mio needs in the background (AI gateway and Pianissimo tokens). Listening
+/// continues with the phone locked, so "when unlocked" made AI stop silently; after the first
+/// unlock since restart the items stay readable, still bound to this device (2026-10-12).
+@MainActor
+enum MioKeychainAccess {
+    private static let migratedKey = "mio.keychain.afterFirstUnlock.v1"
+
+    /// One-time upgrade of items saved as "when unlocked". Retried on the next launch while
+    /// the Keychain is locked; a missing item needs nothing.
+    static func migrateOnce(defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: migratedKey) else { return }
+        let attributes = [kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly] as CFDictionary
+        let statuses = [MioCloudSettings.keychainQuery, TranscriptionSettings.query].map {
+            SecItemUpdate($0 as CFDictionary, attributes)
+        }
+        if statuses.allSatisfy({ $0 == errSecSuccess || $0 == errSecItemNotFound }) {
+            defaults.set(true, forKey: migratedKey)
+        }
     }
 }
 

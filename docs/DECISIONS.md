@@ -2,6 +2,18 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## AI-utskick när telefonen är låst och ikappsändning, 2026-10-12
+
+Användarbeslut 2026-10-12 efter telefonprovet samma dag, där inget nådde Groq. Kompletterar "samlade vardagsutskick" från 2026-10-11.
+
+- **Orsak:** gatewaytoken låg i Keychain som `WhenUnlockedThisDeviceOnly`. När femminutersfönstret stängdes med låst telefon kunde token inte läsas, det tolkades som ändrad parning och AI stängdes av med kön. Nästa start räknade all tidigare text som redan sedd.
+- **Keychain:** gatewayns och Pianissimos token sparas som `AfterFirstUnlockThisDeviceOnly` och flyttas en gång vid start. De går att läsa med låst skärm efter första upplåsningen sedan omstart, är fortfarande bundna till enheten (följer aldrig med till en annan telefon) och ingår aldrig i export. Apple rekommenderar den klassen för poster som behövs i bakgrunden ([kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly](https://developer.apple.com/documentation/security/ksecattraccessibleafterfirstunlockthisdeviceonly)).
+- **Låst Keychain är inte en ändrad parning:** kan token inte läsas (`errSecInteractionNotAllowed`) väntar AI på upplåsning och behåller kön.
+- **Ikappsändning:** vid start skickas vardagstext från de senaste 12 timmarna som fångades medan AI var på men aldrig analyserades (appen stängdes, kön tömdes). En textfri samtyckeslogg (`mio.ai.consentLog.v1`: tider för på, paus och överhoppade kvotpauser, högst 24 h) avgör vad som fångades med AI på. Redan analyserad text, lektioner, text under paus och text som hoppats över under en lång kvotpaus skickas aldrig. Avslutade sessioner skickas utan att vänta på nytt femminutersfönster men med minst 60 s mellan anrop; högst 60 delar köas, de nyaste först.
+- **Stängs appen medan ett anrop pågår** bryts anslutningen och gatewayn avbryter Groq-anropet. Svaret sparas inte, texten räknas inte som analyserad och skickas ikapp vid nästa start. Har Groq redan börjat kan anropet ha räknats mot dagens token.
+
+Förkastat: att spara kön på disk (dubbel sanning bredvid transkriptet och processade källor) och att behålla `WhenUnlocked` och bara vänta (AI skulle stå still så länge telefonen ligger låst i fickan). Ej verifierat på telefon.
+
 ## Veckoplaneraren, 2026-10-11
 
 Användarbeslut 2026-10-11: appen får designen veckoplaneraren. Ersätter de fem flikarna Mio, Lektioner, Kalender, Anteckningar och Morgon.

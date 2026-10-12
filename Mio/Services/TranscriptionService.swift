@@ -11,7 +11,7 @@ enum TranscriptionSettings {
     static let serverKey = "mio.transcription.server"
     static let didChange = Notification.Name("MioTranscriptionConnectionChanged")
     static var address: String { UserDefaults.standard.string(forKey: serverKey) ?? "" }
-    private static var query: [String: Any] {
+    static var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: "app.mio.assistant.transcription",
          kSecAttrAccount as String: "access-token"]
@@ -50,7 +50,7 @@ enum TranscriptionSettings {
         let saved = token.isEmpty && sameOrigin ? try connection().token : token
         try validateToken(saved)
         let attributes: [String: Any] = [kSecValueData as String: Data(saved.utf8),
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
         var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
             status = SecItemAdd(query.merging(attributes) { _, new in new } as CFDictionary, nil)

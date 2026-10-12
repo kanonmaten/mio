@@ -66,6 +66,7 @@ struct ContentView: View {
         }
         .task {
             MioCloudSettings.removeLegacyAccessOnce()
+            MioKeychainAccess.migrateOnce()
             await workflow.bootstrap()
             storesLoaded = true
             followDayPhase()
@@ -81,7 +82,13 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in day.refresh() }
         .onChange(of: navigation.pendingRoute) { _, _ in resolveNotificationRoute() }
         .onChange(of: maintenance.blocksWork) { _, blocked in if !blocked { resolveNotificationRoute() } }
-        .onChange(of: aiEnabled) { _, enabled in if enabled { resumeAI() } else { workflow.analysis.disable() } }
+        .onChange(of: aiEnabled) { _, enabled in
+            if enabled { resumeAI() } else {
+                // The pause ends consent: later catch-up never sends text captured while paused.
+                MioAIConsentLog.record(.off, at: .now, in: .standard)
+                workflow.analysis.disable()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: MioCloudSettings.didResetNotification)) { _ in
             workflow.cloudConfigurationChanged()
             resumeAI()
@@ -103,7 +110,7 @@ struct ContentView: View {
     /// to the foreground and after pairing changes, unless the user paused it.
     private func resumeAI() {
         guard storesLoaded, !maintenance.blocksWork else { return }
-        Task { await workflow.analysis.resumeIfWanted(existingSessions: { model.allSessions }) }
+        Task { await workflow.analysis.resumeIfWanted(existingSessions: { model.allSessions }, assistant: assistant) }
     }
 
     /// Hem shows the evening overview from 17:00; a morning or evening notification still wins.

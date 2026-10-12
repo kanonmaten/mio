@@ -366,4 +366,73 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
         XCTAssertFalse(coordinator.enabled)
         coordinator.disable()
     }
+
+    @MainActor
+    func testLockedKeychainWaitsForUnlockInsteadOfDroppingQueuedText() async throws {
+        let assistant = assistant(self)
+        var clock = Date.now
+        var readable = true
+        var unlockWaits = 0
+        let sent = expectation(description: "Queued text is sent after unlock")
+        let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in readable },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { request, _ in
+                XCTAssertEqual(request.fragments.map(\.text), ["Telefonen är låst."])
+                sent.fulfill()
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            }, wait: { clock.addTimeInterval($0) }, now: { clock },
+            credentialsReadable: { readable }, waitForUnlock: { unlockWaits += 1; readable = true },
+            consentLog: { MioAIConsentLog() }, recordConsent: { _, _, _ in })
+        defer { coordinator.disable() }
+        try await coordinator.enable(existingSessions: [])
+        // The phone locks while the five-minute batch is collecting.
+        readable = false
+        coordinator.observe(MioSession(transcripts: [TranscriptSegment(createdAt: clock, text: "Telefonen är låst.", containsMio: false)]),
+                            assistant: assistant)
+        await fulfillment(of: [sent], timeout: 2)
+        XCTAssertEqual(unlockWaits, 1)
+        for _ in 0..<10_000 { if coordinator.sentBatches == 1 { break }; await Task.yield() }
+        XCTAssertTrue(coordinator.enabled, "A locked Keychain is not a changed pairing")
+        XCTAssertEqual(assistant.analyses.count, 1)
+    }
+
+    @MainActor
+    func testRestartCatchesUpUnsentEverydayTextCapturedWhileAIWasOn() async throws {
+        let assistant = assistant(self)
+        var clock = Date.now
+        let base = clock
+        var log = MioAIConsentLog()
+        log.record(.on, at: base.addingTimeInterval(-3_600))
+        log.record(.skipped, at: base.addingTimeInterval(-1_500), until: base.addingTimeInterval(-1_400))
+        func segment(_ offset: TimeInterval, _ text: String) -> TranscriptSegment {
+            TranscriptSegment(createdAt: base.addingTimeInterval(offset), text: text, containsMio: false)
+        }
+        let everyday = MioSession(startedAt: base.addingTimeInterval(-4_000), endedAt: base.addingTimeInterval(-600), transcripts: [
+            segment(-3_900, "Före samtycket."), segment(-1_800, "Osänt vardagstal."),
+            segment(-1_450, "Under kvotpausen."), segment(-900, "Mer osänt tal.")])
+        let lesson = MioSession(startedAt: base.addingTimeInterval(-3_000), endedAt: base.addingTimeInterval(-2_000),
+                                transcripts: [segment(-2_500, "Lektionstext.")], captureMode: .lesson)
+        let old = MioSession(startedAt: base.addingTimeInterval(-50_000), endedAt: base.addingTimeInterval(-49_000),
+                             transcripts: [segment(-49_500, "För gammalt.")])
+        var sends: [[String]] = []
+        var sendTimes: [Date] = []
+        let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { request, _ in
+                sends.append(request.fragments.map(\.text)); sendTimes.append(clock)
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            }, wait: { clock.addTimeInterval($0) }, now: { clock },
+            consentLog: { log }, recordConsent: { log.record($0, at: $1, until: $2) })
+        defer { coordinator.disable() }
+        try await coordinator.enable(existingSessions: [old, everyday, lesson], assistant: assistant)
+        for _ in 0..<10_000 { if coordinator.sentBatches == 2 { break }; await Task.yield() }
+        XCTAssertEqual(sends, [["Osänt vardagstal."], ["Mer osänt tal."]],
+                       "Only unsent everyday text inside consent; a skipped interval splits the context")
+        XCTAssertEqual(sendTimes.first, base, "Caught-up text of an ended session does not wait for a new window")
+
+        // Analysed text is never sent again on the next start.
+        coordinator.disable()
+        try await coordinator.enable(existingSessions: [old, everyday, lesson], assistant: assistant)
+        for _ in 0..<1_000 { await Task.yield() }
+        XCTAssertEqual(sends.count, 2)
+        XCTAssertFalse(coordinator.isWorking)
+    }
 }

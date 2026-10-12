@@ -112,4 +112,40 @@ final class MioPairingTests: XCTestCase {
         MioAIPreference.setEnabled(true, in: reopened)
         XCTAssertTrue(MioAIPreference.shouldRun(paired: true, defaults: defaults))
     }
+
+    func testConsentLogFindsTheIntervalCoveringCaptureTime() {
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        var log = MioAIConsentLog()
+        log.record(.on, at: base)
+        log.record(.on, at: base.addingTimeInterval(10))
+        XCTAssertEqual(log.entries.count, 1, "Repeated activations keep the original consent start")
+        log.record(.skipped, at: base.addingTimeInterval(100), until: base.addingTimeInterval(200))
+        log.record(.off, at: base.addingTimeInterval(300))
+        log.record(.on, at: base.addingTimeInterval(400))
+        XCTAssertNil(log.consentStart(covering: base.addingTimeInterval(-1)))
+        XCTAssertEqual(log.consentStart(covering: base.addingTimeInterval(50)), base)
+        XCTAssertNil(log.consentStart(covering: base.addingTimeInterval(150)), "Quota-skipped text is never caught up")
+        XCTAssertEqual(log.consentStart(covering: base.addingTimeInterval(250)), base.addingTimeInterval(200),
+                       "Context restarts after a skipped interval")
+        XCTAssertNil(log.consentStart(covering: base.addingTimeInterval(350)), "Text captured while AI was paused stays local")
+        XCTAssertEqual(log.consentStart(covering: base.addingTimeInterval(500)), base.addingTimeInterval(400))
+        XCTAssertTrue(log.isOn)
+    }
+
+    func testConsentLogTrimsOldEntriesButKeepsCurrentStateAndPersists() throws {
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        var log = MioAIConsentLog()
+        log.record(.on, at: base)
+        log.record(.skipped, at: base.addingTimeInterval(10), until: base.addingTimeInterval(20))
+        log.trim(now: base.addingTimeInterval(MioAIConsentLog.retention + 100))
+        XCTAssertEqual(log.entries.map(\.kind), [.on], "An old switch-on still describes the current state")
+        XCTAssertEqual(log.consentStart(covering: base.addingTimeInterval(MioAIConsentLog.retention + 50)), base)
+        let suite = "mio.consent.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        log.save(to: defaults)
+        XCTAssertEqual(MioAIConsentLog.load(from: defaults), log)
+        MioAIConsentLog.record(.off, at: base.addingTimeInterval(MioAIConsentLog.retention + 200), in: defaults)
+        XCTAssertFalse(MioAIConsentLog.load(from: defaults).isOn)
+    }
 }

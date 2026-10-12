@@ -124,6 +124,8 @@ def portable_cloud_source() -> str:
     {endpoint}
     private {token_validation}
     static func connection() throws -> MioCloudConnection {{ throw MioCloudError.disabled }}
+    static var credentialsReadable: Bool {{ true }}
+    static func waitUntilCredentialsReadable() async throws {{ }}
 }}
 '''
     source = source[:settings_start] + platform_settings + source[service_start:]

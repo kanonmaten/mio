@@ -138,3 +138,73 @@ enum MioAIPreference {
         paired && isEnabled(in: defaults)
     }
 }
+
+/// Text-free record of when automatic AI was on, so everyday text that was captured with AI on
+/// but never reached the gateway (app closed, phone locked) can be sent on the next start
+/// (user decision 2026-10-12). Only times are stored; never text or identifiers.
+struct MioAIConsentLog: Codable, Equatable, Sendable {
+    enum Kind: String, Codable, Sendable { case on, off, skipped }
+    struct Entry: Codable, Equatable, Sendable {
+        var kind: Kind
+        var at: Date
+        /// End of a `skipped` interval (a long quota pause whose text is deliberately not analysed).
+        var until: Date?
+    }
+
+    static let key = "mio.ai.consentLog.v1"
+    static let retention: TimeInterval = 24 * 3_600
+    static let limit = 200
+    /// How far back unsent everyday text is caught up after a restart.
+    static let catchUpWindow: TimeInterval = 12 * 3_600
+
+    var entries: [Entry] = []
+
+    static func load(from defaults: UserDefaults) -> MioAIConsentLog {
+        guard let data = defaults.data(forKey: key),
+              let log = try? JSONDecoder().decode(MioAIConsentLog.self, from: data) else { return MioAIConsentLog() }
+        return log
+    }
+
+    func save(to defaults: UserDefaults) {
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        defaults.set(data, forKey: Self.key)
+    }
+
+    static func record(_ kind: Kind, at date: Date, until: Date? = nil, in defaults: UserDefaults) {
+        var log = load(from: defaults)
+        log.record(kind, at: date, until: until)
+        log.save(to: defaults)
+    }
+
+    /// Whether the newest on/off entry says on.
+    var isOn: Bool { entries.last { $0.kind != .skipped }?.kind == .on }
+
+    mutating func record(_ kind: Kind, at date: Date, until: Date? = nil) {
+        if kind != .skipped, isOn == (kind == .on), !entries.isEmpty { return }
+        entries.append(Entry(kind: kind, at: date, until: kind == .skipped ? until : nil))
+        entries.sort { $0.at < $1.at }
+        trim(now: max(date, until ?? date))
+    }
+
+    /// Drops entries older than the retention but keeps the newest on/off state they describe.
+    mutating func trim(now: Date) {
+        let cutoff = now.addingTimeInterval(-Self.retention)
+        let state = entries.last { $0.kind != .skipped && $0.at < cutoff }
+        entries.removeAll { $0.at < cutoff && ($0.kind != .skipped || ($0.until ?? $0.at) < cutoff) }
+        if let state, !entries.contains(state) { entries.insert(state, at: 0) }
+        if entries.count > Self.limit { entries.removeFirst(entries.count - Self.limit) }
+    }
+
+    /// Start of the consent interval covering `date`: the latest switch-on, moved past any
+    /// skipped interval that ended before `date`. Nil when AI was off or the time was skipped.
+    func consentStart(covering date: Date) -> Date? {
+        guard let state = entries.last(where: { $0.kind != .skipped && $0.at <= date }), state.kind == .on else { return nil }
+        var start = state.at
+        for skip in entries where skip.kind == .skipped {
+            let end = skip.until ?? skip.at
+            if skip.at <= date, date < end { return nil }
+            if end <= date, end > start { start = end }
+        }
+        return start
+    }
+}
