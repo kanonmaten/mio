@@ -193,7 +193,8 @@ class SortformerDiarizer:
 
     UNVERIFIED: written against NeMo 2.7.0's SortformerEncLabelModel source
     (process_signal, streaming_feat_loader, forward_streaming_step) without a
-    GPU run. Any failure only turns speaker labels off.
+    GPU run; NeMo 3.0.0 keeps these signatures unchanged. Any failure only turns
+    speaker labels off.
     """
     FRAME_SECONDS = 0.08  # 10 ms mel hop x 8 subsampling, per the model card
 

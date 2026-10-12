@@ -56,7 +56,7 @@ Användargodkänd plan: PC-tjänsten ska klara samtal där flera personer hörs 
 - **Pausstyrda delar:** appen skär 8–22 s ägt ljud vid pauser plus 1 s kontext per sida. 22 + 2 = 24 s ryms exakt i serverns befintliga gräns, som därför inte ändras.
 - **Mätning:** `transcription-server/scripts/measure_wer.py` jämför ordfelfrekvens med och utan förbehandling på publikt svenskt tal (FLEURS sv_se) under syntetiskt dämpade villkor och två överlappande talare.
 
-Ej verifierat: den riktiga Sortformer-körningen (skriven mot källkoden i NeMo 2.7.0 utan GPU-prov), svensk talarkvalitet (modellen är främst tränad på engelska), extra GPU-minne och latens, samt om förbehandlingen faktiskt sänker ordfelen. Mät med skriptet på datorn innan förbehandlingen eller talarmärkningen betraktas som förbättringar.
+Ej verifierat: den riktiga Sortformer-körningen (skriven mot källkoden i NeMo 2.7.0 utan GPU-prov; signaturerna är oförändrade i NeMo 3.0.0), svensk talarkvalitet (modellen är främst tränad på engelska), extra GPU-minne och latens, samt om förbehandlingen faktiskt sänker ordfelen. Mät med skriptet på datorn innan förbehandlingen eller talarmärkningen betraktas som förbättringar.
 
 ## Live Activity och fortsatt bearbetning, 2026-10-11
 
