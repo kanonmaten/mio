@@ -205,22 +205,14 @@ final class MioAnalysisCoordinator {
         status = "AI är pausad. Inga fler utdrag skickas."
     }
 
-    func pauseEveryday(assistant: MioAssistantViewModel) {
-        queue.removeAll { $0.request.mode == .everyday }
-        eligible.removeAll(); endingSessionIDs.removeAll()
-        for id in continuityStarts.keys { continuityStarts[id] = now() }
-        if workerMode == .everyday {
-            generation = UUID(); worker?.cancel(); worker = nil; workerMode = nil; isWaiting = false; isWorking = false; activeSessionID = nil
-            startWorker(assistant: assistant)
-        }
-    }
-
     func beginEndingEveryday(sessionID: UUID) {
         guard enabled, !deletedSessionIDs.contains(sessionID) else { return }
         endingSessionIDs.insert(sessionID)
     }
 
-    /// User pause/stop drains already captured text; future capture begins a new context boundary.
+    /// Pause, stop, an interruption or a capture failure drains already captured text of the
+    /// ending session (nil: only sessions already ending); it is never dropped, and a request
+    /// in flight is kept. Future capture begins a new context boundary.
     func finishEveryday(_ session: MioSession?, assistant: MioAssistantViewModel) {
         if let session, !session.isLesson { observe(session, assistant: assistant) }
         let finished = endingSessionIDs.union(session.map { [$0.id] } ?? [])

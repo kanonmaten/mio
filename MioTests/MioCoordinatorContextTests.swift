@@ -231,7 +231,6 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
         coordinator.disable()
     }
 
-
     @MainActor
     func testModelPacingStartsAfterSlowStatusAndSendCompletion() async throws {
         let assistant = assistant(self)

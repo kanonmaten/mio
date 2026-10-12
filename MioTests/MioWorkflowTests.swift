@@ -4,6 +4,44 @@ import XCTest
 
 final class MioWorkflowTests: XCTestCase {
     @MainActor
+    func testMicrophoneInterruptionSendsQueuedEverydayTextInsteadOfDroppingIt() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let waiting = expectation(description: "Everyday text waits for its five-minute batch")
+        let sent = expectation(description: "Text captured before the interruption is sent")
+        var calls = 0
+        let analysis = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { request, _ in
+                calls += 1
+                XCTAssertEqual(request.fragments.map(\.text), ["Före samtalet"])
+                sent.fulfill()
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            }, wait: { _ in
+                waiting.fulfill()
+                try await Task.sleep(for: .seconds(60))
+            }, consentLog: { MioAIConsentLog() }, recordConsent: { _, _, _ in })
+        let capture = MioViewModel(repository: SessionRepository(storageURL: root.appendingPathComponent("sessions.json")))
+        let assistant = MioAssistantViewModel(repository: MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json")))
+        let workflow = MioWorkflowCoordinator(capture: capture,
+            content: MioContentViewModel(repository: MioContentRepository(storageURL: root.appendingPathComponent("content.json"))),
+            assistant: assistant, analysis: analysis,
+            journal: MioDeletionJournal(storageURL: root.appendingPathComponent("operations.json")))
+        await workflow.bootstrap()
+        try await analysis.enable(existingSessions: [])
+        defer { analysis.disable() }
+        let session = MioSession(transcripts: [TranscriptSegment(text: "Före samtalet", containsMio: false)])
+        capture.currentSession = session
+        capture.runState = .listening
+        analysis.observe(session, assistant: assistant)
+        await fulfillment(of: [waiting], timeout: 2)
+        // A phone call takes the microphone; Mio restarts later, but this text must not be lost.
+        capture.runState = .interrupted
+        await fulfillment(of: [sent], timeout: 2)
+        XCTAssertEqual(calls, 1)
+        XCTAssertTrue(analysis.enabled)
+    }
+
+    @MainActor
     func testFinalizedLocalDetectionReportsItsStorageFailureExplicitly() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

@@ -421,15 +421,13 @@ final class MioWorkflowCoordinator {
         if state == .stopping, let session = capture.currentSession, !session.isLesson {
             endingEverydaySessionID = session.id
             analysis.beginEndingEveryday(sessionID: session.id)
-        } else if state == .off || state == .paused {
+        } else if [.off, .paused, .interrupted, .failed, .unavailable].contains(state) {
+            // Text captured before an interruption was captured with consent: send it now
+            // instead of dropping it. The capture gap keeps it out of later context.
             let final = endingEverydaySessionID.flatMap { capture.session(id: $0) }
                 ?? capture.currentSession.flatMap { $0.isLesson ? nil : $0 }
-            if let final { analysis.finishEveryday(final, assistant: assistant) }
-            else { analysis.pauseEveryday(assistant: assistant) }
+            analysis.finishEveryday(final, assistant: assistant)
             endingEverydaySessionID = nil
-        } else if state == .interrupted || state == .failed || state == .unavailable {
-            endingEverydaySessionID = nil
-            analysis.pauseEveryday(assistant: assistant)
         }
     }
 

@@ -101,12 +101,12 @@ final class MioAnalysisTests: XCTestCase {
     }
 
     @MainActor
-    func testPauseDisableAndDeletionCancelQueuedTextBeforeTransport() async throws {
+    func testDisableAndDeletionCancelQueuedTextBeforeTransport() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let assistant = MioAssistantViewModel(repository: MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json")))
         let connection = MioCloudConnection(endpoint: URL(string: "https://example.invalid/v1/ask")!, token: "synthetic")
-        for action in 0..<3 {
+        for action in 1..<3 {
             let waiting = expectation(description: "Batch waits for aggregation")
             let cancelled = expectation(description: "Wait observes cancellation")
             let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true }, prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { _, _ in
@@ -121,8 +121,7 @@ final class MioAnalysisTests: XCTestCase {
             let session = MioSession(transcripts: [TranscriptSegment(text: "Vi ses i morgon", containsMio: false)])
             coordinator.observe(session, assistant: assistant)
             await fulfillment(of: [waiting], timeout: 2)
-            if action == 0 { coordinator.pauseEveryday(assistant: assistant) }
-            else if action == 1 { coordinator.disable() }
+            if action == 1 { coordinator.disable() }
             else { coordinator.cancel(sessionID: session.id, assistant: assistant) }
             // Cancellation must wake a pending aggregation delay without waiting a minute.
             await fulfillment(of: [cancelled], timeout: 2)
