@@ -6,6 +6,8 @@ Beslut 2026-10-11: gatewayen flyttade från Cloudflare till datorn, och Groq är
 
 ## Installera på datorn (cirka 10 minuter)
 
+Installera [Pianissimo](../transcription-server/README.md) först. Hela ordningen står i [README](../README.md#kom-igång).
+
 1. Skapa en gratis Groq-nyckel på <https://console.groq.com/keys>.
 2. Kör från repot, som din vanliga användare:
 
@@ -20,7 +22,7 @@ Beslut 2026-10-11: gatewayen flyttade från Cloudflare till datorn, och Groq är
    mio-pair
    ```
 
-   Skanna QR-koden i Mio under Inställningar → Dator. `mio-pair --text` visar samma värden som text om kameran inte fungerar.
+   Skanna QR-koden i Mio under Inställningar → Dator. `mio-pair --text` visar samma värden som text om kameran inte fungerar. Är Pianissimo inte installerat säger `mio-pair` det, och koden innehåller då bara AI. Kör den igen när Pianissimo är installerat och tryck **Para om med QR-kod** i Mio.
 
 Kör `./server/install.sh` igen för att uppdatera; nyckel, token och räknare behålls. `./server/install.sh --ny-groq-nyckel` byter Groq-nyckeln utan att telefonen behöver paras om.
 

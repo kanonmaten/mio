@@ -24,10 +24,17 @@ Utan AI används en enkel lokal kommandogrammatik. Med aktiverad AI kan även va
 
 ## Kom igång
 
-1. Läs [användarguiden](docs/ANVANDNING.md) och sätt upp [Pianissimo, systemd och Tailscale](transcription-server/README.md).
-2. Bygg och installera enligt [installation](docs/INSTALLATION.md). Linux kan inte bygga iOS-appen.
-3. Kör [verifieringen](docs/INSTALLATION.md#verifiera-före-bygge) och [helhetstestet](docs/TESTPLAN_HELHET.md) med syntetiska data, inklusive mätprotokollet, före vardagsanvändning.
-4. För AI: installera gatewayen på datorn och para telefonen med QR-koden enligt [gatewayguiden](server/README.md). Manuella poster fungerar utan dator. Ljudtranskription kräver din Pianissimo-dator.
+Gör stegen i den här ordningen. Skripten på datorn körs som din vanliga användare, inte med `sudo`.
+
+1. Installera Pianissimo på datorn med `transcription-server/install.sh`. Första gången tar det ungefär en halvtimme. Se [Pianissimo-guiden](transcription-server/README.md).
+2. Installera AI-gatewayen på samma dator med `server/install.sh` (cirka 10 minuter, du behöver en Groq-nyckel). Se [gatewayguiden](server/README.md).
+3. Installera Tailscale på telefonen, logga in med samma konto som på datorn och slå på VPN On Demand.
+4. Installera Mio på telefonen enligt [installationen](docs/INSTALLATION.md).
+5. Kör `mio-pair` på datorn och skanna QR-koden i Mio under Inställningar → Dator.
+
+`mio-pair` hämtar tokens från båda installationerna, så kör den först när steg 1 och 2 är klara. Kör du den utan Pianissimo får koden bara med AI. Installera då Pianissimo, kör `mio-pair` igen och tryck Para om med QR-kod i Mio.
+
+Fortsätt sedan med [användarguiden](docs/ANVANDNING.md) och [helhetstestet](docs/TESTPLAN_HELHET.md). Anteckningar och planer fungerar utan dator, men inte transkription och AI.
 
 ## Utveckling
 

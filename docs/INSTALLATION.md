@@ -1,39 +1,36 @@
 # Bygga och installera Mio
 
-Det nya bygget kräver även [CachyOS/Pianissimo/Tailscale-installation](../transcription-server/README.md) och, för AI, [gatewayen på samma dator](../server/README.md). Återanslut Tailscale efter SideStore/LocalDevVPN och kontrollera servern i Mio. Ingen ny IPA har byggts för arbetskopian.
+Datorn ska vara uppsatt först (Pianissimo, AI-gatewayen och Tailscale); ordningen står i [README](../README.md#kom-igång). [Status](STATUS.md) visar vad som faktiskt har byggts och provats.
 
-Första testtelefon: iPhone 16 Pro. iPhone 13 provas senare. Lägsta iOS-version: 26.0; Xcode 27 och iOS 27 SDK används för bygget. Aktuellt helhetsbygge: **0.9.0, ej släppt**. [Status](STATUS.md) visar vad som faktiskt har byggts och provats.
+Telefonen behöver iOS 26.0 eller senare (först provad på iPhone 16 Pro). GitHub Actions bygger en osignerad IPA med Xcode 27, och SideStore signerar och installerar den på telefonen. Ingen Mac behövs.
 
-**Historisk testfil, saknar Pianissimo-klienten:** **0.9.0 (5)** från [Actions-körning 36382509184](https://github.com/kanonmaten/mio/actions/runs/36382509184). [Hämta Mio-IPA](https://github.com/kanonmaten/mio/actions/runs/36382509184/artifacts/10953378415), packa upp ZIP-filen och installera IPA:n enligt steg 5–8 nedan. Källrevision och SHA-256 finns i [status](STATUS.md).
+## Bygg och installera
 
-Huvudvägen är **GitHub Actions → osignerad IPA → SideStore**. Koden kan redigeras på Linux, Windows eller Monterey; iOS-kompilering sker på en Mac med kompatibel Xcode.
+1. Uppdatera datorn först om serverkoden ändrats: `git pull`, sedan `transcription-server/install.sh` och `server/install.sh`. Tokens behålls, så telefonen behöver inte paras om.
+2. Kontrollera att **Verifiera Mio på Linux** är grön för den commit du ska bygga.
+3. Kör **Actions → Bygg Mio IPA → Run workflow** på `main`. Den bygger Release, kör XCTest och UI-prov på en iOS 27-simulator och kontrollerar IPA:n (cirka 25 minuter).
+4. Hämta artifacten **Mio-IPA** (sparas 14 dagar) och packa upp ZIP-filen en gång. Den innehåller `Mio-unsigned.ipa` och `Mio-buildinfo.txt` med commit och SHA-256. Flytta IPA:n till Filer på telefonen.
+5. Telefonen på Wi-Fi med LocalDevVPN påslaget: **SideStore → My Apps → +** och välj IPA:n. Appen heter `app.mio.assistant`; en uppdatering behåller dina data.
+6. Slå på Tailscale igen efter LocalDevVPN, öppna Mio och kör [helhetstestet](TESTPLAN_HELHET.md).
 
-## Uppdatera via GitHub Actions och SideStore
-
-1. Kör först [verifieringen](#verifiera-före-bygge) i exakt den arbetskopia som ska byggas. Granska diffen. Färdiga ändringar committas och pushas direkt till `main` (se [CLAUDE.md](../CLAUDE.md)); bevara commit-ID och eventuellt kvarvarande diff-underlag.
-2. Öppna repots **Actions → Bygg Mio IPA → Run workflow** och välj branch.
-3. Workflowen använder ett jobb med etiketten `xcode-27`: osignerad Release med iOS 27 SDK, separat strikt concurrencydiagnostik, XCTest inklusive tre UI-smokeprov på en tillgänglig iOS 27-simulator och IPA-validering. Kontrollera faktisk tilldelad runner, Xcode-/SDK-version, simulator, diagnostik och slutresultat för samma commit. En runneretikett eller köad körning bevisar inte att miljön är tillgänglig. Bygget kontrollerar att appens lägsta iOS-version är 26.0.
-4. Hämta artifacten **Mio-IPA**. Packa upp artifact-ZIP en gång; behåll själva IPA:n orörd. Innehåll: `Mio-unsigned.ipa` och `Mio-buildinfo.txt`. Artifacts sparas enligt workflowen i 14 dagar.
-5. Behåll bygginformationen med commit, körnings-ID, verktygsversioner och SHA-256 samt test-/diagnostikloggarna. Registrera gatewayens separata release och konfigurationsrevision för AI-proven. Flytta IPA:n till Filer på iPhone via en betrodd privat filväg.
-6. Installera som **ny app** med bundle identifier `app.mio.assistant`. Prototypen är redan raderad och dess data migreras inte. Vid framtida uppdateringar av denna app behålls den nya identiteten och ditt signeringskonto.
-7. Anslut iPhone till Wi-Fi och LocalDevVPN. Öppna **SideStore → My Apps → +** och välj IPA:n.
-8. Öppna Mio och kör [helhetstestet](TESTPLAN_HELHET.md), med ren första start och persistens först. Prova enligt [mätprotokollet](TESTPLAN_HELHET.md#mätprotokoll-och-resultatmall) på iPhone 16 Pro och därefter iPhone 13, med exakt iOS-version. iOS 27-bygge och simulatorresultat bevisar inte funktion på iOS 26 eller 27 i fysisk telefon. Kör privat Pianissimo och de dokumenterade ljud-/nät-/långproven; äldre Apple-prov är historik.
-
-Byggsystemet behöver inga Apple-uppgifter eller API-nycklar. `unsigned` betyder att SideStore sköter personlig signering. Ett grönt simulatorjobb verifierar inte mikrofon, bakgrund eller fysisk iPhone.
+Ett grönt simulatorjobb bevisar inte mikrofon, bakgrund eller funktion på en riktig telefon.
 
 ## SideStore: första installation och förnyelse
 
-SideStore-flödet fungerade i det historiska provet 2026-08-20. Följ deras aktuella [förkrav](https://docs.sidestore.io/docs/installation/prerequisites) och [iLoader-guide](https://docs.sidestore.io/docs/installation/install) för en ny dator eller telefon; tredjepartsverktygens instruktioner kan ändras.
+För en ny dator eller telefon, följ SideStores egna [förkrav](https://docs.sidestore.io/docs/installation/prerequisites) och [iLoader-guide](https://docs.sidestore.io/docs/installation/install), eftersom de ändras. I korthet:
 
-Grundflödet är LocalDevVPN på telefonen → iLoader på datorn → datakabel och betrodd parkoppling → installera SideStore → godkänn utvecklarappen och Utvecklarläge på iPhone → logga in i SideStore med samma signeringskonto. Installera verktygen endast från officiellt länkade källor.
+1. Installera LocalDevVPN på telefonen och iLoader på datorn, från de länkar SideStore anger.
+2. Anslut telefonen med kabel och godkänn parkopplingen.
+3. Installera SideStore med iLoader, godkänn utvecklarappen och slå på Utvecklarläge på telefonen.
+4. Logga in i SideStore med samma Apple-konto som signerar.
 
-Förnya Mio och SideStore före den kostnadsfria signeringens sjudagarsgräns: Wi-Fi → LocalDevVPN → **My Apps → Refresh All**. Kontrollera räknaren manuellt. Om SideStore har löpt ut kan iLoader behövas igen; radera inte Mio för att lösa signeringsproblem.
+Gratiskontots signatur gäller i sju dagar. Förnya innan dess: Wi-Fi och LocalDevVPN på, sedan **My Apps → Refresh All**. Har SideStore hunnit gå ut kan iLoader behövas igen. Radera inte Mio för att lösa ett signeringsproblem, då försvinner dina data.
 
-Pairing-filer, certifikat och Apple-uppgifter är känsliga och hör aldrig hemma i repot. Se [SideStores felsökning](https://docs.sidestore.io/docs/troubleshooting) och [FAQ](https://docs.sidestore.io/docs/faq) vid pairing- eller appgränsproblem.
+Pairing-filer, certifikat och Apple-uppgifter hör aldrig hemma i repot. Vid problem: [SideStores felsökning](https://docs.sidestore.io/docs/troubleshooting) och [FAQ](https://docs.sidestore.io/docs/faq).
 
-## Live Activity och widgettillägget (otestat)
+## Live Activity (otestat)
 
-IPA:n innehåller nu tillägget `MioWidgets.appex` (`app.mio.assistant.widgets`) för låsskärmens och Dynamic Islands "Lyssnar"-ruta med Pausa/Fortsätt och Stopp. SideStore måste signera det som ett andra app-ID. Med ett gratiskonto räknas det mot gränsen för app-ID:n per vecka; att det fungerar med SideStore är ännu inte provat på telefonen. Om installationen misslyckas eller rutan aldrig syns: notera felet från SideStore och kontrollera **Inställningar → Mio → Live Activities**. "Fortsätt" öppnar Mio, eftersom iOS inte låter en app i bakgrunden starta mikrofonen.
+IPA:n innehåller tillägget `MioWidgets.appex` (`app.mio.assistant.widgets`) för "Lyssnar"-rutan på låsskärmen och i Dynamic Island. SideStore signerar det som ett andra app-ID, vilket räknas mot gratiskontots veckogräns. Syns rutan aldrig: kontrollera **Inställningar → Mio → Live Activities** och notera eventuellt fel från SideStore.
 
 ## Alternativ: direkt med Xcode
 
@@ -41,46 +38,31 @@ Kräver en Mac som stöder vald Xcode-version och telefonens iOS. Kontrollera [A
 
 1. Hämta repot och öppna `Mio.xcodeproj`.
 2. Lägg till Apple-kontot i Xcode Settings. På app-target **Mio**, välj **Signing & Capabilities → Automatically manage signing → Personal Team**.
-3. Använd `app.mio.assistant` på app-target. Den nya appen har en egen sandbox; det krävs ingen åtkomst till den gamla prototypen.
+3. Behåll `app.mio.assistant` som bundle identifier, annars installeras en ny app utan dina data.
 4. Anslut iPhone med datakabel, lås upp, välj Lita på och slutför parkopplingen i Xcodes enhetshantering.
 5. Aktivera **Inställningar → Integritet och säkerhet → Utvecklarläge** på telefonen och starta om om iOS begär det.
 6. Välj scheme **Mio**, fysisk iPhone och **Product → Run** (`⌘R`). Godkänn utvecklarcertifikatet i telefonens **VPN och enhetshantering** om det krävs.
-7. Välj en iPhone-simulator och kör **Product → Test** (`⌘U`) för XCTest. Byt tillbaka till telefonen för verkligt ljudtest.
+7. Välj en iPhone-simulator och kör **Product → Test** (`⌘U`) för XCTest. Ljud går bara att prova på telefonen.
 
-Tester finns i `MioTests/`: modeller, actorägda lagringspatchar, workflow, förslag, lektioner, avbrott, återupptagbar radering, export och Mio-detektion. `MioUITests/` innehåller tre mindre native smoke-/tillgänglighetsprov. Säkra gateway-/Python-/portableprov körs via [verifieringen](#verifiera-före-bygge). Projektets `Info.plist` innehåller bakgrundsläget `audio`; efter avbrott och reset startar Mio mikrofonen igen själv, men efter tvångsavslutning krävs ett nytt användartryck. Simulatorns ljudbeteende ersätter inte fysisk telefon.
-
-## Första körning och felsökning
+## Felsökning
 
 | Situation | Åtgärd |
 |---|---|
-| Första start | Gå igenom de fyra flikarna och Fånga, para datorn och tillåt mikrofonen vid uttrycklig sessionsstart |
-| Transkription offline | Följ Pianissimo-guiden: dator vaken, systemd redo, Tailscale på båda enheterna, rätt HTTPS-adress/token. Build 5 kan inte använda ljudservern |
-| Mikrofon nekad | Aktivera Mio under **Integritet och säkerhet → Mikrofon** |
-| Texten stannar efter ljudavbrott/ljudvägsbyte | Mio ska starta om mikrofonen själv eller visa notisen "Tryck för att fortsätta lyssna". Annars: kontrollera mikrofon-/transkriptionsstatus, välj Fortsätt och spara observationen med textfri händelselogg |
-| Raderingen är delvis utförd | Följ bannertexten och välj Försök slutföra raderingen igen. Starta inte nya ändringar eller AI-sändningar medan återhämtningen är blockerad |
-| Stabilt Actions-jobb är rött | Spara första tydliga felet, stegets namn, körnings-URL och commit. Senare fel kan vara följdfel |
-| Xcode visar signeringsfel | Kontrollera Team och konto; byt inte appidentitet vid uppgradering |
-| Telefonen saknas i Xcode | Kontrollera datakabel, upplåsning, betrodd parkoppling, Utvecklarläge och Xcodes iOS-stöd |
-| SideStore kan inte förnya | Kontrollera Wi-Fi och LocalDevVPN; förnya SideStore självt och följ officiell felsökning |
-| Mio slutar öppnas efter en vecka | Kontrollera signaturens giltighet och förnya, utan att radera appdata |
-
-Spela bara in personer som tydligt samtycker och följ lokala regler. Använd syntetiska data i tester. Spara JSON-exporter privat utanför repot. Vid batteriprov: ingen laddare, Strömsparläge av och dokumenterade start-/slutvärden.
-
-## Användning och valfri server
-
-Efter installation: följ [användarguiden](ANVANDNING.md). AI kräver [gatewayen på din dator](../server/README.md), installerad med `server/install.sh` och parad med QR-koden från `mio-pair`; därefter är AI på tills du pausar den. Ingen leverantörsnyckel ska anges i iPhone-appen. Mio gör en kontroll utan modelltrafik efter parningen. Statusprovet visar konfiguration och autentisering, inte verifierad modellåtkomst/kvalitet. Alarm och notiser begär egna tillstånd först vid Spara. Kalenderkopior granskas och sparas i Apples editor.
-
-## Leverantörsbyte och ny lektionsvy
-
-Arbetskopians utökning är inte med i build 5 ovan. Uppdatera först gatewayen på datorn med `./server/install.sh`, kontrollera aktiv release och skyddad status utan modelltrafik, bygg därefter aktuell apprevision i Xcode/Actions och installera dess IPA. Höj byggnumret inför den nya distribuerade builden. Nya AI-flöden kräver skyddad `/v2/status` och dess observerade konfigurationsrevision; detaljerade lektioner använder `/v1/lesson-notes`. Gamla klienters v1-rutter behålls, men det gör inte en gammal gateway kompatibel med den nya klienten. Verkliga syntetiska modellanrop kräver separat sändningsgodkännande.
-
-När båda är uppdaterade görs modell-/leverantörsbyte på datorn enligt [gatewayguiden](../server/README.md), utan modellväljare eller ytterligare IPA. Groq är tills vidare enda leverantör. Pausa AI under bytet, gör det modellfria anslutningsprovet igen och granska en ny sändning/aktivering. Ett 409-konfigurationsfel skickar inte om frågan automatiskt. Hemligheter kopieras aldrig till repot. Pianissimo installeras separat enligt driftguidens uttryckliga källsökvägar: endast låsta paketfiler/Python-kod går till `/opt/mio-transcription`, systemd-unit separat; hela Mio-repot eller utvecklingsmiljön ska inte kopieras.
+| `mio-pair` visar ingen kod | Kör `server/install.sh` först. Saknar koden transkriptionen: installera Pianissimo och kör `mio-pair` igen |
+| Transkription offline | Datorn vaken, `transcription-server/check.sh` redo, Tailscale på i båda enheterna. Se [Pianissimo-guiden](../transcription-server/README.md) |
+| AI svarar inte | `systemctl status mio-gateway` på datorn; se [gatewayguiden](../server/README.md) |
+| Mikrofon nekad | Slå på Mio under **Integritet och säkerhet → Mikrofon** |
+| Texten stannar efter ett avbrott | Mio startar om mikrofonen själv eller visar notisen "Tryck för att fortsätta lyssna". Annars: välj Fortsätt |
+| Raderingen är delvis utförd | Följ bannern och välj Försök slutföra raderingen igen |
+| Actions-jobbet är rött | Spara första tydliga felet, stegets namn och körnings-URL; senare fel kan vara följdfel |
+| SideStore kan inte förnya | Wi-Fi och LocalDevVPN på; förnya SideStore självt och följ deras felsökning |
+| Mio öppnas inte efter en vecka | Signaturen har gått ut: förnya, radera inte appen |
 
 ## Verifiera före bygge
 
-Linuxgrinden kör säkra lokala och syntetiska kontroller. Den publicerar ingenting och gör inga verkliga modellanrop. GitHub-workflowen **Verifiera Mio på Linux** (`.github/workflows/verify-linux.yml`) kör samma grind vid varje push i containern `swift:6.3.3-noble`; kontrollera resultatet för exakt den commit som ska byggas.
+Linuxgrinden kör lokala kontroller med syntetiska data. Den publicerar ingenting och gör inga riktiga modellanrop. GitHub kör samma grind vid varje push (workflowen Verifiera Mio på Linux, i containern `swift:6.3.3-noble`).
 
-Lokalt krävs Linux, `python3`, `git`, Node **>=26.10.0 <27**, `npm`, `uv` och normalt `swiftc` (eller `SWIFT_EXECUTABLE`). Kommandot verifierar den arbetskopia där skriptet ligger:
+Lokalt behövs Linux, `python3`, `git`, Node 26 (minst 26.10), `npm`, `uv` och `swiftc` (eller `SWIFT_EXECUTABLE`). Kommandot kontrollerar arbetskopian där skriptet ligger:
 
 ```bash
 mio_repo_directory="$(git rev-parse --show-toplevel)"
@@ -96,8 +78,8 @@ python3 "$mio_repo_directory/scripts/verify.py"
 | Portable Swift, capture recovery, strikt concurrency | Modeller, actorpatchar, workflows, återhämtning | AVFoundation, Keychain, URLSession, UIKit/SwiftUI, iOS-filskydd |
 | Långhistorik (valfri) | Syntetisk session-store: kodning, patchskrivning, processminne | iPhone, ljud, batteri |
 
-Resultat: `PASS (Linux synthetic gates)`, `FAIL` (exitkod 1) eller `UNAVAILABLE` (exitkod 2). `--skip-swift` ger **PARTIAL**; det är ingen fullständig grind. Loggkatalogens `verification.json` registrerar bascommit, arbetskopians digest, verktygsversioner och grindstatus. Spara den med loggarna; den märker native iOS och verklig leverantör som `NOT RUN`.
+Resultatet är `PASS (Linux synthetic gates)`, `FAIL` (exitkod 1) eller `UNAVAILABLE` (exitkod 2). Med `--skip-swift` blir det `PARTIAL`, och då är Swift inte kontrollerat. `verification.json` i loggkatalogen anger commit, verktygsversioner och vilka grindar som körts; iOS och riktig modelltrafik står alltid som `NOT RUN`.
 
-Native: workflowen **Bygg Mio IPA** kör concurrencydiagnostik, Release, XCTest med tre UI-smokeprov och IPA-validering. På en Mac kan concurrencygrinden köras direkt med `python3 scripts/verify_concurrency.py --native --log /tmp/mio-native-concurrency.log`. Bevara loggar, `.xcresult`, körnings-URL och `Mio-buildinfo.txt`.
+iOS-koden kontrolleras bara av workflowen Bygg Mio IPA: concurrencydiagnostik, Release-bygge, XCTest med tre UI-prov och kontroll av IPA:n. På en Mac går concurrencydiagnostiken att köra direkt med `python3 scripts/verify_concurrency.py --native --log /tmp/mio-native-concurrency.log`.
 
-Verkliga syntetiska modellanrop kräver uttryckligt godkännande. Loggar får bara innehålla textfri diagnostik; källtext, frågor, svar, råljud, tokens, fulla adresser och privata exporter hör inte hemma i loggar eller repo.
+Loggar får bara innehålla textfri diagnostik: aldrig källtext, frågor, svar, ljud, tokens, fulla adresser eller exporter.

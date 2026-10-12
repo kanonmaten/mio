@@ -67,14 +67,8 @@ Granskar du en befintlig policy: en grant lägger bara till åtkomst, så breda 
 ## 3. Telefonen
 
 1. Installera Tailscale från App Store och logga in med samma konto. Slå på **VPN On Demand** för Wi-Fi och mobilnät ([guide](https://tailscale.com/docs/features/client/ios-vpn-on-demand)).
-2. Visa token på datorn och för över den privat, till exempel via din lösenordshanterare:
-
-   ```bash
-   sudo sed -n 's/^MIO_TRANSCRIPTION_TOKEN=//p' /etc/mio-transcription.conf
-   ```
-
-3. I Mio: kugghjulet → **Transkription**. Ange adressen från `tailscale serve status` (bara `https://…ts.net`, ingen sökväg) och token. Tryck **Spara anslutning** och sedan **Testa sparad anslutning**. Inget ljud skickas vid testet.
-4. Starta Mio och läs en mening med namn, datum och siffror. Texten kommer efter cirka 15–30 sekunder.
+2. Installera [AI-gatewayen](../server/README.md) om du inte redan gjort det. Kör sedan `mio-pair` på datorn och skanna QR-koden i Mio under **Inställningar → Dator**. Koden innehåller adresser och tokens för både Pianissimo och AI, så du behöver inte skriva av något.
+3. Tryck **Kontrollera anslutningen**. Inget ljud skickas. Starta sedan Mio och läs en mening med namn, datum och siffror; texten kommer efter 15 till 30 sekunder.
 
 Efter en SideStore-förnyelse med LocalDevVPN: slå på Tailscale igen. Datorn måste vara igång och vaken; ställ in energisparläget så att den inte somnar medan du använder Mio.
 
@@ -91,7 +85,7 @@ Skriptet visar modell och version när tjänsten är redo. Inget ljud skickas. I
 | "Inte redo (HTTP 503)" | Modellen laddar fortfarande. Vänta, eller kör `check.sh --wait` |
 | "Ingen kontakt med 127.0.0.1:8765" | `sudo systemctl status mio-transcription` och `sudo journalctl -u mio-transcription -n 50 --no-pager` |
 | Tjänsten startar om hela tiden | GPU-minnet är slut (stäng spel och andra GPU-appar) eller CUDA fungerar inte: kör `nvidia-smi` och `install.sh` igen |
-| Mio säger fel token (401) | Klistra in token igen, utan mellanslag. Det är inte text-AI:ns token |
+| Mio säger fel token (401) | Kör `mio-pair` igen och välj **Para om med QR-kod** i Mio |
 | Fungerar lokalt men inte från telefonen | Tailscale på i telefonen? Rätt adress från `tailscale serve status`? Grants som släpper igenom ditt konto? |
 | `"speakerLabels":"off"` fast du vill ha talare | `sudo journalctl -u mio-transcription -n 50 --no-pager` visar orsaken. Saknas `MIO_DIARIZATION_REVISION`: kör `install.sh` igen. Transkriptionen fungerar ändå |
 | "A server with the specified hostname could not be found" på telefonen | Namnet når inte Tailscales DNS. Slå på **Use Tailscale DNS** i Tailscale-appen och stäng av andra DNS-profiler (t.ex. Quad9, NextDNS, AdGuard under Inställningar → Allmänt → VPN och enhetshantering). |
@@ -116,9 +110,9 @@ Om du använder Mio just när bytet sker blir det en kort lucka i texten.
 
 **Talarmodellen** (`nvidia/diar_streaming_sortformer_4spk-v2`) är låst till den commit som `install.sh` valde och uppdateras inte på natten. Nattuppdateringen rör bara Pianissimos cache. Byta till senaste: ta bort raden `MIO_DIARIZATION_REVISION=` ur `/etc/mio-transcription.conf` (`sudo nano /etc/mio-transcription.conf`) och kör `install.sh` igen.
 
-**Byta token:** `sudo rm /etc/mio-transcription.conf` och kör `install.sh` igen. Det skapar en ny token (och tar senaste modellen). Spara sedan den nya token i Mio.
+**Byta token:** `sudo rm /etc/mio-transcription.conf` och kör `install.sh` igen. Det skapar en ny token (och tar senaste modellen). Para sedan om telefonen med `mio-pair`.
 
-Mios app behöver ingen ny version när modellen uppdateras: appen bryr sig bara om API:t, inte om vilken modellversion som körs. Den visar dock aktuell version under **Testa sparad anslutning**.
+Appen behöver ingen ny version när modellen uppdateras, eftersom API:t är detsamma. Modellversionen syns under Inställningar → Dator → Transkription och Tailscale.
 
 ## Förbehandling och talarmärkning
 

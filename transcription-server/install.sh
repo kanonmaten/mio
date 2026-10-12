@@ -145,5 +145,5 @@ else
 fi
 sudo tailscale serve status 2>/dev/null || true
 
-printf '\nKlart. Ange https-adressen ovan och token i Mio (Inställningar → Transkription).\n'
-printf 'Visa token: sudo sed -n "s/^MIO_TRANSCRIPTION_TOKEN=//p" %s\n' "$config"
+printf '\nKlart. Installera AI-gatewayen (server/install.sh) om du inte redan gjort det,\n'
+printf 'och para sedan telefonen: kör  mio-pair  och skanna QR-koden i Mio (Inställningar → Dator).\n'

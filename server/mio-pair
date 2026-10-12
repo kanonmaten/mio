@@ -21,8 +21,20 @@ host="$(tailscale status --json | node -e '
   process.stdout.write(name.replace(/\.$/u, ""));')"
 [[ $host =~ ^[a-z0-9-]+(\.[a-z0-9-]+)+$ ]] || fail "Hittar inte datorns Tailscale-namn. Är MagicDNS och HTTPS på i Tailscale?"
 
+sudo -v || fail "sudo behövs för att läsa tokens."
+sudo test -f /etc/mio-gateway/gateway.env || fail "AI-gatewayen är inte installerad. Kör server/install.sh först."
+# Pianissimo is optional for pairing. Read only files that exist: with pipefail, a missing
+# file used to end the script silently before any QR code was shown.
+files=(/etc/mio-gateway/gateway.env)
+if sudo test -f /etc/mio-transcription.conf; then
+    files+=(/etc/mio-transcription.conf)
+else
+    echo "OBS: Pianissimo är inte installerat än, så koden innehåller bara AI." >&2
+    echo "     Installera transcription-server/install.sh och kör mio-pair igen för att få med transkriptionen." >&2
+fi
+
 # Secrets travel only through this pipe: never argv, environment, files or the terminal (unless --text).
-payload="$(sudo cat /etc/mio-gateway/gateway.env /etc/mio-transcription.conf 2>/dev/null | node -e '
+payload="$(sudo cat "${files[@]}" | node -e '
   const text = require("node:fs").readFileSync(0, "utf8");
   const value = name => new RegExp(`^${name}=([A-Za-z0-9_-]{32,256})$`, "mu").exec(text)?.[1] ?? null;
   const host = process.argv[1];
@@ -34,7 +46,7 @@ payload="$(sudo cat /etc/mio-gateway/gateway.env /etc/mio-transcription.conf 2>/
 
 printf '%s' "$payload" | qrencode -t ansiutf8 -m 2 -l M
 echo "Skanna i Mio: Inställningar → Dator → Skanna QR-kod."
-echo "Dator: $host (AI på port 8443$(sudo test -f /etc/mio-transcription.conf && echo ', Pianissimo på 443' || echo '; Pianissimo saknas än'))"
+echo "Dator: $host (AI på port 8443$( (( ${#files[@]} == 2 )) && echo ', Pianissimo på 443' || echo '; Pianissimo saknas än'))"
 if $show_text; then
     printf '%s' "$payload" | node -e '
       const p = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
