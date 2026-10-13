@@ -360,7 +360,7 @@ struct MioHomeView: View {
             return [(title: "Avklarat", items: today.completedTasks), (title: "Anteckningar och minnen", items: today.notes)]
         }
         var groups: [(title: String, items: [MioContentItem])] = [
-            (title: "Planer", items: today.plans), (title: "Uppgifter", items: today.tasks)]
+            (title: "Händelser", items: today.plans), (title: "Att göra", items: today.tasks)]
         if isTodaySelected { groups.append((title: "Kvar sedan tidigare", items: today.overdueTasks)) }
         return groups
     }

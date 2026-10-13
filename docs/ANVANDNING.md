@@ -36,7 +36,7 @@ Säg till exempel:
 
 Tydliga Mio-kommandon blir lokala frågor i inkorgen **Förslag**, som du öppnar med **N att granska** på Hem. Vanlig konversation blir inte automatiskt ett minne. Du kan även använda plusknappen i inkorgen för att skriva ett förslag själv, eller **Hitta lokala Mio-förslag** inne i en sparad session.
 
-Öppna frågan och kontrollera **typ, rubrik, text, datum och tid**. Lokala kommandon tolkar inte datum. AI kan föreslå en tid, men du måste markera att datum och tid är kontrollerade före Ja för AI-planer/uppgifter. Om klockslag saknas ber Mio dig välja det.
+Öppna frågan och kontrollera **typ, rubrik, text, datum och tid**. Lokala kommandon tolkar inte datum. AI kan föreslå en tid, men du måste markera att datum och tid är kontrollerade före Ja för AI-förslag på händelser och att göra. Texten är det du sa i transkriptet, inte AI:ns ord. Hörs en dag men inget klockslag föreslås **Heldag**; säger du klockslaget senare uppdateras förslaget. Saknas dagen ber Mio dig välja den.
 
 Om underlaget kompletteras medan du granskar kan Mio be dig granska den nya versionen. Dina redigerade utkastfält behålls. Ändring av relevanta fält återställer datumkontrollen; en saknad tid ska väljas uttryckligen och får inte råka bli ”nu”.
 
@@ -46,17 +46,17 @@ Om underlaget kompletteras medan du granskar kan Mio be dig granska den nya vers
 
 I förgrunden kan upptäckt av Mio ge vibration. Frågor kan behöva granskas genom att du öppnar appen när den har varit i bakgrunden.
 
-## Anteckningar, uppgifter och minnen
+## Anteckningar, att göra och minnen
 
 Använd plusknappen i **Anteckningar** eller historikvyn. Välj typ och fyll i rubrik, text och tid. Du kan koppla posten till en session. Sökningen hittar även svenska ord utan diakritiska tecken, exempelvis `ovning` för `Övning`.
 
-Markera uppgifter klara eller öppna dem igen. Synliga minnen kan ändras och raderas som andra poster. Mio skapar ingen dold profil.
+Typerna heter Anteckning, Att göra, Händelse och Minne. Markera att göra-poster klara eller öppna dem igen. Synliga minnen kan ändras och raderas som andra poster. Mio skapar ingen dold profil.
 
 ## Kalender och påminnelser
 
 **Kalender** visar kommande planer grupperade per vecka, till exempel **Den här veckan · v. 41** och **Nästa vecka · v. 42**. **Lektioner** visar veckonumret vid varje lektion.
 
-Skapa först en plan i **Kalender** eller en uppgift i **Anteckningar**. Öppna den sparade posten:
+Skapa först en händelse i **Kalender** eller en att göra-post i **Anteckningar**. Öppna den sparade posten:
 
 - **Lägg en kopia i Kalender:** granska uppgifterna i Apples editor och spara eller avbryt. Kontrollera kalender, start/slut och eventuell notifiering där. Kopian är fristående och kan synkas via kalenderkontot.
 - **Påminn mig om posten:** välj en framtida tid och spara. Notisbehörighet frågas första gången. Notiser följer iPhones fokus- och ljudinställningar.
@@ -72,7 +72,7 @@ Hem är veckoplaneraren. Rubriken är veckonumret, till exempel **v. 41**. Under
 
 - **Nästa** visar en enda sak att göra i dag, eller **Starta Mio** när inget är planerat.
 - **N att granska** öppnar förslagsinkorgen.
-- Dagens översikt har **Morgon** och **Kväll**. Morgon visar planer, uppgifter och sådant som ligger kvar sedan tidigare. Kväll visar avklarade uppgifter, anteckningar och dagens antal sessioner och lektioner. Från kl. 17 visar Hem kvällen.
+- Dagens översikt har **Morgon** och **Kväll**. Morgon visar händelser, att göra och sådant som ligger kvar sedan tidigare. Kväll visar avklarade att göra-poster, anteckningar och dagens antal sessioner och lektioner. Från kl. 17 visar Hem kvällen.
 - **Tolv veckor** är ett rutnät över dagar då du använt Mio. Det räknar bara sessioner och poster och läser ingen text.
 
 **Fråga Mio** finns uppe till vänster på Hem och Fånga.
@@ -90,7 +90,7 @@ AI är på från början när datorn är parad (beslut 2026-10-11) och startar n
 
 **Kontrollera anslutningen** under Dator och **AI → Kapacitet och uppgifter** gör modellfria statusanrop: gatewayversion, profiler och återstående dagskvot. De bevisar inte modellens svarskvalitet.
 
-**Enskilda frågor:** tryck **Fråga Mio** på Hem eller Fånga. Upp till tre färdiga frågor, byggda på telefonen från senaste lektionen och nästa plan eller uppgift, kan fylla i textfältet; inget skickas förrän du själv skickar. Skriv eller ändra frågan, välj vid behov enstaka poster eller sessionsutdrag och tryck **Skicka frågan**. Frågan skickas direkt utan förhandsgranskning; svaret valideras innan det visas. Svaret kan innehålla fel och utför inga åtgärder. Det försvinner när du lämnar vyn om du inte väljer **Granska och spara som anteckning**. En skickad fråga kan inte återkallas.
+**Enskilda frågor:** tryck **Fråga Mio** på Hem eller Fånga. Upp till tre färdiga frågor, byggda på telefonen från senaste lektionen och nästa händelse eller att göra-post, kan fylla i textfältet; inget skickas förrän du själv skickar. Skriv eller ändra frågan, välj vid behov enstaka poster eller sessionsutdrag och tryck **Skicka frågan**. Frågan skickas direkt utan förhandsgranskning; svaret valideras innan det visas. Svaret kan innehålla fel och utför inga åtgärder. Det försvinner när du lämnar vyn om du inte väljer **Granska och spara som anteckning**. En skickad fråga kan inte återkallas.
 
 ## Exportera och radera
 

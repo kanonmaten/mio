@@ -350,7 +350,7 @@ final class MioViewModel {
             try Task.checkCancellation()
             guard pipeline === newPipeline else { return }
             runState = .listening
-            statusMessage = isLessonActive ? "Lektionsläge: fångar underlag till anteckningar. Vardags-Mio är pausat." : "Mio lyssnar. När AI är på kan Mio föreslå planer ur vanliga samtal."
+            statusMessage = isLessonActive ? "Lektionsläge: fångar underlag till anteckningar. Vardags-Mio är pausat." : "Mio lyssnar. När AI är på kan Mio föreslå händelser och att göra ur vanliga samtal."
             serverMetadata = details.health.metadata
             serverVersion = details.health.serverVersion
             connectionState = .connected; connectionCheckedAt = .now

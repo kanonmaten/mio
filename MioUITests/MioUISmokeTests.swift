@@ -55,12 +55,12 @@ final class MioUISmokeTests: XCTestCase {
         // (XCTest then continues), which alone used up the default two-minute allowance.
         executionTimeAllowance = 240
         let app = XCUIApplication()
-        let title = "Syntetisk uppgift \(UUID().uuidString.prefix(8))"
+        let title = "Syntetisk att göra \(UUID().uuidString.prefix(8))"
         app.launch()
         XCTAssertTrue(app.tabBars.buttons["Anteckningar"].waitForExistence(timeout: 10))
         app.tabBars.buttons["Anteckningar"].tap()
         app.buttons["Lägg till"].firstMatch.tap()
-        app.buttons["Uppgift"].firstMatch.tap()
+        app.buttons["mio.create.task"].firstMatch.tap()
         let titleField = app.textFields["Rubrik"]
         XCTAssertTrue(titleField.waitForExistence(timeout: 5))
         titleField.tap()

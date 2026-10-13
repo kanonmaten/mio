@@ -165,11 +165,11 @@ struct CalendarTabView: View {
             List {
                 if matchingPlans.isEmpty {
                     ContentUnavailableView(
-                        searchText.isEmpty ? "Inga manuella planer" : "Inga träffar",
+                        searchText.isEmpty ? "Inga händelser" : "Inga träffar",
                         systemImage: searchText.isEmpty ? "calendar.badge.plus" : "magnifyingglass",
                         description: Text(
                             searchText.isEmpty
-                                ? "Spara en lokal plan och öppna den för att lägga till en kopia i Apple Kalender eller ställa in alarm."
+                                ? "Spara en händelse och öppna den för att lägga till en kopia i Apple Kalender eller ställa in alarm."
                                 : "Prova ett annat sökord."
                         )
                     )
@@ -197,13 +197,13 @@ struct CalendarTabView: View {
             .mioListGround()
             .navigationTitle("Kalender")
             .toolbar { MioSettingsToolbar() }
-            .searchable(text: $searchText, prompt: "Sök bland planer")
+            .searchable(text: $searchText, prompt: "Sök bland händelser")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         editorRoute = .create(.plan)
                     } label: {
-                        Label("Ny plan", systemImage: "plus")
+                        Label("Ny händelse", systemImage: "plus")
                     }
                 }
             }
@@ -225,7 +225,7 @@ struct CalendarTabView: View {
             )
         }
         .confirmationDialog(
-            "Radera planen?",
+            "Radera händelsen?",
             isPresented: deletionConfirmationIsPresented,
             titleVisibility: .visible
         ) {
@@ -240,7 +240,7 @@ struct CalendarTabView: View {
             }
         } message: {
             if let item = pendingDeletion {
-                Text("Planen ”\(item.title)” tas bort från telefonen.")
+                Text("Händelsen ”\(item.title)” tas bort från telefonen.")
             }
         }
     }
@@ -422,7 +422,7 @@ struct NotesTabView: View {
             .mioListGround()
             .navigationTitle("Anteckningar")
             .toolbar { MioSettingsToolbar() }
-            .searchable(text: $searchText, prompt: "Sök i anteckningar och uppgifter")
+            .searchable(text: $searchText, prompt: "Sök i anteckningar, att göra och minnen")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -432,6 +432,8 @@ struct NotesTabView: View {
                             } label: {
                                 Label(kind.title, systemImage: kind.symbolName)
                             }
+                            // "Att göra" is also a filter segment; tests address the menu item by identifier.
+                            .accessibilityIdentifier("mio.create.\(kind.rawValue)")
                         }
                     } label: {
                         Label("Lägg till", systemImage: "plus")
@@ -447,7 +449,7 @@ struct NotesTabView: View {
         } message: {
             Text(deletionOutcome?.message ?? "Försök igen.")
         }
-        .alert("Kunde inte ändra uppgiften", isPresented: Binding(
+        .alert("Kunde inte ändra att göra-posten", isPresented: Binding(
             get: { completionError != nil },
             set: { if !$0 { completionError = nil; contentModel.errorMessage = nil } }
         )) {
@@ -573,7 +575,7 @@ private enum NotesFilter: String, CaseIterable, Hashable, Identifiable {
     var title: String {
         switch self {
         case .all: "Alla"
-        case .notes: "Noter"
+        case .notes: "Anteckningar"
         case .tasks: "Att göra"
         case .memories: "Minnen"
         }
@@ -592,8 +594,8 @@ private enum NotesFilter: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .all: "Inga anteckningar ännu"
         case .notes: "Inga anteckningar"
-        case .tasks: "Inga uppgifter"
-        case .memories: "Inga uttryckliga minnen"
+        case .tasks: "Inget att göra"
+        case .memories: "Inga minnen"
         }
     }
 
@@ -680,7 +682,7 @@ private struct ContentEditorView: View {
                 }
 
                 if kind == .task {
-                    Section("Uppgift") {
+                    Section("Att göra") {
                         Toggle("Klar", isOn: $isCompleted)
                     }
                 }
@@ -777,7 +779,7 @@ private struct ContentEditorView: View {
         case .timeline: "Tidpunkt"
         case .note: "Datum"
         case .task: "När"
-        case .plan: "Planerad tid"
+        case .plan: "Tid"
         case .memory: "Datum"
         }
     }

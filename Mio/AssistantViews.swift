@@ -488,7 +488,7 @@ struct MioGuideView: View {
     var body: some View {
         List {
             Section("Börja här") {
-                Text("Skapa anteckningar, uppgifter, planer och egna minnen med plusknappen i flikarna. Allt detta fungerar utan mikrofon eller AI.")
+                Text("Skapa anteckningar, att göra, händelser och minnen med plusknappen i flikarna. Allt detta fungerar utan mikrofon eller AI.")
                 Text("Para din dator under Inställningar → Dator: kör mio-pair på datorn och skanna QR-koden. Starta Mio skickar ljud till din dator för svensk text. Starta Mio för vardagslyssning. Starta lektion pausar vardags-Mio och samlar lektionsunderlag separat. Paus och stopp stänger mikrofonen. Historik och rättningar finns under Lektioner → Historik och råtext.")
             }
             Section("Tilltala Mio") {
@@ -501,11 +501,11 @@ struct MioGuideView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Planera dagen") {
-                Text("Öppna en sparad plan eller uppgift för att skapa en separat systempåminnelse eller ett alarm. En plan kan också kopieras till Apple Kalender i dess redigeringsruta. Kalenderkopior synkas inte tillbaka till Mio.")
-                Text("Hem visar veckan, nästa sak och dagens planer. Välj en dag i veckoraden för att se den. Byt till Kväll för avklarade uppgifter, anteckningar och dagens sessioner. Alarm och dagliga påminnelser finns under Inställningar → Påminnelser.")
+                Text("Öppna en sparad händelse eller att göra-post för att skapa en separat systempåminnelse eller ett alarm. En händelse kan också kopieras till Apple Kalender i dess redigeringsruta. Kalenderkopior synkas inte tillbaka till Mio.")
+                Text("Hem visar veckan, nästa sak och dagens händelser. Välj en dag i veckoraden för att se den. Byt till Kväll för avklarade att göra-poster, anteckningar och dagens sessioner. Alarm och dagliga påminnelser finns under Inställningar → Påminnelser.")
             }
             Section("AI") {
-                Text("AI är på när datorn är parad. Nytt vardagstal skickas samlat högst var femte minut och kan ge förslag på planer och uppgifter utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Alla föreslagna poster kräver Ja. Frågor skickas direkt. Pausa AI på Fånga eller under Inställningar → AI; pausen sparas.")
+                Text("AI är på när datorn är parad. Nytt vardagstal skickas samlat högst var femte minut och kan ge förslag på händelser och att göra utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Alla föreslagna poster kräver Ja. Frågor skickas direkt. Pausa AI på Fånga eller under Inställningar → AI; pausen sparas.")
             }
             Section("Din kontroll") {
                 Text("Inget råljud sparas. Spela bara in andra med tydligt samtycke och enligt lokala regler. Du kan ändra och radera synliga minnen i Anteckningar.")

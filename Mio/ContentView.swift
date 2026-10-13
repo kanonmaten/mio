@@ -728,7 +728,7 @@ private struct FirstRunCard: View {
                 Text("2. Säg svenska meningar och ordet Mio.")
                 Text("3. Prova ‘Mio, anteckna att vi arbetar med procent’. Granska förslaget på Hem och välj Ja, Nej eller Inte nu.")
                 Text("4. Använd Starta lektion för lektionsläge. Historik och råtext finns under Lektioner.")
-                Text("5. Hem visar veckan, nästa sak och dagens planer. Från kl. 17 visar Hem vad du gjort.")
+                Text("5. Hem visar veckan, nästa sak och dagens händelser. Från kl. 17 visar Hem vad du gjort.")
             }
             .font(.subheadline)
             .frame(maxWidth: .infinity, alignment: .leading)

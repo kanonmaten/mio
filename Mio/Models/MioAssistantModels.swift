@@ -296,7 +296,7 @@ enum MioAssistantValidationError: LocalizedError {
         case .textTooLong:
             "Texten får vara högst 10 000 tecken. Dela upp den i flera förslag."
         case .unsupportedKind:
-            "Välj anteckning, uppgift, plan eller uttryckligt minne."
+            "Välj anteckning, att göra, händelse eller minne."
         case .activeSession:
             "Stoppa sessionen innan du delar in den i lektioner."
         case .emptyLessonTitle:

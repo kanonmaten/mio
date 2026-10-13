@@ -59,7 +59,7 @@ Ordning: A1, A2, A3, A4, A5. A6 gör användaren på datorn.
 
 ### A5. Namnen
 
-Visningsnamnen enligt tabellen ovan, i 0.9.0. Filtret blir Alla, Anteckningar, Att göra, Händelser och Minnen.
+Visningsnamnen enligt tabellen ovan, i 0.9.0. Filtret i Anteckningar blir Alla, Anteckningar, Att göra och Minnen; händelser ligger i Kalender-fliken tills den tas bort i 0.9.1.
 
 ### A6. Mät transkriptionen (användaren, på datorn)
 

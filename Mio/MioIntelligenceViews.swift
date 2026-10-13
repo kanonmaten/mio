@@ -181,7 +181,7 @@ struct LessonDetailView: View {
                         Text("Textdelar skickas till din dator, med minst en minut emellan. Arbetet fortsätter i bakgrunden när du lämnar appen; sparade delar finns kvar efter avbrott. Råljud skickas inte.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
-                    NavigationLink("Granska föreslagna läxor och planer") { SuggestionInboxView(contentModel: content, sessionModel: model) }
+                    NavigationLink("Granska föreslagna läxor och händelser") { SuggestionInboxView(contentModel: content, sessionModel: model) }
                     NavigationLink("Originaltext, egen anteckning och radering") {
                         SessionEditorView(sessionID: sessionID, contentModel: content, sessionModel: model)
                     }

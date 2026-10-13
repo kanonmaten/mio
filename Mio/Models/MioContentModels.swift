@@ -13,9 +13,10 @@ enum MioContentKind: String, Codable, CaseIterable, Hashable, Identifiable, Send
         switch self {
         case .timeline: "Tidslinjepost"
         case .note: "Anteckning"
-        case .task: "Uppgift"
-        case .plan: "Plan"
-        case .memory: "Uttryckligt minne"
+        // Same words everywhere (user decision 2026-10-13); stored raw values are unchanged.
+        case .task: "Att göra"
+        case .plan: "Händelse"
+        case .memory: "Minne"
         }
     }
 
