@@ -1,5 +1,15 @@
 # Ändringslogg
 
+## 0.9.1 (pågår)
+
+Apples appar äger det Mio fångar ([plan](docs/PLAN_APPLEAPPAR.md), del B).
+
+- **Ja skickar förslaget till rätt Apple-app (2026-10-13):** en händelse öppnar Kalenders egen ruta med rubrik, tid (eller heldag), det du sa och en länk ifyllda. Du väljer kalender och notis och trycker Lägg till; Mio behöver ingen kalenderbehörighet och läser aldrig kalendern. En att göra-post skapas direkt i Påminnelser, i den lista du väljer (Mio minns senaste), med eller utan förfallodag och med en notis vid klockslaget. Det kräver full åtkomst till Påminnelser, eftersom Apple inte har någon nivå som bara skriver; nekar du ligger förslaget kvar med en knapp till Inställningar. Anteckningar och minnen öppnar dela-arket, där du väljer Anteckningar. Mio sparar bara att posten skickades, vart och från vilken session, utan text, datum eller status. Ett nytt Ja skapar aldrig en andra påminnelse.
+- **Länk tillbaka till Mio:** `mio://session/…` i händelsen, påminnelsen och anteckningen öppnar sessionen i Mio. Länken startar aldrig mikrofon eller AI.
+- Versionen är 0.9.1. Kalender-fliken, plusknappen, Mios egna alarm och de gamla lokala posterna finns kvar tills nästa steg; inget är byggt för iOS eller provat på telefonen än.
+
+## Helhetsbygget 2026-10-11 (pågår)
+
 ## Helhetsbygget 2026-10-11 (pågår)
 
 - **Samma namn överallt (2026-10-13):** typerna heter nu Anteckning, Att göra, Händelse (tidigare Plan) och Minne (tidigare Uttryckligt minne), i typväljaren, filtret ("Noter" blev Anteckningar), Kalender-fliken, Hem och hjälptexterna. Sparade poster och exporten är oförändrade.

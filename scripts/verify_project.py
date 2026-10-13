@@ -132,6 +132,9 @@ def main():
         check(bool(info.get('NSMicrophoneUsageDescription')), 'Mikrofonens behörighetstext')
         check(bool(info.get('NSAlarmKitUsageDescription')), 'AlarmKits behörighetstext')
         check(bool(info.get('NSCameraUsageDescription')), 'Kamerans behörighetstext för QR-parning')
+        check(bool(info.get('NSRemindersFullAccessUsageDescription')), 'Påminnelsers behörighetstext')
+        check(not any(key.startswith('NSCalendars') for key in info), 'Ingen kalenderbehörighet; Kalenders egen redigerare används')
+        check([item.get('CFBundleURLSchemes') for item in info.get('CFBundleURLTypes', [])] == [['mio']], 'Länkschemat mio://')
         check(info.get('UIBackgroundModes') == ['audio'], 'Bakgrundsläget audio bevarat')
         check(info.get('NSSupportsLiveActivities') is True, 'Live Activity tillåten')
         check(info.get('BGTaskSchedulerPermittedIdentifiers') == ['app.mio.assistant.lesson-notes.*'],
@@ -145,7 +148,7 @@ def main():
         if path.suffix in ('.xcscheme', '.xcsettings') or path.name == 'contents.xcworkspacedata':
             ET.parse(path)
     check(project.count('PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant;') == 2, 'Appidentiteten app.mio.assistant i Debug och Release')
-    check(project.count('MARKETING_VERSION = 0.9.0;') == 4, 'Helhetsbygge 0.9.0 i appens och widgettilläggets Debug och Release')
+    check(project.count('MARKETING_VERSION = 0.9.1;') == 4, 'Version 0.9.1 i appens och widgettilläggets Debug och Release')
     check(set(re.findall(r'IPHONEOS_DEPLOYMENT_TARGET = ([^;]+);', project)) == {'26.0'}, 'Minst iOS 26.0')
     check(project.count('ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;') == 2, 'AppIcon vald i Debug och Release')
     check('Assets.xcassets in Resources' in object_body(project, '810000000000000000000001'), 'Bildkatalogen ingår i appens resurser')

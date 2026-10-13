@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SuggestionInboxView: View {
     @Environment(MioAssistantViewModel.self) private var assistant
@@ -192,8 +193,12 @@ private struct SuggestedQuestionReviewView: View {
     }
 }
 
+/// Reviews one proposal and hands it to the Apple app that owns its kind (user decision
+/// 2026-10-13, version 0.9.1): Händelse → Calendar's editor, Att göra → Reminders,
+/// Anteckning and Minne → the share sheet for Notes. Nothing leaves Mio without Ja.
 private struct SuggestionReviewView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @Environment(MioAssistantViewModel.self) private var assistant
     @Environment(MioWorkflowCoordinator.self) private var workflow
     let suggestion: MioSuggestion
@@ -204,22 +209,29 @@ private struct SuggestionReviewView: View {
     @State private var text: String
     @State private var date: Date
     @State private var isAllDay: Bool
+    @State private var hasDueDate: Bool
+    @State private var listID: String?
+    @State private var lists: [MioReminderList] = []
     @State private var reviewedDate = false
     @State private var dateChosen = false
     @State private var reviewedRevision: Int
     @State private var reviewedSuggestion: MioSuggestion
     @State private var outcome: MioOperationOutcome?
     @State private var busy = false
+    @State private var showCalendar = false
+    @State private var showShare = false
 
     init(suggestion: MioSuggestion, contentModel: MioContentViewModel, sessionModel: MioViewModel) {
         self.suggestion = suggestion
         self.contentModel = contentModel
         self.sessionModel = sessionModel
-        _kind = State(initialValue: suggestion.kind)
+        _kind = State(initialValue: suggestion.kind == .timeline ? .note : suggestion.kind)
         _title = State(initialValue: suggestion.title)
         _text = State(initialValue: suggestion.body)
         _date = State(initialValue: suggestion.scheduledAt)
         _isAllDay = State(initialValue: suggestion.isAllDay == true)
+        // A proposal from AI without a safe day has no due date until the user picks one.
+        _hasDueDate = State(initialValue: suggestion.evidence != nil && suggestion.needsDateConfirmation != true)
         _reviewedRevision = State(initialValue: suggestion.reviewRevision)
         _reviewedSuggestion = State(initialValue: suggestion)
     }
@@ -228,23 +240,30 @@ private struct SuggestionReviewView: View {
         Form {
             Section("Förhandsgranska och rätta") {
                 Picker("Typ", selection: $kind) {
-                    ForEach(MioContentKind.allCases.filter { $0 != .timeline }) { kind in
+                    ForEach([MioContentKind.plan, .task, .note, .memory]) { kind in
                         Text(kind.title).tag(kind)
                     }
                 }
                 TextField("Rubrik", text: $title)
                 TextEditor(text: $text).frame(minHeight: 100).accessibilityLabel("Det du sa")
-                if kind == .plan || kind == .task {
-                    Toggle("Heldag", isOn: $isAllDay)
+                if kind == .task {
+                    Toggle("Förfallodag", isOn: $hasDueDate)
                 }
-                DatePicker(showsDayOnly ? "Datum" : "Datum och tid", selection: $date, displayedComponents: dateComponents)
+                if showsDate {
+                    Toggle("Heldag", isOn: $isAllDay)
+                    DatePicker(isAllDay ? "Datum" : "Datum och tid", selection: $date, displayedComponents: dateComponents)
+                }
+                if kind == .task, !lists.isEmpty {
+                    Picker("Lista", selection: $listID) {
+                        ForEach(lists) { list in Text(list.title).tag(Optional(list.id)) }
+                    }
+                }
             }
-            .disabled(alreadySaved)
             if let evidence = reviewedSuggestion.evidence {
                 Section("AI-förslagets textunderlag") {
                     Text(evidence).textSelection(.enabled)
                     Text("AI kan misstolka transkriptionen. Jämför förslaget med underlaget.").font(.footnote).foregroundStyle(.secondary)
-                    if kind == .plan || kind == .task {
+                    if requiresDateCheck {
                         if reviewedSuggestion.needsDateConfirmation == true { Text("Säker dag saknas i underlaget. Välj datum ovan.") }
                         else if reviewedSuggestion.isAllDay == true { Text("Inget klockslag hördes, så förslaget gäller hela dagen.") }
                         Toggle(isAllDay ? "Jag har kontrollerat datumet" : "Jag har kontrollerat datum och tid", isOn: $reviewedDate)
@@ -259,14 +278,14 @@ private struct SuggestionReviewView: View {
                     Text("Dina ändringar ovan finns kvar. Granska det uppdaterade underlaget innan du godkänner.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Button("Jag har granskat det uppdaterade förslaget") {
-                        reviewedRevision = current.reviewRevision
                         // A later clock time ("klockan 15") replaces the all-day guess unless the
                         // user already picked a date themselves.
                         if !dateChosen, current.needsDateConfirmation != true,
                            current.isAllDay != reviewedSuggestion.isAllDay || current.scheduledAt != reviewedSuggestion.scheduledAt {
-                            date = current.scheduledAt; isAllDay = current.isAllDay == true
+                            date = current.scheduledAt; isAllDay = current.isAllDay == true; hasDueDate = true
                         }
                         reviewedSuggestion = current
+                        reviewedRevision = current.reviewRevision
                         reviewedDate = false
                         dateChosen = false
                         outcome = nil
@@ -274,14 +293,12 @@ private struct SuggestionReviewView: View {
                 }
             }
             Section {
-                Text(alreadySaved
-                     ? "Posten har sparats. Tryck Ja igen för att avsluta frågan utan att skapa en dubblett."
-                     : "Ja sparar denna post i Mio. Kalender och alarm aktiveras separat när du öppnar den sparade posten. Kontrollera alltid tiden ovan; AI-tolkade datum är också förslag.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                Button("Ja, spara") { Task { await accept() } }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                              || (!alreadySaved && (needsReview || (reviewedSuggestion.evidence != nil && (kind == .plan || kind == .task)
-                                  && (!reviewedDate || (reviewedSuggestion.needsDateConfirmation == true && !dateChosen))))))
+                Text(destinationNote).font(.footnote).foregroundStyle(.secondary)
+                Button(approveTitle) { approve() }
+                    .disabled(!canApprove)
+                if outcome == .failure(MioReminderPort.deniedMessage), let settings = URL(string: UIApplication.openSettingsURLString) {
+                    Button("Öppna Inställningar") { openURL(settings) }
+                }
                 Button("Inte nu") {
                     Task {
                         busy = true
@@ -290,7 +307,7 @@ private struct SuggestionReviewView: View {
                         if result.isSuccess { dismiss() }
                         busy = false
                     }
-                }.disabled(alreadySaved)
+                }
                 Button("Nej, glöm förslaget", role: .destructive) {
                     Task {
                         busy = true
@@ -299,7 +316,7 @@ private struct SuggestionReviewView: View {
                         if result.isSuccess { dismiss() }
                         busy = false
                     }
-                }.disabled(alreadySaved)
+                }
             }
             if let error = outcome?.message {
                 Section { Text(error).foregroundStyle(.red) }
@@ -309,31 +326,110 @@ private struct SuggestionReviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .disabled(busy)
         .navigationBarBackButtonHidden(busy)
+        .task { loadLists() }
+        .sheet(isPresented: $showCalendar) {
+            CalendarHandoffComposer(draft: eventDraft) { saved in
+                guard saved else { return }
+                record(.calendar)
+            }
+        }
+        .sheet(isPresented: $showShare) {
+            MioShareSheet(text: shareText) { destination in
+                showShare = false
+                guard let destination else { return }
+                record(destination)
+            }
+            .presentationDetents([.medium, .large])
+        }
         .onChange(of: date) { _, _ in dateChosen = true; reviewedDate = false }
         .onChange(of: title) { _, _ in reviewedDate = false }
         .onChange(of: text) { _, _ in reviewedDate = false }
         .onChange(of: kind) { _, _ in reviewedDate = false }
         .onChange(of: isAllDay) { _, _ in reviewedDate = false }
+        .onChange(of: hasDueDate) { _, _ in reviewedDate = false }
         .onChange(of: currentSuggestion?.reviewRevision) { _, _ in
             if needsReview { reviewedDate = false }
         }
     }
 
-    private var showsDayOnly: Bool { isAllDay && (kind == .plan || kind == .task) }
-    private var dateComponents: DatePickerComponents { showsDayOnly ? .date : [.date, .hourAndMinute] }
-    private var alreadySaved: Bool { contentModel.item(id: suggestion.id) != nil }
+    private var showsDate: Bool { kind == .plan || (kind == .task && hasDueDate) }
+    private var dateComponents: DatePickerComponents { isAllDay ? .date : [.date, .hourAndMinute] }
+    /// Calendar's editor shows the date itself; a reminder is created directly, so its AI date is
+    /// confirmed here first.
+    private var requiresDateCheck: Bool { kind == .task && hasDueDate }
     private var currentSuggestion: MioSuggestion? { assistant.suggestions.first { $0.id == suggestion.id } }
     private var needsReview: Bool { currentSuggestion.map { $0.reviewRevision != reviewedRevision } ?? false }
+    private var link: URL? {
+        suggestion.sessionID.flatMap { MioLink.session($0, proposal: suggestion.id) } ?? MioLink.proposal(suggestion.id)
+    }
 
-    private func accept() async {
+    private var canApprove: Bool {
+        guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !needsReview else { return false }
+        guard reviewedSuggestion.evidence != nil, requiresDateCheck else { return true }
+        return reviewedDate && (reviewedSuggestion.needsDateConfirmation != true || dateChosen)
+    }
+
+    private var approveTitle: String {
+        switch kind {
+        case .plan: "Ja, lägg till i Kalender"
+        case .task: "Ja, skicka till Påminnelser"
+        default: "Ja, spara i Anteckningar"
+        }
+    }
+
+    private var destinationNote: String {
+        switch kind {
+        case .plan: "Kalender öppnas med rubrik, tid och det du sa ifyllt. Välj kalender och notis där och tryck Lägg till. Mio läser aldrig din kalender."
+        case .task: "Påminnelsen skapas direkt i listan ovan, med en notis om du valt ett klockslag. Ändra den sedan i Påminnelser."
+        default: "Dela-arket öppnas med texten. Välj Anteckningar och en ny eller befintlig anteckning."
+        }
+    }
+
+    private var eventDraft: MioEventDraft {
+        MioEventDraft(title: title.trimmingCharacters(in: .whitespacesAndNewlines), notes: text, url: link, start: date, isAllDay: isAllDay)
+    }
+
+    private var shareText: String {
+        let parts = [title.trimmingCharacters(in: .whitespacesAndNewlines), text.trimmingCharacters(in: .whitespacesAndNewlines),
+                     link?.absoluteString ?? ""]
+        return parts.filter { !$0.isEmpty }.joined(separator: "\n\n")
+    }
+
+    private func loadLists() {
+        guard workflow.reminders.access() == .granted else { return }
+        lists = workflow.reminders.lists()
+        let remembered = UserDefaults.standard.string(forKey: MioReminderPort.lastListKey)
+        listID = lists.first { $0.id == remembered }?.id ?? workflow.reminders.defaultListID() ?? lists.first?.id
+    }
+
+    private func approve() {
+        outcome = nil
+        switch kind {
+        case .plan: showCalendar = true
+        case .task: Task { await sendReminder() }
+        default: showShare = true
+        }
+    }
+
+    private func sendReminder() async {
         guard !busy else { return }
         busy = true
         defer { busy = false }
-        let result = await workflow.acceptSuggestion(id: suggestion.id, expectedRevision: reviewedRevision,
-            kind: kind, title: title, body: text, scheduledAt: date,
-            dateConfirmed: reviewedDate, dateChosen: dateChosen, isAllDay: isAllDay)
+        let result = await workflow.sendToReminders(id: suggestion.id, expectedRevision: reviewedRevision, title: title, notes: text,
+            dueDate: hasDueDate ? date : nil, hasTime: hasDueDate && !isAllDay, listID: listID)
         outcome = result
+        if lists.isEmpty { loadLists() }
         if result.isSuccess { MioFeedback.success(); dismiss() }
+    }
+
+    private func record(_ destination: MioHandoffDestination) {
+        Task {
+            busy = true
+            defer { busy = false }
+            let result = await workflow.recordHandoff(id: suggestion.id, kind: kind, title: title, destination: destination)
+            outcome = result
+            if result.isSuccess { MioFeedback.success(); dismiss() }
+        }
     }
 }
 

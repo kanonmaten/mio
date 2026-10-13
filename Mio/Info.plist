@@ -28,6 +28,19 @@
 	<string>Mio använder kameran bara för att skanna QR-koden från mio-pair när du parar din dator. Ingen bild sparas.</string>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Mio använder alarm bara när du själv sparar ett alarm. Du kan granska och ta bort Mios alarm i appen.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Mio skapar en påminnelse först när du har granskat ett förslag och tryckt Ja, och visar dina kommande påminnelser på Hem. Apple har ingen behörighet som bara låter appar skriva påminnelser. Mio ändrar eller tar aldrig bort dina andra påminnelser.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.mio.assistant.session</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mio</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>

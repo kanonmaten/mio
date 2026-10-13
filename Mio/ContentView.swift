@@ -48,6 +48,19 @@ struct ContentView: View {
             MioNotificationPostView(postID: post.id, contentModel: contentModel, sessionModel: model)
                 .disabled(maintenance.blocksWork)
         }
+        .sheet(item: $navigation.presentedSession) { session in
+            NavigationStack {
+                SessionEditorView(sessionID: session.id, contentModel: contentModel, sessionModel: model)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) { Button("Klar") { navigation.presentedSession = nil } }
+                    }
+            }
+            .disabled(maintenance.blocksWork)
+        }
+        .onOpenURL { url in
+            navigation.receive(link: url)
+            resolveLink()
+        }
         .onReceive(NotificationCenter.default.publisher(for: TranscriptionSettings.didChange)) { _ in
             Task { await model.transcriptionConfigurationChanged() }
         }
@@ -71,11 +84,12 @@ struct ContentView: View {
             storesLoaded = true
             followDayPhase()
             resolveNotificationRoute()
+            resolveLink()
             resumeAI()
         }
         .onChange(of: scenePhase) { _, newPhase in
             model.handleScenePhase(newPhase)
-            if newPhase == .active { day.refresh(); followDayPhase(); resolveNotificationRoute(); resumeAI() }
+            if newPhase == .active { day.refresh(); followDayPhase(); resolveNotificationRoute(); resolveLink(); resumeAI() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in day.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange).receive(on: RunLoop.main)) { _ in day.refresh() }
@@ -117,6 +131,12 @@ struct ContentView: View {
     private func followDayPhase() {
         guard navigation.pendingRoute == nil else { return }
         navigation.dailyPeriod = MioDayPhase.at(.now, calendar: day.calendar) == .evening ? .evening : .morning
+    }
+
+    private func resolveLink() {
+        guard storesLoaded, !maintenance.blocksWork, navigation.pendingLinkSessionID != nil else { return }
+        if showSettings { showSettings = false }
+        navigation.resolvePendingLink { model.session(id: $0) != nil }
     }
 
     private func resolveNotificationRoute() {

@@ -36,7 +36,9 @@
 		CD49C99FBA0EAD18AE138EC0 /* MioAssistantRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 811A9A06738728DC5CA3B7AA /* MioAssistantRepository.swift */; };
 		066BEC7479AC11D3C9009B56 /* MioCloudService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97A7DD328EB98C2F01A4C318 /* MioCloudService.swift */; };
 		68879F3DDCBD0200949BF351 /* MioSystemServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = 460A97A5007E23F545FFD079 /* MioSystemServices.swift */; };
+		F91EE9CA163C7A5BBD3A1CBE /* MioReminderStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE50263E5ABB23A8EF8F8CC /* MioReminderStore.swift */; };
 		6B0895CCC4BDDFFB12FDD7F2 /* SystemIntegrationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24832E2A9856E255C6684632 /* SystemIntegrationViews.swift */; };
+		D5CF09568F3852044D70B84D /* HandoffViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B1EBBD17D54EE6C488F2BD2 /* HandoffViews.swift */; };
 		FD18DEBA6FAC783D93B67542 /* MioAssistantTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0F6E81FA93ACC149D484595 /* MioAssistantTests.swift */; };
 		B1CADA6CCA1050F76E1E3AD0 /* MioIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5D070EFAB8111A5D5EB9406 /* MioIntegrationTests.swift */; };
 		F94E384AB4A23960298BE742 /* MioCloudTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D1BEAF4CB210B06D6F6A3D7 /* MioCloudTests.swift */; };
@@ -89,6 +91,7 @@
 		DE6CAC7E119EEAFC37CBA935 /* MioNavigationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29BF2CD0484E98171C51AF2F /* MioNavigationModels.swift */; };
 		B8F77AD627419B4D668AD0EE /* MioNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BC303EFAC6F5046776374C9 /* MioNavigationTests.swift */; };
 		DE5160000000000000000102 /* MioWeekPlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5160000000000000000002 /* MioWeekPlannerTests.swift */; };
+		1318C8244EC78B78EB2CF96B /* MioHandoffTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B711330E613F63D9F31509E3 /* MioHandoffTests.swift */; };
 		DE5160000000000000000107 /* MioSwiftDataContentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5160000000000000000007 /* MioSwiftDataContentTests.swift */; };
 		B20000000000000000000001 /* MioUISmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000010 /* MioUISmokeTests.swift */; };
 		DA7A00000000000000000101 /* MioStores.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA7A00000000000000000001 /* MioStores.swift */; };
@@ -104,6 +107,7 @@
 		BAC600000000000000000102 /* MioListeningActivityMapping.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000002 /* MioListeningActivityMapping.swift */; };
 		BAC600000000000000000103 /* MioLessonNotesProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000003 /* MioLessonNotesProgress.swift */; };
 		DE5160000000000000000101 /* MioWeekPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5160000000000000000001 /* MioWeekPlanner.swift */; };
+		5868E396E78082EF4663C7C5 /* MioHandoffModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 750D23C45E7B1F503830AB0B /* MioHandoffModels.swift */; };
 		DE5160000000000000000106 /* MioSuggestedQuestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5160000000000000000006 /* MioSuggestedQuestions.swift */; };
 		BAC600000000000000000104 /* MioListeningAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000004 /* MioListeningAttributes.swift */; };
 		BAC600000000000000000105 /* MioLiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000005 /* MioLiveActivityController.swift */; };
@@ -183,7 +187,9 @@
 		811A9A06738728DC5CA3B7AA /* MioAssistantRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioAssistantRepository.swift; sourceTree = "<group>"; };
 		97A7DD328EB98C2F01A4C318 /* MioCloudService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioCloudService.swift; sourceTree = "<group>"; };
 		460A97A5007E23F545FFD079 /* MioSystemServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSystemServices.swift; sourceTree = "<group>"; };
+		3EE50263E5ABB23A8EF8F8CC /* MioReminderStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioReminderStore.swift; sourceTree = "<group>"; };
 		24832E2A9856E255C6684632 /* SystemIntegrationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemIntegrationViews.swift; sourceTree = "<group>"; };
+		2B1EBBD17D54EE6C488F2BD2 /* HandoffViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandoffViews.swift; sourceTree = "<group>"; };
 		D0F6E81FA93ACC149D484595 /* MioAssistantTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioAssistantTests.swift; sourceTree = "<group>"; };
 		C5D070EFAB8111A5D5EB9406 /* MioIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioIntegrationTests.swift; sourceTree = "<group>"; };
 		7D1BEAF4CB210B06D6F6A3D7 /* MioCloudTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioCloudTests.swift; sourceTree = "<group>"; };
@@ -236,6 +242,7 @@
 		29BF2CD0484E98171C51AF2F /* MioNavigationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioNavigationModels.swift; sourceTree = "<group>"; };
 		3BC303EFAC6F5046776374C9 /* MioNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioNavigationTests.swift; sourceTree = "<group>"; };
 		DE5160000000000000000002 /* MioWeekPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWeekPlannerTests.swift; sourceTree = "<group>"; };
+		B711330E613F63D9F31509E3 /* MioHandoffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioHandoffTests.swift; sourceTree = "<group>"; };
 		DE5160000000000000000007 /* MioSwiftDataContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSwiftDataContentTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000010 /* MioUISmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioUISmokeTests.swift; sourceTree = "<group>"; };
 		F20000000000000000000011 /* MioUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MioUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -252,6 +259,7 @@
 		BAC600000000000000000002 /* MioListeningActivityMapping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioListeningActivityMapping.swift; sourceTree = "<group>"; };
 		BAC600000000000000000003 /* MioLessonNotesProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLessonNotesProgress.swift; sourceTree = "<group>"; };
 		DE5160000000000000000001 /* MioWeekPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioWeekPlanner.swift; sourceTree = "<group>"; };
+		750D23C45E7B1F503830AB0B /* MioHandoffModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioHandoffModels.swift; sourceTree = "<group>"; };
 		DE5160000000000000000006 /* MioSuggestedQuestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSuggestedQuestions.swift; sourceTree = "<group>"; };
 		BAC600000000000000000004 /* MioListeningAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioListeningAttributes.swift; sourceTree = "<group>"; };
 		BAC600000000000000000005 /* MioLiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLiveActivityController.swift; sourceTree = "<group>"; };
@@ -307,6 +315,7 @@
 				ED186F304655079D8F88FE48 /* MioIntelligenceViews.swift */,
 				8176C1E54D96C9B75DA141FB /* MioAnalysisCoordinator.swift */,
 				24832E2A9856E255C6684632 /* SystemIntegrationViews.swift */,
+				2B1EBBD17D54EE6C488F2BD2 /* HandoffViews.swift */,
 				34E2C98A8B7B5AF6E1E5B224 /* MioMaintenanceState.swift */,
 				61D4A526FE305E555BEA8CB9 /* MioAssistantViewModel.swift */,
 				799A41C174B0A9B07F25C4C9 /* CloudAssistantView.swift */,
@@ -349,6 +358,7 @@
 				BAC600000000000000000002 /* MioListeningActivityMapping.swift */,
 				BAC600000000000000000003 /* MioLessonNotesProgress.swift */,
 				DE5160000000000000000001 /* MioWeekPlanner.swift */,
+				750D23C45E7B1F503830AB0B /* MioHandoffModels.swift */,
 				DE5160000000000000000006 /* MioSuggestedQuestions.swift */,
 				F10000000000000000000010 /* MioContentModels.swift */,
 			);
@@ -373,6 +383,7 @@
 				9089093008C57C04D98E1592 /* MicrophoneCapture.swift */,
 				730AA95BAC0372A8529AA489 /* TranscriptionService.swift */,
 				460A97A5007E23F545FFD079 /* MioSystemServices.swift */,
+				3EE50263E5ABB23A8EF8F8CC /* MioReminderStore.swift */,
 				97A7DD328EB98C2F01A4C318 /* MioCloudService.swift */,
 				811A9A06738728DC5CA3B7AA /* MioAssistantRepository.swift */,
 				F10000000000000000000005 /* MioWakeWordDetector.swift */,
@@ -390,6 +401,7 @@
 			children = (
 				3BC303EFAC6F5046776374C9 /* MioNavigationTests.swift */,
 				DE5160000000000000000002 /* MioWeekPlannerTests.swift */,
+				B711330E613F63D9F31509E3 /* MioHandoffTests.swift */,
 				DE5160000000000000000007 /* MioSwiftDataContentTests.swift */,
 				8F454690D9B3D7668EF7FEEF /* MioConnectionDiscoveryTests.swift */,
 				C6527737C6BF0A133F69F73F /* MioLessonFreshnessTests.swift */,
@@ -620,7 +632,9 @@
 				3814826E9154155841DCF3FC /* MioAnalysisCoordinator.swift in Sources */,
 				FDEAE468A9D0E2963EBB439A /* MioAnalysisModels.swift in Sources */,
 				6B0895CCC4BDDFFB12FDD7F2 /* SystemIntegrationViews.swift in Sources */,
+				D5CF09568F3852044D70B84D /* HandoffViews.swift in Sources */,
 				68879F3DDCBD0200949BF351 /* MioSystemServices.swift in Sources */,
+				F91EE9CA163C7A5BBD3A1CBE /* MioReminderStore.swift in Sources */,
 				066BEC7479AC11D3C9009B56 /* MioCloudService.swift in Sources */,
 				CD49C99FBA0EAD18AE138EC0 /* MioAssistantRepository.swift in Sources */,
 				5B0E7BD8A75D59711A2F28B8 /* MioAssistantModels.swift in Sources */,
@@ -648,6 +662,7 @@
 				BAC600000000000000000102 /* MioListeningActivityMapping.swift in Sources */,
 				BAC600000000000000000103 /* MioLessonNotesProgress.swift in Sources */,
 				DE5160000000000000000101 /* MioWeekPlanner.swift in Sources */,
+				5868E396E78082EF4663C7C5 /* MioHandoffModels.swift in Sources */,
 				DE5160000000000000000106 /* MioSuggestedQuestions.swift in Sources */,
 				BAC600000000000000000104 /* MioListeningAttributes.swift in Sources */,
 				BAC600000000000000000105 /* MioLiveActivityController.swift in Sources */,
@@ -661,6 +676,7 @@
 			files = (
 				B8F77AD627419B4D668AD0EE /* MioNavigationTests.swift in Sources */,
 				DE5160000000000000000102 /* MioWeekPlannerTests.swift in Sources */,
+				1318C8244EC78B78EB2CF96B /* MioHandoffTests.swift in Sources */,
 				DE5160000000000000000107 /* MioSwiftDataContentTests.swift in Sources */,
 				B73F74418CD0ACA336491565 /* MioConnectionDiscoveryTests.swift in Sources */,
 				38D01045939486BD185502FA /* MioLessonFreshnessTests.swift in Sources */,
@@ -841,7 +857,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.9.0;
+				MARKETING_VERSION = 0.9.1;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant;
@@ -867,7 +883,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.9.0;
+				MARKETING_VERSION = 0.9.1;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant;
@@ -957,7 +973,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.9.0;
+				MARKETING_VERSION = 0.9.1;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -984,7 +1000,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.9.0;
+				MARKETING_VERSION = 0.9.1;
 				PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

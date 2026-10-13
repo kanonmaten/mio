@@ -49,6 +49,9 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
     var isAllDay: Bool?
 
     var allDay: Bool { isAllDay == true }
+    /// Set from 0.9.1: the item was handed to Apple's Calendar, Reminders or Notes and this is
+    /// only its record in Mio, with no text and no date of its own (user decision 2026-10-13).
+    var handoff: MioHandoff?
 
     init(
         id: UUID = UUID(),
@@ -60,7 +63,8 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
         scheduledAt: Date? = nil,
         completedAt: Date? = nil,
         sessionID: UUID? = nil,
-        isAllDay: Bool? = nil
+        isAllDay: Bool? = nil,
+        handoff: MioHandoff? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -72,6 +76,7 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
         self.completedAt = kind == .task ? completedAt : nil
         self.sessionID = sessionID
         self.isAllDay = (kind == .task || kind == .plan) && isAllDay == true ? true : nil
+        self.handoff = handoff
     }
 
     var isCompleted: Bool {

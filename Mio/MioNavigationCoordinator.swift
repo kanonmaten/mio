@@ -8,7 +8,10 @@ final class MioNavigationCoordinator {
     var selectedTab = MioAppTab.home
     var dailyPeriod = MioDailyPeriod.morning
     var presentedPost: MioPresentedPost?
+    /// A session opened from a `mio://` link in Calendar, Reminders or Notes.
+    var presentedSession: MioPresentedPost?
     private(set) var pendingRoute: MioNotificationRoute?
+    private(set) var pendingLinkSessionID: UUID?
     @ObservationIgnored private let onDailyRoute: @MainActor () -> Void
 
     init(onDailyRoute: @escaping @MainActor () -> Void = {}) {
@@ -38,6 +41,21 @@ final class MioNavigationCoordinator {
             // Becoming active retries the microphone in MioViewModel; this only shows it.
             selectedTab = .capture
         }
+    }
+
+    /// Held like a notification route until the stores have loaded. Only opens a view: a link
+    /// never starts the microphone or AI, and anything but a session link just shows Hem.
+    func receive(link url: URL) {
+        pendingLinkSessionID = MioLink.sessionID(from: url)
+        if pendingLinkSessionID == nil { presentedSession = nil; selectedTab = .home }
+    }
+
+    func resolvePendingLink(sessionExists: (UUID) -> Bool) {
+        guard let id = pendingLinkSessionID else { return }
+        pendingLinkSessionID = nil
+        presentedPost = nil
+        guard sessionExists(id) else { presentedSession = nil; selectedTab = .home; return }
+        presentedSession = MioPresentedPost(id: id)
     }
 
     func reconcile(using destination: (UUID) -> MioAppTab?) {

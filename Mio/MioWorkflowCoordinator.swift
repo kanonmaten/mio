@@ -10,6 +10,7 @@ final class MioWorkflowCoordinator {
     let analysis: MioAnalysisCoordinator
     let questions: MioQuestionWorkflow
     let deletion: MioDeletionRecovery
+    let reminders: MioReminderPort
     private(set) var lastOutcome: MioOperationOutcome?
     private(set) var pendingLessonIDs: Set<UUID> = []
     private(set) var queuedCommands = 0
@@ -49,9 +50,11 @@ final class MioWorkflowCoordinator {
          assistant: MioAssistantViewModel, analysis: MioAnalysisCoordinator,
          journal: MioDeletionJournal = MioDeletionJournal(), diagnostics: MioDiagnosticsRepository = .shared,
          systemActions: MioSystemActionPort? = nil, questions: MioQuestionWorkflow? = nil,
+         reminders: MioReminderPort? = nil,
          clearCredentials: (@MainActor () throws -> Void)? = nil,
          pendingLessonDefaults: UserDefaults = .standard, metrics: MioMetricArchive = .shared) {
         self.pendingLessonDefaults = pendingLessonDefaults
+        self.reminders = reminders ?? .native
         let systemActions = systemActions ?? .native
         let maintenance = MioMaintenanceState.shared
         let questions = questions ?? MioQuestionWorkflow(canSend: { !maintenance.blocksWork })
@@ -201,6 +204,78 @@ final class MioWorkflowCoordinator {
                 case .unsupportedSchemaVersion, .invalidRelationships: return .failure(error.localizedDescription)
                 }
             } catch { return .failure("Kunde inte godkänna förslaget: \(error.localizedDescription)") }
+        }
+    }
+
+    /// Creates the approved reminder in Reminders, then records the handoff and closes the
+    /// proposal. The reminder carries the proposal's link, so a retry after a failed local write
+    /// finds it instead of creating a second one. Denied access leaves the proposal untouched.
+    func sendToReminders(id: UUID, expectedRevision: Int, title: String, notes: String,
+                         dueDate: Date?, hasTime: Bool, listID: String?) async -> MioOperationOutcome {
+        await approveHandoff(id: id, expectedRevision: expectedRevision, title: title, kind: .task) { [reminders] suggestion, cleanTitle in
+            if reminders.access() == .notDetermined { _ = await reminders.requestAccess() }
+            guard reminders.access() == .granted else { throw MioReminderError.accessDenied }
+            let due = dueDate.map { hasTime ? $0 : Calendar.current.startOfDay(for: $0) }
+            let draft = MioReminderDraft(title: cleanTitle, notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                url: suggestion.sessionID.flatMap { MioLink.session($0, proposal: id) } ?? MioLink.proposal(id),
+                dueDate: due, hasTime: due != nil && hasTime, listID: listID)
+            let identifier = try await reminders.save(draft)
+            if let listID { UserDefaults.standard.set(listID, forKey: MioReminderPort.lastListKey) }
+            return MioHandoff(destination: .reminders, externalIdentifier: identifier, sentAt: .now)
+        }
+    }
+
+    /// Records a handoff the user already completed in Apple's own UI (the Calendar editor or
+    /// the share sheet). That action is authoritative, so a newer AI revision does not block it.
+    func recordHandoff(id: UUID, kind: MioContentKind, title: String, destination: MioHandoffDestination,
+                       externalIdentifier: String? = nil) async -> MioOperationOutcome {
+        await approveHandoff(id: id, expectedRevision: nil, title: title, kind: kind) { _, _ in
+            MioHandoff(destination: destination, externalIdentifier: externalIdentifier, sentAt: .now)
+        }
+    }
+
+    private func approveHandoff(id: UUID, expectedRevision: Int?, title: String, kind: MioContentKind,
+                                perform: @escaping @MainActor (MioSuggestion, String) async throws -> MioHandoff) async -> MioOperationOutcome {
+        await enqueue { [self] in
+            var claim: MioSuggestionApprovalClaim?
+            do {
+                try Task.checkCancellation()
+                if try await content.latestItems().contains(where: { $0.id == id }) {
+                    return await assistant.markAcceptedOutcome(id: id, reconcileExistingContent: true)
+                }
+                let document = try await assistant.latestDocument()
+                guard let suggestion = document.suggestions.first(where: { $0.id == id }), suggestion.purpose == .content else {
+                    return .conflict("Förslaget finns inte längre. Gå tillbaka till inkorgen.")
+                }
+                let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !cleanTitle.isEmpty else { return .failure("Skriv en rubrik innan du skickar.") }
+                claim = try await assistant.claimSuggestionApproval(id: id, expectedRevision: expectedRevision ?? suggestion.reviewRevision)
+                let handoff = try await perform(suggestion, cleanTitle)
+                // The record keeps no text and no date: Apple's app owns both from now on.
+                let item = MioContentItem(id: id, kind: kind, title: cleanTitle, createdAt: suggestion.createdAt,
+                    updatedAt: handoff.sentAt, scheduledAt: handoff.sentAt,
+                    sessionID: suggestion.sessionID.flatMap { capture.session(id: $0)?.id }, handoff: handoff)
+                let saved = await content.saveApproved(item)
+                guard saved.isSuccess else {
+                    if try await content.latestItems().contains(where: { $0.id == id }) {
+                        if let claim { _ = await assistant.completeSuggestionApproval(claim) }
+                    } else if let claim { _ = await assistant.releaseSuggestionApproval(claim) }
+                    return saved
+                }
+                return await assistant.completeSuggestionApproval(claim!)
+            } catch is CancellationError {
+                if let claim { _ = await assistant.releaseSuggestionApproval(claim) }
+                return .cancelled
+            } catch let error as MioAssistantRepositoryError {
+                if let claim { _ = await assistant.releaseSuggestionApproval(claim) }
+                switch error {
+                case .suggestionChanged, .approvalInProgress, .invalidApproval: return .conflict(error.localizedDescription)
+                case .unsupportedSchemaVersion, .invalidRelationships: return .failure(error.localizedDescription)
+                }
+            } catch {
+                if let claim { _ = await assistant.releaseSuggestionApproval(claim) }
+                return .failure(error.localizedDescription)
+            }
         }
     }
 
