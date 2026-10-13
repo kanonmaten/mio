@@ -106,8 +106,8 @@ struct MioHomeView: View {
             switch next {
             case .upcoming(let item), .overdue(let item):
                 itemLine(item, timeText: next == .overdue(item)
-                         ? "Kvar sedan \(MioTimeText.describe(item.scheduledAt, relativeTo: .now, calendar: day.calendar))"
-                         : MioTimeText.describe(item.scheduledAt, relativeTo: .now, calendar: day.calendar))
+                         ? "Kvar sedan \(MioTimeText.describe(item.scheduledAt, relativeTo: .now, calendar: day.calendar, allDay: item.allDay))"
+                         : MioTimeText.describe(item.scheduledAt, relativeTo: .now, calendar: day.calendar, allDay: item.allDay))
             case .none where server.isEmpty:
                 // Unpaired, pairing is the one real next step, so it leads instead of "Klart för i dag".
                 Group {
@@ -339,7 +339,8 @@ struct MioHomeView: View {
                     .accessibilityAddTraits(.isHeader)
                 ForEach(group.items) { item in
                     itemLine(item, timeText: MioTimeText.describe(item.kind == .task && item.isCompleted ? item.completedAt ?? item.scheduledAt : item.scheduledAt,
-                                                                  relativeTo: day.overviewDate, calendar: day.calendar))
+                                                                  relativeTo: day.overviewDate, calendar: day.calendar,
+                                                                  allDay: item.allDay && !(item.kind == .task && item.isCompleted)))
                 }
             }
             if navigation.dailyPeriod == .evening {

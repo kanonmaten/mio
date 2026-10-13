@@ -48,7 +48,7 @@ Ordning: A1, A2, A3, A4, A5. A6 gör användaren på datorn.
 
 - **Vad det är + tid:** prov, möten, bokningar och andra saker som sker vid en viss tidpunkt blir alltid **händelse**. Något du ska göra blir händelse om det har klockslag, annars **att göra**, med förfallodag om en dag nämns ("lämna in senast fredag").
 - **Veckodagar och relativa dagar** ("på torsdag", "i morgon", "nästa vecka på måndag") räknas fram mot källans tid och tidszon. "Torsdag" betyder nästa torsdag efter källtiden, eller samma dag om den är en torsdag och klockslaget inte har passerat.
-- **Datum utan klockslag** blir heldag. Gatewayns resultat får en ny version där `scheduledAt` ersätts av `date` (`ÅÅÅÅ-MM-DD` eller `null`) och `time` (`HH:MM` eller `null`). Appen sparar heldag som ett nytt valfritt fält, `isAllDay`, i innehållsposten. Det är Codable-payload, så ingen ändring av SwiftData-schemat behövs ([beslut](DECISIONS.md#swiftdata-i-stället-för-hela-json-filer-2026-10-11)). Ingen påhittad standardtid.
+- **Datum utan klockslag** blir heldag. `scheduledAt` i gatewayns resultat får också vara ett datum utan klockslag (`ÅÅÅÅ-MM-DD`); en äldre app läser det som saknat datum. Det ersatte den först planerade uppdelningen i `date` och `time`, som hade krävt en ny resultatversion. Appen sparar heldag som ett nytt valfritt fält, `isAllDay`, i förslaget och innehållsposten. Det är Codable-payload, så ingen ändring av SwiftData-schemat behövs ([beslut](DECISIONS.md#swiftdata-i-stället-för-hela-json-filer-2026-10-11)). Ingen påhittad standardtid.
 - **Senare klockslag:** säger du "klockan 15" efteråt ersätter analysen det öppna förslaget (`replacesID` finns redan) så att heldagen blir 15:00 innan du svarat. Har du redan svarat Ja skapas ingen dubblett; tiden ändrar du själv.
 - Granskningen spärrar inte Ja för heldag. Saknas även datum krävs ett val som i dag.
 
@@ -129,7 +129,7 @@ Anteckningar-fliken byter namn till **Förslag**. Överst ligger förslag att gr
 ### AI
 
 - Kandidattyperna är `plan` (händelse), `task` (att göra) och `note` (anteckning). Minnen skapas fortfarande bara av den lokala regeln "kom ihåg".
-- Regeln från A3 och de nya fälten `date`/`time` gäller oförändrat. Inga autonoma åtgärder: varje överlämning kräver Ja, och för händelser och anteckningar även Apples egen ruta.
+- Regeln från A3 och datum utan klockslag gäller oförändrat. Inga autonoma åtgärder: varje överlämning kräver Ja, och för händelser och anteckningar även Apples egen ruta.
 
 ### Dokumentation
 

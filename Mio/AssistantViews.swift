@@ -203,6 +203,7 @@ private struct SuggestionReviewView: View {
     @State private var title: String
     @State private var text: String
     @State private var date: Date
+    @State private var isAllDay: Bool
     @State private var reviewedDate = false
     @State private var dateChosen = false
     @State private var reviewedRevision: Int
@@ -218,6 +219,7 @@ private struct SuggestionReviewView: View {
         _title = State(initialValue: suggestion.title)
         _text = State(initialValue: suggestion.body)
         _date = State(initialValue: suggestion.scheduledAt)
+        _isAllDay = State(initialValue: suggestion.isAllDay == true)
         _reviewedRevision = State(initialValue: suggestion.reviewRevision)
         _reviewedSuggestion = State(initialValue: suggestion)
     }
@@ -231,8 +233,11 @@ private struct SuggestionReviewView: View {
                     }
                 }
                 TextField("Rubrik", text: $title)
-                TextEditor(text: $text).frame(minHeight: 100).accessibilityLabel("Beskrivning")
-                DatePicker("Datum och tid", selection: $date)
+                TextEditor(text: $text).frame(minHeight: 100).accessibilityLabel("Det du sa")
+                if kind == .plan || kind == .task {
+                    Toggle("Heldag", isOn: $isAllDay)
+                }
+                DatePicker(showsDayOnly ? "Datum" : "Datum och tid", selection: $date, displayedComponents: dateComponents)
             }
             .disabled(alreadySaved)
             if let evidence = reviewedSuggestion.evidence {
@@ -240,8 +245,9 @@ private struct SuggestionReviewView: View {
                     Text(evidence).textSelection(.enabled)
                     Text("AI kan misstolka transkriptionen. Jämför förslaget med underlaget.").font(.footnote).foregroundStyle(.secondary)
                     if kind == .plan || kind == .task {
-                        if reviewedSuggestion.needsDateConfirmation == true { Text("Säker tid saknas i underlaget. Välj datum och tid ovan.") }
-                        Toggle("Jag har kontrollerat datum och tid", isOn: $reviewedDate)
+                        if reviewedSuggestion.needsDateConfirmation == true { Text("Säker dag saknas i underlaget. Välj datum ovan.") }
+                        else if reviewedSuggestion.isAllDay == true { Text("Inget klockslag hördes, så förslaget gäller hela dagen.") }
+                        Toggle(isAllDay ? "Jag har kontrollerat datumet" : "Jag har kontrollerat datum och tid", isOn: $reviewedDate)
                     }
                 }
             }
@@ -254,6 +260,12 @@ private struct SuggestionReviewView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                     Button("Jag har granskat det uppdaterade förslaget") {
                         reviewedRevision = current.reviewRevision
+                        // A later clock time ("klockan 15") replaces the all-day guess unless the
+                        // user already picked a date themselves.
+                        if !dateChosen, current.needsDateConfirmation != true,
+                           current.isAllDay != reviewedSuggestion.isAllDay || current.scheduledAt != reviewedSuggestion.scheduledAt {
+                            date = current.scheduledAt; isAllDay = current.isAllDay == true
+                        }
                         reviewedSuggestion = current
                         reviewedDate = false
                         dateChosen = false
@@ -301,11 +313,14 @@ private struct SuggestionReviewView: View {
         .onChange(of: title) { _, _ in reviewedDate = false }
         .onChange(of: text) { _, _ in reviewedDate = false }
         .onChange(of: kind) { _, _ in reviewedDate = false }
+        .onChange(of: isAllDay) { _, _ in reviewedDate = false }
         .onChange(of: currentSuggestion?.reviewRevision) { _, _ in
             if needsReview { reviewedDate = false }
         }
     }
 
+    private var showsDayOnly: Bool { isAllDay && (kind == .plan || kind == .task) }
+    private var dateComponents: DatePickerComponents { showsDayOnly ? .date : [.date, .hourAndMinute] }
     private var alreadySaved: Bool { contentModel.item(id: suggestion.id) != nil }
     private var currentSuggestion: MioSuggestion? { assistant.suggestions.first { $0.id == suggestion.id } }
     private var needsReview: Bool { currentSuggestion.map { $0.reviewRevision != reviewedRevision } ?? false }
@@ -316,7 +331,7 @@ private struct SuggestionReviewView: View {
         defer { busy = false }
         let result = await workflow.acceptSuggestion(id: suggestion.id, expectedRevision: reviewedRevision,
             kind: kind, title: title, body: text, scheduledAt: date,
-            dateConfirmed: reviewedDate, dateChosen: dateChosen)
+            dateConfirmed: reviewedDate, dateChosen: dateChosen, isAllDay: isAllDay)
         outcome = result
         if result.isSuccess { MioFeedback.success(); dismiss() }
     }

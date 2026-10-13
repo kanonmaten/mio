@@ -246,7 +246,13 @@ extension MioItemRow where Trailing == EmptyView {
 
 /// Swedish time phrases for Hem: "kl. 13.40", "i går kl. 9.00", "tis 6 okt".
 enum MioTimeText {
-    static func describe(_ date: Date, relativeTo now: Date, calendar: Calendar) -> String {
+    static func describe(_ date: Date, relativeTo now: Date, calendar: Calendar, allDay: Bool = false) -> String {
+        if allDay {
+            if calendar.isDate(date, inSameDayAs: now) { return "i dag" }
+            if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) { return "i går" }
+            if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now), calendar.isDate(date, inSameDayAs: tomorrow) { return "i morgon" }
+            return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(MioTheme.swedish))
+        }
         let time = date.formatted(.dateTime.hour().minute().locale(MioTheme.swedish))
         if calendar.isDate(date, inSameDayAs: now) { return "kl. \(time)" }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {

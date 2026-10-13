@@ -67,7 +67,7 @@ test('task definition owns prompt, schema, budget and validates domain independe
   const lesson = tasks.createTaskRequest('lesson', { fragments: [] });
   assert.equal(lesson.maxOutputTokens, 3_000);
   assert.deepEqual(lesson.structuredOutput.schema.properties.candidates.items.properties.kind.enum, ['plan', 'task']);
-  assert.equal(tasks.createTaskRequest('analyze-v2', {}).promptVersion, '2026-10-13.1');
+  assert.equal(tasks.createTaskRequest('analyze-v2', {}).promptVersion, '2026-10-13.2');
   assert.deepEqual(tasks.validateTaskResult('ask', '{"answer":"Syntetiskt svar"}', {}), { answer: 'Syntetiskt svar' });
   for (const [mode, text, error] of [['ask', '{"answer":"x","action":"create"}', 'invalid_upstream_answer'],
     ['analyze', '{}', 'invalid_analysis_result'], ['lesson', '{}', 'invalid_lesson_result'],

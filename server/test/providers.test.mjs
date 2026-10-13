@@ -127,7 +127,7 @@ test('lesson HTTP contract authenticates, validates and adds server-owned proven
   const body = await response.json();
   assert.deepEqual(body.sections, notes.sections);
   assert.deepEqual(body.candidates, notes.candidates);
-  assert.deepEqual(body.metadata, { provider: 'groq', model: 'qwen/qwen3.8-27b', promptVersion: '2026-09-28.1', lessonIntervalSeconds: 120 });
+  assert.deepEqual(body.metadata, { provider: 'groq', model: 'qwen/qwen3.8-27b', promptVersion: '2026-10-13.2', lessonIntervalSeconds: 120 });
   assert.equal(f.calls(), 1);
 });
 

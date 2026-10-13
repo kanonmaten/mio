@@ -153,7 +153,8 @@ final class MioWorkflowCoordinator {
     }
 
     func acceptSuggestion(id: UUID, expectedRevision: Int, kind: MioContentKind, title: String,
-                          body: String, scheduledAt: Date, dateConfirmed: Bool, dateChosen: Bool) async -> MioOperationOutcome {
+                          body: String, scheduledAt: Date, dateConfirmed: Bool, dateChosen: Bool,
+                          isAllDay: Bool = false) async -> MioOperationOutcome {
         await enqueue { [self] in
             var claim: MioSuggestionApprovalClaim?
             do {
@@ -174,9 +175,11 @@ final class MioWorkflowCoordinator {
                 guard !cleanTitle.isEmpty else { return .failure("Skriv en rubrik innan du sparar.") }
                 claim = try await assistant.claimSuggestionApproval(id: id, expectedRevision: expectedRevision)
                 try Task.checkCancellation()
+                let allDay = isAllDay && dated
                 let item = MioContentItem(id: id, kind: kind, title: cleanTitle, body: body,
-                    createdAt: suggestion.createdAt, updatedAt: .now, scheduledAt: scheduledAt,
-                    sessionID: suggestion.sessionID.flatMap { capture.session(id: $0)?.id })
+                    createdAt: suggestion.createdAt, updatedAt: .now,
+                    scheduledAt: allDay ? Calendar.current.startOfDay(for: scheduledAt) : scheduledAt,
+                    sessionID: suggestion.sessionID.flatMap { capture.session(id: $0)?.id }, isAllDay: allDay)
                 let saved = await content.saveApproved(item)
                 guard saved.isSuccess else {
                     // A privacy-attribute failure may follow an atomic content commit.

@@ -24,6 +24,8 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
     var purpose: MioSuggestionPurpose
     var evidence: String?
     var needsDateConfirmation: Bool?
+    /// The AI named a day without a clock time; `scheduledAt` is the start of that day.
+    var isAllDay: Bool?
     /// Optional for legacy documents; changes to the reviewed proposal advance it.
     var revision: Int?
     var reviewRevision: Int { revision ?? 0 }
@@ -42,7 +44,8 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         purpose: MioSuggestionPurpose = .content,
         evidence: String? = nil,
         needsDateConfirmation: Bool? = nil,
-        revision: Int? = nil
+        revision: Int? = nil,
+        isAllDay: Bool? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -58,10 +61,11 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         self.evidence = evidence
         self.needsDateConfirmation = needsDateConfirmation
         self.revision = revision
+        self.isAllDay = isAllDay
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, title, body, createdAt, scheduledAt, sessionID, sourceSegmentID, state, deferredAt, purpose, evidence, needsDateConfirmation, revision
+        case id, kind, title, body, createdAt, scheduledAt, sessionID, sourceSegmentID, state, deferredAt, purpose, evidence, needsDateConfirmation, revision, isAllDay
     }
 
     init(from decoder: Decoder) throws {
@@ -79,6 +83,7 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         evidence = try values.decodeIfPresent(String.self, forKey: .evidence)
         needsDateConfirmation = try values.decodeIfPresent(Bool.self, forKey: .needsDateConfirmation)
         revision = try values.decodeIfPresent(Int.self, forKey: .revision)
+        isAllDay = try values.decodeIfPresent(Bool.self, forKey: .isAllDay)
         // Older assistant documents contain only proposed content items.
         purpose = try values.decodeIfPresent(MioSuggestionPurpose.self, forKey: .purpose) ?? .content
     }
@@ -99,7 +104,8 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
             createdAt: createdAt,
             updatedAt: now,
             scheduledAt: scheduledAt,
-            sessionID: sessionID
+            sessionID: sessionID,
+            isAllDay: isAllDay
         )
     }
 }

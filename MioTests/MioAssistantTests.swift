@@ -183,6 +183,57 @@ final class MioAssistantTests: XCTestCase {
         XCTAssertEqual(completed.analysisDecisions?.first?.isClosed, true)
     }
 
+    func testDayWithoutClockTimeIsAllDayInTheRequestTimeZone() throws {
+        let day = try XCTUnwrap(MioAnalysisResult.parseSchedule("2026-10-15", timeZone: "Europe/Stockholm"))
+        XCTAssertTrue(day.isAllDay)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Europe/Stockholm"))
+        XCTAssertEqual(calendar.dateComponents([.year, .month, .day, .hour, .minute], from: day.date),
+                       DateComponents(year: 2026, month: 10, day: 15, hour: 0, minute: 0))
+        let timed = try XCTUnwrap(MioAnalysisResult.parseSchedule("2026-10-15T15:00:00+02:00", timeZone: "Europe/Stockholm"))
+        XCTAssertFalse(timed.isAllDay)
+        for invalid in ["2026-02-30", "2026-13-01", "2026-10-1", "15 oktober", "2026-10-15T"] {
+            XCTAssertNil(MioAnalysisResult.parseSchedule(invalid, timeZone: "Europe/Stockholm"), invalid)
+        }
+        XCTAssertNil(MioAnalysisResult.parseSchedule("2026-10-15", timeZone: "Inte/EnZon"))
+    }
+
+    /// The export from 2026-10-13: the item's text was the model's question and the later
+    /// "klockan 15" never reached the proposal.
+    func testProposalTextIsWhatTheUserSaidAndALaterTimeReplacesAllDay() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let repository = MioAssistantRepository(storageURL: fixture.file)
+        let first = TranscriptSegment(text: "Jag har religionsprov på torsdag.", containsMio: false)
+        let chatter = TranscriptSegment(text: "Här sätter vi", containsMio: false)
+        let second = TranscriptSegment(text: "klockan 15.", containsMio: false)
+        let session = MioSession(transcripts: [first, chatter, second])
+        let a = MioAnalysisFragment.make(from: first)[0], c = MioAnalysisFragment.make(from: second)[0]
+        let initial = MioAnalysisRequest(mode: .everyday, timeZone: "Europe/Stockholm", fragments: [a], usesContextContract: true)
+        _ = try await repository.applyAnalysis(MioAnalysisResult(candidates: [.init(kind: .plan, title: "Religionsprov",
+            body: "Du nämnde att du har ett religionsprov på torsdag. Ska jag lägga till det som en påminnelse?",
+            scheduledAt: "2026-10-15", sourceIDs: [a.id], evidence: "religionsprov på torsdag")], highlights: [], uncertainties: []),
+            request: initial, session: session)
+        let proposedDocument = try await repository.loadDocument()
+        let proposed = try XCTUnwrap(proposedDocument.suggestions.first)
+        XCTAssertEqual(proposed.body, "Jag har religionsprov på torsdag.", "the model's text never becomes the item's text")
+        XCTAssertEqual(proposed.isAllDay, true)
+        XCTAssertEqual(proposed.needsDateConfirmation, false)
+        XCTAssertEqual(proposed.contentItem().allDay, true)
+
+        let follow = MioAnalysisRequest(mode: .everyday, timeZone: "Europe/Stockholm", fragments: [c], contextFragments: [a],
+            priorDecisions: [.init(id: proposed.id, kind: .plan, sourceIDs: [a.id], isOpen: true)], usesContextContract: true)
+        _ = try await repository.applyAnalysis(MioAnalysisResult(candidates: [.init(kind: .plan, title: "Religionsprov",
+            body: "", scheduledAt: "2026-10-15T15:00:00+02:00", sourceIDs: [a.id, c.id], evidence: "klockan 15",
+            replacesID: proposed.id)], highlights: [], uncertainties: []), request: follow, session: session)
+        let updatedDocument = try await repository.loadDocument()
+        let updated = try XCTUnwrap(updatedDocument.suggestions.first)
+        XCTAssertEqual(updated.body, "Jag har religionsprov på torsdag. klockan 15.", "only the cited segments, in transcript order")
+        XCTAssertNil(updated.isAllDay)
+        XCTAssertEqual(updated.scheduledAt, MioAnalysisResult.parseDate("2026-10-15T15:00:00+02:00"))
+        XCTAssertEqual(updated.reviewRevision, 1)
+    }
+
     func testAnalysisReplacementVersionsDraftAndOldApprovalConflicts() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }

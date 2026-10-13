@@ -20,6 +20,20 @@ struct MioAnalysisFragment: Codable, Hashable, Sendable {
         return UUID(uuidString: String(parts[0]))
     }
 
+    /// The user's own words behind a proposal: the display text (with any correction) of the
+    /// source segments in transcript order, never model text and never a speaker name.
+    static func sourceText(ids: [String], in session: MioSession, limit: Int = 2_000) -> String {
+        let segmentIDs = Set(ids.compactMap { Self(id: $0, text: "", occurredAt: "").segmentID })
+        var text = session.transcripts.filter { segmentIDs.contains($0.id) }
+            .map { $0.displayText.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }.joined(separator: " ")
+        if text.utf8.count > limit {
+            while text.utf8.count > limit - 3 { text.removeLast() }
+            text += "…"
+        }
+        return text
+    }
+
     static func make(from segment: TranscriptSegment) -> [Self] {
         var parts: [String] = []
         var part = ""
@@ -201,7 +215,8 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
                   [.task, .plan, .note].contains(candidate.kind)
                       && !candidate.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                       && candidate.title.utf8.count <= 240 && candidate.body.utf8.count <= 2_000
-                      && (candidate.scheduledAt == nil || MioAnalysisResult.parseDate(candidate.scheduledAt!) != nil)
+                      && (candidate.scheduledAt == nil
+                          || MioAnalysisResult.parseSchedule(candidate.scheduledAt!, timeZone: request.timeZone) != nil)
                       && grounded(candidate.sourceIDs, candidate.evidence) && validReplacement(candidate)
               }), highlights.allSatisfy({ !$0.text.isEmpty && $0.text.utf8.count <= 1_500 && grounded($0.sourceIDs, $0.evidence) })
         else { throw MioCloudError.invalidResponse }
@@ -212,6 +227,24 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
                   section.body.utf8.count <= 8_000, grounded(section.sourceIDs, section.evidence)
             else { throw MioCloudError.invalidResponse }
         }
+    }
+
+    /// A proposed time: a full timestamp, or a day ("YYYY-MM-DD") without a clock time, which is
+    /// all-day and starts at midnight in the request's time zone (user decision 2026-10-13).
+    static func parseSchedule(_ value: String, timeZone identifier: String) -> (date: Date, isAllDay: Bool)? {
+        if let date = parseDate(value) { return (date, false) }
+        guard value.utf8.count == 10, let timeZone = TimeZone(identifier: identifier),
+              let pattern = try? NSRegularExpression(pattern: #"^([0-9]{4})-([0-9]{2})-([0-9]{2})$"#),
+              let match = pattern.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) else { return nil }
+        let parts = (1...3).compactMap { Range(match.range(at: $0), in: value).flatMap { Int(value[$0]) } }
+        guard parts.count == 3 else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let components = DateComponents(year: parts[0], month: parts[1], day: parts[2])
+        // Calendar normalizes 2026-02-30 to March; only an exact round trip is a real day.
+        guard components.isValidDate(in: calendar), let date = calendar.date(from: components),
+              calendar.dateComponents([.year, .month, .day], from: date) == components else { return nil }
+        return (date, true)
     }
 
     static func parseDate(_ value: String) -> Date? {

@@ -23,7 +23,7 @@ Varje repository är actorägt och läser senaste validerade tillstånd för än
 
 ## Innehållspost
 
-`MioContentItem` har UUID, typ (`timeline`, `note`, `task`, `plan`, `memory`), obligatorisk trimmad rubrik, text, skapandetid, uppdateringstid, användarvald `scheduledAt`, valfri `completedAt` och valfri sessionskoppling. Endast uppgifter har klarstatus. En lokal plan är inte automatiskt en systemkalenderpost.
+`MioContentItem` har UUID, typ (`timeline`, `note`, `task`, `plan`, `memory`), obligatorisk trimmad rubrik, text, skapandetid, uppdateringstid, användarvald `scheduledAt`, valfri `completedAt`, valfri sessionskoppling och valfritt `isAllDay` (2026-10-13; bara uppgifter och planer, `scheduledAt` är då dagens början och saknat fält betyder att tiden gäller). Endast uppgifter har klarstatus. En lokal plan är inte automatiskt en systemkalenderpost.
 
 Ordning är fallande vald tid, skapandetid och slutligen UUID. Sökning normaliserar skiftläge, diakritik och teckenbredd med svensk lokal. Sessioner söks på titel, anteckning och visningstext.
 
@@ -42,6 +42,8 @@ Lektioner har UUID, sessionID, rubrik, anteckning, start/slut och skapande-/änd
 `MioSuggestion` har stabilt UUID, purpose (`content` eller `question`), innehållstyp, rubrik/text, skapandetid/vald tid, valfri session-/segmentkoppling, pending/deferred och uppskjutningstid. Saknad purpose avkodas som content. Frågor använder ingen ny innehållstyp och sparas inte automatiskt som anteckningar.
 
 Ja sparar en innehållspost med förslagets UUID och avför sedan frågan. Ett omförsök efter delvis misslyckad lagring skapar inte dubbletter eller skriver över senare ändringar. Nej tar bort förslagstexten; `processedSources` behåller endast UUID:n för deduplicering. Originaltranskriptet förblir synligt tills sessionen raderas. Inte nu behåller utkastet lokalt.
+
+Ett AI-förslags text byggs i appen av källsegmentens visningstext i transkriptordning (högst 2 000 byte), aldrig av modellens `body` (2026-10-13). AI:ns `scheduledAt` kan vara en tidpunkt eller ett datum utan klockslag (`ÅÅÅÅ-MM-DD`); datumet tolkas som dagens början i begärans tidszon och ger förslagets valfria `isAllDay`. En senare ersättning bygger texten av beslutets alla källor.
 
 Förslagets additiva valfria `revision` blir `reviewRevision` (saknat fält = 0). Godkännande kräver samma revision som användaren granskade. En senare AI-komplettering gör granskningen föråldrad; användarens redigerade utkast bevaras och måste granskas igen. Actorägd godkännandeclaim stänger analysbeslut före innehållssparning. Vid relevant utkaständring återställs datumkontrollen. Saknat AI-datum/klockslag kräver ett uttryckligt användarval; ett internt standarddatum är inte ett godkänt datum.
 

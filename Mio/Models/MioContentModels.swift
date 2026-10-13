@@ -43,6 +43,11 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
     /// Optional relationship to a local transcription session. The transcript remains
     /// in the session store and is never duplicated into this item.
     var sessionID: UUID?
+    /// A day without a clock time; `scheduledAt` is then the start of that day (2026-10-13).
+    /// Absent in older items, which always had a time.
+    var isAllDay: Bool?
+
+    var allDay: Bool { isAllDay == true }
 
     init(
         id: UUID = UUID(),
@@ -53,7 +58,8 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
         updatedAt: Date? = nil,
         scheduledAt: Date? = nil,
         completedAt: Date? = nil,
-        sessionID: UUID? = nil
+        sessionID: UUID? = nil,
+        isAllDay: Bool? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -64,6 +70,7 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
         self.scheduledAt = scheduledAt ?? createdAt
         self.completedAt = kind == .task ? completedAt : nil
         self.sessionID = sessionID
+        self.isAllDay = (kind == .task || kind == .plan) && isAllDay == true ? true : nil
     }
 
     var isCompleted: Bool {

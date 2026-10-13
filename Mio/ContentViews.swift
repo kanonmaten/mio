@@ -621,6 +621,7 @@ private struct ContentEditorView: View {
     @State private var title: String
     @State private var bodyText: String
     @State private var scheduledAt: Date
+    @State private var isAllDay: Bool
     @State private var isCompleted: Bool
     @State private var sessionID: UUID?
     @State private var isSaving = false
@@ -639,6 +640,7 @@ private struct ContentEditorView: View {
         _title = State(initialValue: item?.title ?? "")
         _bodyText = State(initialValue: item?.body ?? "")
         _scheduledAt = State(initialValue: item?.scheduledAt ?? .now)
+        _isAllDay = State(initialValue: item?.allDay ?? false)
         _isCompleted = State(initialValue: item?.isCompleted ?? false)
         _sessionID = State(initialValue: item?.sessionID)
     }
@@ -667,10 +669,13 @@ private struct ContentEditorView: View {
                 }
 
                 Section("Tid") {
+                    if kind == .plan || kind == .task {
+                        Toggle("Heldag", isOn: $isAllDay)
+                    }
                     DatePicker(
                         dateLabel,
                         selection: $scheduledAt,
-                        displayedComponents: [.date, .hourAndMinute]
+                        displayedComponents: dateComponents
                     )
                 }
 
@@ -707,7 +712,8 @@ private struct ContentEditorView: View {
                 }
 
                 if let item, kind == .plan || kind == .task {
-                    if title == item.title && bodyText == item.body && scheduledAt == item.scheduledAt && kind == item.kind {
+                    if title == item.title && bodyText == item.body && scheduledAt == item.scheduledAt && kind == item.kind
+                        && isAllDay == item.allDay {
                         ContentSystemActionsView(item: item)
                     } else {
                         Section {
@@ -762,6 +768,10 @@ private struct ContentEditorView: View {
         }
     }
 
+    private var dateComponents: DatePickerComponents {
+        isAllDay && (kind == .plan || kind == .task) ? .date : [.date, .hourAndMinute]
+    }
+
     private var dateLabel: String {
         switch kind {
         case .timeline: "Tidpunkt"
@@ -794,7 +804,8 @@ private struct ContentEditorView: View {
             body: bodyText,
             scheduledAt: scheduledAt,
             isCompleted: isCompleted,
-            sessionID: sessionID
+            sessionID: sessionID,
+            isAllDay: isAllDay && (kind == .plan || kind == .task)
         )
         if didSave {
             MioFeedback.success()
@@ -1194,7 +1205,8 @@ private struct ContentItemRow: View {
 
                 HStack(spacing: 10) {
                     Label(
-                        item.scheduledAt.formatted(date: .abbreviated, time: .shortened),
+                        item.allDay ? item.scheduledAt.formatted(date: .abbreviated, time: .omitted) + " · heldag"
+                            : item.scheduledAt.formatted(date: .abbreviated, time: .shortened),
                         systemImage: "calendar"
                     )
                     Text(item.kind.title)

@@ -21,6 +21,7 @@ struct CalendarEventComposer: UIViewControllerRepresentable {
         event.notes = item.body.isEmpty ? nil : item.body
         event.startDate = item.scheduledAt
         event.endDate = item.scheduledAt.addingTimeInterval(60 * 60)
+        event.isAllDay = item.allDay
         controller.eventStore = store
         controller.event = event
         controller.editViewDelegate = context.coordinator

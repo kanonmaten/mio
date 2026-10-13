@@ -3,7 +3,7 @@ import { PROVIDERS, providerProfile } from './provider.mjs';
 import { ANALYSIS_V2_PROMPT_VERSION, PROMPT_VERSION } from './prompts.mjs';
 import { TASK_IDS, resolveTaskProfile, taskProfiles, taskConfigurationIdentifiers, safeModelIdentifier, safeProviderIdentifier } from './task-profiles.mjs';
 
-export const RELEASE = '2026-10-13.1';
+export const RELEASE = '2026-10-13.2';
 export function gatewayStatus(config, valid = true) {
   // Older clients only call /v1/analyze, so v1 status describes the effective everyday task.
   const { provider, model } = valid ? taskConfigurationIdentifiers(config, 'everyday')

@@ -36,6 +36,13 @@ function date(value) {
     && hour <= 23 && minute <= 59 && second <= 59 && offsetHour <= 23 && offsetMinute <= 59
     && Number.isFinite(Date.parse(value));
 }
+// A day without a clock time ("YYYY-MM-DD"): an all-day event or a task due that day.
+function day(value) {
+  if (typeof value !== 'string') return false;
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
+  return parts !== null && date(`${value}T00:00:00Z`);
+}
+const scheduled = value => value === null || date(value) || day(value);
 export function validateAnalysisPayload(value) {
   if (!keys(value, ['mode', 'timeZone', 'fragments']) || !['everyday', 'lesson'].includes(value.mode)
       || !text(value.timeZone, 100) || !Array.isArray(value.fragments)
@@ -72,7 +79,7 @@ export function validateAnalysisResult(value, payload) {
   for (const item of value.candidates) {
     if (!keys(item, ['kind', 'title', 'body', 'scheduledAt', 'sourceIDs', 'evidence'])
         || !['plan', 'task', 'note'].includes(item.kind) || !text(item.title, 240)
-        || !text(item.body, 2_000, true) || !(item.scheduledAt === null || date(item.scheduledAt))
+        || !text(item.body, 2_000, true) || !scheduled(item.scheduledAt)
         || !grounded(item)) throw new Error('ungrounded_candidate');
   }
   for (const item of value.highlights) {

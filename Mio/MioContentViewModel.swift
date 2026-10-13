@@ -31,13 +31,13 @@ final class MioContentViewModel {
 
     @discardableResult
     func save(id: UUID? = nil, kind: MioContentKind, title: String, body: String,
-              scheduledAt: Date, isCompleted: Bool, sessionID: UUID?) async -> Bool {
+              scheduledAt: Date, isCompleted: Bool, sessionID: UUID?, isAllDay: Bool = false) async -> Bool {
         await saveOutcome(id: id, kind: kind, title: title, body: body, scheduledAt: scheduledAt,
-                          isCompleted: isCompleted, sessionID: sessionID).isSuccess
+                          isCompleted: isCompleted, sessionID: sessionID, isAllDay: isAllDay).isSuccess
     }
 
     func saveOutcome(id: UUID? = nil, kind: MioContentKind, title: String, body: String,
-                     scheduledAt: Date, isCompleted: Bool, sessionID: UUID?) async -> MioOperationOutcome {
+                     scheduledAt: Date, isCompleted: Bool, sessionID: UUID?, isAllDay: Bool = false) async -> MioOperationOutcome {
         guard MioMaintenanceState.shared.beginWrite() else { return publish(.conflict("Vänta tills dataåtgärden är klar och försök igen.")) }
         defer { MioMaintenanceState.shared.endWrite() }
         let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -53,8 +53,9 @@ final class MioContentViewModel {
             try Task.checkCancellation()
             let item = MioContentItem(id: existing?.id ?? id ?? UUID(), kind: kind, title: cleanTitle,
                 body: body.trimmingCharacters(in: .whitespacesAndNewlines), createdAt: existing?.createdAt ?? .now,
-                updatedAt: .now, scheduledAt: scheduledAt,
-                completedAt: kind == .task && isCompleted ? existing?.completedAt ?? .now : nil, sessionID: sessionID)
+                updatedAt: .now, scheduledAt: isAllDay ? Calendar.current.startOfDay(for: scheduledAt) : scheduledAt,
+                completedAt: kind == .task && isCompleted ? existing?.completedAt ?? .now : nil, sessionID: sessionID,
+                isAllDay: isAllDay)
             update(try await repository.upsert(item))
             return publish(.success)
         } catch is CancellationError { return publish(.cancelled) }
@@ -88,7 +89,7 @@ final class MioContentViewModel {
     func setTaskCompleted(id: UUID, isCompleted: Bool) async {
         guard let item = items.first(where: { $0.id == id && $0.kind == .task }) else { return }
         _ = await saveOutcome(id: id, kind: .task, title: item.title, body: item.body, scheduledAt: item.scheduledAt,
-                              isCompleted: isCompleted, sessionID: item.sessionID)
+                              isCompleted: isCompleted, sessionID: item.sessionID, isAllDay: item.allDay)
     }
 
     func unlinkSession(id: UUID) async { _ = await unlinkSessionOutcome(id: id) }

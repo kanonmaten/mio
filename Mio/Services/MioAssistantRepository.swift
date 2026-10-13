@@ -278,7 +278,8 @@ final class MioAssistantRepositoryCore {
             guard let firstID = candidate.sourceIDs.first, let segmentID = sources[firstID]?.segmentID else { continue }
             let source = MioProcessedSource(sessionID: session.id, segmentID: segmentID)
             // A segment can contain both a local command and an unrelated ordinary plan.
-            let date = candidate.scheduledAt.flatMap(MioAnalysisResult.parseDate)
+            let schedule = candidate.scheduledAt.flatMap { MioAnalysisResult.parseSchedule($0, timeZone: request.timeZone) }
+            let date = schedule?.date
             let linked = decisions.filter { $0.sessionID == session.id
                 && !Set($0.sourceIDs).isDisjoint(with: candidate.sourceIDs.filter { !request.fragments.map(\.id).contains($0) }) }
             if let replacement = candidate.replacesID {
@@ -289,9 +290,12 @@ final class MioAssistantRepositoryCore {
                       let suggestionIndex = document.suggestions.firstIndex(where: { $0.id == replacement }),
                       let decisionIndex = decisions.firstIndex(where: { $0.id == replacement }) else { continue }
                 document.suggestions[suggestionIndex].title = candidate.title
-                document.suggestions[suggestionIndex].body = candidate.body
+                // The user's words from every source of the decision, e.g. the day and the later time.
+                document.suggestions[suggestionIndex].body = MioAnalysisFragment.sourceText(
+                    ids: decisions[decisionIndex].sourceIDs + candidate.sourceIDs, in: session)
                 document.suggestions[suggestionIndex].scheduledAt = date ?? document.suggestions[suggestionIndex].scheduledAt
                 document.suggestions[suggestionIndex].needsDateConfirmation = date == nil
+                if let schedule { document.suggestions[suggestionIndex].isAllDay = schedule.isAllDay ? true : nil }
                 document.suggestions[suggestionIndex].evidence = candidate.evidence
                 let nextRevision = document.suggestions[suggestionIndex].reviewRevision.addingReportingOverflow(1)
                 guard !nextRevision.overflow else { throw MioAssistantRepositoryError.invalidRelationships }
@@ -302,10 +306,14 @@ final class MioAssistantRepositoryCore {
                 continue
             }
             guard linked.isEmpty else { continue }
+            // Model text never becomes the item's text (user decision 2026-10-13): the body is
+            // what the user said in the cited segments.
             let proposal = MioSuggestion(
-                kind: candidate.kind, title: candidate.title, body: candidate.body,
+                kind: candidate.kind, title: candidate.title,
+                body: MioAnalysisFragment.sourceText(ids: candidate.sourceIDs, in: session),
                 scheduledAt: date, sessionID: session.id, sourceSegmentID: segmentID,
-                evidence: candidate.evidence, needsDateConfirmation: date == nil
+                evidence: candidate.evidence, needsDateConfirmation: date == nil,
+                isAllDay: schedule?.isAllDay == true ? true : nil
             )
             // V2 never guesses whether identical new-only events mean the same
             // plan. Only an explicit, grounded replacement may merge identities.
