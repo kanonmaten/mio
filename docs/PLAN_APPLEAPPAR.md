@@ -103,16 +103,16 @@ Kalender och Påminnelser är skilda appar med skilda behörigheter. Mio ber ald
 
 ### Vad Mio sparar
 
-- En **överlämning** per godkänt förslag: förslagets ID, typ, rubrik, destination (Kalender, Påminnelser eller den app dela-arket rapporterade), tid, sessions-ID och käll-ID:n, och för Påminnelser `calendarItemIdentifier`. Inga datum, ingen status och ingen kopia av texten. Apple äger posten.
-- Om Kalenders redigerare lämnar tillbaka händelsens ID utan behörighet sparas det, annars inte. **Ej verifierat.**
-- Exporten får version 3 med `handoffs` i stället för `content`. Avkodning av version 2 finns kvar.
+- En **överlämning** per godkänt förslag: förslagets ID, typ, rubrik, destination (Kalender, Påminnelser eller den app dela-arket rapporterade), tid och sessions-ID, och för Påminnelser `calendarItemIdentifier`. Inga datum, ingen status och ingen kopia av texten. Apple äger posten.
+- Genomfört: överlämningen är en innehållspost med det valfria fältet `handoff`, tom text och `scheduledAt` = sändningstiden. Godkännandet, raderingen och exporten (schema 2, additivt fält) återanvänds, och SwiftData-schemat ändras inte. Det ersatte idén om en egen tabell och export 3.
+- Kalenders redigerare används utan behörighet och lämnar inget ID som Mio sparar.
 
 ### Vad som försvinner
 
 - **Kalender-fliken.** Flikarna blir Hem, Lektioner, Förslag och Fånga.
 - **Plusknappen** för att skapa poster själv i Mio. Skriv direkt i Apples appar.
-- **Mios lokala poster.** Vid uppgraderingen raderas alla befintliga anteckningar, uppgifter, planer och minnen (användarens val). Exportera före uppgraderingen om något ska sparas. Raderingen sker genom en ny `VersionedSchema` och migrationsplanen; ett okänt schema skrivs aldrig över.
-- **Mios alarm och postnotiser:** AlarmKit-alarm (även fristående alarm med veckodagar), `mio.reminder.<UUID>` och knappen "Lägg en kopia i Kalender". Kvarvarande alarm och notiser tas bort vid uppgraderingen med den sparade listan över kända alarm-UUID:n. `NSAlarmKitUsageDescription` tas bort.
+- **Mios lokala poster.** Vid uppgraderingen raderas alla befintliga anteckningar, uppgifter, planer och minnen (användarens val). Exportera före uppgraderingen om något ska sparas. Genomfört som en engångsåtgärd vid start: poster utan `handoff` raderas via det vanliga innehållslagret. Ingen schemaändring behövs, eftersom det är rader som tas bort och inte struktur.
+- **Mios alarm och postnotiser:** AlarmKit-alarm (även fristående alarm med veckodagar), `mio.reminder.<UUID>` och knappen "Lägg en kopia i Kalender". Kvarvarande alarm och notiser tas bort vid uppgraderingen. `NSAlarmKitUsageDescription` och AlarmKit-koden för rensningen behålls i 0.9.1 så att gamla alarm säkert kan avbrytas; de tas bort i en senare version.
 - **Kvar:** morgon- och kvällsnotisen och "Tryck för att fortsätta lyssna", under inställningsdelen **Notiser**.
 
 ### Förslag-fliken

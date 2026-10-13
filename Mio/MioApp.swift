@@ -28,7 +28,7 @@ struct MioApp: App {
             day.select(day.referenceDate)
         })
         let workflow = MioWorkflowCoordinator(capture: capture, content: content,
-                                              assistant: assistant, analysis: analysis)
+                                              assistant: assistant, analysis: analysis, removesLegacyItems: true)
         _model = State(initialValue: capture)
         _contentModel = State(initialValue: content)
         _assistantModel = State(initialValue: assistant)

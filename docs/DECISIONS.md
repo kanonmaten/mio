@@ -14,6 +14,8 @@ Genomfört i 0.9.0: när mer än en vardagsbatch väntar skickas tolv nya textde
 
 Genomfört i 0.9.0: heldag uttrycks som `scheduledAt` i formen `ÅÅÅÅ-MM-DD` i stället för nya fält `date` och `time`, eftersom en äldre app då bara ser ett saknat datum och gatewayns resultatversion kan vara kvar. Prompterna har versionen `2026-10-13.2` (vardag, v2 och lektion) och gatewayns release är `2026-10-13.2`.
 
+Genomfört i 0.9.1: överlämningen sparas som en innehållspost med valfritt `handoff` (destination, Påminnelsers ID, tid), utan text, datum eller status, så godkännande, radering och export (schema 2) återanvänds utan schemaändring. Bortvalt: en egen SwiftData-tabell och export 3 (ny `VersionedSchema` för samma information). En påminnelse får länken `mio://session/<id>?forslag=<id>` (eller `mio://forslag/<id>`), och Mio letar efter den länken före ny sparning, så ett nytt Ja efter ett lokalt skrivfel aldrig ger två påminnelser. Inspelning i Kalenders redigerare och dela-arket registreras även om AI hunnit uppdatera förslaget, eftersom användarens sparning i Apples ruta är det som gäller. Gamla poster raderas en gång vid start (bara i appen, aldrig i testernas arbetsflöden), därefter alla Mio-alarm och `mio.reminder.*`; morgon- och kvällsnotisen behålls. AlarmKit-nyckeln och rensningskoden ligger kvar i 0.9.1 så att gamla alarm kan avbrytas.
+
 Ej verifierat: allt som rör telefonen i 0.9.1 och modellens följsamhet till klassningen och datumregeln.
 
 ## AI-utskick när telefonen är låst och ikappsändning, 2026-10-12

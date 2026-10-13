@@ -331,6 +331,32 @@ final class MioSystemServices {
 
     static func reminderID(for itemID: UUID) -> String { "mio.reminder.\(itemID.uuidString)" }
 
+    /// One-time cleanup for 0.9.1 (user decision 2026-10-13): Mio no longer has alarms or post
+    /// reminders, so every Mio alarm and every `mio.reminder.*` notification is removed. The
+    /// morning and evening notifications and the resume notice stay.
+    func removeLegacyActions() async -> Bool {
+        guard !isBusy else { return false }
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            // Without alarm permission no Mio alarm can ring, so nothing is left to cancel.
+            if alarmManager.authorizationState == .authorized {
+                for alarm in try alarmManager.alarms { try alarmManager.cancel(id: alarm.id) }
+            }
+            rememberAlarmIDs([])
+        } catch {
+            MioLog.error(.storage, "legacy alarm cleanup failed")
+            return false
+        }
+        let pending = await notificationCenter.pendingNotificationRequests().map(\.identifier)
+        let delivered = await notificationCenter.deliveredNotifications().map(\.request.identifier)
+        let legacy = Array(Set(pending + delivered).filter { $0.hasPrefix("mio.reminder.") })
+        notificationCenter.removePendingNotificationRequests(withIdentifiers: legacy)
+        notificationCenter.removeDeliveredNotifications(withIdentifiers: legacy)
+        await refresh()
+        return true
+    }
+
     /// Outside the "mio." prefix so it never appears among the user's reminders.
     static let resumeListeningID = "app.mio.capture.resume-listening"
 

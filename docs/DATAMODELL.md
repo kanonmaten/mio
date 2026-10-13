@@ -23,7 +23,7 @@ Varje repository är actorägt och läser senaste validerade tillstånd för än
 
 ## Innehållspost
 
-`MioContentItem` har UUID, typ (`timeline`, `note`, `task`, `plan`, `memory`), obligatorisk trimmad rubrik, text, skapandetid, uppdateringstid, användarvald `scheduledAt`, valfri `completedAt`, valfri sessionskoppling och valfritt `isAllDay` (2026-10-13; bara uppgifter och planer, `scheduledAt` är då dagens början och saknat fält betyder att tiden gäller). Endast uppgifter har klarstatus. En lokal plan är inte automatiskt en systemkalenderpost.
+`MioContentItem` har UUID, typ (`timeline`, `note`, `task`, `plan`, `memory`), obligatorisk trimmad rubrik, text, skapandetid, uppdateringstid, användarvald `scheduledAt`, valfri `completedAt`, valfri sessionskoppling och valfritt `isAllDay` (2026-10-13; bara uppgifter och planer, `scheduledAt` är då dagens början och saknat fält betyder att tiden gäller). Endast uppgifter har klarstatus. Från 0.9.1 har en ny post alltid det valfria fältet `handoff` (`destination`: `calendar`, `reminders`, `notes` eller `otherApp`; valfritt `externalIdentifier`, som är påminnelsens `calendarItemIdentifier`; `sentAt`). Den är då bara ett kvitto på en överlämning till Apples app: tom text, `scheduledAt` = `sentAt`, inget heldagsfält och ingen klarstatus. Vid uppgraderingen raderas poster utan `handoff` en gång (markeringen `mio.upgrade.0.9.1.legacyItemsRemoved` i UserDefaults). Exporten behåller schema 2; `handoff` är ett additivt fält i `content`.
 
 Ordning är fallande vald tid, skapandetid och slutligen UUID. Sökning normaliserar skiftläge, diakritik och teckenbredd med svensk lokal. Sessioner söks på titel, anteckning och visningstext.
 
@@ -53,7 +53,7 @@ Frågesvaret och `MioAnswerNoteDraft` finns endast tillfälligt i RAM. Draftets 
 
 ## Systemdata och konfiguration
 
-iOS är källa för AlarmKit-alarm och lokala notiser. Postalarm använder postens UUID; notiser `mio.reminder.<UUID>`; dagliga notiser fasta Mio-ID:n. En lista med enbart kända alarm-UUID:n finns i egna UserDefaults så att nekad behörighet inte döljer ett kvarvarande alarm vid radering. Kalenderkopior finns i den kalender användaren väljer och är fristående.
+iOS är källa för lokala notiser: dagliga notiser har fasta Mio-ID:n (`mio.daily.*`). Från 0.9.1 skapar Mio inga alarm eller postnotiser; uppgraderingen avbryter alla Mio-alarm och notiser `mio.reminder.<UUID>` en gång. Påminnelser och kalenderhändelser ägs av Apples appar; Mio läser kommande ofullbordade påminnelser för Hem utan att spara dem och läser aldrig kalendern. En lista med enbart kända alarm-UUID:n finns i egna UserDefaults så att nekad behörighet inte döljer ett kvarvarande alarm vid radering. Kalenderkopior finns i den kalender användaren väljer och är fristående.
 
 Notisens `userInfo` innehåller endast `mioRoute` (`post`, `morning`, `evening`, `resumeListening`) och, för post, ett opakt `mioPostID`-UUID. Låsskärmtexten är generell. Extra nycklar/ogiltiga rutter avvisas. En pending rutt hålls till lokala lager har lästs; `morning`/`evening` öppnar Hem, `resumeListening` öppnar Fånga och borttagen post ger säker fallback till Hem. Rutt, flikval och vald översiktsdag är tillfälligt presentationstillstånd och startar aldrig mikrofon eller AI.
 

@@ -178,4 +178,41 @@ final class MioHandoffTests: XCTestCase {
         XCTAssertEqual(other.due.map(\.id), ["e"])
         XCTAssertTrue(other.overdue.isEmpty, "only today lists what was left from earlier days")
     }
+
+    @MainActor
+    func testUpgradeRemovesOldLocalItemsAndAlarmsOnceButKeepsHandoffs() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "MioHandoffTests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let repository = MioContentRepository(storageURL: root.appendingPathComponent("content.json"), exportDirectoryURL: root)
+        let sent = MioContentItem(kind: .plan, title: "Skickad", handoff: MioHandoff(destination: .calendar, externalIdentifier: nil, sentAt: .now))
+        _ = try await repository.upsert(MioContentItem(kind: .plan, title: "Religionsprov"))
+        _ = try await repository.upsert(MioContentItem(kind: .memory, title: "Föredrar blå pennor"))
+        _ = try await repository.upsert(sent)
+        var legacyRemovals = 0
+        var cancelled: [UUID] = []
+        func workflow() -> MioWorkflowCoordinator {
+            MioWorkflowCoordinator(capture: MioViewModel(repository: SessionRepository(storageURL: root.appendingPathComponent("sessions.json"))),
+                content: MioContentViewModel(repository: repository),
+                assistant: MioAssistantViewModel(repository: MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json"))),
+                analysis: MioAnalysisCoordinator(),
+                systemActions: MioSystemActionPort(cancel: { cancelled.append($0); return .success }, removeAll: { .success },
+                                                   removeLegacy: { legacyRemovals += 1; return .success }),
+                removesLegacyItems: true, pendingLessonDefaults: defaults)
+        }
+        await workflow().bootstrap()
+        let items = try await repository.loadItems()
+        XCTAssertEqual(items.map(\.id), [sent.id], "only the handoff record survives the upgrade")
+        XCTAssertEqual(legacyRemovals, 1)
+        XCTAssertTrue(cancelled.isEmpty, "alarms go in one sweep, not per item")
+        XCTAssertTrue(defaults.bool(forKey: MioWorkflowCoordinator.legacyCleanupKey))
+
+        _ = try await repository.upsert(MioContentItem(kind: .note, title: "Efter uppgraderingen"))
+        await workflow().bootstrap()
+        let later = try await repository.loadItems()
+        XCTAssertEqual(later.count, 2, "the cleanup runs once")
+        XCTAssertEqual(legacyRemovals, 1)
+    }
 }

@@ -10,7 +10,8 @@ Apples appar äger det Mio fångar ([plan](docs/PLAN_APPLEAPPAR.md), del B).
 - **Hem läser Påminnelser:** Nästa är den närmaste påminnelsen i dag (även heldag) eller den äldsta som ligger kvar. Morgon visar dagens att göra och det som ligger kvar, och Kväll visar det du skickat och dagens sessioner. Påminnelserna läses när Hem visas och när de ändras, och sparas aldrig i Mio. Händelser i Kalender visas inte, eftersom Mio inte läser kalendern.
 - **Inställningar → Notiser** ersätter Påminnelser och har bara morgon- och kvällsnotisen. Mios alarm och postpåminnelser går inte längre att skapa.
 - **AI-svar sparas i Anteckningar:** "Granska och spara i Anteckningar" öppnar dela-arket; Mio behåller ingen kopia av svaret.
-- Versionen är 0.9.1. De gamla lokala posterna och alarmen tas bort i nästa steg; inget är provat på telefonen än.
+- **Uppgraderingen rensar en gång:** dina gamla lokala anteckningar, uppgifter, planer och minnen raderas (ditt val; exportera före uppdateringen om något ska sparas), liksom Mios alarm och postpåminnelser. Morgon- och kvällsnotisen och det du skickat finns kvar. Misslyckas något försöker Mio igen vid nästa start.
+- Versionen är 0.9.1. Inget är provat på telefonen än.
 
 ## Helhetsbygget 2026-10-11 (pågår)
 

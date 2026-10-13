@@ -173,7 +173,7 @@ Veckobandet är sju lika breda celler med 6 pt mellanrum. Vid tillgänglighetsst
 
 Paneler har 16 pt inre marginal och 12 pt mellan innehåll. Rader har minst 44 pt höjd, ikonkolumnen är 28 pt bred och varje fristående ikonknapp får en träffyta på minst 44 × 44 pt. Strecknätet är 12 kolumner × 7 rader (måndag överst) med 4 pt mellanrum och kvadratiska celler. Övriga flikar är `insetGrouped`-listor på den tonade marken.
 
-Skalet är en `TabView` med fyra flikar (Hem, Lektioner, Kalender, Anteckningar) och Fånga som den separata runda knappen längst ut i flikfältet (`role: .search`). Flikfältet krymper vid skroll nedåt. Inställningar öppnas som en panel från höger.
+Skalet är en `TabView` med tre flikar (Hem, Lektioner, Förslag; Kalender och Anteckningar togs bort i 0.9.1) och Fånga som den separata runda knappen längst ut i flikfältet (`role: .search`). Flikfältet krymper vid skroll nedåt. Inställningar öppnas som en panel från höger.
 
 ## Elevation & Depth
 

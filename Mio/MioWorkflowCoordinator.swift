@@ -11,6 +11,11 @@ final class MioWorkflowCoordinator {
     let questions: MioQuestionWorkflow
     let deletion: MioDeletionRecovery
     let reminders: MioReminderPort
+    @ObservationIgnored private let systemActions: MioSystemActionPort
+    /// Only the app itself opts in; tests construct workflows without touching real data.
+    @ObservationIgnored private let removesLegacyItems: Bool
+    /// Set once the 0.9.1 upgrade removed the items and alarms from before Apple's apps took over.
+    static let legacyCleanupKey = "mio.upgrade.0.9.1.legacyItemsRemoved"
     private(set) var lastOutcome: MioOperationOutcome?
     private(set) var pendingLessonIDs: Set<UUID> = []
     private(set) var queuedCommands = 0
@@ -50,12 +55,14 @@ final class MioWorkflowCoordinator {
          assistant: MioAssistantViewModel, analysis: MioAnalysisCoordinator,
          journal: MioDeletionJournal = MioDeletionJournal(), diagnostics: MioDiagnosticsRepository = .shared,
          systemActions: MioSystemActionPort? = nil, questions: MioQuestionWorkflow? = nil,
-         reminders: MioReminderPort? = nil,
+         reminders: MioReminderPort? = nil, removesLegacyItems: Bool = false,
          clearCredentials: (@MainActor () throws -> Void)? = nil,
          pendingLessonDefaults: UserDefaults = .standard, metrics: MioMetricArchive = .shared) {
         self.pendingLessonDefaults = pendingLessonDefaults
         self.reminders = reminders ?? .native
         let systemActions = systemActions ?? .native
+        self.systemActions = systemActions
+        self.removesLegacyItems = removesLegacyItems
         let maintenance = MioMaintenanceState.shared
         let questions = questions ?? MioQuestionWorkflow(canSend: { !maintenance.blocksWork })
         let clearCredentials = clearCredentials ?? Self.clearNativeCredentials
@@ -115,8 +122,22 @@ final class MioWorkflowCoordinator {
         let recovered = await resumeDeletion()
         guard recovered.isSuccess else { return }
         await loadPresentationIfNeeded()
+        if removesLegacyItems { await removeLegacyItemsOnce() }
         resumePendingLessons()
         observeAnalysisAvailability()
+    }
+
+    /// 0.9.1 (user decision 2026-10-13): local notes, tasks, plans and memories from before the
+    /// handoff to Apple's apps are deleted once, then Mio's alarms and post reminders. Handoff
+    /// records are kept. A failure leaves the marker unset, so the next launch tries again.
+    func removeLegacyItemsOnce() async {
+        guard !pendingLessonDefaults.bool(forKey: Self.legacyCleanupKey) else { return }
+        guard let items = try? await content.latestItems() else { return }
+        for item in items where item.handoff == nil {
+            guard await content.deleteOutcome(id: item.id, cancelSystem: false).isSuccess else { return }
+        }
+        guard await systemActions.removeLegacy().isSuccess else { return }
+        pendingLessonDefaults.set(true, forKey: Self.legacyCleanupKey)
     }
 
     func finalizeLesson(_ session: MioSession, fromCapture: Bool = false) async -> MioOperationOutcome {

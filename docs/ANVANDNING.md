@@ -4,9 +4,9 @@ Detta är guiden för helhetsbygget 0.9.0. Koden behöver först byggas och inst
 
 ## Första gången
 
-Flikfältet har fyra flikar, **Hem**, **Lektioner**, **Kalender** och **Anteckningar**, och längst till höger en rund mikrofonknapp, **Fånga**. Knappen öppnar Fånga men startar aldrig mikrofonen själv. Du kan skriva manuella poster direkt, utan mikrofon, notiser eller AI. **Inställningar → Så använder du Mio** innehåller en kort guide i appen.
+Flikfältet har tre flikar, **Hem**, **Lektioner** och **Förslag**, och längst till höger en rund mikrofonknapp, **Fånga**. Knappen öppnar Fånga men startar aldrig mikrofonen själv. Från 0.9.1 sparar Apples appar det Mio fångar: händelser i Kalender, att göra i Påminnelser och anteckningar och minnen i Anteckningar. **Inställningar → Så använder du Mio** innehåller en kort guide i appen.
 
-Alla inställningar finns i en panel som glider in från höger: tryck kugghjulet uppe till höger eller svep in från skärmens högra kant. Stäng med **Klar**, ett tryck utanför eller ett svep åt höger. Panelen är en enda sida med avsnitten Dator, AI, Lektioner, Påminnelser, Mio, Integritet och data samt Om.
+Alla inställningar finns i en panel som glider in från höger: tryck kugghjulet uppe till höger eller svep in från skärmens högra kant. Stäng med **Klar**, ett tryck utanför eller ett svep åt höger. Panelen är en enda sida med avsnitten Dator, AI, Lektioner, Notiser, Mio, Integritet och data samt Om.
 
 **Para datorn:** kör `mio-pair` på datorn ([gatewayguiden](../server/README.md)) och välj **Dator → Skanna QR-kod**. Kameran används bara för koden. Koden innehåller datorns Tailscale-adress och tokens för AI-gatewayen och, om den finns, Pianissimo. Tokens sparas i nyckelringen. Fungerar inte kameran: **Ange uppgifterna manuellt** med värdena från `mio-pair --text` (transkriptionen är valfri). Efter parningen kontrollerar Mio datorn utan att skicka ljud eller använda AI-kvot och visar resultatet. Första gången visas en kort påminnelse om samtycke när du spelar in andra. Datorn måste vara igång med Tailscale; iPhone ska vara i samma tailnet. Se [driftguiden](../transcription-server/README.md) för Pianissimo.
 
@@ -34,50 +34,41 @@ Säg till exempel:
 - **Mio, planera tandläkaren.**
 - **Mio, kom ihåg att jag föredrar blå pennor.**
 
-Tydliga Mio-kommandon blir lokala frågor i inkorgen **Förslag**, som du öppnar med **N att granska** på Hem. Vanlig konversation blir inte automatiskt ett minne. Du kan även använda plusknappen i inkorgen för att skriva ett förslag själv, eller **Hitta lokala Mio-förslag** inne i en sparad session.
+Tydliga Mio-kommandon blir lokala frågor i fliken **Förslag**, som du också når med **N att granska** på Hem. Vanlig konversation blir inte automatiskt ett minne. Inne i en sparad session finns **Hitta lokala Mio-förslag**.
 
 Öppna frågan och kontrollera **typ, rubrik, text, datum och tid**. Lokala kommandon tolkar inte datum. AI kan föreslå en tid, men du måste markera att datum och tid är kontrollerade före Ja för AI-förslag på händelser och att göra. Texten är det du sa i transkriptet, inte AI:ns ord. Hörs en dag men inget klockslag föreslås **Heldag**; säger du klockslaget senare uppdateras förslaget. Saknas dagen ber Mio dig välja den.
 
 Om underlaget kompletteras medan du granskar kan Mio be dig granska den nya versionen. Dina redigerade utkastfält behålls. Ändring av relevanta fält återställer datumkontrollen; en saknad tid ska väljas uttryckligen och får inte råka bli ”nu”.
 
-- **Ja, spara:** skapar posten i Mio. Alarm, notiser och kalenderkopior aktiveras separat.
+- **Ja** skickar förslaget till rätt app:
+  - **Händelse:** Kalenders egen ruta öppnas med rubrik, tid eller heldag, det du sa och en länk ifyllda. Välj kalender och notis och tryck **Lägg till**. Mio behöver ingen kalenderbehörighet och läser aldrig kalendern.
+  - **Att göra:** påminnelsen skapas direkt i den lista du valt, med eller utan förfallodag och med notis vid klockslaget. Första gången frågar iOS om Mio får använda Påminnelser; Apple har ingen behörighet som bara skriver. Nekar du ligger förslaget kvar med en knapp till Inställningar.
+  - **Anteckning och Minne:** dela-arket öppnas med texten. Välj **Anteckningar** och en ny eller befintlig anteckning.
 - **Nej, glöm förslaget:** tar bort frågan. Originaltexten i sessionen finns kvar tills du raderar sessionen.
 - **Inte nu:** behåller frågan i inkorgen till senare.
 
 I förgrunden kan upptäckt av Mio ge vibration. Frågor kan behöva granskas genom att du öppnar appen när den har varit i bakgrunden.
 
-## Anteckningar, att göra och minnen
+## Skickat och länken tillbaka
 
-Använd plusknappen i **Anteckningar** eller historikvyn. Välj typ och fyll i rubrik, text och tid. Du kan koppla posten till en session. Sökningen hittar även svenska ord utan diakritiska tecken, exempelvis `ovning` för `Övning`.
+Under **Förslag → Skickat** ser du vart varje godkänt förslag gick, när och från vilken session. Ändra, bocka av och radera i Kalender, Påminnelser eller Anteckningar; Mio sparar ingen kopia av text, datum eller status. **Glöm** tar bara bort Mios notering.
 
-Typerna heter Anteckning, Att göra, Händelse och Minne. Markera att göra-poster klara eller öppna dem igen. Synliga minnen kan ändras och raderas som andra poster. Mio skapar ingen dold profil.
+Länken `mio://session/…` i händelsen, påminnelsen eller anteckningen öppnar sessionen i Mio. Den startar aldrig mikrofon eller AI.
 
-## Kalender och påminnelser
-
-**Kalender** visar kommande planer grupperade per vecka, till exempel **Den här veckan · v. 41** och **Nästa vecka · v. 42**. **Lektioner** visar veckonumret vid varje lektion.
-
-Skapa först en händelse i **Kalender** eller en att göra-post i **Anteckningar**. Öppna den sparade posten:
-
-- **Lägg en kopia i Kalender:** granska uppgifterna i Apples editor och spara eller avbryt. Kontrollera kalender, start/slut och eventuell notifiering där. Kopian är fristående och kan synkas via kalenderkontot.
-- **Påminn mig om posten:** välj en framtida tid och spara. Notisbehörighet frågas första gången. Notiser följer iPhones fokus- och ljudinställningar.
-- **Skapa eller ändra postens alarm:** välj tid och spara. AlarmKit frågar om separat alarmbehörighet.
-
-Ändringar av Mio-posten uppdaterar inte automatiskt systemtider eller kalenderkopian. Öppna motsvarande kontroll för att ändra dem. Om du raderar en Mio-post avbryts dess Mio-alarm/notis; kalenderkopior tas bort i Kalender.
-
-Under **Inställningar → Påminnelser** kan du skapa fristående alarm, välja veckodagar, se kommande notiser och ta bort dem. Låsskärmen visar generell Mio-text. Prova ett alarm ett par minuter framåt innan du förlitar dig på det.
+När du uppdaterar till 0.9.1 raderas en gång dina gamla lokala anteckningar, uppgifter, planer och minnen, samt Mios alarm och postpåminnelser. Exportera före uppdateringen om något ska sparas. Morgon- och kvällsnotisen finns kvar under **Inställningar → Notiser**.
 
 ## Hem
 
 Hem är veckoplaneraren. Rubriken är veckonumret, till exempel **v. 41**. Under den finns veckans sju dagar, med i dag inringad och små streck för hur mycket som hänt. Tryck på en dag för att se den, byt vecka med pilarna och tryck **I dag** för att komma tillbaka.
 
-- **Nästa** visar en enda sak att göra i dag, eller **Starta Mio** när inget är planerat.
+- **Nästa** visar nästa påminnelse i dag (även heldag) eller den äldsta som ligger kvar, eller **Starta Mio** när inget finns. Mio läser inte Kalender, så händelser visas inte här.
 - **N att granska** öppnar förslagsinkorgen.
-- Dagens översikt har **Morgon** och **Kväll**. Morgon visar händelser, att göra och sådant som ligger kvar sedan tidigare. Kväll visar avklarade att göra-poster, anteckningar och dagens antal sessioner och lektioner. Från kl. 17 visar Hem kvällen.
-- **Tolv veckor** är ett rutnät över dagar då du använt Mio. Det räknar bara sessioner och poster och läser ingen text.
+- Dagens översikt har **Morgon** och **Kväll**. Morgon visar dagens att göra från Påminnelser och det som ligger kvar sedan tidigare. Kväll visar det du skickat till Apples appar och dagens antal sessioner och lektioner. Från kl. 17 visar Hem kvällen.
+- **Tolv veckor** är ett rutnät över dagar då du använt Mio. Det räknar bara sessioner och skickade förslag och läser ingen text.
 
 **Fråga Mio** finns uppe till vänster på Hem och Fånga.
 
-Översikten räknar och visar sparat innehåll lokalt och uppdateras när du återvänder till appen, vid dagbyte och ändrad tidszon. En uttryckligen vald historisk dag behålls vid vanlig uppdatering. Dagliga påminnelser för morgon och kväll ställs in under **Inställningar → Påminnelser**; de visar generell text och öppnar Hem med morgon- respektive kvällsöversikten. En postnotis öppnar den lokala posten; om den är raderad går du säkert tillbaka till Hem. Ingen notisöppning startar mikrofon, AI eller en systemåtgärd; undantaget är **Tryck för att fortsätta lyssna**, som öppnar Fånga och fortsätter en session du själv startat.
+Påminnelserna läses när Hem visas, när du återvänder till appen och när de ändras i Påminnelser; de sparas aldrig i Mio. En uttryckligen vald historisk dag behålls vid vanlig uppdatering. Dagliga notiser för morgon och kväll ställs in under **Inställningar → Notiser**; de visar generell text och öppnar Hem med morgon- respektive kvällsöversikten. En gammal postnotis från före 0.9.1 öppnar Hem. Ingen notisöppning startar mikrofon, AI eller en systemåtgärd; undantaget är **Tryck för att fortsätta lyssna**, som öppnar Fånga och fortsätter en session du själv startat.
 
 ## AI
 
@@ -96,7 +87,7 @@ AI är på från början när datorn är parad (beslut 2026-10-11) och startar n
 
 Stoppa sessionen och gå till **Inställningar → Integritet och data → Export, radering och behörigheter → Skapa lokal export**. Dela/spara JSON-filen privat. Exporten innehåller innehåll, sessioner, förslag, lektioner, AI-anteckningar och diagnostik; aldrig råljud eller åtkomsttoken. Det finns ingen importknapp i detta bygge.
 
-**Radera all lokal data** tar efter bekräftelse bort de tre domänlagren, diagnostik, interna exportkopior, egna alarm/notiser och datorns parning. En liten journal med bara ID:n och avslutade steg gör att en avbruten radering kan fortsätta efter omstart. Ett fel kan innebära att vissa steg redan är utförda. Följ bannertexten och välj **Försök slutföra raderingen igen**; andra ändringar och AI-sändningar väntar tills raderingen är klar. Redan delade filer, skickade molnfrågor och kalenderkopior kan inte återkallas av detta. Kvarvarande systemåtgärder ska hanteras innan raderingen kan slutföras.
+**Radera all lokal data** tar efter bekräftelse bort de tre domänlagren, diagnostik, interna exportkopior, egna notiser och datorns parning. En liten journal med bara ID:n och avslutade steg gör att en avbruten radering kan fortsätta efter omstart. Ett fel kan innebära att vissa steg redan är utförda. Följ bannertexten och välj **Försök slutföra raderingen igen**; andra ändringar och AI-sändningar väntar tills raderingen är klar. Redan delade filer, skickade molnfrågor och det du skickat till Kalender, Påminnelser och Anteckningar påverkas inte. Kvarvarande systemåtgärder ska hanteras innan raderingen kan slutföras.
 
 ## Nya AI-val och detaljerade lektionsanteckningar
 
