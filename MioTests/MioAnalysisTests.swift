@@ -189,7 +189,7 @@ extension MioAnalysisTests {
 
     func testEverydayReviewsShowEmptyAnswersAndAttributeProposalsToTheirLatestReview() throws {
         let session = UUID(), lesson = UUID(), start = Date(timeIntervalSince1970: 1_800_000_000)
-        let ids = (0..<4).map { "\(UUID().uuidString):0" }
+        let ids: [String] = (0..<4).map { _ in "\(UUID().uuidString):0" }
         func record(_ fragments: [String], at offset: TimeInterval, in owner: UUID? = nil,
                     uncertainties: [String] = []) -> MioAnalysisRecord {
             MioAnalysisRecord(id: UUID(), sessionID: owner ?? session, fragmentIDs: fragments, highlights: [],
