@@ -126,7 +126,16 @@ struct LessonDetailView: View {
                         }
                     }
                     ForEach(document.orderedRecords) { record in
-                        Text(record.freshness(in: session).message).font(.footnote).foregroundStyle(.secondary)
+                        if record.isUnprocessedLessonPart {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("Kunde inte bearbetas", systemImage: "exclamationmark.triangle").font(.headline)
+                                Text("AI gav ogiltiga svar för den här delen flera gånger. Originaltexten visas i stället.")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                                Text(document.originalText(of: record)).textSelection(.enabled)
+                            }
+                        } else {
+                            Text(record.freshness(in: session).message).font(.footnote).foregroundStyle(.secondary)
+                        }
                         ForEach(Array((record.sections ?? []).enumerated()), id: \.offset) { _, section in
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(section.heading).font(.headline)

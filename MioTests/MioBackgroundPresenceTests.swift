@@ -108,6 +108,60 @@ final class MioBackgroundPresenceTests: XCTestCase {
         coordinator.disable()
     }
 
+    func testRejectedLessonPartIsRetriedThenSplitThenMarked() {
+        let fragments = (0..<4).map { MioAnalysisFragment(id: "\(UUID().uuidString):0", text: "Del \($0).", occurredAt: "") }
+        XCTAssertEqual(MioLessonRetry.action(failures: 1, depth: 0, fragments: fragments), .retry)
+        XCTAssertEqual(MioLessonRetry.action(failures: 2, depth: 0, fragments: fragments),
+                       .split([Array(fragments[..<2]), Array(fragments[2...])]))
+        XCTAssertEqual(MioLessonRetry.action(failures: 1, depth: 1, fragments: fragments), .retry)
+        XCTAssertEqual(MioLessonRetry.action(failures: 2, depth: 1, fragments: fragments), .markUnprocessed)
+        XCTAssertEqual(MioLessonRetry.action(failures: 2, depth: 0, fragments: [fragments[0]]), .markUnprocessed)
+        XCTAssertTrue(MioLessonRetry.isRejectedAnswer(MioCloudError.gateway(502, .invalidLessonResult)))
+        XCTAssertTrue(MioLessonRetry.isRejectedAnswer(MioCloudError.invalidResponse))
+        XCTAssertFalse(MioLessonRetry.isRejectedAnswer(MioCloudError.gatewayRateLimited(.providerQuota, 60)))
+        XCTAssertFalse(MioLessonRetry.isRejectedAnswer(MioCloudError.network))
+    }
+
+    /// The export from 2026-10-13: one lesson part was rejected six times, every rejection
+    /// turned AI off, and the lesson never got past it.
+    @MainActor
+    func testRejectedLessonPartDoesNotStopAIAndTheLessonFinishes() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let assistant = MioAssistantViewModel(repository: MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json")))
+        let segments = (0..<8).map { TranscriptSegment(text: "Syntetisk lektionsdel \($0).", containsMio: false) }
+        let session = MioSession(endedAt: .now, transcripts: segments, captureMode: .lesson)
+        let poison = MioAnalysisFragment.make(from: segments[5])[0].id
+        var calls: [[String]] = []
+        let connection = MioCloudConnection(endpoint: URL(string: "https://example.invalid/v1/ask")!, token: "synthetic")
+        let coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { request, _ in
+                calls.append(request.fragments.map(\.id))
+                if request.fragments.contains(where: { $0.id == poison }) { throw MioCloudError.gateway(502, .invalidLessonResult) }
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [], sections: [], metadata:
+                    MioAnalysisMetadata(provider: "groq", model: "qwen/qwen3.8-27b", promptVersion: "test", lessonIntervalSeconds: 60))
+            }, wait: { _ in })
+        try await coordinator.enable(existingSessions: [session])
+        coordinator.summarizeLesson(session, assistant: assistant)
+        for _ in 0..<20_000 where coordinator.hasPendingLessonNotes(sessionID: session.id) { await Task.yield() }
+
+        XCTAssertTrue(coordinator.enabled, "a rejected lesson answer must never turn AI off")
+        XCTAssertEqual(calls.map(\.count), [8, 8, 4, 4, 4], "twice whole, then each half; the poisoned half twice")
+        let document = MioLessonDocument(session: session, records: assistant.analyses)
+        XCTAssertEqual(document.completedCount, 4)
+        XCTAssertEqual(document.unprocessedCount, 4)
+        XCTAssertTrue(document.isComplete)
+        XCTAssertEqual(document.remainingRequestCount, 0, "a marked part is never sent again")
+        XCTAssertTrue(document.progress.hasPrefix("4 av 8 textdelar bearbetade, 4 kunde inte bearbetas."))
+        XCTAssertTrue(document.markdown.contains("Syntetisk lektionsdel 5."), "the original text replaces the missing notes")
+        XCTAssertEqual(MioLessonNotesProgress(document: document).step(hasPendingWork: false), .finished)
+
+        coordinator.summarizeLesson(session, assistant: assistant)
+        for _ in 0..<1_000 { await Task.yield() }
+        XCTAssertEqual(calls.count, 5, "nothing is queued again for a finished lesson")
+        coordinator.disable()
+    }
+
     @MainActor
     func testUnfinishedLessonNotesResumeWhenAIIsEnabledAfterLaunch() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -49,6 +49,7 @@ protocol MioAssistantStore: Sendable {
     func detectSuggestions(in session: MioSession, now: Date) async throws -> Int
     @discardableResult
     func applyAnalysis(_ result: MioAnalysisResult, request: MioAnalysisRequest, session: MioSession) async throws -> Int
+    func markLessonPartUnprocessed(request: MioAnalysisRequest, session: MioSession) async throws
     func deferSuggestion(id: UUID, now: Date) async throws
     func removeSuggestion(id: UUID) async throws
     func saveLesson(_ lesson: MioLesson, session: MioSession) async throws
@@ -150,6 +151,9 @@ struct MioDeferredAssistantStore: MioAssistantStore {
     }
     func applyAnalysis(_ result: MioAnalysisResult, request: MioAnalysisRequest, session: MioSession) async throws -> Int {
         try await store().applyAnalysis(result, request: request, session: session)
+    }
+    func markLessonPartUnprocessed(request: MioAnalysisRequest, session: MioSession) async throws {
+        try await store().markLessonPartUnprocessed(request: request, session: session)
     }
     func deferSuggestion(id: UUID, now: Date) async throws { try await store().deferSuggestion(id: id, now: now) }
     func removeSuggestion(id: UUID) async throws { try await store().removeSuggestion(id: id) }

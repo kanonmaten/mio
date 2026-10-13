@@ -247,6 +247,17 @@ struct MioAnalysisRecord: Identifiable, Codable, Hashable, Sendable {
     var sections: [MioLessonSection]? = nil
     var metadata: MioAnalysisMetadata? = nil
     var sourceRevisions: [MioSourceRevision]? = nil
+    /// A lesson part the model kept answering invalidly (user decision 2026-10-13). It has empty
+    /// sections, so it counts as handled and is never sent again automatically; the lesson shows
+    /// its original text instead of notes.
+    var isUnprocessed: Bool? = nil
+
+    var isUnprocessedLessonPart: Bool { isUnprocessed == true }
+
+    /// An unprocessed marker carries no model output at all.
+    var unprocessedShapeIsValid: Bool {
+        !isUnprocessedLessonPart || (sections == [] && highlights.isEmpty && uncertainties.isEmpty && metadata == nil)
+    }
 
     var sourceRevisionsAreValid: Bool {
         guard sourceRevisions != nil else { return true }
@@ -306,24 +317,37 @@ struct MioLessonDocument {
                 return left == right ? $0.offset < $1.offset : left < right
             }.map(\.element)
     }
+    /// Fragments with notes, or marked as impossible to process; neither is sent again.
+    private var handledIDs: Set<String> { Set(orderedRecords.flatMap(\.fragmentIDs)) }
+    private var unprocessedIDs: Set<String> { Set(orderedRecords.filter(\.isUnprocessedLessonPart).flatMap(\.fragmentIDs)) }
     var completedCount: Int {
-        let completed = Set(orderedRecords.flatMap(\.fragmentIDs))
+        let completed = handledIDs.subtracting(unprocessedIDs)
         return fragments.filter { completed.contains($0.id) }.count
     }
-    var remainingCount: Int { max(0, fragments.count - completedCount) }
+    var unprocessedCount: Int { fragments.filter { unprocessedIDs.contains($0.id) }.count }
+    var remainingCount: Int { max(0, fragments.count - completedCount - unprocessedCount) }
     var remainingRequestCount: Int {
-        let completed = Set(orderedRecords.flatMap(\.fragmentIDs))
-        return MioAnalysisRequest.batches(mode: .lesson, fragments: fragments.filter { !completed.contains($0.id) }).count
+        let handled = handledIDs
+        return MioAnalysisRequest.batches(mode: .lesson, fragments: fragments.filter { !handled.contains($0.id) }).count
     }
     var freshness: MioSourceFreshness {
-        let values = orderedRecords.map { $0.freshness(in: session) }
+        let values = orderedRecords.filter { !$0.isUnprocessedLessonPart }.map { $0.freshness(in: session) }
         if values.contains(.older) { return .older }
         return values.isEmpty || values.contains(.unknown) ? .unknown : .current
     }
-    var isComplete: Bool { session.endedAt != nil && !fragments.isEmpty && completedCount == fragments.count }
+    var isComplete: Bool { session.endedAt != nil && !fragments.isEmpty && remainingCount == 0 }
     var progress: String {
-        "\(completedCount) av \(fragments.count) textdelar bearbetade. "
-            + (isComplete ? "Alla textdelar är bearbetade; granska AI-utkastet." : "Ofullständiga anteckningar – återstående text kan bearbetas senare.")
+        var text = "\(completedCount) av \(fragments.count) textdelar bearbetade"
+        if unprocessedCount > 0 { text += ", \(unprocessedCount) kunde inte bearbetas" }
+        text += ". "
+        if !isComplete { return text + "Ofullständiga anteckningar – återstående text kan bearbetas senare." }
+        return text + (unprocessedCount > 0 ? "Originaltexten visas där AI inte kunde skriva anteckningar; granska AI-utkastet."
+            : "Alla textdelar är bearbetade; granska AI-utkastet.")
+    }
+    /// Original transcript text of an unprocessed part, in source order.
+    func originalText(of record: MioAnalysisRecord) -> String {
+        let ids = Set(record.fragmentIDs)
+        return fragments.filter { ids.contains($0.id) }.map(\.text).joined(separator: "\n")
     }
     var markdown: String {
         var parts = ["# \(session.title ?? "Lektion")", session.startedAt.formatted(date: .abbreviated, time: .shortened),
@@ -334,6 +358,10 @@ struct MioLessonDocument {
             parts += gaps.map { "- \($0.startedAt.formatted(date: .omitted, time: .standard))–\($0.endedAt.formatted(date: .omitted, time: .standard)): \($0.reason)" }
         }
         for record in orderedRecords {
+            if record.isUnprocessedLessonPart {
+                parts.append("## Kunde inte bearbetas\n\nAI kunde inte skriva anteckningar för den här delen. Originaltext:\n\n\(originalText(of: record))")
+                continue
+            }
             for section in record.sections ?? [] {
                 parts.append("## \(section.heading)\n\n\(section.body)")
             }

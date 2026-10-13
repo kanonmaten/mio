@@ -775,6 +775,9 @@ actor MioSwiftDataAssistantRepository: MioAssistantStore {
     func applyAnalysis(_ result: MioAnalysisResult, request: MioAnalysisRequest, session: MioSession) throws -> Int {
         try core.applyAnalysis(result, request: request, session: session)
     }
+    func markLessonPartUnprocessed(request: MioAnalysisRequest, session: MioSession) throws {
+        try core.markLessonPartUnprocessed(request: request, session: session)
+    }
     func deferSuggestion(id: UUID, now: Date) throws { try core.deferSuggestion(id: id, now: now) }
     /// A rejected proposal's text must not outlive the rejection in the legacy backup.
     func removeSuggestion(id: UUID) throws {

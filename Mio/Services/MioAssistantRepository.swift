@@ -112,6 +112,9 @@ actor MioAssistantRepository {
     func applyAnalysis(_ result: MioAnalysisResult, request: MioAnalysisRequest, session: MioSession) throws -> Int {
         try core.applyAnalysis(result, request: request, session: session)
     }
+    func markLessonPartUnprocessed(request: MioAnalysisRequest, session: MioSession) throws {
+        try core.markLessonPartUnprocessed(request: request, session: session)
+    }
     func deferSuggestion(id: UUID, now: Date = .now) throws { try core.deferSuggestion(id: id, now: now) }
     func removeSuggestion(id: UUID) throws { try core.removeSuggestion(id: id) }
     func saveLesson(_ lesson: MioLesson, session: MioSession) throws { try core.saveLesson(lesson, session: session) }
@@ -331,6 +334,26 @@ final class MioAssistantRepositoryCore {
         return count
     }
 
+    /// Records a lesson part whose model answers were rejected repeatedly, so the lesson can
+    /// continue past it. Only the exact submitted text is accepted; nothing from a model is stored.
+    func markLessonPartUnprocessed(request: MioAnalysisRequest, session: MioSession) throws {
+        guard !isDeleted(session) else { throw MioAssistantValidationError.deletedSession }
+        guard request.mode == .lesson, session.isLesson, !request.fragments.isEmpty else { throw MioCloudError.invalidContext }
+        _ = try request.validatedData()
+        let actual = Dictionary(uniqueKeysWithValues: session.transcripts.flatMap(MioAnalysisFragment.make).map { ($0.id, $0) })
+        guard request.fragments.allSatisfy({ actual[$0.id]?.text == $0.text && actual[$0.id]?.occurredAt == $0.occurredAt })
+        else { throw MioCloudError.invalidContext }
+        var document = try loadDocument()
+        let handled = Set((document.analyses ?? []).filter { $0.sessionID == session.id && $0.sections != nil }.flatMap(\.fragmentIDs))
+        guard handled.isDisjoint(with: request.fragments.map(\.id)) else { return }
+        var records = document.analyses ?? []
+        records.append(MioAnalysisRecord(id: UUID(), sessionID: session.id, fragmentIDs: request.fragments.map(\.id),
+                                         highlights: [], uncertainties: [], createdAt: .now, sections: [],
+                                         sourceRevisions: request.sourceRevisions, isUnprocessed: true))
+        document.analyses = records
+        try write(document)
+    }
+
     func deferSuggestion(id: UUID, now: Date = .now) throws {
         guard approvalClaims[id] == nil else { throw MioAssistantRepositoryError.approvalInProgress }
         var document = try loadDocument()
@@ -416,7 +439,7 @@ final class MioAssistantRepositoryCore {
               Set(decisions.map(\.id)).count == decisions.count,
               document.suggestions.allSatisfy({ $0.sourceSegmentID == nil || $0.sessionID != nil }),
               document.suggestions.allSatisfy({ ($0.revision ?? 0) >= 0 }),
-              analyses.allSatisfy({ Set($0.fragmentIDs).count == $0.fragmentIDs.count && $0.sourceRevisionsAreValid }),
+              analyses.allSatisfy({ Set($0.fragmentIDs).count == $0.fragmentIDs.count && $0.sourceRevisionsAreValid && $0.unprocessedShapeIsValid }),
               decisions.allSatisfy({ decision in
                   Set(decision.sourceIDs).count == decision.sourceIDs.count && (decision.isClosed ||
                       document.suggestions.contains { $0.id == decision.id && $0.sessionID == decision.sessionID && $0.kind == decision.kind })

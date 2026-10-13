@@ -29,6 +29,9 @@ final class MioAnalysisCoordinator {
     @ObservationIgnored private var resumeRequested = false
     @ObservationIgnored private let isWanted: @MainActor () -> Bool
     @ObservationIgnored private var lessonInterval: TimeInterval = 60
+    /// Rejected answers per lesson part (see `MioLessonRetry`). Kept across pause and re-pairing
+    /// so a part cannot be retried forever; a restart of the app starts the count again.
+    @ObservationIgnored private var lessonRejections: [String: Int] = [:]
     @ObservationIgnored private var deletedSessionIDs: Set<UUID> = []
     @ObservationIgnored private let loadConnection: @MainActor () throws -> MioCloudConnection
     @ObservationIgnored private let configurationMatches: @MainActor (MioCloudConnection) -> Bool
@@ -87,6 +90,8 @@ final class MioAnalysisCoordinator {
         var continuityStartedAt: Date = .distantFuture
         var eligibleSegmentIDs: Set<UUID> = []
         var isFinal = false
+        /// 1 for a half of a lesson part that was split after rejected answers.
+        var lessonDepth = 0
     }
 
     /// Starts analysis when the PC is paired and AI is not paused: at launch, on return to the
@@ -452,6 +457,11 @@ final class MioAnalysisCoordinator {
                         if request.mode == .lesson { self.status = MioLessonDocument(session: session, records: assistant.analyses).progress }
                         self.isWorking = false
                     } catch {
+                        if work.request.mode == .lesson, MioLessonRetry.isRejectedAnswer(error),
+                           self.generation == token, self.enabled {
+                            try await self.handleRejectedLessonPart(work, assistant: assistant)
+                            continue
+                        }
                         // Quota, rate limits and an unreachable PC pause instead of stopping AI.
                         guard self.generation == token, !(error is CancellationError),
                               (try? await self.connectionStillMatches(connection, token: token)) == true,
@@ -479,6 +489,31 @@ final class MioAnalysisCoordinator {
                     self.fail(error.localizedDescription)
                 }
             }
+        }
+    }
+
+    /// Retries, splits or marks a lesson part whose answer was rejected; never stops AI, so
+    /// everyday analysis keeps running. The lesson interval still spaces every new attempt.
+    private func handleRejectedLessonPart(_ work: Work, assistant: MioAssistantViewModel) async throws {
+        isWorking = false; activeSessionID = nil
+        let key = MioLessonRetry.key(work.request.fragments)
+        let failures = (lessonRejections[key] ?? 0) + 1
+        lessonRejections[key] = failures
+        switch MioLessonRetry.action(failures: failures, depth: work.lessonDepth, fragments: work.request.fragments) {
+        case .retry:
+            queue.insert(work, at: 0)
+            status = "AI gav ett ogiltigt svar för en lektionsdel. Försöker igen."
+        case .split(let halves):
+            let parts = halves.map {
+                Work(session: work.session, request: MioAnalysisRequest(mode: .lesson, timeZone: work.request.timeZone, fragments: $0),
+                     lessonDepth: work.lessonDepth + 1)
+            }
+            queue.insert(contentsOf: parts, at: 0)
+            status = "AI gav ogiltiga svar för en lektionsdel. Delar upp den i mindre delar."
+        case .markUnprocessed:
+            lessonRejections[key] = nil
+            try await assistant.markLessonPartUnprocessed(request: work.request, session: work.session)
+            status = MioLessonDocument(session: work.session, records: assistant.analyses).progress
         }
     }
 

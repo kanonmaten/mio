@@ -99,6 +99,14 @@ final class MioAssistantViewModel {
         return count
     }
 
+    func markLessonPartUnprocessed(request: MioAnalysisRequest, session: MioSession) async throws {
+        guard !isDeletingAll, !sessionsBeingDeleted.contains(session.id),
+              MioMaintenanceState.shared.beginWrite() else { throw MioAssistantValidationError.deletedSession }
+        defer { MioMaintenanceState.shared.endWrite() }
+        try await repository.markLessonPartUnprocessed(request: request, session: session)
+        try await refresh()
+    }
+
     func analyzedFragmentIDs(for sessionID: UUID, detailedLesson: Bool = false) -> Set<String> {
         Set(analyses.filter { $0.sessionID == sessionID && (!detailedLesson || $0.sections != nil) }.flatMap(\.fragmentIDs))
     }

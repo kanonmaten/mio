@@ -33,6 +33,8 @@ En avslutad session får titel, manuell anteckning och separata `correctedText`-
 
 Ett enda sessionsregister innehåller aktiva, pausade och avslutade sessioner. Separata actor-kommandon uppdaterar capture-checkpoint, slutmarkering, titel/anteckning och rättning. Generationsbundna operations-token avvisar sena skrivningar efter radering; en avslutad session öppnas inte på nytt av ett sent checkpoint. Valfri `mutationRevision` markerar lagrad sessionsändring, och varje segment kan ha valfri `correctionRevision`. Äldre JSON utan fälten avkodas fortfarande.
 
+En analyspost för lektionsanteckningar kan ha det valfria fältet `isUnprocessed: true` (2026-10-13). Den har då tomma `sections`, inga punkter, osäkerheter eller metadata, och betyder att AI:n gav ogiltiga svar för just de textdelarna flera gånger. Delarna räknas som hanterade och skickas aldrig igen automatiskt; lektionen visar originaltexten. Äldre poster utan fältet avkodas som förut.
+
 Lektioner har UUID, sessionID, rubrik, anteckning, start/slut och skapande-/ändringstid. Intervall måste ligga inom avslutad session och får inte överlappa. Visningen väljer originalsegment som överlappar intervallet. Segment delas aldrig; ett gränsöverskridande segment kan därför visas i två lektioner.
 
 ## Förslag och frågor

@@ -18,7 +18,8 @@ struct MioLessonNotesProgress: Equatable, Sendable {
     }
 
     init(document: MioLessonDocument) {
-        self.init(completed: document.completedCount, total: document.fragments.count)
+        // Parts marked as unprocessed are finished work too; nothing more will be sent for them.
+        self.init(completed: document.completedCount + document.unprocessedCount, total: document.fragments.count)
     }
 
     var isComplete: Bool { total > 0 && completed == total }

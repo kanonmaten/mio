@@ -65,3 +65,39 @@ enum MioAnalysisSchedule {
         pausedUntil.timeIntervalSince(now) > everydayWindow
     }
 }
+
+/// What to do when the model's answer for a lesson part is rejected (user decision 2026-10-13).
+/// A part rejected twice is split into two halves in source order; a half rejected twice more is
+/// marked as unprocessed so the rest of the lesson continues. Quota, rate and network errors are
+/// pauses, never rejections, and AI is never turned off because of a rejected part.
+enum MioLessonRetry {
+    static let attemptsPerPart = 2
+
+    enum Action: Equatable, Sendable {
+        case retry
+        case split([[MioAnalysisFragment]])
+        case markUnprocessed
+    }
+
+    /// An answer the gateway or the app refused as invalid model output.
+    static func isRejectedAnswer(_ error: Error) -> Bool {
+        switch error as? MioCloudError {
+        case .gateway(_, let code)?:
+            [.invalidLessonResult, .invalidAnalysisResult, .invalidUpstreamResponse, .invalidUpstreamAnswer,
+             .incompleteUpstreamResponse, .providerInvalidResponse, .providerTruncated].contains(code)
+        case .invalidResponse?: true
+        default: false
+        }
+    }
+
+    /// `failures` counts rejections of exactly these fragments, including the latest one.
+    /// `depth` is 0 for a part as batched and 1 for a half.
+    static func action(failures: Int, depth: Int, fragments: [MioAnalysisFragment]) -> Action {
+        guard failures >= attemptsPerPart else { return .retry }
+        guard depth == 0, fragments.count > 1 else { return .markUnprocessed }
+        let middle = fragments.count / 2
+        return .split([Array(fragments[..<middle]), Array(fragments[middle...])])
+    }
+
+    static func key(_ fragments: [MioAnalysisFragment]) -> String { fragments.map(\.id).joined(separator: "|") }
+}
