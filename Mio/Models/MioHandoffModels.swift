@@ -90,8 +90,8 @@ enum MioReminderError: Error, LocalizedError, Equatable {
 /// full access once; calendar events go through Apple's own editor and need no access at all.
 @MainActor
 struct MioReminderPort {
-    static let deniedMessage = "Mio har inte åtkomst till Påminnelser. Tillåt det i Inställningar → Mio → Påminnelser. Förslaget ligger kvar."
-    static let lastListKey = "mio.reminders.lastListID"
+    nonisolated static let deniedMessage = "Mio har inte åtkomst till Påminnelser. Tillåt det i Inställningar → Mio → Påminnelser. Förslaget ligger kvar."
+    nonisolated static let lastListKey = "mio.reminders.lastListID"
 
     var access: @MainActor () -> MioReminderAccess
     var requestAccess: @MainActor () async -> Bool
