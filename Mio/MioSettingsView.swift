@@ -2,7 +2,8 @@ import SwiftUI
 import UIKit
 
 private struct OpenMioSettingsKey: EnvironmentKey {
-    static let defaultValue: () -> Void = {}
+    // Computed, not stored: a static stored closure would be shared global state that is not Sendable.
+    static var defaultValue: () -> Void { {} }
 }
 extension EnvironmentValues {
     var openMioSettings: () -> Void {

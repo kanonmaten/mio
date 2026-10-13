@@ -125,7 +125,7 @@ final class MioSystemServices {
         do {
             alarmStatus = alarmManager.authorizationState
             if alarmStatus == .notDetermined {
-                alarmStatus = try await alarmManager.requestAuthorization()
+                alarmStatus = try await Self.requestAlarmAuthorization()
             }
             guard alarmStatus == .authorized else {
                 errorMessage = "Alarm är inte tillåtna. Du kan ändra detta i iPhones Inställningar för Mio."
@@ -152,7 +152,7 @@ final class MioSystemServices {
                 schedule: schedule,
                 attributes: attributes
             )
-            _ = try await alarmManager.schedule(id: id, configuration: configuration)
+            _ = try await Self.scheduleAlarm(id: id, configuration: configuration)
             rememberAlarmIDs(knownAlarmIDs.union([id]))
             await refresh()
             statusMessage = "Alarmet är sparat hos iOS."
@@ -275,6 +275,19 @@ final class MioSystemServices {
             errorMessage = "Kunde inte ta bort postens alarm. Posten har inte raderats: \(error.localizedDescription)"
             return false
         }
+    }
+
+    // AlarmManager is not Sendable and its async methods are @concurrent. Calling them on the
+    // main-actor `alarmManager` property would send main-actor state off the actor, so the two
+    // async calls run nonisolated on the shared manager and only Sendable results come back.
+    nonisolated private static func requestAlarmAuthorization() async throws -> AlarmManager.AuthorizationState {
+        try await AlarmManager.shared.requestAuthorization()
+    }
+
+    nonisolated private static func scheduleAlarm(
+        id: UUID, configuration: AlarmManager.AlarmConfiguration<MioAlarmMetadata>
+    ) async throws -> Alarm {
+        try await AlarmManager.shared.schedule(id: id, configuration: configuration)
     }
 
     /// Returns false, without removing anything, when a known Mio alarm cannot be checked

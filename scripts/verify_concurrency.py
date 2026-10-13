@@ -48,9 +48,13 @@ def main() -> int:
                 return 2
             cloud = build / "MioCloudPortable.swift"
             cloud.write_text(portable_cloud_source() + portable_capture_source())
+            # SIL, not -typecheck: "sending ... risks causing data races" comes from region-based
+            # isolation, a SIL pass that -typecheck never runs. The upcoming feature mirrors the
+            # Mio target's SWIFT_UPCOMING_FEATURE_INFER_SENDABLE_FROM_CAPTURES.
             command = [swiftc, "-swift-version", "5", "-strict-concurrency=complete", "-warn-concurrency",
-                       "-module-cache-path", str(build / "module-cache"), "-typecheck", "-module-name", "Mio",
-                       *[str(ROOT / path) for path in SOURCES], str(cloud)]
+                       "-enable-upcoming-feature", "InferSendableFromCaptures",
+                       "-module-cache-path", str(build / "module-cache"), "-wmo", "-emit-sil", "-o", os.devnull,
+                       "-module-name", "Mio", *[str(ROOT / path) for path in SOURCES], str(cloud)]
         print(f"Checking {'native iOS target' if args.native else 'portable core with substituted native boundaries'}; log: {log}", flush=True)
         process = subprocess.run(command, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         log.write_text(process.stdout)

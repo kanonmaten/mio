@@ -11,7 +11,11 @@ final class MioLiveActivityController {
     private let capture: MioViewModel
     private var target: MioListeningActivityTarget?
     private var applied: MioListeningActivityTarget?
-    private var activity: Activity<MioListeningAttributes>?
+    // Only the identity is kept. `Activity` is not Sendable and its `update`/`end` are @concurrent,
+    // so a stored instance would be main-actor state sent off the actor. Each call looks the
+    // activity up in `activities` instead, with a plain loop: a closure such as `first(where:)`
+    // would tie the result to the main actor again.
+    private var current: (id: String, sessionID: UUID)?
     private var worker: Task<Void, Never>?
     private var removedStaleActivities = false
     private var started = false
@@ -52,7 +56,7 @@ final class MioLiveActivityController {
         if !removedStaleActivities {
             removedStaleActivities = true
             // Capture never survives a relaunch, so activities from an earlier process are stale.
-            for stale in Activity<MioListeningAttributes>.activities where stale.id != activity?.id {
+            for stale in Activity<MioListeningAttributes>.activities where stale.id != current?.id {
                 await stale.end(nil, dismissalPolicy: .immediate)
             }
         }
@@ -66,30 +70,40 @@ final class MioLiveActivityController {
 
     private func reconcile(to wanted: MioListeningActivityTarget?) async {
         guard let wanted else {
-            if let activity {
-                self.activity = nil
-                await activity.end(nil, dismissalPolicy: .immediate)
+            if let current {
+                self.current = nil
+                await end(activityID: current.id)
             }
             return
         }
         let content = ActivityContent(state: wanted.state, staleDate: nil)
-        if let activity, activity.attributes.sessionID == wanted.sessionID {
-            // A user-dismissed activity stays dismissed for the rest of this session.
-            if activity.activityState == .ended || activity.activityState == .dismissed { return }
-            await activity.update(content)
+        if let current, current.sessionID == wanted.sessionID {
+            // A user-dismissed activity stays dismissed for the rest of this session, also once
+            // the system has removed it from `activities`.
+            for activity in Activity<MioListeningAttributes>.activities where activity.id == current.id {
+                if activity.activityState == .ended || activity.activityState == .dismissed { return }
+                await activity.update(content)
+            }
             return
         }
-        if let previous = activity {
-            activity = nil
-            await previous.end(nil, dismissalPolicy: .immediate)
+        if let previous = current {
+            current = nil
+            await end(activityID: previous.id)
         }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         do {
-            activity = try Activity.request(
+            let activity = try Activity.request(
                 attributes: MioListeningAttributes(sessionID: wanted.sessionID, isLesson: wanted.isLesson),
                 content: content, pushType: nil)
+            current = (activity.id, wanted.sessionID)
         } catch {
             logger.error("Live Activity could not start: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func end(activityID id: String) async {
+        for activity in Activity<MioListeningAttributes>.activities where activity.id == id {
+            await activity.end(nil, dismissalPolicy: .immediate)
         }
     }
 }

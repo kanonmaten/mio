@@ -83,7 +83,10 @@ final class MioViewModel {
         startClock()
     }
 
-    deinit {
+    // Isolated (SE-0371): the observer tokens are main-actor state and not Sendable, so they are
+    // removed on the main actor, possibly slightly after the last release. The block observers hold
+    // `self` weakly, so a late removal cannot call back into a deallocated model.
+    isolated deinit {
         pauseTask?.cancel()
         startupTask?.cancel()
         clockTask?.cancel()

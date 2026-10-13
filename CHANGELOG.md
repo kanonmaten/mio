@@ -11,6 +11,7 @@ Apples appar äger det Mio fångar ([plan](docs/PLAN_APPLEAPPAR.md), del B).
 - **Inställningar → Notiser** ersätter Påminnelser och har bara morgon- och kvällsnotisen. Mios alarm och postpåminnelser går inte längre att skapa.
 - **AI-svar sparas i Anteckningar:** "Granska och spara i Anteckningar" öppnar dela-arket; Mio behåller ingen kopia av svaret.
 - **Uppgraderingen rensar en gång:** dina gamla lokala anteckningar, uppgifter, planer och minnen raderas (ditt val; exportera före uppdateringen om något ska sparas), liksom Mios alarm och postpåminnelser. Morgon- och kvällsnotisen och det du skickat finns kvar. Misslyckas något försöker Mio igen vid nästa start.
+- **Strikt concurrency utan varningar (2026-10-13):** native-diagnosen i "Bygg Mio IPA" gav 88 varningsblock sedan körning #37. SwiftData-sökningarna, alarmanropen, Live Activity, inställningsmiljön och vymodellens `deinit` är rättade så att kompilatorn kan bevisa dem; inget är tystat. Live Activity sparar nu bara aktivitetens id och slår upp aktiviteten före varje uppdatering och avslut. Den portabla kontrollen på Linux kör nu samma isoleringsanalys som Xcode och hade annars missat sådana varningar. Se [besluten](docs/DECISIONS.md). Native-bygget är inte kört med ändringarna.
 - Versionen är 0.9.1. Inget är provat på telefonen än.
 
 ## Helhetsbygget 2026-10-11 (pågår)

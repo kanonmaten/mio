@@ -4,6 +4,10 @@ import SwiftData
 // SwiftData persistence for sessions, content and assistant data. Each row stores identity
 // columns plus the existing Codable value as a JSON payload, so additive value-type fields
 // persist without a schema change while every write touches only changed rows.
+//
+// `#Predicate` requires `KeyPath & Sendable`. The Mio target turns on
+// SWIFT_UPCOMING_FEATURE_INFER_SENDABLE_FROM_CAPTURES (SE-0418, default in Swift 6) so the
+// compiler proves each `\.sessionID`-style literal Sendable; it captures nothing.
 
 enum MioSchemaV1: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(1, 0, 0) }
