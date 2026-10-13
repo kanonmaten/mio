@@ -2,6 +2,16 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Rättningar efter provet och Apples appar, 2026-10-13
+
+Användarbeslut 2026-10-13 efter exporten samma dag. Hela planen står i [PLAN_APPLEAPPAR.md](PLAN_APPLEAPPAR.md); här står besluten och vad som valdes bort.
+
+- **Namn:** Anteckning, Att göra, Händelse (tidigare Plan) och Minne överallt. Lagrade värden ändras inte. Mios inställningsdel "Påminnelser" byter namn till Notiser i 0.9.1. Bortvalt för Plan: Tillfälle och Bokning (Händelse är Apples ord i Kalender).
+- **0.9.0:** ett lektionsblock som underkänns två gånger delas i två halvor; en halva som underkänns igen markeras "kunde inte bearbetas" med originaltexten synlig och lektionen fortsätter (bortvalt: hoppa över hela blocket direkt, stanna och fråga). Förslagets text är det användaren sa, byggt i appen ur källsegmenten; prompten ber inte längre om förtydligande i `body`. Detta ersätter den delen av beslutet "Tomma AI-svar visas och oklar dag ger förslag". Prov, möten och bokningar är alltid händelser; annat blir händelse med klockslag och annars att göra. Datum utan klockslag blir heldag och uppdateras om ett klockslag hörs innan användaren svarat (bortvalt: spärra Ja, snabbval i förslaget). Långa köer slås ihop till större anrop och Hem visar eftersläpningen. Transkriptionen mäts med FLEURS och ett uppläst känt stycke; privata inspelningar mäts aldrig och råljud sparas aldrig.
+- **0.9.1:** Apple äger posterna och Mio sparar bara en överlämning med länk (bortvalt: kopia i båda, eller att Mio glömmer allt). Händelser skickas via Kalenders egen redigerare utan behörighet (bortvalt: åtkomst som bara skriver, full kalenderåtkomst). Att göra-poster skapas direkt med full åtkomst till Påminnelser, eftersom Apple saknar åtkomst som bara skriver påminnelser (bortvalt: dela-arket utan datum, Genvägar). Anteckningar och minnen går via dela-arket till Anteckningar, som saknar API (bortvalt: Genvägar, kopiera och öppna). Kalender-fliken, plusknappen, lokala poster, AlarmKit och postnotiser tas bort; befintliga poster raderas vid uppgraderingen. Anteckningar-fliken blir Förslag. Hem läser kommande påminnelser men inte kalendern.
+
+Ej verifierat: allt som rör telefonen i 0.9.1 och modellens följsamhet till klassningen och datumregeln.
+
 ## AI-utskick när telefonen är låst och ikappsändning, 2026-10-12
 
 Användarbeslut 2026-10-12 efter telefonprovet samma dag, där inget nådde Groq. Kompletterar "samlade vardagsutskick" från 2026-10-11.
