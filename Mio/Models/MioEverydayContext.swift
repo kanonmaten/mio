@@ -2,13 +2,19 @@ import Foundation
 
 /// A bounded overlap uses original fragment identities; only new sources are processed.
 enum MioEverydayContext {
-    static func batches(_ fragments: [MioAnalysisFragment]) -> [[MioAnalysisFragment]] {
+    /// Gateway capability for backlog batches (twelve new sources, 12,000 bytes).
+    static let backlogCapability = "analysis-backlog-v1"
+
+    /// Normal batches hold five new sources. A backlog (user decision 2026-10-13) holds twelve,
+    /// so a long queue catches up in fewer calls; the fixed prompt then costs fewer tokens too.
+    static func batches(_ fragments: [MioAnalysisFragment], backlog: Bool = false) -> [[MioAnalysisFragment]] {
         var result: [[MioAnalysisFragment]] = []
         var batch: [MioAnalysisFragment] = []
         var bytes = 0
+        let count = backlog ? 12 : 5, limit = backlog ? 12_000 : 6_000
         for fragment in fragments {
             // Reserve three source slots and 4,000 bytes for continuity.
-            if !batch.isEmpty && (batch.count == 5 || bytes + fragment.text.utf8.count > 6_000) {
+            if !batch.isEmpty && (batch.count == count || bytes + fragment.text.utf8.count > limit) {
                 result.append(batch); batch = []; bytes = 0
             }
             batch.append(fragment); bytes += fragment.text.utf8.count

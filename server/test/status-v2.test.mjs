@@ -17,6 +17,7 @@ test('v2 status reports individual task contracts and safe fixed configuration f
     assert.equal(item.configured, task !== 'lesson'); assert.equal(item.provider, 'groq');
     for (const required of ['reasoning-off', 'temperature-zero', 'strict-json', contract]) assert.ok(item.capabilities.includes(required));
     assert.equal(item.configurationError, task === 'lesson' ? 'provider_model_incompatible' : null);
+    assert.equal(item.capabilities.includes('analysis-backlog-v1'), task === 'everyday');
   }
   assert.deepEqual(status.quota, { limit: 100, remaining: null, resetAt: null, unit: 'requests' });
   assert.equal(metadataHeaders(status)['X-Mio-Configuration-Revision'], status.configurationRevision);

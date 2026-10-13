@@ -10,7 +10,7 @@ import { createFileCounterStore, createMemoryCounterStore } from './state-store.
 import { PROMPT_VERSION, ANALYSIS_V2_PROMPT_VERSION } from './prompts.mjs';
 import { authenticated, gatewayStatus, gatewayStatusV2, configurationRevision, metadataHeaders } from './status.mjs';
 
-const MAX_BODY_BYTES = 20_000;
+const MAX_BODY_BYTES = 40_000;
 function byteLength(value) { return Buffer.byteLength(value, 'utf8'); }
 function exactKeys(value, expected) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)

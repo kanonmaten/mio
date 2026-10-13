@@ -125,12 +125,12 @@ struct MioAnalysisRequest: Codable, Sendable {
     func validatedData() throws -> Data {
         let all = allFragments
         let contextIDs = Set(contextFragments.map(\.id))
-        guard TimeZone(identifier: timeZone) != nil, !fragments.isEmpty, (1...8).contains(all.count),
+        guard TimeZone(identifier: timeZone) != nil, !fragments.isEmpty, (1...16).contains(all.count),
               Set(all.map(\.id)).count == all.count,
               all.allSatisfy({ $0.segmentID != nil && $0.id.utf8.count <= 80
                   && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                   && $0.text.utf8.count <= 4_000 && ISO8601DateFormatter().date(from: $0.occurredAt) != nil }),
-              all.reduce(0, { $0 + $1.text.utf8.count }) <= 10_000,
+              all.reduce(0, { $0 + $1.text.utf8.count }) <= (all.count > 8 ? 16_000 : 10_000),
               contextFragments.reduce(0, { $0 + $1.text.utf8.count }) <= 4_000,
               priorDecisions.count <= 12, Set(priorDecisions.map(\.id)).count == priorDecisions.count,
               priorDecisions.allSatisfy({ [.plan, .task, .note].contains($0.kind)
@@ -139,7 +139,7 @@ struct MioAnalysisRequest: Codable, Sendable {
               usesContextContract ? mode == .everyday : (contextFragments.isEmpty && priorDecisions.isEmpty && !contextLimited)
         else { throw MioCloudError.invalidContext }
         let data = try JSONEncoder().encode(self)
-        guard data.count <= 20_000 else { throw MioCloudError.invalidContext }
+        guard data.count <= (all.count > 8 ? 40_000 : 20_000) else { throw MioCloudError.invalidContext }
         return data
     }
 

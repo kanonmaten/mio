@@ -245,6 +245,8 @@ struct MioHomeView: View {
         } else if let until = analysis.pausedUntil, until > .now {
             statusLine("AI fortsätter \(MioTimeText.describe(until, relativeTo: .now, calendar: day.calendar)).",
                        symbol: "clock", action: nil, perform: {})
+        } else if let lag = MioAnalysisSchedule.lagMinutes(oldest: analysis.pendingEverydaySince, now: .now) {
+            statusLine("AI ligger \(lag) min efter. Förslag kan komma senare.", symbol: "hourglass", action: nil, perform: {})
         } else if let review = latestReview {
             // Opens the session, where every AI answer and its questions about the text are listed.
             NavigationLink {

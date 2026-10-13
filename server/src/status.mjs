@@ -44,7 +44,7 @@ export function metadataHeaders(status, promptVersion = status.promptVersion ?? 
 
 const taskPromptVersion = task => task === 'everyday' ? ANALYSIS_V2_PROMPT_VERSION : PROMPT_VERSION;
 const taskCapabilities = task => ['reasoning-off', 'temperature-zero', 'strict-json',
-  task === 'ask' ? 'ask-v1' : task === 'everyday' ? 'analysis-context-v2' : 'lesson-notes-v1'];
+  ...(task === 'ask' ? ['ask-v1'] : task === 'everyday' ? ['analysis-context-v2', 'analysis-backlog-v1'] : ['lesson-notes-v1'])];
 // null means no daily cap; status then reports quota as null instead of an invented limit.
 // A token cap (the binding Groq free-tier limit) takes precedence over a request cap.
 const positiveLimit = value => Number.isSafeInteger(value) && value > 0 ? value : null;

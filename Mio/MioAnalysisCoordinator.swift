@@ -9,6 +9,10 @@ final class MioAnalysisCoordinator {
     private(set) var errorMessage: String?
     private(set) var sentBatches = 0
     private(set) var pausedUntil: Date?
+    /// Capture time of the oldest everyday text waiting in the queue (not in flight).
+    private(set) var pendingEverydaySince: Date?
+    /// Whether the paired gateway accepts backlog batches; read from each status check.
+    @ObservationIgnored private var acceptsBacklogBatches = false
     @ObservationIgnored private var consentStartedAt = Date.distantFuture
     @ObservationIgnored private var connection: MioCloudConnection?
     @ObservationIgnored private var observed: [UUID: Set<UUID>] = [:]
@@ -16,7 +20,9 @@ final class MioAnalysisCoordinator {
     @ObservationIgnored private var latestSessions: [UUID: MioSession] = [:]
     @ObservationIgnored private var continuityStarts: [UUID: Date] = [:]
     @ObservationIgnored private var endingSessionIDs: Set<UUID> = []
-    @ObservationIgnored private var queue: [Work] = []
+    @ObservationIgnored private var queue: [Work] = [] {
+        didSet { refreshPendingEveryday() }
+    }
     @ObservationIgnored private var worker: Task<Void, Never>?
     @ObservationIgnored private var workerMode: MioCaptureMode?
     @ObservationIgnored private var isWaiting = false
@@ -130,6 +136,7 @@ final class MioAnalysisCoordinator {
             throw MioCloudError.changedConfiguration
         }
         connection = prepared.connection
+        acceptsBacklogBatches = Self.acceptsBacklog(prepared.status)
         quotaResetAt = prepared.status.quota?.resetAt.flatMap(MioAnalysisResult.parseDate)
         if let pausedUntil, pausedUntil <= now() { self.pausedUntil = nil }
         for session in existingSessions { observed[session.id] = Set(session.transcripts.map(\.id)) }
@@ -335,7 +342,10 @@ final class MioAnalysisCoordinator {
         append(fragments, base: boundary, enqueuedAt: now(), waited: 0, allowed: eligible[session.id] ?? [], final: final)
         for start in groups.keys.sorted() {
             guard let group = groups[start] else { continue }
-            queue += MioEverydayContext.batches(group.fragments).map {
+            // More than one normal batch waiting means AI is behind: send larger batches.
+            var batches = MioEverydayContext.batches(group.fragments)
+            if acceptsBacklogBatches, batches.count > 1 { batches = MioEverydayContext.batches(group.fragments, backlog: true) }
+            queue += batches.map {
                 Work(session: session, request: MioAnalysisRequest(mode: .everyday, timeZone: TimeZone.current.identifier, fragments: $0),
                      enqueuedAt: group.enqueuedAt, waited: group.waited, continuityStartedAt: start,
                      eligibleSegmentIDs: group.eligible, isFinal: group.isFinal)
@@ -420,6 +430,7 @@ final class MioAnalysisCoordinator {
                             throw MioCloudError.gateway(409, .configurationChanged)
                         }
                         self.quotaResetAt = prepared.status.quota?.resetAt.flatMap(MioAnalysisResult.parseDate)
+                        self.acceptsBacklogBatches = Self.acceptsBacklog(prepared.status)
                         let session = work.request.mode == .everyday ? (self.latestSessions[work.session.id] ?? work.session) : work.session
                         var request = work.request
                         if request.mode == .everyday {
@@ -515,6 +526,16 @@ final class MioAnalysisCoordinator {
             try await assistant.markLessonPartUnprocessed(request: work.request, session: work.session)
             status = MioLessonDocument(session: work.session, records: assistant.analyses).progress
         }
+    }
+
+    nonisolated static func acceptsBacklog(_ status: MioGatewayStatusV2) -> Bool {
+        status.tasks[.everyday].capabilities.contains(MioEverydayContext.backlogCapability)
+    }
+
+    private func refreshPendingEveryday() {
+        let oldest = queue.lazy.filter { $0.request.mode == .everyday }
+            .flatMap(\.request.fragments).compactMap { MioAnalysisResult.parseDate($0.occurredAt) }.min()
+        if oldest != pendingEverydaySince { pendingEverydaySince = oldest }
     }
 
     private func fail(_ message: String) {

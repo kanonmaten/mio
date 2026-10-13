@@ -81,7 +81,7 @@ Alla genereringsrutter kräver `Authorization: Bearer <gatewaytoken>` och JSON u
 
 `/v2/status` svarar med `quota: {limit, remaining, resetAt, unit}` där `unit` är `tokens` eller `requests`, eller `quota: null` utan dygnsgräns. Klienter skickar den observerade revisionen som `X-Mio-Configuration-Revision`; en ändrad konfiguration ger 409 `configuration_changed` före kvot och modellanrop.
 
-Gränser: fråga högst 2 000 byte, sex utdrag och 10 000 byte kontext. Analys 1–8 fragment. Body högst 20 000 byte med 5 s deadline. Hela anropet högst 40 s. Två samtidiga anrop. Svar från Groq högst 65 536 byte.
+Gränser: fråga högst 2 000 byte, sex utdrag och 10 000 byte kontext. Analys 1–16 fragment och högst 16 000 byte text. Body högst 40 000 byte med 5 s deadline. Hela anropet högst 40 s. Två samtidiga anrop. Svar från Groq högst 65 536 byte.
 
 ## Verifiera utan modelltrafik
 

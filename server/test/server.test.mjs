@@ -97,7 +97,7 @@ test('invalid JSON, content types and too large bodies are rejected locally', as
   assert.equal((await f.ask('{broken')).status, 400);
   assert.equal((await f.ask(payload, { 'Content-Type': 'text/plain' })).status, 415);
   assert.equal((await f.ask(payload, { 'Content-Encoding': 'gzip' })).status, 415);
-  assert.equal((await f.ask('x'.repeat(20001))).status, 413);
+  assert.equal((await f.ask('x'.repeat(40001))).status, 413);
   assert.equal(f.calls.length, 0);
 });
 

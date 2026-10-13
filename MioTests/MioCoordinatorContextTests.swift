@@ -87,6 +87,58 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
         XCTAssertFalse(MioDiagnosticsRuntime.analysisEnabled)
     }
 
+    func testBacklogBatchesHoldTwelveSourcesAndStayWithinTheRequestBudget() throws {
+        let segments = (0..<20).map { TranscriptSegment(createdAt: Date(timeIntervalSince1970: 1_800_000_000 + Double($0) * 15),
+                                                       text: "Mening \($0) med lite text.", containsMio: false) }
+        let fragments = segments.flatMap(MioAnalysisFragment.make)
+        XCTAssertEqual(MioEverydayContext.batches(fragments).map(\.count), [5, 5, 5, 5])
+        XCTAssertEqual(MioEverydayContext.batches(fragments, backlog: true).map(\.count), [12, 8])
+        let request = MioAnalysisRequest(mode: .everyday, timeZone: "Europe/Stockholm", fragments: Array(fragments[3..<15]),
+            contextFragments: Array(fragments[0..<3]), usesContextContract: true)
+        XCTAssertNoThrow(try request.validatedData(), "twelve new and three context sources fit one call")
+        let tooMany = MioAnalysisRequest(mode: .everyday, timeZone: "Europe/Stockholm", fragments: Array(fragments[0..<17]),
+            usesContextContract: true)
+        XCTAssertThrowsError(try tooMany.validatedData())
+
+        var status = syntheticGatewayStatus()
+        XCTAssertFalse(MioAnalysisCoordinator.acceptsBacklog(status), "an older gateway never receives a large batch")
+        status = MioGatewayStatusV2(protocolVersion: 2, release: "fixture", configurationRevision: status.configurationRevision,
+            tasks: .init(ask: status.tasks.ask, everyday: .init(configured: true, provider: "fixture", model: "fixture-model",
+                promptVersion: "fixture-v1", capabilities: Array(MioAITaskID.everyday.requiredCapabilities) + ["analysis-backlog-v1"],
+                configurationError: nil), lesson: status.tasks.lesson), quota: nil)
+        XCTAssertTrue(MioAnalysisCoordinator.acceptsBacklog(status))
+    }
+
+    func testLagIsShownOnlyAfterTenMinutes() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertNil(MioAnalysisSchedule.lagMinutes(oldest: nil, now: now))
+        XCTAssertNil(MioAnalysisSchedule.lagMinutes(oldest: now.addingTimeInterval(-600), now: now))
+        XCTAssertEqual(MioAnalysisSchedule.lagMinutes(oldest: now.addingTimeInterval(-75 * 60), now: now), 75)
+    }
+
+    @MainActor
+    func testQueuedEverydayTextReportsItsAgeUntilSent() async throws {
+        let assistant = assistant(self)
+        var clock = Date.now
+        let start = clock
+        let sent = expectation(description: "The batch is sent")
+        var pendingWhileWaiting: Date?
+        let connection = MioCloudConnection(endpoint: URL(string: "https://example.invalid/v1/ask")!, token: "synthetic")
+        var coordinator: MioAnalysisCoordinator!
+        coordinator = MioAnalysisCoordinator(loadConnection: { connection }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { _, _ in
+                sent.fulfill()
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            }, wait: { seconds in pendingWhileWaiting = coordinator.pendingEverydaySince; clock.addTimeInterval(seconds) }, now: { clock })
+        try await coordinator.enable(existingSessions: [])
+        let segment = TranscriptSegment(createdAt: start, text: "Vi ses på biblioteket", containsMio: false)
+        coordinator.observe(MioSession(transcripts: [segment]), assistant: assistant)
+        await fulfillment(of: [sent], timeout: 2)
+        XCTAssertEqual(pendingWhileWaiting.map { Int($0.timeIntervalSince1970) }, Int(segment.audioStartedAt.timeIntervalSince1970))
+        XCTAssertNil(coordinator.pendingEverydaySince, "nothing is waiting once the batch left the queue")
+        coordinator.disable()
+    }
+
     @MainActor
     func testSecondRequestUsesDecisionCreatedByFirstResponseAndPreservesMinutePacing() async throws {
         let assistant = assistant(self)

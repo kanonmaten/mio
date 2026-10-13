@@ -59,6 +59,13 @@ enum MioAnalysisSchedule {
         }
     }
 
+    /// Minutes the oldest queued everyday text has waited, shown on Hem once it exceeds ten.
+    static func lagMinutes(oldest: Date?, now: Date) -> Int? {
+        guard let oldest else { return nil }
+        let waited = now.timeIntervalSince(oldest)
+        return waited > 600 ? Int(waited / 60) : nil
+    }
+
     /// Whether queued everyday text is dropped during a pause instead of kept. The text stays on
     /// the phone; only its analysis is skipped, so a long quota pause cannot grow the queue.
     static func dropsEverydayWork(pausedUntil: Date, now: Date) -> Bool {

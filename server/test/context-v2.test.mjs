@@ -33,9 +33,14 @@ test('v2 payload rejects unbounded context, overlapping sources, invalid decisio
     { priorDecisions: [{ ...payload.priorDecisions[0], sourceIDs: [oldID, oldID] }] },
     { priorDecisions: [{ ...payload.priorDecisions[0], isOpen: 1 }] },
     { priorDecisions: [{ ...payload.priorDecisions[0], kind: 'memory' }] },
-    { fragments: Array.from({ length: 8 }, (_, index) => ({ ...payload.fragments[0], id: newID.replace(':0', `:${index}`) })) },
-    { fragments: Array.from({ length: 3 }, (_, index) => ({ ...payload.fragments[0], id: newID.replace(':0', `:${index}`), text: 'ö'.repeat(1700) })) }
+    { fragments: Array.from({ length: 16 }, (_, index) => ({ ...payload.fragments[0], id: newID.replace(':0', `:${index}`) })) },
+    { fragments: Array.from({ length: 5 }, (_, index) => ({ ...payload.fragments[0], id: newID.replace(':0', `:${index}`), text: 'ö'.repeat(1700) })) }
   ]) assert.throws(() => analysis.validateAnalysisV2Payload({ ...payload, ...patch }));
+});
+
+test('a backlog batch carries twelve new sources beside the context', () => {
+  const fragments = Array.from({ length: 12 }, (_, index) => ({ ...payload.fragments[0], id: newID.replace(':0', `:${index}`), text: 'å'.repeat(450) }));
+  assert.doesNotThrow(() => analysis.validateAnalysisV2Payload({ ...payload, fragments }));
 });
 
 test('v2 candidates require new evidence sources and explicit unambiguous open replacement', () => {

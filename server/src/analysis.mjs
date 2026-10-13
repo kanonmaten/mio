@@ -46,7 +46,7 @@ const scheduled = value => value === null || date(value) || day(value);
 export function validateAnalysisPayload(value) {
   if (!keys(value, ['mode', 'timeZone', 'fragments']) || !['everyday', 'lesson'].includes(value.mode)
       || !text(value.timeZone, 100) || !Array.isArray(value.fragments)
-      || value.fragments.length < 1 || value.fragments.length > 8) throw new Error('invalid_analysis');
+      || value.fragments.length < 1 || value.fragments.length > 16) throw new Error('invalid_analysis');
   try { new Intl.DateTimeFormat('sv-SE', { timeZone: value.timeZone }); }
   catch { throw new Error('invalid_timezone'); }
   const ids = new Set();
@@ -59,7 +59,8 @@ export function validateAnalysisPayload(value) {
     }
     ids.add(fragment.id); total += Buffer.byteLength(fragment.text, 'utf8');
   }
-  if (total > 10_000) throw new Error('analysis_too_large');
+  // A backlog may send up to twelve new and three context sources in one call (2026-10-13).
+  if (total > 16_000) throw new Error('analysis_too_large');
   return value;
 }
 export function validateAnalysisResult(value, payload) {
@@ -150,7 +151,7 @@ export function validateAnalysisV2Payload(value) {
       || value.mode !== 'everyday' || typeof value.contextLimited !== 'boolean'
       || !Array.isArray(value.fragments) || value.fragments.length < 1 || !Array.isArray(value.contextFragments)
       || !Array.isArray(value.priorDecisions) || value.priorDecisions.length > 12) throw new Error('invalid_analysis');
-  // The existing source contract also enforces disjoint IDs and the shared eight-source/UTF-8 budget.
+  // The existing source contract also enforces disjoint IDs and the shared sixteen-source/UTF-8 budget.
   validateAnalysisPayload({ mode: value.mode, timeZone: value.timeZone,
     fragments: [...value.fragments, ...value.contextFragments] });
   if (value.contextFragments.reduce((sum, f) => sum + Buffer.byteLength(f.text, 'utf8'), 0) > 4_000) {
