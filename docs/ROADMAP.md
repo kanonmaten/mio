@@ -2,7 +2,7 @@
 
 Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhängande i stället för att leverera en funktionell version i taget. Användaren har också valt att AI-klient och server ska byggas, med molnet avstängt tills det konfigureras.
 
-**Helhetsbygget identifieras som 0.9.0, ej släppt.** Det ersätter de planerade separata v0.3–v0.5-leveranserna. v0.1.0 är historisk transkriptionsprototyp och v0.2.0 är den tidigare manuella grunden. Dessa etiketter ändrar inga gamla resultat.
+**Helhetsbygget identifierades som 0.9.0; den aktuella versionen är 0.9.1, ej släppt** (användarens val 2026-10-13, se [beslut](DECISIONS.md#rättningar-efter-provet-och-apples-appar-2026-10-13)). Det ersätter de planerade separata v0.3–v0.5-leveranserna. v0.1.0 är historisk transkriptionsprototyp och v0.2.0 är den tidigare manuella grunden. Dessa etiketter ändrar inga gamla resultat.
 
 ## Sammanhängande produkt
 
@@ -44,7 +44,7 @@ Read-only produktionskontroll den 3 oktober visar att den gamla OpenAI-bundlen f
 4. Kör [helhetstestet](TESTPLAN_HELHET.md) samt återstående [långtest](TESTPLAN_HELHET.md#långprov-latens-värme-och-batteri).
 5. Registrera exakt revision, build, enhet och resultat i [status](STATUS.md). Åtgärda verkliga fel innan daglig tillit.
 
-Versionsnumret 1.0.0 används först när accepterad vardagsomfattning är verifierad. Inget datum eller löfte om heldagslyssning ges utan mätningar. Appversion, byggnummer och lagringsschema är separata värden. Sedan 2026-10-13 sätter IPA-workflowen byggnumret till körningens nummer (0.9.0 (37) och framåt), så att varje installerad IPA motsvarar en körning och en commit; projektfilens 5 gäller bara lokala byggen. Versionsnumret står kvar på 0.9.0 tills helhetsbygget är verifierat (användarens val 2026-10-13); bundle identifier och beständiga lagringsvägar ändras inte.
+Versionsnumret 1.0.0 används först när accepterad vardagsomfattning är verifierad. Inget datum eller löfte om heldagslyssning ges utan mätningar. Appversion, byggnummer och lagringsschema är separata värden. Sedan 2026-10-13 sätter IPA-workflowen byggnumret till körningens nummer (0.9.0 (37) och framåt), så att varje installerad IPA motsvarar en körning och en commit; projektfilens 5 gäller bara lokala byggen. Versionen höjdes till 0.9.1 när Apples appar tog över posterna (användarens val senare 2026-10-13, som ersätter beslutet att stå kvar på 0.9.0). Ingen av versionerna är verifierad på telefonen; bundle identifier och beständiga lagringsvägar ändras inte.
 
 Råljudslagring, molnöverföring utan aktiverat samtycke, dold profilering och tyst kalenderbokning ingår inte. Serverdrift och Tailscale behövs för transkription. Manuella poster och lokal historik fungerar utan server.
 

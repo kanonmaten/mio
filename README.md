@@ -2,9 +2,9 @@
 
 Privat SwiftUI-app för iOS 26+ (första testtelefon iPhone 16 Pro, senare även iPhone 13): privat svensk transkription via Pianissimo på egen CachyOS-dator, anteckningar, planering och en diskret vardagsassistent. Ingen App Store-distribution.
 
-**Aktuellt helhetsbygge: 0.9.0 — ej släppt.** Design-, Pianissimo-, bakgrunds-, inställnings- och AI-/lektionsändringar i arbetskopian är ännu inte Xcode-byggda eller publicerade; den befintliga build 5 innehåller dem inte. Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
+**Aktuell version: 0.9.1 — ej släppt och inte provad på telefonen.** 0.9.0 är revisionen `8f90ddc` med rättningarna efter provet 2026-10-13; 0.9.1 lägger till att Apples appar äger posterna ([plan](docs/PLAN_APPLEAPPAR.md)). Båda är byggda och testade i simulatorn, ingen är installerad eller provad på telefonen. Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
 
-[Planen för tillförlitlighet](PLAN.md) styr 0.9.0; [status](docs/STATUS.md) visar verifierat läge och återstående acceptansprov.
+[Planen för tillförlitlighet](PLAN.md) styr 0.9.0 och [planen för Apples appar](docs/PLAN_APPLEAPPAR.md) 0.9.1; [status](docs/STATUS.md) visar verifierat läge och återstående acceptansprov.
 
 ## Funktioner
 
