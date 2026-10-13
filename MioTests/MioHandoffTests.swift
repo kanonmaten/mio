@@ -150,4 +150,32 @@ final class MioHandoffTests: XCTestCase {
         let old = try JSONDecoder().decode(MioContentItem.self, from: JSONSerialization.data(withJSONObject: legacy))
         XCTAssertNil(old.handoff)
     }
+
+    func testHomeReadsTheNextReminderAndTheDayFromReminders() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Europe/Stockholm"))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 10, day: 13, hour: 14, minute: 30)))
+        func at(_ day: Int, _ hour: Int?) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour ?? 0))!
+        }
+        let lateYesterday = MioReminderSummary(id: "a", title: "Lämna boken", dueDate: at(12, nil), hasTime: false)
+        let passed = MioReminderSummary(id: "b", title: "Ring", dueDate: at(13, 9), hasTime: true)
+        let allDay = MioReminderSummary(id: "c", title: "Gympakläder", dueDate: at(13, nil), hasTime: false)
+        let later = MioReminderSummary(id: "d", title: "Plugga", dueDate: at(13, 18), hasTime: true)
+        let thursday = MioReminderSummary(id: "e", title: "Religionsprov", dueDate: at(15, nil), hasTime: false)
+        let undated = MioReminderSummary(id: "f", title: "Köpa gympaskor", dueDate: nil, hasTime: false)
+        let all = [later, thursday, undated, passed, allDay, lateYesterday]
+        XCTAssertEqual(MioReminderNext.make(reminders: all, now: now, calendar: calendar), .upcoming(allDay),
+                       "an all-day reminder counts for the whole day; a timed one long past does not")
+        XCTAssertEqual(MioReminderNext.make(reminders: [later, thursday], now: now, calendar: calendar), .upcoming(later))
+        XCTAssertEqual(MioReminderNext.make(reminders: [lateYesterday, thursday], now: now, calendar: calendar), .overdue(lateYesterday))
+        XCTAssertEqual(MioReminderNext.make(reminders: [thursday, undated], now: now, calendar: calendar), .none)
+
+        let today = MioReminderDay.make(reminders: all, date: now, today: now, calendar: calendar)
+        XCTAssertEqual(today.due.map(\.id), ["c", "b", "d"])
+        XCTAssertEqual(today.overdue.map(\.id), ["a"])
+        let other = MioReminderDay.make(reminders: all, date: at(15, 12), today: now, calendar: calendar)
+        XCTAssertEqual(other.due.map(\.id), ["e"])
+        XCTAssertTrue(other.overdue.isEmpty, "only today lists what was left from earlier days")
+    }
 }

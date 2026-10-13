@@ -6,7 +6,11 @@ Apples appar äger det Mio fångar ([plan](docs/PLAN_APPLEAPPAR.md), del B).
 
 - **Ja skickar förslaget till rätt Apple-app (2026-10-13):** en händelse öppnar Kalenders egen ruta med rubrik, tid (eller heldag), det du sa och en länk ifyllda. Du väljer kalender och notis och trycker Lägg till; Mio behöver ingen kalenderbehörighet och läser aldrig kalendern. En att göra-post skapas direkt i Påminnelser, i den lista du väljer (Mio minns senaste), med eller utan förfallodag och med en notis vid klockslaget. Det kräver full åtkomst till Påminnelser, eftersom Apple inte har någon nivå som bara skriver; nekar du ligger förslaget kvar med en knapp till Inställningar. Anteckningar och minnen öppnar dela-arket, där du väljer Anteckningar. Mio sparar bara att posten skickades, vart och från vilken session, utan text, datum eller status. Ett nytt Ja skapar aldrig en andra påminnelse.
 - **Länk tillbaka till Mio:** `mio://session/…` i händelsen, påminnelsen och anteckningen öppnar sessionen i Mio. Länken startar aldrig mikrofon eller AI.
-- Versionen är 0.9.1. Kalender-fliken, plusknappen, Mios egna alarm och de gamla lokala posterna finns kvar tills nästa steg; inget är byggt för iOS eller provat på telefonen än.
+- **Flikarna Hem, Lektioner, Förslag och Fånga:** Kalender- och Anteckningar-flikarna är borta. Förslag visar det som väntar på Ja, Nej eller Inte nu, med antal på fliken, och under Skickat vart varje godkänt förslag gick och från vilken session. "Glöm" tar bara bort Mios notering, aldrig posten i Apples app. Plusknapparna för att skapa poster och förslag själv är borttagna; skriv direkt i Kalender, Påminnelser eller Anteckningar.
+- **Hem läser Påminnelser:** Nästa är den närmaste påminnelsen i dag (även heldag) eller den äldsta som ligger kvar. Morgon visar dagens att göra och det som ligger kvar, och Kväll visar det du skickat och dagens sessioner. Påminnelserna läses när Hem visas och när de ändras, och sparas aldrig i Mio. Händelser i Kalender visas inte, eftersom Mio inte läser kalendern.
+- **Inställningar → Notiser** ersätter Påminnelser och har bara morgon- och kvällsnotisen. Mios alarm och postpåminnelser går inte längre att skapa.
+- **AI-svar sparas i Anteckningar:** "Granska och spara i Anteckningar" öppnar dela-arket; Mio behåller ingen kopia av svaret.
+- Versionen är 0.9.1. De gamla lokala posterna och alarmen tas bort i nästa steg; inget är provat på telefonen än.
 
 ## Helhetsbygget 2026-10-11 (pågår)
 

@@ -98,9 +98,9 @@ struct MioSettingsView: View {
                     .font(.footnote)
                 Text("Historik och råtext finns under fliken Lektioner.").font(.footnote).foregroundStyle(.secondary)
             } header: { Text("Lektioner") }
-            Section("Påminnelser") {
-                NavigationLink { SystemRemindersView() } label: {
-                    Label("Alarm, notiser och dagliga påminnelser", systemImage: "alarm")
+            Section("Notiser") {
+                NavigationLink { MioNotificationSettingsView() } label: {
+                    Label("Morgon- och kvällsnotis", systemImage: "bell")
                 }
             }
             Section {

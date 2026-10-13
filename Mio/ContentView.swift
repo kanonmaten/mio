@@ -23,12 +23,14 @@ struct ContentView: View {
             Tab("Lektioner", systemImage: "book", value: MioAppTab.lessons) {
                 LessonLibraryView(model: model, content: contentModel)
             }
-            Tab("Kalender", systemImage: "calendar", value: MioAppTab.calendar) {
-                CalendarTabView(contentModel: contentModel, sessionModel: model)
+            Tab("Förslag", systemImage: "tray", value: MioAppTab.proposals) {
+                NavigationStack {
+                    SuggestionInboxView(contentModel: contentModel, sessionModel: model)
+                        .mioListGround()
+                        .toolbar { MioSettingsToolbar() }
+                }
             }
-            Tab("Anteckningar", systemImage: "note.text", value: MioAppTab.notes) {
-                NotesTabView(contentModel: contentModel, sessionModel: model)
-            }
+            .badge(assistant.pendingCount)
             // The separate round button at the trailing end of the tab bar (iOS 26). It opens Fånga;
             // it never starts the microphone by itself.
             Tab("Fånga", systemImage: "mic", value: MioAppTab.capture, role: .search) {
@@ -42,10 +44,6 @@ struct ContentView: View {
         .environment(\.openMioSettings, { showSettings = true })
         .mioSettingsPanel(isPresented: $showSettings, onDismiss: resolveNotificationRoute) {
             MioSettingsView(model: model, contentModel: contentModel)
-                .disabled(maintenance.blocksWork)
-        }
-        .sheet(item: $navigation.presentedPost) { post in
-            MioNotificationPostView(postID: post.id, contentModel: contentModel, sessionModel: model)
                 .disabled(maintenance.blocksWork)
         }
         .sheet(item: $navigation.presentedSession) { session in
@@ -115,10 +113,9 @@ struct ContentView: View {
         }
     }
 
-    private func notificationDestination(_ id: UUID) -> MioAppTab? {
-        guard let item = contentModel.item(id: id) else { return nil }
-        return item.kind == .plan ? .calendar : .notes
-    }
+    /// Post notifications belong to items from before 0.9.1, which the upgrade removes; any that
+    /// still arrives falls back to Hem.
+    private func notificationDestination(_ id: UUID) -> MioAppTab? { nil }
 
     /// AI is on by default once paired (user decision 2026-10-11): start it at launch, on return
     /// to the foreground and after pairing changes, unless the user paused it.
@@ -748,7 +745,7 @@ private struct FirstRunCard: View {
                 Text("2. Säg svenska meningar och ordet Mio.")
                 Text("3. Prova ‘Mio, anteckna att vi arbetar med procent’. Granska förslaget på Hem och välj Ja, Nej eller Inte nu.")
                 Text("4. Använd Starta lektion för lektionsläge. Historik och råtext finns under Lektioner.")
-                Text("5. Hem visar veckan, nästa sak och dagens händelser. Från kl. 17 visar Hem vad du gjort.")
+                Text("5. Hem visar veckan, nästa påminnelse och dagens att göra. Från kl. 17 visar Hem vad du gjort.")
             }
             .font(.subheadline)
             .frame(maxWidth: .infinity, alignment: .leading)

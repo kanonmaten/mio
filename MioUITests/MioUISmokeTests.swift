@@ -1,15 +1,15 @@
 import XCTest
 
 /// Native simulator/device smoke coverage. These tests never press capture,
-/// permissions, AI-send, or destructive controls; one test creates a synthetic
-/// task through the ordinary local UI. Run in a test simulator; Linux cannot run it.
+/// permissions, AI-send, or destructive controls, and never hand anything to Apple's apps.
+/// Run in a test simulator; Linux cannot run it.
 final class MioUISmokeTests: XCTestCase {
     @MainActor
-    func testFourTabsPlusCaptureButtonAndIndependentActivityStates() throws {
+    func testThreeTabsPlusCaptureButtonAndIndependentActivityStates() throws {
         let app = XCUIApplication()
         app.launch()
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 10))
-        for title in ["Hem", "Lektioner", "Kalender", "Anteckningar"] {
+        for title in ["Hem", "Lektioner", "Förslag"] {
             let tab = app.tabBars.buttons[title]
             XCTAssertTrue(tab.exists, "Missing native tab: \(title)")
             tab.tap()
@@ -49,32 +49,17 @@ final class MioUISmokeTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["mio.settings.panel"].firstMatch.waitForNonExistence(timeout: 5))
     }
 
+    /// 0.9.1: nothing is created by hand in Mio; Förslag lists proposals and what was sent.
     @MainActor
-    func testTaskCompletionHasNamedAccessibleHitArea() throws {
-        // The iOS 27 simulator sometimes reports the app as busy for 60 s after a menu or tap
-        // (XCTest then continues), which alone used up the default two-minute allowance.
-        executionTimeAllowance = 240
+    func testProposalsTabHasNoLocalCreationAndPassesTheAudit() throws {
         let app = XCUIApplication()
-        let title = "Syntetisk att göra \(UUID().uuidString.prefix(8))"
         app.launch()
-        XCTAssertTrue(app.tabBars.buttons["Anteckningar"].waitForExistence(timeout: 10))
-        app.tabBars.buttons["Anteckningar"].tap()
-        app.buttons["Lägg till"].firstMatch.tap()
-        app.buttons["mio.create.task"].firstMatch.tap()
-        let titleField = app.textFields["Rubrik"]
-        XCTAssertTrue(titleField.waitForExistence(timeout: 5))
-        titleField.tap()
-        titleField.typeText(title)
-        app.navigationBars.buttons["Spara"].firstMatch.tap()
-        let incomplete = app.buttons["Markera \(title) som klar"]
-        XCTAssertTrue(incomplete.waitForExistence(timeout: 5))
-        XCTAssertGreaterThanOrEqual(incomplete.frame.width, 44)
-        XCTAssertGreaterThanOrEqual(incomplete.frame.height, 44)
-        incomplete.tap()
-        let completed = app.buttons["Markera \(title) som inte klar"]
-        // On failure, name what is on screen (an alert or error text) instead of a bare false.
-        let visible = { app.alerts.allElementsBoundByIndex.map(\.label) + app.staticTexts.allElementsBoundByIndex.prefix(30).map(\.label) }
-        XCTAssertTrue(completed.waitForExistence(timeout: 10), "Synligt: \(visible().joined(separator: " | "))")
+        XCTAssertTrue(app.tabBars.buttons["Förslag"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Förslag"].tap()
+        XCTAssertTrue(app.navigationBars["Förslag"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Lägg till"].exists)
+        XCTAssertFalse(app.buttons["Skriv förslag"].exists)
+        XCTAssertFalse(app.tabBars.buttons["Kalender"].exists)
         try app.performAccessibilityAudit(for: [.elementDetection, .sufficientElementDescription])
     }
 }

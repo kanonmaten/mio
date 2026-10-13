@@ -25,6 +25,19 @@ final class MioAnswerNoteTests: XCTestCase {
     }
 
     @MainActor
+    func testAnswerSharedToNotesKeepsOnlyTheHandoffRecord() async throws {
+        let fixture = makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        _ = await fixture.workflow.questions.sendApproved(.init(question: "Fråga", context: []), connection: connection())
+        let draft = try XCTUnwrap(fixture.workflow.questions.answerDraft)
+        let saved = await fixture.workflow.saveAnswerNote(draft, title: "Svar", body: "Syntetiskt svar", destination: .notes)
+        XCTAssertEqual(saved, .success)
+        let items = try await fixture.workflow.content.latestItems()
+        XCTAssertEqual(items.first?.handoff?.destination, .notes)
+        XCTAssertEqual(items.first?.body, "", "Notes owns the answer text; Mio keeps no copy")
+    }
+
+    @MainActor
     func testConfigurationAndDeletionInvalidateUnsavedAnswerDraft() async throws {
         for delete in [false, true] {
             let fixture = makeFixture()

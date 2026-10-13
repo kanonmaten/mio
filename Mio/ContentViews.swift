@@ -8,7 +8,6 @@ struct TimelineTabView: View {
     @Bindable var sessionModel: MioViewModel
 
     @State private var searchText = ""
-    @State private var editorRoute: ContentEditorRoute?
     @State private var pendingDeletion: MioContentItem?
 
     var body: some View {
@@ -20,7 +19,7 @@ struct TimelineTabView: View {
                         systemImage: searchText.isEmpty ? "clock" : "magnifyingglass",
                         description: Text(
                             searchText.isEmpty
-                                ? "Lägg till något manuellt eller starta en Mio-session."
+                                ? "Starta en Mio-session. Det du skickar till Apples appar syns också här."
                                 : "Prova ett annat sökord. Sökningen omfattar både manuellt innehåll och transkript."
                         )
                     )
@@ -29,15 +28,11 @@ struct TimelineTabView: View {
                     ForEach(timelineElements) { element in
                         switch element {
                         case let .content(item):
-                            Button {
-                                editorRoute = .edit(item)
-                            } label: {
-                                ContentItemRow(
-                                    item: item,
-                                    linkedSessionTitle: linkedSessionTitle(for: item)
-                                )
-                            }
-                            .buttonStyle(.plain)
+                            // A handed-over item lives in Apple's app; Mio shows only its record.
+                            ContentItemRow(
+                                item: item,
+                                linkedSessionTitle: linkedSessionTitle(for: item)
+                            )
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
                                     pendingDeletion = item
@@ -63,22 +58,7 @@ struct TimelineTabView: View {
             .listStyle(.insetGrouped)
             .mioListGround()
             .navigationTitle("Tidslinje")
-            .searchable(text: $searchText, prompt: "Sök i innehåll och sessioner")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        ForEach(MioContentKind.allCases) { kind in
-                            Button {
-                                editorRoute = .create(kind)
-                            } label: {
-                                Label(kind.title, systemImage: kind.symbolName)
-                            }
-                        }
-                    } label: {
-                        Label("Lägg till", systemImage: "plus")
-                    }
-                }
-            }
+            .searchable(text: $searchText, prompt: "Sök i sessioner och skickat")
         }
         .alert("Kunde inte slutföra raderingen", isPresented: Binding(
             get: { deletionOutcome?.message != nil },
@@ -87,14 +67,6 @@ struct TimelineTabView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(deletionOutcome?.message ?? "Försök igen.")
-        }
-        .sheet(item: $editorRoute) { route in
-            ContentEditorView(
-                contentModel: contentModel,
-                sessionModel: sessionModel,
-                item: route.item,
-                initialKind: route.initialKind
-            )
         }
         .confirmationDialog(
             "Radera posten?",
@@ -112,7 +84,8 @@ struct TimelineTabView: View {
             }
         } message: {
             if let item = pendingDeletion {
-                Text("\(item.kind.title) ”\(item.title)” tas bort från telefonen.")
+                Text(item.handoff.map { "Mio glömmer att ”\(item.title)” skickades. Posten i \($0.destination.title) finns kvar." }
+                     ?? "\(item.kind.title) ”\(item.title)” tas bort från telefonen.")
             }
         }
     }
@@ -149,400 +122,6 @@ struct TimelineTabView: View {
     }
 }
 
-struct CalendarTabView: View {
-    @Environment(MioWorkflowCoordinator.self) private var workflow
-    @Environment(MioDayContext.self) private var day
-    @State private var deletionOutcome: MioOperationOutcome?
-    @Bindable var contentModel: MioContentViewModel
-    @Bindable var sessionModel: MioViewModel
-
-    @State private var searchText = ""
-    @State private var editorRoute: ContentEditorRoute?
-    @State private var pendingDeletion: MioContentItem?
-
-    var body: some View {
-        NavigationStack {
-            List {
-                if matchingPlans.isEmpty {
-                    ContentUnavailableView(
-                        searchText.isEmpty ? "Inga händelser" : "Inga träffar",
-                        systemImage: searchText.isEmpty ? "calendar.badge.plus" : "magnifyingglass",
-                        description: Text(
-                            searchText.isEmpty
-                                ? "Spara en händelse och öppna den för att lägga till en kopia i Apple Kalender eller ställa in alarm."
-                                : "Prova ett annat sökord."
-                        )
-                    )
-                    .listRowBackground(Color.clear)
-                } else {
-                    // Upcoming plans are grouped by Swedish week number, like a paper planner.
-                    ForEach(upcomingWeeks, id: \.monday) { week in
-                        Section(weekTitle(week.monday)) {
-                            ForEach(week.plans) { plan in
-                                planRow(plan)
-                            }
-                        }
-                    }
-
-                    if !earlierPlans.isEmpty {
-                        Section("Tidigare") {
-                            ForEach(earlierPlans) { plan in
-                                planRow(plan)
-                            }
-                        }
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-            .mioListGround()
-            .navigationTitle("Kalender")
-            .toolbar { MioSettingsToolbar() }
-            .searchable(text: $searchText, prompt: "Sök bland händelser")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        editorRoute = .create(.plan)
-                    } label: {
-                        Label("Ny händelse", systemImage: "plus")
-                    }
-                }
-            }
-        }
-        .alert("Kunde inte slutföra raderingen", isPresented: Binding(
-            get: { deletionOutcome?.message != nil },
-            set: { if !$0 { deletionOutcome = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(deletionOutcome?.message ?? "Försök igen.")
-        }
-        .sheet(item: $editorRoute) { route in
-            ContentEditorView(
-                contentModel: contentModel,
-                sessionModel: sessionModel,
-                item: route.item,
-                initialKind: route.initialKind
-            )
-        }
-        .confirmationDialog(
-            "Radera händelsen?",
-            isPresented: deletionConfirmationIsPresented,
-            titleVisibility: .visible
-        ) {
-            if let item = pendingDeletion {
-                Button("Radera permanent", role: .destructive) {
-                    pendingDeletion = nil
-                    Task { deletionOutcome = await workflow.deleteContent(id: item.id) }
-                }
-            }
-            Button("Avbryt", role: .cancel) {
-                pendingDeletion = nil
-            }
-        } message: {
-            if let item = pendingDeletion {
-                Text("Händelsen ”\(item.title)” tas bort från telefonen.")
-            }
-        }
-    }
-
-    private var matchingPlans: [MioContentItem] {
-        contentModel.filteredItems(kinds: Set([.plan]), searchText: searchText)
-    }
-
-    private var upcomingPlans: [MioContentItem] {
-        let startOfToday = day.startOfToday
-        return matchingPlans
-            .filter { $0.scheduledAt >= startOfToday }
-            .sorted {
-                if $0.scheduledAt != $1.scheduledAt {
-                    return $0.scheduledAt < $1.scheduledAt
-                }
-                return $0.id.uuidString < $1.id.uuidString
-            }
-    }
-
-    private var upcomingWeeks: [(monday: Date, plans: [MioContentItem])] {
-        var weeks: [(monday: Date, plans: [MioContentItem])] = []
-        for plan in upcomingPlans {
-            let monday = MioWeekPlanner.startOfWeek(containing: plan.scheduledAt, calendar: day.calendar)
-            if let last = weeks.indices.last, weeks[last].monday == monday {
-                weeks[last].plans.append(plan)
-            } else {
-                weeks.append((monday: monday, plans: [plan]))
-            }
-        }
-        return weeks
-    }
-
-    private func weekTitle(_ monday: Date) -> String {
-        let number = MioWeekPlanner.weekNumber(of: monday, calendar: day.calendar)
-        let thisWeek = MioWeekPlanner.startOfWeek(containing: day.startOfToday, calendar: day.calendar)
-        if monday == thisWeek { return "Den här veckan · v. \(number)" }
-        if let next = day.calendar.date(byAdding: .day, value: 7, to: thisWeek), monday == next { return "Nästa vecka · v. \(number)" }
-        return "v. \(number)"
-    }
-
-    private var earlierPlans: [MioContentItem] {
-        let startOfToday = day.startOfToday
-        return matchingPlans
-            .filter { $0.scheduledAt < startOfToday }
-            .sorted {
-                if $0.scheduledAt != $1.scheduledAt {
-                    return $0.scheduledAt > $1.scheduledAt
-                }
-                return $0.id.uuidString < $1.id.uuidString
-            }
-    }
-
-    @ViewBuilder
-    private func planRow(_ plan: MioContentItem) -> some View {
-        Button {
-            editorRoute = .edit(plan)
-        } label: {
-            ContentItemRow(
-                item: plan,
-                linkedSessionTitle: linkedSessionTitle(for: plan)
-            )
-        }
-        .buttonStyle(.plain)
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                pendingDeletion = plan
-            } label: {
-                Label("Radera", systemImage: "trash")
-            }
-        }
-    }
-
-    private var deletionConfirmationIsPresented: Binding<Bool> {
-        Binding(
-            get: { pendingDeletion != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingDeletion = nil
-                }
-            }
-        )
-    }
-
-    private func linkedSessionTitle(for item: MioContentItem) -> String? {
-        guard let sessionID = item.sessionID,
-              let session = sessionModel.session(id: sessionID)
-        else { return nil }
-        return displayTitle(for: session)
-    }
-}
-
-struct NotesTabView: View {
-    @Environment(MioWorkflowCoordinator.self) private var workflow
-    @State private var deletionOutcome: MioOperationOutcome?
-    @Bindable var contentModel: MioContentViewModel
-    @Bindable var sessionModel: MioViewModel
-
-    @State private var searchText = ""
-    @State private var filter: NotesFilter = .all
-    @State private var editorRoute: ContentEditorRoute?
-    @State private var pendingDeletion: MioContentItem?
-    @State private var completionError: String?
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    Picker("Visa", selection: $filter) {
-                        ForEach(NotesFilter.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                }
-
-                if visibleItems.isEmpty {
-                    ContentUnavailableView(
-                        searchText.isEmpty ? filter.emptyTitle : "Inga träffar",
-                        systemImage: searchText.isEmpty ? filter.symbolName : "magnifyingglass",
-                        description: Text(
-                            searchText.isEmpty
-                                ? "Skapa innehåll manuellt med plusknappen."
-                                : "Prova ett annat sökord."
-                        )
-                    )
-                    .listRowBackground(Color.clear)
-                } else {
-                    Section {
-                        ForEach(visibleItems) { item in
-                            HStack(alignment: .top, spacing: 10) {
-                                if item.kind == .task {
-                                    Button {
-                                        Task {
-                                            await contentModel.setTaskCompleted(
-                                                id: item.id,
-                                                isCompleted: !item.isCompleted
-                                            )
-                                            // A failed save or alarm cancellation must not look like a dead tap.
-                                            completionError = contentModel.errorMessage
-                                        }
-                                    } label: {
-                                        Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                                            .font(.title3)
-                                            .foregroundStyle(item.isCompleted ? .green : .secondary)
-                                            .frame(minWidth: 44, minHeight: 44)
-                                            .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel(
-                                        item.isCompleted ? "Markera \(item.title) som inte klar" : "Markera \(item.title) som klar"
-                                    )
-                                    .accessibilityIdentifier("mio.task-completion.\(item.id.uuidString)")
-                                }
-
-                                Button {
-                                    editorRoute = .edit(item)
-                                } label: {
-                                    ContentItemRow(
-                                        item: item,
-                                        linkedSessionTitle: linkedSessionTitle(for: item)
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    pendingDeletion = item
-                                } label: {
-                                    Label("Radera", systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-            .mioListGround()
-            .navigationTitle("Anteckningar")
-            .toolbar { MioSettingsToolbar() }
-            .searchable(text: $searchText, prompt: "Sök i anteckningar, att göra och minnen")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        ForEach(NotesFilter.creatableKinds) { kind in
-                            Button {
-                                editorRoute = .create(kind)
-                            } label: {
-                                Label(kind.title, systemImage: kind.symbolName)
-                            }
-                            // "Att göra" is also a filter segment; tests address the menu item by identifier.
-                            .accessibilityIdentifier("mio.create.\(kind.rawValue)")
-                        }
-                    } label: {
-                        Label("Lägg till", systemImage: "plus")
-                    }
-                }
-            }
-        }
-        .alert("Kunde inte slutföra raderingen", isPresented: Binding(
-            get: { deletionOutcome?.message != nil },
-            set: { if !$0 { deletionOutcome = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(deletionOutcome?.message ?? "Försök igen.")
-        }
-        .alert("Kunde inte ändra att göra-posten", isPresented: Binding(
-            get: { completionError != nil },
-            set: { if !$0 { completionError = nil; contentModel.errorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(completionError ?? "Försök igen.")
-        }
-        .sheet(item: $editorRoute) { route in
-            ContentEditorView(
-                contentModel: contentModel,
-                sessionModel: sessionModel,
-                item: route.item,
-                initialKind: route.initialKind
-            )
-        }
-        .confirmationDialog(
-            "Radera innehållet?",
-            isPresented: deletionConfirmationIsPresented,
-            titleVisibility: .visible
-        ) {
-            if let item = pendingDeletion {
-                Button("Radera permanent", role: .destructive) {
-                    pendingDeletion = nil
-                    Task { deletionOutcome = await workflow.deleteContent(id: item.id) }
-                }
-            }
-            Button("Avbryt", role: .cancel) {
-                pendingDeletion = nil
-            }
-        } message: {
-            if let item = pendingDeletion {
-                Text("\(item.kind.title) ”\(item.title)” tas bort från telefonen.")
-            }
-        }
-    }
-
-    private var visibleItems: [MioContentItem] {
-        MioContentItem.timelineSorted(
-            contentModel.filteredItems(kinds: filter.kinds, searchText: searchText)
-        )
-    }
-
-    private var deletionConfirmationIsPresented: Binding<Bool> {
-        Binding(
-            get: { pendingDeletion != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingDeletion = nil
-                }
-            }
-        )
-    }
-
-    private func linkedSessionTitle(for item: MioContentItem) -> String? {
-        guard let sessionID = item.sessionID,
-              let session = sessionModel.session(id: sessionID)
-        else { return nil }
-        return displayTitle(for: session)
-    }
-}
-
-struct MioNotificationPostView: View {
-    let postID: UUID
-    let contentModel: MioContentViewModel
-    let sessionModel: MioViewModel
-
-    var body: some View {
-        if let item = contentModel.item(id: postID) {
-            ContentEditorView(contentModel: contentModel, sessionModel: sessionModel,
-                              item: item, initialKind: item.kind)
-        } else {
-            NavigationStack {
-                ContentUnavailableView("Posten finns inte kvar", systemImage: "doc.questionmark",
-                                       description: Text("Stäng vyn för att gå tillbaka till din dag."))
-            }
-        }
-    }
-}
-
-private struct ContentEditorRoute: Identifiable {
-    let id = UUID()
-    let item: MioContentItem?
-    let initialKind: MioContentKind
-
-    static func create(_ kind: MioContentKind) -> Self {
-        Self(item: nil, initialKind: kind)
-    }
-
-    static func edit(_ item: MioContentItem) -> Self {
-        Self(item: item, initialKind: item.kind)
-    }
-}
-
 private enum TimelineElement: Identifiable {
     case content(MioContentItem)
     case session(MioSession)
@@ -559,269 +138,6 @@ private enum TimelineElement: Identifiable {
         case let .content(item): item.scheduledAt
         case let .session(session): session.startedAt
         }
-    }
-}
-
-private enum NotesFilter: String, CaseIterable, Hashable, Identifiable {
-    case all
-    case notes
-    case tasks
-    case memories
-
-    static let creatableKinds: [MioContentKind] = [.note, .task, .memory]
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .all: "Alla"
-        case .notes: "Anteckningar"
-        case .tasks: "Att göra"
-        case .memories: "Minnen"
-        }
-    }
-
-    var kinds: Set<MioContentKind> {
-        switch self {
-        case .all: Set(Self.creatableKinds)
-        case .notes: Set([.note])
-        case .tasks: Set([.task])
-        case .memories: Set([.memory])
-        }
-    }
-
-    var emptyTitle: String {
-        switch self {
-        case .all: "Inga anteckningar ännu"
-        case .notes: "Inga anteckningar"
-        case .tasks: "Inget att göra"
-        case .memories: "Inga minnen"
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .all: "note.text"
-        case .notes: MioContentKind.note.symbolName
-        case .tasks: MioContentKind.task.symbolName
-        case .memories: MioContentKind.memory.symbolName
-        }
-    }
-}
-
-private struct ContentEditorView: View {
-    @Environment(MioWorkflowCoordinator.self) private var workflow
-    @State private var deletionOutcome: MioOperationOutcome?
-    @Environment(\.dismiss) private var dismiss
-
-    @Bindable var contentModel: MioContentViewModel
-    @Bindable var sessionModel: MioViewModel
-
-    let item: MioContentItem?
-
-    @State private var kind: MioContentKind
-    @State private var title: String
-    @State private var bodyText: String
-    @State private var scheduledAt: Date
-    @State private var isAllDay: Bool
-    @State private var isCompleted: Bool
-    @State private var sessionID: UUID?
-    @State private var isSaving = false
-    @State private var showDeleteConfirmation = false
-
-    init(
-        contentModel: MioContentViewModel,
-        sessionModel: MioViewModel,
-        item: MioContentItem?,
-        initialKind: MioContentKind
-    ) {
-        self.contentModel = contentModel
-        self.sessionModel = sessionModel
-        self.item = item
-        _kind = State(initialValue: item?.kind ?? initialKind)
-        _title = State(initialValue: item?.title ?? "")
-        _bodyText = State(initialValue: item?.body ?? "")
-        _scheduledAt = State(initialValue: item?.scheduledAt ?? .now)
-        _isAllDay = State(initialValue: item?.allDay ?? false)
-        _isCompleted = State(initialValue: item?.isCompleted ?? false)
-        _sessionID = State(initialValue: item?.sessionID)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Typ") {
-                    Picker("Typ", selection: $kind) {
-                        ForEach(MioContentKind.allCases) { option in
-                            Label(option.title, systemImage: option.symbolName)
-                                .tag(option)
-                        }
-                    }
-                }
-
-                Section {
-                    TextField("Rubrik", text: $title)
-                    TextEditor(text: $bodyText)
-                        .frame(minHeight: 110)
-                        .accessibilityLabel("Text")
-                } header: {
-                    Text("Innehåll")
-                } footer: {
-                    Text("Rubriken krävs. Allt sparas lokalt på telefonen.")
-                }
-
-                Section("Tid") {
-                    if kind == .plan || kind == .task {
-                        Toggle("Heldag", isOn: $isAllDay)
-                    }
-                    DatePicker(
-                        dateLabel,
-                        selection: $scheduledAt,
-                        displayedComponents: dateComponents
-                    )
-                }
-
-                if kind == .task {
-                    Section("Att göra") {
-                        Toggle("Klar", isOn: $isCompleted)
-                    }
-                }
-
-                Section {
-                    Picker("Session", selection: $sessionID) {
-                        Text("Ingen session")
-                            .tag(Optional<UUID>.none)
-                        ForEach(sessionModel.allSessions) { session in
-                            Text(displayTitle(for: session))
-                                .tag(Optional(session.id))
-                        }
-                    }
-
-                    if let sessionID,
-                       sessionModel.session(id: sessionID) != nil {
-                        NavigationLink("Öppna sessionsredigering") {
-                            SessionEditorView(
-                                sessionID: sessionID,
-                                contentModel: contentModel,
-                                sessionModel: sessionModel
-                            )
-                        }
-                    }
-                } header: {
-                    Text("Kopplad session")
-                } footer: {
-                    Text("Kopplingen duplicerar inte transkriptet.")
-                }
-
-                if let item, kind == .plan || kind == .task {
-                    if title == item.title && bodyText == item.body && scheduledAt == item.scheduledAt && kind == item.kind
-                        && isAllDay == item.allDay {
-                        ContentSystemActionsView(item: item)
-                    } else {
-                        Section {
-                            Text("Spara ändringarna och öppna posten igen för att använda kalender, alarm eller påminnelser. Befintliga systemtider ändras separat.")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                if item != nil {
-                    Section {
-                        Button("Radera innehållet", role: .destructive) {
-                            showDeleteConfirmation = true
-                        }
-                    }
-                }
-            }
-            .navigationTitle(item == nil ? "Nytt innehåll" : "Redigera")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Avbryt") {
-                        dismiss()
-                    }
-                    .disabled(isSaving)
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Spara") {
-                        Task { await save() }
-                    }
-                    .disabled(isSaving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-        .interactiveDismissDisabled(isSaving)
-        .confirmationDialog(
-            "Radera innehållet?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Radera permanent", role: .destructive) {
-                Task { await deleteItem() }
-            }
-            Button("Avbryt", role: .cancel) {}
-        } message: {
-            Text("Posten och dess Mio-alarm/påminnelse tas bort. Sessionen och eventuella kalenderkopior finns kvar.")
-        }
-        .alert("Kunde inte slutföra ändringen", isPresented: contentErrorIsPresented) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(deletionOutcome?.message ?? contentModel.errorMessage ?? "Ett okänt fel inträffade.")
-        }
-    }
-
-    private var dateComponents: DatePickerComponents {
-        isAllDay && (kind == .plan || kind == .task) ? .date : [.date, .hourAndMinute]
-    }
-
-    private var dateLabel: String {
-        switch kind {
-        case .timeline: "Tidpunkt"
-        case .note: "Datum"
-        case .task: "När"
-        case .plan: "Tid"
-        case .memory: "Datum"
-        }
-    }
-
-    private var contentErrorIsPresented: Binding<Bool> {
-        Binding(
-            get: { deletionOutcome?.message != nil || contentModel.errorMessage != nil },
-            set: { isPresented in
-                if !isPresented {
-                    contentModel.errorMessage = nil
-                    deletionOutcome = nil
-                }
-            }
-        )
-    }
-
-    private func save() async {
-        isSaving = true
-        defer { isSaving = false }
-        let didSave = await contentModel.save(
-            id: item?.id,
-            kind: kind,
-            title: title,
-            body: bodyText,
-            scheduledAt: scheduledAt,
-            isCompleted: isCompleted,
-            sessionID: sessionID,
-            isAllDay: isAllDay && (kind == .plan || kind == .task)
-        )
-        if didSave {
-            MioFeedback.success()
-            dismiss()
-        }
-    }
-
-    private func deleteItem() async {
-        guard let item else { return }
-        isSaving = true
-        let outcome = await workflow.deleteContent(id: item.id)
-        deletionOutcome = outcome
-        isSaving = false
-        if outcome.isSuccess { dismiss() }
     }
 }
 
@@ -1181,7 +497,7 @@ struct SessionEditorView: View {
     }
 }
 
-private struct ContentItemRow: View {
+struct ContentItemRow: View {
     let item: MioContentItem
     let linkedSessionTitle: String?
 
@@ -1206,11 +522,16 @@ private struct ContentItemRow: View {
                 }
 
                 HStack(spacing: 10) {
-                    Label(
-                        item.allDay ? item.scheduledAt.formatted(date: .abbreviated, time: .omitted) + " · heldag"
-                            : item.scheduledAt.formatted(date: .abbreviated, time: .shortened),
-                        systemImage: "calendar"
-                    )
+                    if let handoff = item.handoff {
+                        Label("\(handoff.destination.title) · \(handoff.sentAt.formatted(date: .abbreviated, time: .shortened))",
+                              systemImage: handoff.destination.symbolName)
+                    } else {
+                        Label(
+                            item.allDay ? item.scheduledAt.formatted(date: .abbreviated, time: .omitted) + " · heldag"
+                                : item.scheduledAt.formatted(date: .abbreviated, time: .shortened),
+                            systemImage: "calendar"
+                        )
+                    }
                     Text(item.kind.title)
                 }
                 .font(.caption)

@@ -1,7 +1,9 @@
+import EventKit
 import SwiftUI
 
-/// Hem: the week planner. Week number and seven days on top, then the one next thing, what
+/// Hem: the week planner. Week number and seven days on top, then the next reminder, what
 /// waits for review, the chosen day's morning or evening overview, and twelve weeks of use.
+/// From 0.9.1 tasks come from Reminders, read on demand and never stored; Calendar is not read.
 struct MioHomeView: View {
     @Bindable var model: MioViewModel
     @Bindable var contentModel: MioContentViewModel
@@ -9,11 +11,14 @@ struct MioHomeView: View {
     @Environment(MioDayContext.self) private var day
     @Environment(MioNavigationCoordinator.self) private var navigation
     @Environment(MioAnalysisCoordinator.self) private var analysis
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openMioSettings) private var openSettings
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(MioCloudSettings.serverKey) private var server = ""
     @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
     @State private var showAsk = false
+    @State private var reminders: [MioReminderSummary] = []
 
     var body: some View {
         NavigationStack {
@@ -49,7 +54,21 @@ struct MioHomeView: View {
             .sheet(isPresented: $showAsk) {
                 MioAskSheet(items: contentModel.items, sessions: model.allSessions)
             }
+            .task(id: day.overviewDate) { await loadReminders() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await loadReminders() } }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .EKEventStoreChanged)) { _ in
+                Task { await loadReminders() }
+            }
         }
+    }
+
+    /// Overdue reminders and those due up to the end of the later of today and the chosen day.
+    private func loadReminders() async {
+        let chosen = day.calendar.startOfDay(for: day.overviewDate)
+        let end = day.calendar.date(byAdding: .day, value: 1, to: max(chosen, day.startOfToday)) ?? chosen
+        reminders = await workflow.reminders.upcoming(DateInterval(start: .distantPast, end: end))
     }
 
     // MARK: Week
@@ -104,10 +123,10 @@ struct MioHomeView: View {
         let next = nextUp
         MioPanel {
             switch next {
-            case .upcoming(let item), .overdue(let item):
-                itemLine(item, timeText: next == .overdue(item)
-                         ? "Kvar sedan \(MioTimeText.describe(item.scheduledAt, relativeTo: .now, calendar: day.calendar, allDay: item.allDay))"
-                         : MioTimeText.describe(item.scheduledAt, relativeTo: .now, calendar: day.calendar, allDay: item.allDay))
+            case .upcoming(let reminder):
+                reminderLine(reminder, timeText: dueText(reminder, relativeTo: .now))
+            case .overdue(let reminder):
+                reminderLine(reminder, timeText: "Kvar sedan \(dueText(reminder, relativeTo: .now))")
             case .none where server.isEmpty:
                 // Unpaired, pairing is the one real next step, so it leads instead of "Klart för i dag".
                 Group {
@@ -152,8 +171,8 @@ struct MioHomeView: View {
         }
     }
 
-    private var nextUp: MioNextUp {
-        MioNextUp.make(content: contentModel.items, now: .now, calendar: day.calendar)
+    private var nextUp: MioReminderNext {
+        MioReminderNext.make(reminders: reminders, now: .now, calendar: day.calendar)
     }
 
     private var emptyNextText: String {
@@ -168,28 +187,27 @@ struct MioHomeView: View {
         [.off, .failed, .unavailable].contains(model.runState) && !server.isEmpty
     }
 
-    /// A row opens the post; a task also gets its own completion control beside it.
-    private func itemLine(_ item: MioContentItem, timeText: String) -> some View {
-        HStack(spacing: 4) {
-            Button { navigation.presentedPost = MioPresentedPost(id: item.id) } label: {
-                MioItemRow(item: item, timeText: timeText).contentShape(Rectangle())
+    /// A reminder as Reminders shows it; Mio does not change or complete it.
+    private func reminderLine(_ reminder: MioReminderSummary, timeText: String) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Image(systemName: "checklist")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.tint)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(reminder.title).font(.body.weight(.medium))
+                Text(timeText).font(.subheadline).foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
-            if item.kind == .task {
-                Button {
-                    Task { await contentModel.setTaskCompleted(id: item.id, isCompleted: !item.isCompleted) }
-                } label: {
-                    Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .font(.title2)
-                        .foregroundStyle(MioTheme.tint)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(item.isCompleted ? "Markera \(item.title) som inte klar" : "Markera \(item.title) som klar")
-                .accessibilityIdentifier("mio.task-completion.\(item.id.uuidString)")
-            }
+            Spacer(minLength: 8)
         }
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func dueText(_ reminder: MioReminderSummary, relativeTo date: Date) -> String {
+        guard let due = reminder.dueDate else { return "Utan datum" }
+        return MioTimeText.describe(due, relativeTo: date, calendar: day.calendar, allDay: !reminder.hasTime)
     }
 
     // MARK: Review and status
@@ -313,6 +331,17 @@ struct MioHomeView: View {
                          date: day.overviewDate, calendar: day.calendar)
     }
 
+    private var reminderDay: MioReminderDay {
+        MioReminderDay.make(reminders: reminders, date: day.overviewDate, today: day.startOfToday, calendar: day.calendar)
+    }
+
+    /// Records of what was handed to Apple's apps on the chosen day.
+    private var sentToday: [MioContentItem] {
+        contentModel.items.filter { item in
+            item.handoff.map { day.calendar.isDate($0.sentAt, inSameDayAs: day.overviewDate) } ?? false
+        }.sorted { ($0.handoff?.sentAt ?? .distantPast) < ($1.handoff?.sentAt ?? .distantPast) }
+    }
+
     @ViewBuilder
     private var overview: some View {
         @Bindable var navigation = navigation
@@ -328,41 +357,47 @@ struct MioHomeView: View {
             .frame(maxWidth: stacked ? .infinity : 200)
             .padding(.top, stacked ? 0 : 8)
         }
-        let groups = overviewGroups
         MioPanel {
-            if groups.allSatisfy({ $0.items.isEmpty }) {
-                Text(navigation.dailyPeriod == .evening ? "Inget avklarat eller sparat den här dagen." : "Inget planerat den här dagen.")
-                    .foregroundStyle(.secondary)
-            }
-            ForEach(groups.filter { !$0.items.isEmpty }, id: \.title) { group in
-                Text(group.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .accessibilityAddTraits(.isHeader)
-                ForEach(group.items) { item in
-                    itemLine(item, timeText: MioTimeText.describe(item.kind == .task && item.isCompleted ? item.completedAt ?? item.scheduledAt : item.scheduledAt,
-                                                                  relativeTo: day.overviewDate, calendar: day.calendar,
-                                                                  allDay: item.allDay && !(item.kind == .task && item.isCompleted)))
-                }
-            }
             if navigation.dailyPeriod == .evening {
+                if sentToday.isEmpty {
+                    Text("Inget skickat den här dagen.").foregroundStyle(.secondary)
+                } else {
+                    groupTitle("Skickat")
+                    ForEach(sentToday) { item in
+                        MioItemRow(item: item, timeText: item.handoff.map {
+                            "\($0.destination.title) · \(MioTimeText.describe($0.sentAt, relativeTo: day.overviewDate, calendar: day.calendar))"
+                        } ?? "")
+                    }
+                }
                 Divider()
                 Label("\(briefing.sessionCount) sessioner · \(briefing.lessonCount) lektioner", systemImage: "waveform")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            } else {
+                let today = reminderDay
+                if today.due.isEmpty && today.overdue.isEmpty {
+                    Text(reminders.isEmpty && workflow.reminders.access() != .granted
+                         ? "Att göra visas här när Mio får läsa Påminnelser. Det frågar Mio första gången du skickar en att göra-post."
+                         : "Inget att göra den här dagen.")
+                        .foregroundStyle(.secondary)
+                }
+                if !today.due.isEmpty {
+                    groupTitle("Att göra")
+                    ForEach(today.due) { reminderLine($0, timeText: dueText($0, relativeTo: day.overviewDate)) }
+                }
+                if !today.overdue.isEmpty {
+                    groupTitle("Kvar sedan tidigare")
+                    ForEach(today.overdue) { reminderLine($0, timeText: dueText($0, relativeTo: day.overviewDate)) }
+                }
             }
         }
     }
 
-    private var overviewGroups: [(title: String, items: [MioContentItem])] {
-        let today = self.briefing
-        if navigation.dailyPeriod == .evening {
-            return [(title: "Avklarat", items: today.completedTasks), (title: "Anteckningar och minnen", items: today.notes)]
-        }
-        var groups: [(title: String, items: [MioContentItem])] = [
-            (title: "Händelser", items: today.plans), (title: "Att göra", items: today.tasks)]
-        if isTodaySelected { groups.append((title: "Kvar sedan tidigare", items: today.overdueTasks)) }
-        return groups
+    private func groupTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 

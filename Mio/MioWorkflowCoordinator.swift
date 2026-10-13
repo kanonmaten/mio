@@ -391,15 +391,20 @@ final class MioWorkflowCoordinator {
         await content.bootstrap(); await assistant.bootstrap(); await capture.bootstrap()
     }
 
-    /// Explicit local approval; one stable draft ID preserves later user edits on retries.
-    func saveAnswerNote(_ draft: MioAnswerNoteDraft, title: String, body: String) async -> MioOperationOutcome {
+    /// Explicit approval; one stable draft ID preserves later user edits on retries. With a
+    /// destination (0.9.1) the text already went to Notes through the share sheet and Mio keeps
+    /// only the handoff record, without the answer text.
+    func saveAnswerNote(_ draft: MioAnswerNoteDraft, title: String, body: String,
+                        destination: MioHandoffDestination? = nil) async -> MioOperationOutcome {
         await enqueue { [self] in
             guard questions.generation == draft.generation, questions.answerDraft?.id == draft.id else { return .cancelled }
             let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
             let cleanBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !cleanTitle.isEmpty, !cleanBody.isEmpty else { return .failure("Skriv en rubrik och kontrollera svaret innan du sparar.") }
             guard cleanTitle.utf8.count <= 2_000, cleanBody.utf8.count <= 24_000 else { return .failure("Anteckningen är för stor. Korta texten innan du sparar.") }
-            let item = MioContentItem(id: draft.id, kind: .note, title: cleanTitle, body: cleanBody)
+            let handoff = destination.map { MioHandoff(destination: $0, externalIdentifier: nil, sentAt: .now) }
+            let item = MioContentItem(id: draft.id, kind: .note, title: cleanTitle, body: handoff == nil ? cleanBody : "",
+                                      scheduledAt: handoff?.sentAt, handoff: handoff)
             return await content.saveApproved(item)
         }
     }

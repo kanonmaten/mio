@@ -138,3 +138,51 @@ enum MioNextUp: Equatable, Sendable {
         return .none
     }
 }
+
+/// Hem from 0.9.1: Reminders owns tasks, so Nästa reads unfinished reminders on demand (never
+/// stored). Calendar is never read. A reminder without a clock time counts for its whole day.
+enum MioReminderNext: Equatable, Sendable {
+    case upcoming(MioReminderSummary)
+    case overdue(MioReminderSummary)
+    case none
+
+    /// Today's next reminder, timed ones up to 30 minutes late included; otherwise the oldest
+    /// one left from an earlier day.
+    static func make(reminders: [MioReminderSummary], now: Date, calendar: Calendar) -> MioReminderNext {
+        let startOfToday = calendar.startOfDay(for: now)
+        guard let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday) else { return .none }
+        let dated = MioReminderDay.sortedByDue(reminders)
+        let recent = now.addingTimeInterval(-30 * 60)
+        for reminder in dated {
+            guard let due = reminder.dueDate, due >= startOfToday, due < endOfToday else { continue }
+            if !reminder.hasTime || due >= recent { return .upcoming(reminder) }
+        }
+        if let late = dated.first(where: { ($0.dueDate ?? .distantFuture) < startOfToday }) { return .overdue(late) }
+        return .none
+    }
+}
+
+/// The reminders shown in Hem's morning overview for one day.
+struct MioReminderDay: Equatable, Sendable {
+    let due: [MioReminderSummary]
+    /// Left from earlier days; only listed for today.
+    let overdue: [MioReminderSummary]
+
+    static func make(reminders: [MioReminderSummary], date: Date, today: Date, calendar: Calendar) -> MioReminderDay {
+        let start = calendar.startOfDay(for: date)
+        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start.addingTimeInterval(86_400)
+        let sorted = sortedByDue(reminders)
+        let isToday = calendar.isDate(date, inSameDayAs: today)
+        let due = sorted.filter { reminder in reminder.dueDate.map { $0 >= start && $0 < end } ?? false }
+        let overdue = isToday ? sorted.filter { reminder in reminder.dueDate.map { $0 < start } ?? false } : []
+        return MioReminderDay(due: due, overdue: overdue)
+    }
+
+    /// Dated reminders by due time, then identifier; undated ones are left out.
+    static func sortedByDue(_ reminders: [MioReminderSummary]) -> [MioReminderSummary] {
+        reminders.filter { $0.dueDate != nil }.sorted { left, right in
+            let a = left.dueDate ?? .distantFuture, b = right.dueDate ?? .distantFuture
+            return a == b ? left.id < right.id : a < b
+        }
+    }
+}

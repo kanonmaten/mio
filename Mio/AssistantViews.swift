@@ -1,36 +1,87 @@
 import SwiftUI
 import UIKit
 
+/// Förslag (0.9.1): proposals waiting for Ja, Nej or Inte nu, then what was handed to Apple's
+/// apps. Nothing is created here by hand; write in Calendar, Reminders or Notes directly.
 struct SuggestionInboxView: View {
     @Environment(MioAssistantViewModel.self) private var assistant
+    @Environment(MioWorkflowCoordinator.self) private var workflow
     let contentModel: MioContentViewModel
     let sessionModel: MioViewModel
-    @State private var showComposer = false
+    @State private var pendingDeletion: MioContentItem?
+    @State private var deletionOutcome: MioOperationOutcome?
 
     var body: some View {
         List {
             Section {
-                Text("Inget förslag blir en sparad post förrän du väljer Ja. Inte nu behåller frågan här. Nej tar bort förslaget; originaltranskriptet påverkas inte.")
+                Text("Inget skickas till Kalender, Påminnelser eller Anteckningar förrän du väljer Ja. Inte nu behåller förslaget här. Nej tar bort förslaget; originaltranskriptet påverkas inte.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             if assistant.suggestions.isEmpty {
-                ContentUnavailableView("Inga väntande frågor", systemImage: "checkmark.bubble", description: Text("När AI är på kommer förslag ur vanliga samtal hit. Du kan också använda ett lokalt Mio-kommando eller skriva med plusknappen."))
+                ContentUnavailableView("Inga väntande förslag", systemImage: "checkmark.bubble", description: Text("När AI är på kommer förslag ur vanliga samtal hit, liksom lokala Mio-kommandon."))
             }
             suggestionSection("Att granska", state: .pending)
             suggestionSection("Inte nu", state: .deferred)
+            if !sent.isEmpty {
+                Section {
+                    ForEach(sent) { item in
+                        sentRow(item)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) { pendingDeletion = item } label: { Label("Glöm", systemImage: "trash") }
+                            }
+                    }
+                } header: {
+                    Text("Skickat")
+                } footer: {
+                    Text("Ändra och bocka av i Kalender, Påminnelser eller Anteckningar. Mio sparar bara vart posten skickades och från vilken session.")
+                }
+            }
             if let error = assistant.errorMessage {
                 Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
             }
         }
         .navigationTitle("Förslag")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { showComposer = true } label: { Label("Skriv förslag", systemImage: "plus") }
+        .confirmationDialog("Glöm att posten skickades?", isPresented: Binding(
+            get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }
+        ), titleVisibility: .visible) {
+            if let item = pendingDeletion {
+                Button("Glöm", role: .destructive) {
+                    pendingDeletion = nil
+                    Task { deletionOutcome = await workflow.deleteContent(id: item.id) }
+                }
+            }
+            Button("Avbryt", role: .cancel) { pendingDeletion = nil }
+        } message: {
+            if let item = pendingDeletion, let handoff = item.handoff {
+                Text("Posten i \(handoff.destination.title) finns kvar. Bara Mios notering försvinner.")
             }
         }
-        .sheet(isPresented: $showComposer) {
-            SuggestionComposerView()
+        .alert("Kunde inte glömma posten", isPresented: Binding(
+            get: { deletionOutcome?.message != nil }, set: { if !$0 { deletionOutcome = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deletionOutcome?.message ?? "Försök igen.")
+        }
+    }
+
+    private var sent: [MioContentItem] {
+        contentModel.items.filter { $0.handoff != nil }
+            .sorted { ($0.handoff?.sentAt ?? .distantPast) > ($1.handoff?.sentAt ?? .distantPast) }
+    }
+
+    @ViewBuilder
+    private func sentRow(_ item: MioContentItem) -> some View {
+        let session = item.sessionID.flatMap { sessionModel.session(id: $0) }
+        if let session {
+            NavigationLink {
+                SessionEditorView(sessionID: session.id, contentModel: contentModel, sessionModel: sessionModel)
+            } label: {
+                ContentItemRow(item: item, linkedSessionTitle: nil)
+            }
+        } else {
+            ContentItemRow(item: item, linkedSessionTitle: nil)
         }
     }
 
@@ -56,62 +107,6 @@ struct SuggestionInboxView: View {
                     }
                 }
             }
-        }
-    }
-}
-
-private struct SuggestionComposerView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(MioAssistantViewModel.self) private var assistant
-    @State private var kind: MioContentKind = .task
-    @State private var isQuestion = false
-    @State private var text = ""
-    @State private var date = Date.now
-    @State private var saving = false
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("Vad vill du spara?") {
-                    Toggle("Fråga till AI", isOn: $isQuestion)
-                    if !isQuestion {
-                        Picker("Typ", selection: $kind) {
-                            ForEach(MioContentKind.allCases.filter { $0 != .timeline }) { kind in
-                                Text(kind.title).tag(kind)
-                            }
-                        }
-                    }
-                    TextEditor(text: $text).frame(minHeight: 140).accessibilityLabel("Förslagets text")
-                    if !isQuestion { DatePicker("Datum och tid", selection: $date) }
-                }
-                Section {
-                    Text("Mio skapar en lokal fråga som du får granska. Inget skickas till AI och inget alarm skapas här.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                    if let error = assistant.errorMessage { Text(error).foregroundStyle(.red) }
-                }
-            }
-            .navigationTitle("Nytt förslag")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Avbryt") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Lägg i inkorgen") {
-                        saving = true
-                        Task {
-                            let saved: Bool
-                            if isQuestion {
-                                saved = await assistant.proposeQuestion(text: text, sessionID: nil)
-                            } else {
-                                saved = await assistant.propose(text: text, kind: kind, scheduledAt: date, sessionID: nil)
-                            }
-                            saving = false
-                            if saved { dismiss() }
-                        }
-                    }
-                    .disabled(saving || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .disabled(saving)
-            .interactiveDismissDisabled(saving)
         }
     }
 }
@@ -584,7 +579,7 @@ struct MioGuideView: View {
     var body: some View {
         List {
             Section("Börja här") {
-                Text("Skapa anteckningar, att göra, händelser och minnen med plusknappen i flikarna. Allt detta fungerar utan mikrofon eller AI.")
+                Text("Mio fångar och föreslår; Apples appar sparar. Godkänner du ett förslag hamnar en händelse i Kalender, en att göra-post i Påminnelser och en anteckning eller ett minne i Anteckningar.")
                 Text("Para din dator under Inställningar → Dator: kör mio-pair på datorn och skanna QR-koden. Starta Mio skickar ljud till din dator för svensk text. Starta Mio för vardagslyssning. Starta lektion pausar vardags-Mio och samlar lektionsunderlag separat. Paus och stopp stänger mikrofonen. Historik och rättningar finns under Lektioner → Historik och råtext.")
             }
             Section("Tilltala Mio") {
@@ -593,20 +588,20 @@ struct MioGuideView: View {
                 Text("Mio, planera tandläkaren.")
                 Text("Mio, kom ihåg att jag föredrar blå pennor.")
                 Text("Mio, fråga varför himlen är blå.")
-                Text("Använd kommandot i början av en mening. Granska sedan förslaget från Hem: kontrollera typ, text och tid. Lokala kommandon tolkar inte datum; även AI-tolkade tider måste granskas. Vibration ges när Mio upptäcks i förgrunden; i bakgrunden kan du behöva öppna appen för att se frågor.")
+                Text("Använd kommandot i början av en mening. Granska sedan förslaget under Förslag: kontrollera typ, text och tid. Lokala kommandon tolkar inte datum; även AI-tolkade tider måste granskas. Vibration ges när Mio upptäcks i förgrunden; i bakgrunden kan du behöva öppna appen för att se frågor.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Planera dagen") {
-                Text("Öppna en sparad händelse eller att göra-post för att skapa en separat systempåminnelse eller ett alarm. En händelse kan också kopieras till Apple Kalender i dess redigeringsruta. Kalenderkopior synkas inte tillbaka till Mio.")
-                Text("Hem visar veckan, nästa sak och dagens händelser. Välj en dag i veckoraden för att se den. Byt till Kväll för avklarade att göra-poster, anteckningar och dagens sessioner. Alarm och dagliga påminnelser finns under Inställningar → Påminnelser.")
+                Text("Ja på en händelse öppnar Kalenders egen ruta, där du väljer kalender och notis. Ja på en att göra-post skapar den i Påminnelser, i den lista du väljer. Ändra och bocka av där; Mio skriver aldrig över dina poster.")
+                Text("Hem visar veckan, nästa påminnelse och dagens att göra från Påminnelser. Mio läser inte din kalender. Byt till Kväll för det du skickat och dagens sessioner. Morgon- och kvällsnotis finns under Inställningar → Notiser.")
             }
             Section("AI") {
                 Text("AI är på när datorn är parad. Nytt vardagstal skickas samlat högst var femte minut och kan ge förslag på händelser och att göra utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Alla föreslagna poster kräver Ja. Frågor skickas direkt. Pausa AI på Fånga eller under Inställningar → AI; pausen sparas.")
             }
             Section("Din kontroll") {
-                Text("Inget råljud sparas. Spela bara in andra med tydligt samtycke och enligt lokala regler. Du kan ändra och radera synliga minnen i Anteckningar.")
-                Text("Export innehåller lokal text, förslag, lektioner och diagnostik. Förvara den privat. Radera all lokal data tar också bort Mios alarm, notiser och AI-konfiguration. Redan delade filer och kalenderkopior finns kvar där du sparade dem.")
-                Text("Långvarig bakgrundslyssning och batteritid måste provas på din telefon. iOS startar inte om lyssningen när appen tvångsavslutats. Kontrollera alarm på enheten innan du förlitar dig på dem.")
+                Text("Inget råljud sparas. Spela bara in andra med tydligt samtycke och enligt lokala regler. Minnen sparas i Apples Anteckningar, där du ändrar och raderar dem.")
+                Text("Export innehåller lokal text, förslag, lektioner och diagnostik. Förvara den privat. Radera all lokal data tar också bort Mios notiser och AI-konfiguration. Det du skickat till Kalender, Påminnelser och Anteckningar finns kvar där.")
+                Text("Långvarig bakgrundslyssning och batteritid måste provas på din telefon. iOS startar inte om lyssningen när appen tvångsavslutats.")
             }
         }
         .navigationTitle("Så använder du Mio")

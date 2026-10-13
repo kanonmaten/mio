@@ -2,7 +2,8 @@ import Foundation
 
 /// Four sections plus the separate capture (mic) tab. Morgon and Kväll live on Hem.
 enum MioAppTab: String, Hashable, Sendable {
-    case home, lessons, calendar, notes, capture
+    // 0.9.1: Kalender and Anteckningar gave way to Förslag; Apple's apps own the items.
+    case home, lessons, proposals, capture
 }
 
 enum MioDailyPeriod: String, Hashable, Sendable {

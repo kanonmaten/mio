@@ -109,7 +109,7 @@ struct CloudAssistantView: View {
                     Text(verbatim: answer).textSelection(.enabled)
                     Text("Svaret är rådgivande. Det kan innehålla fel och skapar inga poster, påminnelser eller kalenderhändelser. Svaret försvinner när du lämnar vyn om du inte själv sparar det som en anteckning.")
                         .font(.footnote).foregroundStyle(.secondary)
-                    Button("Granska och spara som anteckning") { answerNoteReview = workflow.questions.answerDraft }
+                    Button("Granska och spara i Anteckningar") { answerNoteReview = workflow.questions.answerDraft }
                         .disabled(workflow.questions.answerDraft == nil)
                     Button("Rensa fråga och svar", role: .destructive) { clearConversation() }
                 }
@@ -280,6 +280,7 @@ private struct MioAnswerNoteReviewView: View {
     @State private var bodyText: String
     @State private var isSaving = false
     @State private var outcome: MioOperationOutcome?
+    @State private var showShare = false
 
     init(draft: MioAnswerNoteDraft) {
         self.draft = draft
@@ -289,25 +290,33 @@ private struct MioAnswerNoteReviewView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Lokal anteckning · granska svaret") {
+                Section("Anteckning · granska svaret") {
                     TextField("Rubrik", text: $title)
-                    TextEditor(text: $bodyText).frame(minHeight: 180).accessibilityLabel("Svarstext som sparas lokalt")
-                    Text("Kontrollera och redigera uppgifterna. Spara skapar en vanlig lokal anteckning utan ett nytt AI-anrop.")
+                    TextEditor(text: $bodyText).frame(minHeight: 180).accessibilityLabel("Svarstext som sparas i Anteckningar")
+                    Text("Kontrollera och redigera uppgifterna. Dela-arket öppnas med texten; välj Anteckningar. Inget nytt AI-anrop görs och Mio behåller ingen kopia av svaret.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 if let message = outcome?.message { Section { Text(message).foregroundStyle(.red) } }
-                Button("Spara anteckning lokalt") {
-                    isSaving = true
-                    Task {
-                        let result = await workflow.saveAnswerNote(draft, title: title, body: bodyText)
-                        outcome = result; isSaving = false
-                        if result.isSuccess { dismiss() }
-                    }
-                }.disabled(isSaving)
+                Button("Spara i Anteckningar") { showShare = true }
+                    .disabled(isSaving || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                              || bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .navigationTitle("Granska anteckning")
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Avbryt") { dismiss() }.disabled(isSaving) } }
         }
         .interactiveDismissDisabled(isSaving)
+        .sheet(isPresented: $showShare) {
+            MioShareSheet(text: [title, bodyText].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: "\n\n")) { destination in
+                showShare = false
+                guard let destination else { return }
+                isSaving = true
+                Task {
+                    let result = await workflow.saveAnswerNote(draft, title: title, body: bodyText, destination: destination)
+                    outcome = result; isSaving = false
+                    if result.isSuccess { dismiss() }
+                }
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 }

@@ -29,8 +29,8 @@ final class MioNavigationTests: XCTestCase {
         navigation.receive(.post(id))
         XCTAssertEqual(navigation.selectedTab, .home)
         XCTAssertNil(navigation.presentedPost)
-        navigation.resolvePending { requested in requested == id ? .calendar : nil }
-        XCTAssertEqual(navigation.selectedTab, .calendar)
+        navigation.resolvePending { requested in requested == id ? .proposals : nil }
+        XCTAssertEqual(navigation.selectedTab, .proposals)
         XCTAssertEqual(navigation.presentedPost?.id, id)
         XCTAssertNil(navigation.pendingRoute)
     }
@@ -40,7 +40,7 @@ final class MioNavigationTests: XCTestCase {
         let id = UUID()
         let navigation = MioNavigationCoordinator()
         navigation.receive(.post(id))
-        navigation.resolvePending { _ in .notes }
+        navigation.resolvePending { _ in .proposals }
         XCTAssertEqual(navigation.presentedPost?.id, id)
         navigation.reconcile { _ in nil }
         XCTAssertNil(navigation.presentedPost)
@@ -55,7 +55,7 @@ final class MioNavigationTests: XCTestCase {
     func testDailyNotificationsSelectTheirNativeOverviewAndClearPostPresentation() async {
         let navigation = MioNavigationCoordinator()
         navigation.receive(.post(UUID()))
-        navigation.resolvePending { _ in .notes }
+        navigation.resolvePending { _ in .proposals }
         navigation.receive(.evening)
         navigation.resolvePending { _ in nil }
         XCTAssertEqual(navigation.selectedTab, .home)
@@ -96,7 +96,7 @@ final class MioNavigationTests: XCTestCase {
         })
         day.select(selected)
         navigation.receive(.post(UUID()))
-        navigation.resolvePending { _ in .notes }
+        navigation.resolvePending { _ in .proposals }
         XCTAssertEqual(day.selectedDate, selected)
         XCTAssertFalse(day.followsToday)
     }
