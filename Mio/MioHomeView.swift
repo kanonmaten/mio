@@ -231,7 +231,8 @@ struct MioHomeView: View {
         }
     }
 
-    /// Only shown when AI is not simply working: unpaired, paused by the user, or waiting on quota.
+    /// Unpaired, paused by the user or waiting on quota; otherwise when AI last answered, so an
+    /// answer without proposals still shows that AI ran.
     @ViewBuilder
     private var aiStatus: some View {
         if server.isEmpty {
@@ -244,7 +245,33 @@ struct MioHomeView: View {
         } else if let until = analysis.pausedUntil, until > .now {
             statusLine("AI fortsätter \(MioTimeText.describe(until, relativeTo: .now, calendar: day.calendar)).",
                        symbol: "clock", action: nil, perform: {})
+        } else if let review = latestReview {
+            // Opens the session, where every AI answer and its questions about the text are listed.
+            NavigationLink {
+                SessionEditorView(sessionID: review.sessionID, contentModel: contentModel, sessionModel: model)
+            } label: {
+                HStack(spacing: 10) {
+                    Label("AI granskade senast \(MioTimeText.describe(review.reviewedAt, relativeTo: .now, calendar: day.calendar)) · \(review.outcome)",
+                          systemImage: "text.magnifyingglass")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("mio.home.ai-review")
         }
+    }
+
+    private var latestReview: MioEverydayReview? {
+        MioEverydayReview.make(records: assistant.analyses, decisions: assistant.analysisDecisions,
+                               excludingSessionIDs: Set(model.allSessions.filter(\.isLesson).map(\.id))).first
     }
 
     private func statusLine(_ text: String, symbol: String, action: String?, perform: @escaping () -> Void) -> some View {

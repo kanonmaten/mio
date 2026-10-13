@@ -838,6 +838,7 @@ struct SessionEditorView: View {
             if let session = sessionModel.session(id: sessionID) {
                 Form {
                     sessionSection(session)
+                    aiReviewSection(session)
                     Section("Ordna sessionen") {
                         NavigationLink("Lektionsindelning") {
                             LessonManagementView(session: session)
@@ -933,6 +934,31 @@ struct SessionEditorView: View {
             Text("Session")
         } footer: {
             Text(sessionDateDescription(session))
+        }
+    }
+
+    /// Every everyday AI answer for this session, including those without proposals.
+    @ViewBuilder
+    private func aiReviewSection(_ session: MioSession) -> some View {
+        let reviews = MioEverydayReview.make(records: assistant.analyses, decisions: assistant.analysisDecisions,
+                                             excludingSessionIDs: []).filter { $0.sessionID == session.id }
+        if !session.isLesson, !reviews.isEmpty {
+            Section {
+                ForEach(reviews) { review in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("\(review.reviewedAt.formatted(.dateTime.hour().minute().locale(MioTheme.swedish))) · \(review.fragmentText) · \(review.outcome)")
+                        ForEach(Array(review.uncertainties.enumerated()), id: \.offset) { _, uncertainty in
+                            Label(uncertainty, systemImage: "questionmark.circle")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                Text("AI-genomgångar")
+            } footer: {
+                Text("Varje rad är ett svar från AI. Förslag granskar du från Hem; AI:ns frågor om texten visas bara här.")
+            }
         }
     }
 

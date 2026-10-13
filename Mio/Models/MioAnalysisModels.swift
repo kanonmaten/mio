@@ -344,3 +344,36 @@ struct MioLessonDocument {
         return parts.joined(separator: "\n\n")
     }
 }
+
+/// One everyday AI review, listed even when it returned nothing, so a valid empty answer is
+/// not mistaken for a lost one. Pure presentation over persisted records; nothing new is stored.
+struct MioEverydayReview: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let sessionID: UUID
+    let reviewedAt: Date
+    let fragmentCount: Int
+    /// AI proposals created or completed by this review, whether still open or already decided.
+    let suggestionCount: Int
+    let uncertainties: [String]
+
+    /// Newest first. Lesson records, detailed or legacy, belong to the lesson views.
+    static func make(records: [MioAnalysisRecord], decisions: [MioAnalysisDecision],
+                     excludingSessionIDs excluded: Set<UUID>) -> [MioEverydayReview] {
+        let everyday = records.filter { $0.sections == nil && !excluded.contains($0.sessionID) }
+        // A record lists only the new fragments it sent, never its context. A decision's sources
+        // grow when a later review completes it, so the latest matching review owns it.
+        var counts: [UUID: Int] = [:]
+        for decision in decisions {
+            let owner = everyday.filter { $0.sessionID == decision.sessionID && !Set($0.fragmentIDs).isDisjoint(with: decision.sourceIDs) }
+                .max { $0.createdAt < $1.createdAt }
+            if let owner { counts[owner.id, default: 0] += 1 }
+        }
+        return everyday.map {
+            MioEverydayReview(id: $0.id, sessionID: $0.sessionID, reviewedAt: $0.createdAt, fragmentCount: $0.fragmentIDs.count,
+                              suggestionCount: counts[$0.id] ?? 0, uncertainties: $0.uncertainties)
+        }.sorted { $0.reviewedAt > $1.reviewedAt }
+    }
+
+    var outcome: String { suggestionCount == 0 ? "inga förslag" : "\(suggestionCount) förslag" }
+    var fragmentText: String { fragmentCount == 1 ? "1 textdel" : "\(fragmentCount) textdelar" }
+}

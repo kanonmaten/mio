@@ -187,6 +187,33 @@ extension MioAnalysisTests {
         XCTAssertFalse(complete.markdown.contains("qwen/"))
     }
 
+    func testEverydayReviewsShowEmptyAnswersAndAttributeProposalsToTheirLatestReview() throws {
+        let session = UUID(), lesson = UUID(), start = Date(timeIntervalSince1970: 1_800_000_000)
+        let ids = (0..<4).map { "\(UUID().uuidString):0" }
+        func record(_ fragments: [String], at offset: TimeInterval, in owner: UUID? = nil,
+                    uncertainties: [String] = []) -> MioAnalysisRecord {
+            MioAnalysisRecord(id: UUID(), sessionID: owner ?? session, fragmentIDs: fragments, highlights: [],
+                              uncertainties: uncertainties, createdAt: start.addingTimeInterval(offset))
+        }
+        let empty = record([ids[0]], at: 0, uncertainties: ["Vilket ord avsågs?"])
+        let proposing = record([ids[1], ids[2]], at: 60)
+        let completing = record([ids[3]], at: 120)
+        let lessonRecord = record([ids[0]], at: 180, in: lesson)
+        // One proposal from new text only, one that a later review completed with new sources.
+        let decisions = [
+            MioAnalysisDecision(id: UUID(), sessionID: session, kind: .plan, sourceIDs: [ids[1]], isClosed: false),
+            MioAnalysisDecision(id: UUID(), sessionID: session, kind: .task, sourceIDs: [ids[2], ids[3]], isClosed: true)
+        ]
+        let reviews = MioEverydayReview.make(records: [empty, proposing, completing, lessonRecord], decisions: decisions,
+                                             excludingSessionIDs: [lesson])
+        XCTAssertEqual(reviews.map(\.id), [completing.id, proposing.id, empty.id])
+        XCTAssertEqual(reviews.map(\.suggestionCount), [1, 1, 0])
+        XCTAssertEqual(reviews.last?.outcome, "inga förslag")
+        XCTAssertEqual(reviews.last?.uncertainties, ["Vilket ord avsågs?"])
+        XCTAssertEqual(reviews[1].fragmentText, "2 textdelar")
+        XCTAssertEqual(reviews[0].outcome, "1 förslag")
+    }
+
     func testOldAnalysisRecordsDecodeWithoutDetailedNotes() throws {
         let original = MioAnalysisRecord(id: UUID(), sessionID: UUID(), fragmentIDs: [], highlights: [], uncertainties: [], createdAt: .now)
         let data = try JSONEncoder().encode(original)

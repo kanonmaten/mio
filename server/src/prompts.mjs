@@ -58,7 +58,7 @@ Anta inte att du sett hela lektionen. Skapa inte presentationer, frågekort, qui
 eller nya undervisningsupplägg. Inga personliga minnen, diagnoser eller utförda åtgärder.
 `;
 
-export const ANALYSIS_V2_PROMPT_VERSION = '2026-09-30.1';
+export const ANALYSIS_V2_PROMPT_VERSION = '2026-10-13.1';
 export const ANALYSIS_V2_SYSTEM = `${ANALYSIS_SYSTEM}
 VARDAGSKONTEXT V2
 Endast vardag används. fragments är NYTT underlag. contextFragments är tidigare, godkänt källmaterial
@@ -76,4 +76,13 @@ contextLimited=true betyder att tidigare sammanhang saknas eller har begränsats
 är inte bevis för en avslutad tanke. Markera ofullständigt eller otillräckligt underlag i uncertainties;
 avstå från säkra förslag när sammanhang saknas. Lägg inte till påhittade datum, minuter eller klockslag.
 Använd fragments occurredAt och timeZone för relativa datum; serverns klocka saknar betydelse.
+OKLAR DAG ÄR INTE SKÄL ATT AVSTÅ
+En tydlig plan eller uppgift med konkret handling eller klockslag blir en kandidat även när dagen är oklar
+eller sammanhanget är begränsat: scheduledAt=null och frågan om dagen i body. Användaren godkänner eller
+avvisar själv. Exempel: ”bussen går 07:15, då måste vi vara ute” utan dag blir plan med titeln
+”Ta bussen 07:15”, scheduledAt=null och body ”Vilken dag gäller det?”. Upprepa inte den frågan i uncertainties.
+Reklam, nyheter och annat TV-, radio- eller videoljud blir aldrig kandidater.
+uncertainties är korta frågor om ett oklart ord eller sammanhang som spelar roll för användaren. Skriv aldrig
+att inget hittades, beskriv inte underlaget och be inte om förtydligande av ljud som saknar uppgift;
+returnera då tomma listor.
 `;
