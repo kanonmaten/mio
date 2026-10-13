@@ -39,6 +39,22 @@ class VerificationDiagnosticsTests(unittest.TestCase):
 
 
 class WorkflowContractTests(unittest.TestCase):
+    def test_ipa_workflow_requires_parallel_ipa_and_test_jobs(self):
+        def job(*commands):
+            return {"runs-on": "xcode-27", "steps": [{"run": command} for command in commands]}
+        workflow = {"jobs": {
+            "ipa": job("xcodebuild -configuration Release build", "zip Mio-unsigned.ipa; echo > Mio-buildinfo.txt"),
+            "test": job("xcodebuild -only-testing:MioTests test-without-building",
+                        "xcodebuild -only-testing:MioUITests test-without-building",
+                        "python3 scripts/verify_concurrency.py --native"),
+        }}
+        self.assertEqual(project.workflow_contract_issues("build-unsigned-ipa.yml", workflow), [])
+        workflow["jobs"]["test"]["steps"].pop()
+        workflow["jobs"]["ipa"]["runs-on"] = "macos-latest"
+        issues = project.workflow_contract_issues("build-unsigned-ipa.yml", workflow)
+        self.assertIn("IPA- och testjobb på xcode-27", issues)
+        self.assertIn("native strict-concurrencydiagnostik", issues)
+
     def test_linux_workflow_requires_the_shared_gate_and_evidence_artifact(self):
         workflow = {
             "jobs": {

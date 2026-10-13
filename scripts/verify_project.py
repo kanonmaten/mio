@@ -55,21 +55,24 @@ def workflow_contract_issues(name, workflow):
         return ['YAML-roten måste innehålla en jobs-mappning']
     jobs = workflow['jobs']
     if name == 'build-unsigned-ipa.yml':
-        job = jobs.get('build', {})
-        job = job if isinstance(job, dict) else {}
-        steps = job.get('steps', [])
-        if not isinstance(steps, list):
-            return ['jobbets steps måste vara en lista']
-        commands = '\n'.join(step.get('run', '') for step in steps
-                              if isinstance(step, dict) and isinstance(step.get('run', ''), str))
+        # Two parallel jobs: the IPA does not wait for the simulator tests.
+        commands = {}
+        for key in ('ipa', 'test'):
+            job = jobs.get(key, {})
+            steps = job.get('steps', []) if isinstance(job, dict) else []
+            if not isinstance(steps, list):
+                return [f'jobbet {key}: steps måste vara en lista']
+            commands[key] = '\n'.join(step.get('run', '') for step in steps
+                                      if isinstance(step, dict) and isinstance(step.get('run', ''), str))
         checks = [
-            (len(jobs) == 1 and job.get('runs-on') == 'xcode-27', 'ett sammanhållet jobb på xcode-27'),
-            ('scripts/verify_concurrency.py' in commands and '--native' in commands,
+            (set(jobs) == {'ipa', 'test'} and all(isinstance(jobs[key], dict) and jobs[key].get('runs-on') == 'xcode-27'
+                                                  for key in ('ipa', 'test')),
+             'IPA- och testjobb på xcode-27'),
+            ('-configuration Release' in commands['ipa'] and 'Mio-unsigned.ipa' in commands['ipa']
+             and 'Mio-buildinfo.txt' in commands['ipa'], 'Release, IPA-validering och byggproveniens'),
+            ('test-without-building' in commands['test'] and 'MioUITests' in commands['test'], 'XCTest och UI-tester'),
+            ('scripts/verify_concurrency.py' in commands['test'] and '--native' in commands['test'],
              'native strict-concurrencydiagnostik'),
-            ('-configuration Release' in commands and 'test-without-building' in commands,
-             'Release och XCTest'),
-            ('Mio-unsigned.ipa' in commands and 'Mio-buildinfo.txt' in commands,
-             'IPA-validering och byggproveniens'),
         ]
     elif name == 'verify-linux.yml':
         job = jobs.get('verify', {})

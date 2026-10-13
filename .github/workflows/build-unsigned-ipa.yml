@@ -4,6 +4,11 @@ run-name: "Bygg Mio IPA #${{ github.run_number }}"
 
 on:
   workflow_dispatch:
+    inputs:
+      skarmbilder:
+        description: "Ta skärmbilder av Hem i simulatorn (cirka 4 min extra)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -13,10 +18,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Xcode 27 – bygg, test och IPA
+  # Two runners in parallel: the IPA is ready after the Release build (about 5 min) while the
+  # simulator tests continue. The IPA job does not wait for the tests; check the test job before
+  # calling a revision tested.
+  ipa:
+    name: Xcode 27 – IPA
     runs-on: xcode-27
-    timeout-minutes: 60
+    timeout-minutes: 20
     env:
       EXPECTED_IOS_MAJOR: "27"
       MINIMUM_IOS_VERSION: "26.0"
@@ -52,15 +60,6 @@ jobs:
           plutil -lint Mio/PrivacyInfo.xcprivacy
           plutil -lint MioWidgets/Info.plist
 
-      - name: Diagnostisera strikt concurrency i det riktiga iOS-targetet
-        # Diagnostic gate: warnings are recorded and uploaded, but do not block the IPA
-        # until the existing warnings have been fixed (PLAN.md, Developer experience).
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          python3 "$GITHUB_WORKSPACE/scripts/verify_concurrency.py" \
-            --native --log "$RUNNER_TEMP/Mio-concurrency.log"
-
       - name: Bygg osignerad iPhone-app
         run: |
           set -euo pipefail
@@ -79,28 +78,103 @@ jobs:
             ONLY_ACTIVE_ARCH=NO \
             build 2>&1 | tee "$RUNNER_TEMP/Mio-release.log"
 
-      - name: Kompilera enhetstester
+      - name: Skapa IPA-filen
         run: |
           set -euo pipefail
-          xcodebuild \
-            -project Mio.xcodeproj \
-            -scheme Mio \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$RUNNER_TEMP/TestDerivedData" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            ONLY_ACTIVE_ARCH=NO \
-            build-for-testing 2>&1 | tee "$RUNNER_TEMP/Mio-test-build.log"
+          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/Mio.app"
+          test -d "$APP_PATH"
+          test -x "$APP_PATH/Mio"
+          test -f "$APP_PATH/PrivacyInfo.xcprivacy"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PATH/Info.plist")" = "$MINIMUM_IOS_VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")" = "app.mio.assistant"
+          # The Live Activity extension must ship inside the app; SideStore signs it as a second app ID.
+          WIDGET_PATH="$APP_PATH/PlugIns/MioWidgets.appex"
+          test -x "$WIDGET_PATH/MioWidgets"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$WIDGET_PATH/Info.plist")" = "app.mio.assistant.widgets"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$WIDGET_PATH/Info.plist")" = "com.apple.widgetkit-extension"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$WIDGET_PATH/Info.plist")" = \
+            "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")"
 
-      - name: Kör enhetstester
-        # Unit tests run alone on a fresh simulator, before any UI test can wedge it (run #33:
-        # a hung UI test left the simulator unresponsive and a 2 s unit test then waited 10 min).
-        # No spindump collection: for pure logic tests a hang means a wedged simulator, and
-        # collecting diagnostics from one blocked for 600 s.
-        timeout-minutes: 12
+          rm -rf "$RUNNER_TEMP/Payload"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          ditto "$APP_PATH" "$RUNNER_TEMP/Payload/Mio.app"
+
+          (
+            cd "$RUNNER_TEMP"
+            /usr/bin/zip -qry "$GITHUB_WORKSPACE/Mio-unsigned.ipa" Payload
+          )
+
+          /usr/bin/unzip -t "$GITHUB_WORKSPACE/Mio-unsigned.ipa"
+          /usr/bin/lipo -archs "$APP_PATH/Mio" | /usr/bin/grep -qw arm64
+
+          {
+            echo "Mio – osignerad molnbyggnad"
+            /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist" | sed 's/^/Version: /'
+            /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist" | sed 's/^/Build: /'
+            /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PATH/Info.plist" | sed 's/^/Minimum iOS: /'
+            echo "GitHub run: $GITHUB_RUN_ID"
+            echo "Commit: $GITHUB_SHA"
+            echo "Workflow: $GITHUB_WORKFLOW_REF"
+            echo "Runner: $RUNNER_NAME ($RUNNER_OS/$RUNNER_ARCH)"
+            echo "Checkout dirty: $(git status --porcelain | wc -l | tr -d ' ')"
+            sw_vers -productVersion | sed 's/^/macOS: /'
+            xcodebuild -version | tr '\n' ' '
+            echo
+            xcrun --sdk iphoneos --show-sdk-version | sed 's/^/iPhoneOS SDK: /'
+            /usr/bin/shasum -a 256 "$GITHUB_WORKSPACE/Mio-unsigned.ipa"
+          } > "$GITHUB_WORKSPACE/Mio-buildinfo.txt"
+
+      - name: Ladda upp färdig IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mio-IPA
+          path: |
+            Mio-unsigned.ipa
+            Mio-buildinfo.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Spara native diagnostik även vid fel
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Mio-native-ipa
+          path: |
+            ${{ runner.temp }}/Mio-release.log
+            ${{ runner.temp }}/Mio-release.xcresult
+          if-no-files-found: warn
+          retention-days: 14
+
+  test:
+    name: Xcode 27 – tester
+    runs-on: xcode-27
+    timeout-minutes: 50
+    env:
+      EXPECTED_IOS_MAJOR: "27"
+      MINIMUM_IOS_VERSION: "26.0"
+
+    steps:
+      - name: Hämta projektet
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Visa byggmiljön
+        run: |
+          set -euo pipefail
+          sw_vers
+          xcode-select -p
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          XCODE_VERSION="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
+          IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          test "${XCODE_VERSION%%.*}" = "27"
+          test "${IOS_SDK_VERSION%%.*}" = "$EXPECTED_IOS_MAJOR"
+
+      - name: Starta simulatorn i bakgrunden
+        # simctl boot returns once booting has begun; the simulator finishes starting while the
+        # tests compile, and the test step waits for it with bootstatus.
         run: |
           set -euo pipefail
           command -v jq
@@ -135,6 +209,32 @@ jobs:
           fi
           echo "Vald simulator: $SIMULATOR_UDID"
           echo "SIMULATOR_UDID=$SIMULATOR_UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+
+      - name: Kompilera enhetstester
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project Mio.xcodeproj \
+            -scheme Mio \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/TestDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            build-for-testing 2>&1 | tee "$RUNNER_TEMP/Mio-test-build.log"
+
+      - name: Kör enhetstester
+        # Unit tests run alone on a fresh simulator, before any UI test can wedge it (run #33:
+        # a hung UI test left the simulator unresponsive and a 2 s unit test then waited 10 min).
+        # No spindump collection: for pure logic tests a hang means a wedged simulator, and
+        # collecting diagnostics from one blocked for 600 s.
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
           xcrun simctl boot "$SIMULATOR_UDID" || true
           xcrun simctl bootstatus "$SIMULATOR_UDID" -b
           # simctl shutdown on a wedged simulator blocked for 9 min in run #33; perl's alarm bounds it.
@@ -193,9 +293,9 @@ jobs:
             test-without-building 2>&1 | tee "$RUNNER_TEMP/Mio-uitests.log"
 
       - name: Ta skärmbilder i simulatorn
-        # Fresh simulator, no user data: Hem in light, dark and the largest text size, so the
-        # design can be reviewed before installing. Never blocks the IPA; runs even after a test failure.
-        if: ${{ !cancelled() && env.SIMULATOR_UDID != '' }}
+        # Optional (about 4 min): fresh simulator, no user data, Hem in light, dark and the largest
+        # text size so the design can be reviewed before installing. Runs even after a test failure.
+        if: ${{ !cancelled() && inputs.skarmbilder && env.SIMULATOR_UDID != '' }}
         continue-on-error: true
         timeout-minutes: 8
         run: |
@@ -224,7 +324,7 @@ jobs:
           ls -l "$OUT"
 
       - name: Ladda upp skärmbilder
-        if: always()
+        if: ${{ always() && inputs.skarmbilder }}
         uses: actions/upload-artifact@v7
         with:
           name: Mio-screenshots
@@ -292,67 +392,10 @@ jobs:
           PY
           done
 
-      - name: Skapa IPA-filen
-        run: |
-          set -euo pipefail
-          APP_PATH="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/Mio.app"
-          test -d "$APP_PATH"
-          test -x "$APP_PATH/Mio"
-          test -f "$APP_PATH/PrivacyInfo.xcprivacy"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PATH/Info.plist")" = "$MINIMUM_IOS_VERSION"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")" = "app.mio.assistant"
-          # The Live Activity extension must ship inside the app; SideStore signs it as a second app ID.
-          WIDGET_PATH="$APP_PATH/PlugIns/MioWidgets.appex"
-          test -x "$WIDGET_PATH/MioWidgets"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$WIDGET_PATH/Info.plist")" = "app.mio.assistant.widgets"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$WIDGET_PATH/Info.plist")" = "com.apple.widgetkit-extension"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$WIDGET_PATH/Info.plist")" = \
-            "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")"
-
-          rm -rf "$RUNNER_TEMP/Payload"
-          mkdir -p "$RUNNER_TEMP/Payload"
-          ditto "$APP_PATH" "$RUNNER_TEMP/Payload/Mio.app"
-
-          (
-            cd "$RUNNER_TEMP"
-            /usr/bin/zip -qry "$GITHUB_WORKSPACE/Mio-unsigned.ipa" Payload
-          )
-
-          /usr/bin/unzip -t "$GITHUB_WORKSPACE/Mio-unsigned.ipa"
-          /usr/bin/lipo -archs "$APP_PATH/Mio" | /usr/bin/grep -qw arm64
-
-          {
-            echo "Mio – osignerad molnbyggnad"
-            /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist" | sed 's/^/Version: /'
-            /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist" | sed 's/^/Build: /'
-            /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP_PATH/Info.plist" | sed 's/^/Minimum iOS: /'
-            echo "GitHub run: $GITHUB_RUN_ID"
-            echo "Commit: $GITHUB_SHA"
-            echo "Workflow: $GITHUB_WORKFLOW_REF"
-            echo "Runner: $RUNNER_NAME ($RUNNER_OS/$RUNNER_ARCH)"
-            echo "Checkout dirty: $(git status --porcelain | wc -l | tr -d ' ')"
-            sw_vers -productVersion | sed 's/^/macOS: /'
-            xcodebuild -version | tr '\n' ' '
-            echo
-            xcrun --sdk iphoneos --show-sdk-version | sed 's/^/iPhoneOS SDK: /'
-            /usr/bin/shasum -a 256 "$GITHUB_WORKSPACE/Mio-unsigned.ipa"
-          } > "$GITHUB_WORKSPACE/Mio-buildinfo.txt"
-
-      - name: Ladda upp färdig IPA
-        uses: actions/upload-artifact@v7
-        with:
-          name: Mio-IPA
-          path: |
-            Mio-unsigned.ipa
-            Mio-buildinfo.txt
-          if-no-files-found: error
-          retention-days: 14
-          compression-level: 0
-
       - name: Skriv små skärmbilder i loggen
         # Artifact downloads can be unreachable from review sandboxes; small JPEGs in base64
         # between markers let a reviewer rebuild them from the job log. Simulator only, no user data.
-        if: always()
+        if: ${{ always() && inputs.skarmbilder }}
         continue-on-error: true
         run: |
           set -uo pipefail
@@ -365,11 +408,22 @@ jobs:
             echo "MIO-SHOT-END $name"
           done
 
+      - name: Diagnostisera strikt concurrency i det riktiga iOS-targetet
+        # Diagnostic gate: warnings are recorded and uploaded, but do not block the IPA
+        # until the existing warnings have been fixed (PLAN.md, Developer experience).
+        # Runs last in the test job so that it delays neither the IPA nor the test results.
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/scripts/verify_concurrency.py" \
+            --native --log "$RUNNER_TEMP/Mio-concurrency.log"
+
       - name: Spara native diagnostik även vid fel
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: Mio-native-verification
+          name: Mio-native-tests
           path: |
             ${{ runner.temp }}/Mio-*.log
             ${{ runner.temp }}/Mio-*.xcresult

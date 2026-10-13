@@ -137,7 +137,7 @@ Tabellen beskriver den tidigare grundens beslut. Apple-transkription och de hist
 | Resurs före modulstart | `SpeechTranscriber` endast efter installerad svensk assetstatus; separat installationsknapp | 2026-08-24 |
 | Installation före fallback | Ersätter omedelbar fallback: stödd saknad svensk resurs installeras vid start. Verkliga fel ger ny analyzer för Dictation; avbryt startar inte fallback | 2026-09-28 |
 | Inga externa integrationer i v0.2.0 | Ingen OpenAI, EventKit, systemalarm eller konto; Kalender och Morgon är lokala vyer | 2026-08-24 |
-| Gemensamt Xcode 27-bygge | Ett jobb på `xcode-27` är konfigurerat för Release, XCTest och osignerad IPA med iOS 27 SDK och lägsta iOS-version 26.0 | 2026-09-25 |
+| Gemensamt Xcode 27-bygge | Två parallella jobb på `xcode-27` (sedan 2026-10-13): ett för Release och osignerad IPA, ett för XCTest, UI-tester och concurrency-diagnos, med iOS 27 SDK och lägsta iOS-version 26.0 | 2026-09-25 |
 | Beständiga namn och versioner | Projektet heter Mio; produktmilstolpar använder v0.x.y enligt roadmapen | 2026-09-22 |
 
 ## Ny appidentitet och testtelefon, 2026-09-26
@@ -251,3 +251,7 @@ Sessioner, innehåll och assistentdata lagras i SwiftData (iOS 26) med ett `Vers
 Användaren valde 2026-10-13 båda åtgärderna efter telefonprovet, där 11 giltiga vardagssvar gav 0 förslag och inget syntes i appen. Appen visar nu varje vardagsgenomgång (Hem och sessionen) som presentation över befintliga `MioAnalysisRecord`; antalet förslag räknas fram ur de textfria besluten, där det senaste svaret vars nya fragment ingår i beslutets källor äger beslutet. Inget nytt fält eller schema. Bortvalt: spara antalet i posten (kräver fält och exportändring, äldre poster saknar det) och en notis per tomt svar (stör var femte minut).
 
 Vardagsprompten får en egen regel: en tydlig plan eller uppgift med konkret handling eller klockslag blir en kandidat med `scheduledAt=null` och frågan om dagen i body, även med begränsat sammanhang; förslag kräver fortfarande Ja. `uncertainties` får inte beskriva underlaget eller säga att inget hittades. Bortvalt: sänka trösklarna generellt (TV-ljud och småprat ger då brus) och efterbearbeta osäkerheter till förslag i appen (gissning utanför modellens grundning). Regeln ligger bara i v2-tillägget, så frågor och lektioner behåller sina promptversioner. Effekten på `qwen/qwen3.8-27b` är **inte provad** med riktiga anrop.
+
+## IPA och tester i två parallella jobb, 2026-10-13
+
+Användaren valde 2026-10-13 att snabba upp "Bygg Mio IPA". Körning #35 tog 21 min, varav cirka 4,5 min kompilering (tre gånger) och resten simulatorn: enhetstester 7 min, UI-tester 4,8 min och skärmbilder 4 min. Nu bygger ett jobb Release och IPA (väntat cirka 5 min) medan ett annat kör testerna. Simulatorn börjar starta innan testerna kompileras, concurrency-diagnosen ligger sist i testjobbet och skärmbilderna körs bara när rutan bockas i vid start. Avvägning: IPA:n kan laddas ner innan testerna är klara, så en revision är testad först när testjobbet är grönt; två körare används samtidigt. Bortvalt: cache av byggfiler mellan körningar (bräckligt på värdade Mac-körare, högst någon minut) och parallella tester (togs bort efter hänget i körning #33). Tidsvinsterna är uppskattningar tills en körning har mätts.
