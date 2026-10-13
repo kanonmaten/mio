@@ -61,8 +61,11 @@ jobs:
           plutil -lint MioWidgets/Info.plist
 
       - name: Bygg osignerad iPhone-app
+        # The build number is the run number, so every installed IPA names exactly one run and,
+        # through Mio-buildinfo.txt, one commit. The project file keeps 5 for local builds.
         run: |
           set -euo pipefail
+          test "$GITHUB_RUN_NUMBER" -gt 5
           xcodebuild \
             -project Mio.xcodeproj \
             -scheme Mio \
@@ -74,6 +77,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY='' \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             ONLY_ACTIVE_ARCH=NO \
             build 2>&1 | tee "$RUNNER_TEMP/Mio-release.log"
@@ -94,6 +98,8 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$WIDGET_PATH/Info.plist")" = "com.apple.widgetkit-extension"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$WIDGET_PATH/Info.plist")" = \
             "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Info.plist")"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_PATH/Info.plist")" = "$GITHUB_RUN_NUMBER"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$WIDGET_PATH/Info.plist")" = "$GITHUB_RUN_NUMBER"
 
           rm -rf "$RUNNER_TEMP/Payload"
           mkdir -p "$RUNNER_TEMP/Payload"

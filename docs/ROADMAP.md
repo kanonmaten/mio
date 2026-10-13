@@ -44,7 +44,7 @@ Read-only produktionskontroll den 3 oktober visar att den gamla OpenAI-bundlen f
 4. Kör [helhetstestet](TESTPLAN_HELHET.md) samt återstående [långtest](TESTPLAN_HELHET.md#långprov-latens-värme-och-batteri).
 5. Registrera exakt revision, build, enhet och resultat i [status](STATUS.md). Åtgärda verkliga fel innan daglig tillit.
 
-Versionsnumret 1.0.0 används först när accepterad vardagsomfattning är verifierad. Inget datum eller löfte om heldagslyssning ges utan mätningar. Appversion, byggnummer och lagringsschema är separata värden. `CURRENT_PROJECT_VERSION` höjs inför nästa distribuerade build; bundle identifier och beständiga lagringsvägar ändras inte.
+Versionsnumret 1.0.0 används först när accepterad vardagsomfattning är verifierad. Inget datum eller löfte om heldagslyssning ges utan mätningar. Appversion, byggnummer och lagringsschema är separata värden. Sedan 2026-10-13 sätter IPA-workflowen byggnumret till körningens nummer (0.9.0 (37) och framåt), så att varje installerad IPA motsvarar en körning och en commit; projektfilens 5 gäller bara lokala byggen. Versionsnumret står kvar på 0.9.0 tills helhetsbygget är verifierat (användarens val 2026-10-13); bundle identifier och beständiga lagringsvägar ändras inte.
 
 Råljudslagring, molnöverföring utan aktiverat samtycke, dold profilering och tyst kalenderbokning ingår inte. Serverdrift och Tailscale behövs för transkription. Manuella poster och lokal historik fungerar utan server.
 

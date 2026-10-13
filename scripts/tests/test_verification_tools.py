@@ -43,7 +43,8 @@ class WorkflowContractTests(unittest.TestCase):
         def job(*commands):
             return {"runs-on": "xcode-27", "steps": [{"run": command} for command in commands]}
         workflow = {"jobs": {
-            "ipa": job("xcodebuild -configuration Release build", "zip Mio-unsigned.ipa; echo > Mio-buildinfo.txt"),
+            "ipa": job('xcodebuild -configuration Release CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" build',
+                       "zip Mio-unsigned.ipa; echo > Mio-buildinfo.txt"),
             "test": job("xcodebuild -only-testing:MioTests test-without-building",
                         "xcodebuild -only-testing:MioUITests test-without-building",
                         "python3 scripts/verify_concurrency.py --native"),
@@ -51,7 +52,9 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(project.workflow_contract_issues("build-unsigned-ipa.yml", workflow), [])
         workflow["jobs"]["test"]["steps"].pop()
         workflow["jobs"]["ipa"]["runs-on"] = "macos-latest"
+        workflow["jobs"]["ipa"]["steps"][0]["run"] = "xcodebuild -configuration Release build"
         issues = project.workflow_contract_issues("build-unsigned-ipa.yml", workflow)
+        self.assertIn("byggnummer från körningens nummer", issues)
         self.assertIn("IPA- och testjobb på xcode-27", issues)
         self.assertIn("native strict-concurrencydiagnostik", issues)
 

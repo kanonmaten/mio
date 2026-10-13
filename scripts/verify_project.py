@@ -70,6 +70,7 @@ def workflow_contract_issues(name, workflow):
              'IPA- och testjobb på xcode-27'),
             ('-configuration Release' in commands['ipa'] and 'Mio-unsigned.ipa' in commands['ipa']
              and 'Mio-buildinfo.txt' in commands['ipa'], 'Release, IPA-validering och byggproveniens'),
+            ('CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"' in commands['ipa'], 'byggnummer från körningens nummer'),
             ('test-without-building' in commands['test'] and 'MioUITests' in commands['test'], 'XCTest och UI-tester'),
             ('scripts/verify_concurrency.py' in commands['test'] and '--native' in commands['test'],
              'native strict-concurrencydiagnostik'),
