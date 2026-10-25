@@ -26,7 +26,7 @@ final class MioViewModel {
     }
     var previousSessions: [MioSession] {
         get { sessionRegister.sessions }
-        set { sessionRegister.sessions = newValue; stateRevision &+= 1 }
+        set { sessionRegister.replaceAll(newValue); stateRevision &+= 1 }
     }
     var liveTranscript = ""
     var statusMessage = "Starta Mio för att skicka ljud privat till din transkriptionsserver."
@@ -706,7 +706,7 @@ final class MioViewModel {
     }
 
     var allSessions: [MioSession] {
-        sessionRegister.sessions.sorted { $0.startedAt > $1.startedAt }
+        sessionRegister.sessions
     }
 
     func session(id: UUID) -> MioSession? {

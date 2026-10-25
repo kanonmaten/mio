@@ -76,6 +76,28 @@ final class MioContextTests: XCTestCase {
         }
     }
 
+    func testContextTrimsOldestFragmentsUntilDecisionHintsFitLimit() throws {
+        let origin = Date(timeIntervalSince1970: 1_900_000_000)
+        func segment(_ index: Int) -> TranscriptSegment {
+            TranscriptSegment(audioStartedAt: origin.addingTimeInterval(Double(index) * 3),
+                              audioEndedAt: origin.addingTimeInterval(Double(index) * 3 + 2),
+                              text: "Del \(index)", containsMio: false)
+        }
+        let old = (0..<14).map(segment)
+        let newSegment = segment(14)
+        let session = MioSession(transcripts: old + [newSegment])
+        let fresh = MioAnalysisFragment.make(from: newSegment)
+        let oldFragments = old.flatMap(MioAnalysisFragment.make)
+        let decisions = oldFragments.prefix(13).map {
+            MioAnalysisDecision(id: UUID(), sessionID: session.id, kind: .task, sourceIDs: [$0.id], isClosed: false)
+        }
+        let request = try MioEverydayContext.request(fragments: fresh, session: session,
+            eligibleSegmentIDs: Set(session.transcripts.map(\.id)), continuityStartedAt: origin, decisions: decisions)
+        XCTAssertLessThanOrEqual(request.priorDecisions.count, 12)
+        XCTAssertTrue(request.contextLimited)
+        XCTAssertFalse(request.contextFragments.map(\.id).contains(oldFragments[0].id))
+    }
+
     func testContextDoesNotInvalidateAlreadyAnalyzedNewBatchAndClosedDecisionSurvivesReload() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

@@ -278,27 +278,40 @@ struct MioSession: Identifiable, Codable, Hashable, Sendable {
 struct MioSessionRegister {
     var sessions: [MioSession] = []
     private var selectedID: UUID?
+    private var indexByID: [UUID: Int] = [:]
 
     var current: MioSession? {
-        get { sessions.first { $0.id == selectedID } }
+        get {
+            guard let selectedID, let index = indexByID[selectedID], sessions.indices.contains(index) else { return nil }
+            return sessions[index]
+        }
         set {
             selectedID = newValue?.id
             if let newValue { replace(newValue) }
         }
     }
 
+    mutating func replaceAll(_ sessions: [MioSession]) {
+        self.sessions = sessions
+        rebuildIndex()
+    }
+
     /// Live capture replaces the selected session for every segment, event and battery
     /// sample; an unchanged start time keeps its position without re-sorting the history.
     mutating func replace(_ session: MioSession) {
-        if let index = sessions.firstIndex(where: { $0.id == session.id }) {
+        if let index = indexByID[session.id] {
             guard (session.mutationRevision ?? 0) >= (sessions[index].mutationRevision ?? 0) else { return }
             if sessions[index].startedAt == session.startedAt {
                 sessions[index] = session
                 return
             }
             sessions.remove(at: index)
+            indexByID[session.id] = nil
+            reindex(from: index)
         }
-        sessions.insert(session, at: insertionIndex(for: session))
+        let index = insertionIndex(for: session)
+        sessions.insert(session, at: index)
+        reindex(from: index)
     }
 
     /// Sessions stay ordered newest first.
@@ -307,8 +320,23 @@ struct MioSessionRegister {
     }
 
     mutating func remove(id: UUID) {
-        sessions.removeAll { $0.id == id }
+        guard let index = indexByID[id] else { return }
+        sessions.remove(at: index)
+        indexByID[id] = nil
+        reindex(from: index)
         if selectedID == id { selectedID = nil }
+    }
+
+    private mutating func rebuildIndex() {
+        indexByID = [:]
+        reindex(from: sessions.startIndex)
+    }
+
+    private mutating func reindex(from start: Int) {
+        guard start <= sessions.endIndex else { return }
+        for index in start..<sessions.endIndex {
+            indexByID[sessions[index].id] = index
+        }
     }
 }
 

@@ -8,12 +8,15 @@ struct TimelineTabView: View {
     @Bindable var sessionModel: MioViewModel
 
     @State private var searchText = ""
+    @State private var debouncedSearchText = ""
     @State private var pendingDeletion: MioContentItem?
+    @State private var timelineElementsSnapshot: [TimelineElement] = []
+    @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
             List {
-                if timelineElements.isEmpty {
+                if timelineElementsSnapshot.isEmpty {
                     ContentUnavailableView(
                         searchText.isEmpty ? "Tidslinjen är tom" : "Inga träffar",
                         systemImage: searchText.isEmpty ? "clock" : "magnifyingglass",
@@ -25,7 +28,7 @@ struct TimelineTabView: View {
                     )
                     .listRowBackground(Color.clear)
                 } else {
-                    ForEach(timelineElements) { element in
+                    ForEach(timelineElementsSnapshot) { element in
                         switch element {
                         case let .content(item):
                             // A handed-over item lives in Apple's app; Mio shows only its record.
@@ -59,6 +62,22 @@ struct TimelineTabView: View {
             .mioListGround()
             .navigationTitle("Tidslinje")
             .searchable(text: $searchText, prompt: "Sök i sessioner och skickat")
+            .task {
+                debouncedSearchText = searchText
+                rebuildTimeline(using: searchText)
+            }
+            .onChange(of: searchText) { _, text in
+                scheduleSearchRefresh(for: text)
+            }
+            .onChange(of: contentModel.stateRevision) { _, _ in
+                rebuildTimeline(using: debouncedSearchText)
+            }
+            .onChange(of: sessionModel.stateRevision) { _, _ in
+                rebuildTimeline(using: debouncedSearchText)
+            }
+            .onDisappear {
+                searchTask?.cancel()
+            }
         }
         .alert("Kunde inte slutföra raderingen", isPresented: Binding(
             get: { deletionOutcome?.message != nil },
@@ -90,12 +109,26 @@ struct TimelineTabView: View {
         }
     }
 
-    private var timelineElements: [TimelineElement] {
-        let content = contentModel.filteredItems(searchText: searchText).map(TimelineElement.content)
+    @MainActor
+    private func scheduleSearchRefresh(for text: String) {
+        searchTask?.cancel()
+        searchTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            debouncedSearchText = text
+            rebuildTimeline(using: text)
+        }
+    }
+
+    private func rebuildTimeline(using search: String) {
+        let query = TimelineSearch.normalized(search)
+        let content = contentModel.items
+            .filter { TimelineSearch.matches($0, query: query) }
+            .map(TimelineElement.content)
         let sessions = sessionModel.allSessions
-            .filter { $0.matches(searchText: searchText) }
+            .filter { TimelineSearch.matches($0, query: query) }
             .map(TimelineElement.session)
-        return (content + sessions).sorted {
+        timelineElementsSnapshot = (content + sessions).sorted {
             if $0.date != $1.date {
                 return $0.date > $1.date
             }
@@ -119,6 +152,28 @@ struct TimelineTabView: View {
               let session = sessionModel.session(id: sessionID)
         else { return nil }
         return displayTitle(for: session)
+    }
+}
+
+private enum TimelineSearch {
+    static let locale = Locale(identifier: "sv-SE")
+
+    static func normalized(_ text: String) -> String {
+        text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: locale)
+            .lowercased(with: locale)
+    }
+
+    static func matches(_ item: MioContentItem, query: String) -> Bool {
+        guard !query.isEmpty else { return true }
+        return normalized("\(item.kind.title) \(item.title) \(item.body)").contains(query)
+    }
+
+    static func matches(_ session: MioSession, query: String) -> Bool {
+        guard !query.isEmpty else { return true }
+        let transcriptText = session.transcripts.map(\.displayText).joined(separator: " ")
+        return normalized("\(session.title ?? "") \(session.manualNote ?? "") \(transcriptText)").contains(query)
     }
 }
 

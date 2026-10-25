@@ -119,4 +119,16 @@ final class MioSessionModelsTests: XCTestCase {
         XCTAssertNil(register.current)
         XCTAssertTrue(register.sessions.isEmpty)
     }
+
+    func testSessionRegisterReplaceAllRebuildsLookupIndex() {
+        var register = MioSessionRegister()
+        let first = MioSession(startedAt: Date(timeIntervalSince1970: 1_000), title: "Först")
+        let second = MioSession(startedAt: Date(timeIntervalSince1970: 2_000), title: "Andra")
+        register.current = first
+        register.replaceAll([second, first])
+        register.current = second
+        XCTAssertEqual(register.current?.id, second.id)
+        register.remove(id: first.id)
+        XCTAssertEqual(register.current?.id, second.id)
+    }
 }
