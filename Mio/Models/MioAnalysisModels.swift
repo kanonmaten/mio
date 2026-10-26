@@ -424,9 +424,16 @@ struct MioEverydayReview: Identifiable, Equatable, Sendable {
         // A record lists only the new fragments it sent, never its context. A decision's sources
         // grow when a later review completes it, so the latest matching review owns it.
         var counts: [UUID: Int] = [:]
+        var latestBySessionAndFragment: [UUID: [String: MioAnalysisRecord]] = [:]
+        for record in everyday.sorted(by: { $0.createdAt < $1.createdAt }) {
+            for id in record.fragmentIDs {
+                latestBySessionAndFragment[record.sessionID, default: [:]][id] = record
+            }
+        }
         for decision in decisions {
-            let owner = everyday.filter { $0.sessionID == decision.sessionID && !Set($0.fragmentIDs).isDisjoint(with: decision.sourceIDs) }
-                .max { $0.createdAt < $1.createdAt }
+            let owner = decision.sourceIDs
+                .compactMap { latestBySessionAndFragment[decision.sessionID]?[$0] }
+                .max(by: { $0.createdAt < $1.createdAt })
             if let owner { counts[owner.id, default: 0] += 1 }
         }
         return everyday.map {

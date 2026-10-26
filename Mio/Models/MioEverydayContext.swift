@@ -26,19 +26,22 @@ enum MioEverydayContext {
     static func request(fragments: [MioAnalysisFragment], session: MioSession,
                         eligibleSegmentIDs: Set<UUID>, continuityStartedAt: Date,
                         decisions: [MioAnalysisDecision]) throws -> MioAnalysisRequest {
-        let all = session.transcripts.flatMap(MioAnalysisFragment.make)
         let newIDs = Set(fragments.map(\.id))
-        guard !session.isLesson, let first = all.firstIndex(where: { newIDs.contains($0.id) }),
+        // The live session is not repository-validated; duplicates must fail, not trap.
+        let segmentIDs = Set(session.transcripts.map(\.id))
+        guard segmentIDs.count == session.transcripts.count else { throw MioCloudError.invalidContext }
+        let segments = Dictionary(uniqueKeysWithValues: session.transcripts.map { ($0.id, $0) })
+        let all = session.transcripts.flatMap(MioAnalysisFragment.make)
+        let allIDs = Set(all.map(\.id))
+        guard !session.isLesson,
+              let first = all.firstIndex(where: { newIDs.contains($0.id) }),
               let startID = all[first].segmentID,
-              let start = session.transcripts.first(where: { $0.id == startID })?.audioStartedAt,
-              Set(all.map(\.id)).isSuperset(of: newIDs)
+              let start = segments[startID]?.audioStartedAt,
+              allIDs.isSuperset(of: newIDs)
         else { throw MioCloudError.invalidContext }
         let windowStart = max(continuityStartedAt, start.addingTimeInterval(-60))
         let gaps = (session.captureGaps ?? []).filter { $0.startedAt < start && $0.endedAt > windowStart }
         let floor = max(windowStart, gaps.map(\.endedAt).max() ?? windowStart)
-        // The live session is not repository-validated; duplicates must fail, not trap.
-        guard Set(session.transcripts.map(\.id)).count == session.transcripts.count else { throw MioCloudError.invalidContext }
-        let segments = Dictionary(uniqueKeysWithValues: session.transcripts.map { ($0.id, $0) })
         let possible = all.prefix(first).filter { fragment in
             guard let id = fragment.segmentID, let segment = segments[id] else { return false }
             return eligibleSegmentIDs.contains(id) && segment.audioStartedAt >= windowStart
@@ -48,10 +51,31 @@ enum MioEverydayContext {
             return segment.audioStartedAt >= floor
         }
         var limited = context.count != possible.count || !gaps.isEmpty
-        func hints(for context: [MioAnalysisFragment]) -> [MioAnalysisDecisionHint] {
-            let ids = Set(context.map(\.id))
-            return decisions.filter { $0.sessionID == session.id }.compactMap { decision in
-                let sources = decision.sourceIDs.filter { ids.contains($0) }
+        let fragmentBytes = context.map { $0.text.utf8.count }
+        var contextBytes = fragmentBytes.reduce(0, +)
+        let newBytes = fragments.reduce(0) { $0 + $1.text.utf8.count }
+        while !context.isEmpty {
+            let allCount = context.count + fragments.count
+            let totalLimit = allCount > 8 ? 16_000 : 10_000
+            guard allCount > 16 || contextBytes > 4_000 || contextBytes + newBytes > totalLimit else { break }
+            contextBytes -= context.removeFirst().text.utf8.count
+            limited = true
+        }
+        let sessionDecisions = decisions.filter { $0.sessionID == session.id }
+        var sourcesByDecision: [[String]] = []
+        sourcesByDecision.reserveCapacity(sessionDecisions.count)
+        var fragmentToDecisions: [String: [Int]] = [:]
+        let contextIDs = Set(context.map(\.id))
+        for (index, decision) in sessionDecisions.enumerated() {
+            let sources = decision.sourceIDs.filter { contextIDs.contains($0) }
+            sourcesByDecision.append(sources)
+            for source in sources {
+                fragmentToDecisions[source, default: []].append(index)
+            }
+        }
+        func hints() -> [MioAnalysisDecisionHint] {
+            sessionDecisions.enumerated().compactMap { index, decision in
+                let sources = sourcesByDecision[index]
                 guard !sources.isEmpty else { return nil }
                 return MioAnalysisDecisionHint(id: decision.id, kind: decision.kind, sourceIDs: sources, isOpen: !decision.isClosed)
             }
@@ -59,13 +83,19 @@ enum MioEverydayContext {
         // Remove whole old fragments, never trim or renumber new evidence. Encoding
         // bounds also cover long decision lineages and non-ASCII source text.
         while true {
-            let decisions = hints(for: context)
+            let decisions = hints()
             let request = MioAnalysisRequest(mode: .everyday, timeZone: TimeZone.current.identifier,
                 fragments: fragments, contextFragments: context, priorDecisions: decisions,
                 contextLimited: limited, usesContextContract: true)
             if (try? request.validatedData()) != nil { return request }
             guard !context.isEmpty else { throw MioCloudError.invalidContext }
-            context.removeFirst(); limited = true
+            let removed = context.removeFirst().id
+            if let affected = fragmentToDecisions[removed] {
+                for index in affected {
+                    sourcesByDecision[index].removeAll { $0 == removed }
+                }
+            }
+            limited = true
         }
     }
 }

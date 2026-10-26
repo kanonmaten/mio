@@ -62,6 +62,11 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
     cache = OrderedDict()
     jobs = set()
 
+    def prune_cache(now):
+        for key in list(cache):
+            if now - cache[key][0] >= cache_ttl:
+                del cache[key]
+
     async def load():
         try:
             await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(executor, backend.load), 300)
@@ -79,9 +84,7 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
     async def expire_cache():
         while True:
             await asyncio.sleep(1)
-            for key in list(cache):
-                if time.monotonic() - cache[key][0] >= cache_ttl:
-                    del cache[key]
+            prune_cache(time.monotonic())
             if labeler:
                 labeler.sessions.expire()
 
@@ -136,18 +139,32 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
 
     def run_inference(chunk, pcm):
         """Runs on the single inference thread: preprocess, ASR, optional speakers."""
-        audio = pcm_to_float(pcm)
+        started = time.monotonic()
+        preprocess_ms, asr_ms, speaker_ms = 0.0, 0.0, 0.0
+        audio = None
         model_pcm = pcm
+        if preprocessing or labeler:
+            audio = pcm_to_float(pcm)
         if preprocessing:
             try:
+                preprocess_started = time.monotonic()
                 audio = preprocess(audio)
                 model_pcm = float_to_pcm(audio)
+                preprocess_ms = (time.monotonic() - preprocess_started) * 1_000
             except Exception as error:  # cleanup is an enhancement, never a reason to drop speech
                 if not state["preprocess_warned"]:
                     state["preprocess_warned"] = True
                     log.warning("Förbehandling misslyckades (%s); originalljudet används.", type(error).__name__)
+        asr_started = time.monotonic()
         words = validate_backend_words(backend.transcribe(model_pcm), len(pcm) // 2)
-        return labeler.label(chunk, audio, words) if labeler else words
+        asr_ms = (time.monotonic() - asr_started) * 1_000
+        if labeler:
+            speaker_started = time.monotonic()
+            words = labeler.label(chunk, audio, words)
+            speaker_ms = (time.monotonic() - speaker_started) * 1_000
+        log.debug("perf request_ms=%.1f preprocess_ms=%.1f asr_ms=%.1f speaker_ms=%.1f samples=%d",
+                  (time.monotonic() - started) * 1_000, preprocess_ms, asr_ms, speaker_ms, len(pcm) // 2)
+        return words
 
     async def infer(key, fingerprint, chunk, pcm):
         try:
@@ -209,9 +226,7 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
             pcm = decode_wave(body, chunk)
             key = (chunk.session_id, chunk.chunk_id)
             fingerprint = chunk.fingerprint(body)
-            for old_key in list(cache):
-                if time.monotonic() - cache[old_key][0] >= cache_ttl:
-                    del cache[old_key]
+            prune_cache(time.monotonic())
             if key in cache:
                 _, previous, result = cache[key]
                 if previous != fingerprint:

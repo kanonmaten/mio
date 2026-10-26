@@ -2,6 +2,22 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Prestandastädning utan kontraktsbrott, 2026-10-25
+
+Valt efter kodgranskning och tester:
+
+- **SwiftUI-härledning flyttas från `body` till snapshots:** tidslinjen bygger en sök-snapshot när datarevision eller debouncerad söktext ändras (250 ms), och Hem bygger en samlad snapshot för vecka/streak/granskningsrad/dagsöversikt när underlaget ändras. Beteendet, tillgängligheten och texter är oförändrade.
+- **Vardagskontexten trimmas med löpande budget före valideringsloopen:** `MioEverydayContext.request` indexerar segment och beslut en gång, trimmar kontext med antal-/bytegränser och uppdaterar prior-decision-kopplingar inkrementellt när äldsta fragment tas bort. Exakt valideringskontrakt (`validatedData`) är oförändrat och används fortfarande som sista grind.
+- **Genomgångsattribution indexeras per session/fragment:** `MioEverydayReview.make` hittar senaste ägare via ett sessionsbundet fragmentindex i stället för att söka hela listan för varje beslut.
+- **Aktiv sessionsersättning får ID-index:** `MioSessionRegister` behåller ett in-memory `UUID -> index` för O(1)-uppslag vid löpande ersättningar; ordning (nyast först) och `mutationRevision`-regeln är oförändrade.
+- **Transkriptionsservern optimerar datakonvertering men ökar inte samtidigheten:** PCM→float görs bara när förbehandling eller talarmärkning faktiskt behöver den. Inferens ligger kvar på en worker (GPU-säkerhet), och prestandaloggen innehåller bara stage-latenser och sampleantal (ingen text, ljudpayload eller token).
+
+Bortvalt:
+
+- att öka GPU-samtidigheten (risk för VRAM-krockar och ändrad retry/busy-semantik),
+- att ändra API-kontrakt eller cachegränser för att vinna prestanda,
+- att lagra sökindex eller UI-snapshots på disk (onödigt för privatappen; runtime-cache räcker).
+
 ## Strikt concurrency i det riktiga iOS-targetet, 2026-10-13
 
 Sedan körning #37 (`034cdbc`) underkänner det native concurrency-steget i "Bygg Mio IPA" (Xcode 27, `SWIFT_STRICT_CONCURRENCY=complete`) med 88 varningsblock, medan den portabla kontrollen på Linux var godkänd. Blocken kom från fem orsaker. Varje orsak är rättad i koden så att kompilatorn kan bevisa säkerheten. Inget är tystat med `@preconcurrency` eller `nonisolated(unsafe)`.

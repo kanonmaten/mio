@@ -126,6 +126,8 @@ Båda är på som standard och styrs med rader i `/etc/mio-transcription.conf`. 
 
 Talarmärkningen numrerar upp till fyra talare per session (1, 2, …) i den ordning de hörs först. Den laddas efter att transkriptionen redan är redo, och om den fallerar skrivs en rad i journalen och texten kommer ändå, bara utan talare. Detaljer finns i [API.md](API.md#talarmärkning).
 
+När både förbehandling och talarmärkning är avstängda skickas rå PCM direkt till modellen utan extra PCM→float-konvertering.
+
 **Ej verifierat:** den riktiga talarmodellen och förbehandlingen är bara provade med syntetiska signaler och falska modeller, inte på GPU eller med riktigt tal. Talarmodellen är främst tränad på engelska. Mät gärna med skriptet nedan innan du litar på resultatet.
 
 ## Mäta ordfelfrekvens
@@ -175,6 +177,7 @@ sudo userdel mio-transcription
 ## Integritet
 
 - Ljudet behandlas bara i RAM. Inga ljudfiler, transkript eller tokens skrivs till disk eller logg.
+- Prestandaloggar (debug-nivå) innehåller bara latenser per steg och sampleantal, aldrig användartext, ljudpayload eller tokens.
 - Upp till åtta textsvar sparas i högst ~90 s i minnet så att ett återförsök inte transkriberas två gånger.
 - Talarmärkningen analyserar rösterna. Dess talarcache (röstkännetecken, inte ljud) finns bara i RAM, per session, och raderas när appen avslutar sessionen, efter 10 minuter utan nytt ljud eller vid omstart. Högst fyra sessioner hålls samtidigt.
 - Tjänsten har ingen swap och inga core dumps. Undvik viloläge till disk (hibernation) medan Mio används, eftersom det kan skriva RAM till disk.

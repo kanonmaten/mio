@@ -57,9 +57,13 @@ Tomt `words` är giltig tystnad. `speaker` är additivt och valfritt: heltal 1�
 
 Samma session/chunk-ID och identisk metadata/body ger samma cachesvar under cirka 90 s; olika innehåll med samma ID ger 409. Upp till åtta textsvar/fingerprints lagras i RAM, aldrig ljud i cache. Efter TTL eller processrestart kan samma ljud behöva infereras igen. Klienten använder chunk-ID och sin aktiva sessionsgeneration för att undvika dubbel eller sen lagring.
 
+Servern loggar vid debug-nivå bara textfri prestandadata per anrop (total latenstid, delsteg och sampleantal). Ingen användartext, ljudpayload eller token loggas.
+
 ## Förbehandling före modellen
 
 Modelloberoende och bara i RAM, på som standard (`MIO_PREPROCESS=0` stänger av): DC-offset tas bort, 80 Hz högpass (amplitudsvar som andra ordningens Butterworth, nollfas via FFT så ordtider inte flyttas), nivå mot cirka −23 dBFS RMS mätt på talliknande ramar, högst +20 dB förstärkning och ingen förstärkning av delar som bara innehåller tystnad eller jämnt brus, samt mjuk toppbegränsning under −0,5 dBFS i stället för klippning. Ingen brusreducering: sådan försämrar ofta modern taligenkänning ([arXiv 2512.17562](https://arxiv.org/abs/2512.17562)). WAV-längd, sampletakt, ordtider och cache-fingerprint (beräknat på det mottagna ljudet) är oförändrade. Talarmodellen får samma förbehandlade ljud.
+
+Om både förbehandling och talarmärkning är avstängda gör servern ingen PCM→float-konvertering före ASR.
 
 ## Talarmärkning
 

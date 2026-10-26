@@ -214,6 +214,20 @@ extension MioAnalysisTests {
         XCTAssertEqual(reviews[0].outcome, "1 förslag")
     }
 
+    func testEverydayReviewAttributionStaysWithinSession() throws {
+        let sessionA = UUID(), sessionB = UUID(), now = Date(timeIntervalSince1970: 1_800_100_000)
+        let shared = "\(UUID().uuidString):0"
+        let recordA = MioAnalysisRecord(id: UUID(), sessionID: sessionA, fragmentIDs: [shared], highlights: [],
+                                        uncertainties: [], createdAt: now)
+        let newerB = MioAnalysisRecord(id: UUID(), sessionID: sessionB, fragmentIDs: [shared], highlights: [],
+                                       uncertainties: [], createdAt: now.addingTimeInterval(60))
+        let decision = MioAnalysisDecision(id: UUID(), sessionID: sessionA, kind: .plan, sourceIDs: [shared], isClosed: false)
+        let reviews = MioEverydayReview.make(records: [recordA, newerB], decisions: [decision], excludingSessionIDs: [])
+        let byID = Dictionary(uniqueKeysWithValues: reviews.map { ($0.sessionID, $0.suggestionCount) })
+        XCTAssertEqual(byID[sessionA], 1)
+        XCTAssertEqual(byID[sessionB], 0)
+    }
+
     func testOldAnalysisRecordsDecodeWithoutDetailedNotes() throws {
         let original = MioAnalysisRecord(id: UUID(), sessionID: UUID(), fragmentIDs: [], highlights: [], uncertainties: [], createdAt: .now)
         let data = try JSONEncoder().encode(original)

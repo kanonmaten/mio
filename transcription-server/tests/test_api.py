@@ -385,6 +385,22 @@ def test_preprocessing_reaches_the_model_only_when_enabled(start, enabled):
     assert client.get("/health", headers=headers()).json()["preprocessing"] is enabled
 
 
+def test_plain_transcription_skips_float_conversion_when_not_needed(monkeypatch, start):
+    import mio_transcription.app as appmodule
+    calls = {"pcm_to_float": 0}
+    original = appmodule.pcm_to_float
+
+    def counting_pcm_to_float(pcm):
+        calls["pcm_to_float"] += 1
+        return original(pcm)
+
+    monkeypatch.setattr(appmodule, "pcm_to_float", counting_pcm_to_float)
+    backend = RecordingBackend()
+    client = start(create_app(backend, TOKEN, fatal_exit=lambda _: None, preprocessing=False, diarizer=None))
+    assert client.post("/v1/transcribe", headers=headers(), content=offset_audio()).status_code == 200
+    assert calls["pcm_to_float"] == 0
+
+
 @pytest.mark.parametrize("seconds,core", [(8 + 2, (16_000, 144_000)), (22 + 2, (16_000, 368_000)),
                                           (22, (0, 352_000))])
 def test_pause_cut_chunk_lengths_fit_the_contract(service, seconds, core):

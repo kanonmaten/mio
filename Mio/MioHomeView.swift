@@ -19,6 +19,7 @@ struct MioHomeView: View {
     @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
     @State private var showAsk = false
     @State private var reminders: [MioReminderSummary] = []
+    @State private var derived = MioHomeDerivedSnapshot.empty
 
     var body: some View {
         NavigationStack {
@@ -61,6 +62,12 @@ struct MioHomeView: View {
             .onReceive(NotificationCenter.default.publisher(for: .EKEventStoreChanged)) { _ in
                 Task { await loadReminders() }
             }
+            .task { refreshDerivedSnapshot() }
+            .onChange(of: day.revision) { _, _ in refreshDerivedSnapshot() }
+            .onChange(of: model.stateRevision) { _, _ in refreshDerivedSnapshot() }
+            .onChange(of: contentModel.stateRevision) { _, _ in refreshDerivedSnapshot() }
+            .onChange(of: assistant.stateRevision) { _, _ in refreshDerivedSnapshot() }
+            .onChange(of: reminders) { _, _ in refreshDerivedSnapshot() }
         }
     }
 
@@ -73,18 +80,8 @@ struct MioHomeView: View {
 
     // MARK: Week
 
-    private var activity: [Date: Int] {
-        MioWeekPlanner.activity(content: contentModel.items, sessionStarts: model.allSessions.map(\.startedAt),
-                                calendar: day.calendar)
-    }
-
-    private var week: MioWeekOverview {
-        MioWeekOverview.make(containing: day.overviewDate, today: day.startOfToday, activity: activity, calendar: day.calendar)
-    }
-
-    private var streak: MioStreakGrid {
-        MioStreakGrid.make(today: day.startOfToday, activity: activity, calendar: day.calendar)
-    }
+    private var week: MioWeekOverview { derived.week }
+    private var streak: MioStreakGrid { derived.streak }
 
     private var isTodaySelected: Bool { day.calendar.isDate(day.overviewDate, inSameDayAs: day.startOfToday) }
 
@@ -290,8 +287,7 @@ struct MioHomeView: View {
     }
 
     private var latestReview: MioEverydayReview? {
-        MioEverydayReview.make(records: assistant.analyses, decisions: assistant.analysisDecisions,
-                               excludingSessionIDs: Set(model.allSessions.filter(\.isLesson).map(\.id))).first
+        derived.latestReview
     }
 
     private func statusLine(_ text: String, symbol: String, action: String?, perform: @escaping () -> Void) -> some View {
@@ -327,19 +323,16 @@ struct MioHomeView: View {
     // MARK: Day overview (formerly Morgon and Kväll)
 
     private var briefing: MioBriefing {
-        MioBriefing.make(content: contentModel.items, sessions: model.allSessions, lessons: assistant.lessons,
-                         date: day.overviewDate, calendar: day.calendar)
+        derived.briefing
     }
 
     private var reminderDay: MioReminderDay {
-        MioReminderDay.make(reminders: reminders, date: day.overviewDate, today: day.startOfToday, calendar: day.calendar)
+        derived.reminderDay
     }
 
     /// Records of what was handed to Apple's apps on the chosen day.
     private var sentToday: [MioContentItem] {
-        contentModel.items.filter { item in
-            item.handoff.map { day.calendar.isDate($0.sentAt, inSameDayAs: day.overviewDate) } ?? false
-        }.sorted { ($0.handoff?.sentAt ?? .distantPast) < ($1.handoff?.sentAt ?? .distantPast) }
+        derived.sentToday
     }
 
     @ViewBuilder
@@ -399,6 +392,46 @@ struct MioHomeView: View {
             .foregroundStyle(.secondary)
             .accessibilityAddTraits(.isHeader)
     }
+
+    private func refreshDerivedSnapshot() {
+        let sessions = model.allSessions
+        let items = contentModel.items
+        let activity = MioWeekPlanner.activity(content: items, sessionStarts: sessions.map(\.startedAt), calendar: day.calendar)
+        let week = MioWeekOverview.make(containing: day.overviewDate, today: day.startOfToday, activity: activity,
+                                        calendar: day.calendar)
+        let streak = MioStreakGrid.make(today: day.startOfToday, activity: activity, calendar: day.calendar)
+        let lessonIDs = Set(sessions.filter(\.isLesson).map(\.id))
+        let latestReview = MioEverydayReview.make(records: assistant.analyses, decisions: assistant.analysisDecisions,
+                                                  excludingSessionIDs: lessonIDs).first
+        let briefing = MioBriefing.make(content: items, sessions: sessions, lessons: assistant.lessons,
+                                        date: day.overviewDate, calendar: day.calendar)
+        let reminderDay = MioReminderDay.make(reminders: reminders, date: day.overviewDate, today: day.startOfToday,
+                                              calendar: day.calendar)
+        let sentToday = items.filter { item in
+            item.handoff.map { day.calendar.isDate($0.sentAt, inSameDayAs: day.overviewDate) } ?? false
+        }.sorted { ($0.handoff?.sentAt ?? .distantPast) < ($1.handoff?.sentAt ?? .distantPast) }
+        derived = MioHomeDerivedSnapshot(week: week, streak: streak, latestReview: latestReview, briefing: briefing,
+                                         reminderDay: reminderDay, sentToday: sentToday)
+    }
+}
+
+private struct MioHomeDerivedSnapshot: Sendable {
+    let week: MioWeekOverview
+    let streak: MioStreakGrid
+    let latestReview: MioEverydayReview?
+    let briefing: MioBriefing
+    let reminderDay: MioReminderDay
+    let sentToday: [MioContentItem]
+
+    static let empty = MioHomeDerivedSnapshot(
+        week: MioWeekOverview(weekNumber: 0, days: []),
+        streak: MioStreakGrid(weeks: [], weekNumbers: [], activeDays: 0, currentRun: 0),
+        latestReview: nil,
+        briefing: MioBriefing(date: .distantPast, plans: [], tasks: [], overdueTasks: [], completedTasks: [],
+                              notes: [], sessionCount: 0, lessonCount: 0),
+        reminderDay: MioReminderDay(due: [], overdue: []),
+        sentToday: []
+    )
 }
 
 /// Fråga Mio as its own sheet, reachable from Hem and Fånga.
