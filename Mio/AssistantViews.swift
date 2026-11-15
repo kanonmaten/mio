@@ -580,7 +580,7 @@ struct MioGuideView: View {
         List {
             Section("Börja här") {
                 Text("Mio fångar och föreslår; Apples appar sparar. Godkänner du ett förslag hamnar en händelse i Kalender, en att göra-post i Påminnelser och en anteckning eller ett minne i Anteckningar.")
-                Text("Para din dator under Inställningar → Dator: kör mio-pair på datorn och skanna QR-koden. Starta Mio skickar ljud till din dator för svensk text. Starta Mio för vardagslyssning. Starta lektion pausar vardags-Mio och samlar lektionsunderlag separat. Paus och stopp stänger mikrofonen. Historik och rättningar finns under Lektioner → Historik och råtext.")
+                Text("Para din dator under Inställningar → Parning: kör mio-pair på datorn och skanna QR-koden. Starta Mio skickar ljud till din dator för svensk text. Starta Mio för vardagslyssning. Starta lektion pausar vardags-Mio och samlar lektionsunderlag separat. Paus och stopp stänger mikrofonen. Historik och rättningar finns under Lektioner → Historik och råtext.")
             }
             Section("Tilltala Mio") {
                 Text("Mio, anteckna att vi arbetar med procent.")
@@ -596,7 +596,7 @@ struct MioGuideView: View {
                 Text("Hem visar veckan, nästa påminnelse och dagens att göra från Påminnelser. Mio läser inte din kalender. Byt till Kväll för det du skickat och dagens sessioner. Morgon- och kvällsnotis finns under Inställningar → Notiser.")
             }
             Section("AI") {
-                Text("AI är på när datorn är parad. Nytt vardagstal skickas samlat högst var femte minut och kan ge förslag på händelser och att göra utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Alla föreslagna poster kräver Ja. Frågor skickas direkt. Pausa AI på Fånga eller under Inställningar → AI; pausen sparas.")
+                Text("AI är på när datorn är parad. Nytt vardagstal skickas samlat högst var femte minut och kan ge förslag på händelser och att göra utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Alla föreslagna poster kräver Ja. Frågor skickas direkt. Pausa AI under Inställningar → AI; pausen sparas. Är AI-tjänsten upptagen väntar Mio och försöker igen av sig själv.")
             }
             Section("Din kontroll") {
                 Text("Inget råljud sparas. Spela bara in andra med tydligt samtycke och enligt lokala regler. Minnen sparas i Apples Anteckningar, där du ändrar och raderar dem.")
@@ -604,6 +604,8 @@ struct MioGuideView: View {
                 Text("Långvarig bakgrundslyssning och batteritid måste provas på din telefon. iOS startar inte om lyssningen när appen tvångsavslutats.")
             }
         }
+        .mioListGround()
         .navigationTitle("Så använder du Mio")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -36,11 +36,15 @@ test('transport settings stay bounded while invalid generation configuration rem
   assert.equal(resolveTaskProfile(loadConfig({ GROQ_API_KEY: token, MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'example' }), 'ask').configured, false);
   assert.throws(() => loadConfig({ GROQ_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'example', MIO_REQUESTS_PER_DAY: '1000001' }));
   assert.equal(loadConfig({ GROQ_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'example' }).requestsPerDay, null);
-  // Groq free tier: three requests per minute is the default, the token cap is optional.
-  const defaultsFromEnv = loadConfig({ GROQ_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'qwen/qwen3.8-27b' });
+  // Groq free tier: requests are sized against 8,000 tokens per minute; the daily cap is optional.
+  const env = { GROQ_API_KEY: 'fixture', MIO_GATEWAY_TOKEN: token, MIO_AI_MODEL: 'qwen/qwen3.8-27b' };
+  const defaultsFromEnv = loadConfig(env);
   assert.equal(defaultsFromEnv.provider, 'groq');
-  assert.equal(defaultsFromEnv.requestsPerMinute, 3);
+  assert.equal(defaultsFromEnv.requestsPerMinute, 10);
+  assert.equal(defaultsFromEnv.tokensPerMinute, 8_000);
   assert.equal(defaultsFromEnv.tokensPerDay, null);
+  for (const off of ['', '0']) assert.equal(loadConfig({ ...env, MIO_TOKENS_PER_MINUTE: off }).tokensPerMinute, null);
+  assert.throws(() => loadConfig({ ...env, MIO_TOKENS_PER_MINUTE: '500' }));
 });
 
 test('payload preserves exactly approved text and refuses unknown fields', () => {
@@ -84,7 +88,7 @@ test('success uses fixed upstream, no storage, no tools and only approved contex
   assert.equal(init.headers.Authorization, `Bearer ${defaults.apiKey}`);
   assert.ok(!JSON.stringify(init).includes(token));
   const request = JSON.parse(init.body);
-  assert.equal(request.max_tokens, 1000);
+  assert.equal(request.max_tokens, 1200);
   assert.equal(request.stream, false);
   assert.equal('tools' in request, false);
   assert.equal(request.messages.length, 2);
@@ -101,13 +105,70 @@ test('invalid JSON, content types and too large bodies are rejected locally', as
   assert.equal(f.calls.length, 0);
 });
 
-test('upstream errors expose only fixed error codes and never retry', async t => {
+test('upstream errors expose only fixed error codes and are retried exactly once', async t => {
   let calls = 0;
-  const f = await fixture(t, { fetchImpl: async () => { calls++; return new Response('private upstream details', { status: 500 }); } });
+  const f = await fixture(t, { config: { retryDelayMs: 1 },
+    fetchImpl: async () => { calls++; return new Response('private upstream details', { status: 500 }); } });
   const r = await f.ask();
   assert.equal(r.status, 502);
   assert.deepEqual(await r.json(), { error: 'provider_infrastructure' });
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
+});
+
+test('one retry recovers a brief provider failure and a short provider wait with the identical request', async t => {
+  for (const failure of [() => new Response('down', { status: 503 }),
+    () => new Response(JSON.stringify({ error: { code: 'rate_limit_exceeded' } }), { status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '0.01' } }),
+    () => { throw new TypeError('socket closed'); }]) {
+    const bodies = [];
+    const f = await fixture(t, { config: { retryDelayMs: 1, upstreamTimeoutMs: 5_000 }, fetchImpl: async (_, init) => {
+      bodies.push(init.body);
+      return bodies.length === 1 ? failure() : completion();
+    } });
+    const r = await f.ask();
+    assert.equal(r.status, 200);
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[0], bodies[1]);
+    // The retry is the same reserved request: the local minute counter moved once.
+    assert.equal((await (await fetch(`${f.base}/v2/status`, { headers: { Authorization: `Bearer ${token}` } })).json()).quota.remaining, 99);
+  }
+});
+
+test('a long provider wait, a size refusal and an invalid answer are never retried', async t => {
+  for (const [response, status, code, retryAfter] of [
+    [() => new Response('{}', { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '45' } }), 429, 'provider_quota', '45'],
+    [() => new Response('{}', { status: 429, headers: { 'Content-Type': 'application/json' } }), 429, 'provider_quota', '60'],
+    // Groq: one request larger than the per-minute token budget. Waiting cannot help.
+    [() => new Response(JSON.stringify({ error: { type: 'tokens', code: 'rate_limit_exceeded' } }), { status: 413,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '2' } }), 413, 'provider_request_too_large', null],
+    [() => new Response('{}', { status: 401, headers: { 'Content-Type': 'application/json' } }), 502, 'provider_authentication', null]]) {
+    let calls = 0;
+    const f = await fixture(t, { config: { retryDelayMs: 1, upstreamTimeoutMs: 5_000 }, fetchImpl: async () => { calls++; return response(); } });
+    const r = await f.ask();
+    assert.equal(r.status, status);
+    assert.deepEqual(await r.json(), { error: code });
+    assert.equal(r.headers.get('retry-after'), retryAfter);
+    assert.equal(calls, 1);
+  }
+});
+
+test('requests are sized to the per-minute token budget before any quota or provider call', async t => {
+  const f = await fixture(t, { config: { tokensPerMinute: 2_000 } });
+  // A short question keeps its full answer reservation.
+  assert.equal((await f.ask({ question: 'Hej', context: [] })).status, 200);
+  assert.equal(JSON.parse(f.calls[0].init.body).max_tokens, 1200);
+  // A larger prompt shrinks the reservation so prompt + max_tokens still fit the minute.
+  assert.equal((await f.ask({ question: 'Hej', context: [{ label: 'a', text: 'x'.repeat(1_500) }] })).status, 200);
+  const shrunk = JSON.parse(f.calls[1].init.body).max_tokens;
+  assert.ok(shrunk >= 300 && shrunk < 1200, String(shrunk));
+  // A prompt that leaves no room for an answer is refused locally: no provider call, no quota.
+  const refused = await f.ask({ question: 'Hej', context: [{ label: 'a', text: 'x'.repeat(4_000) }] });
+  assert.equal(refused.status, 413);
+  assert.deepEqual(await refused.json(), { error: 'provider_request_too_large' });
+  assert.equal(f.calls.length, 2);
+  const status = await (await fetch(`${f.base}/v2/status`, { headers: { Authorization: `Bearer ${token}` } })).json();
+  assert.equal(status.quota.remaining, 98);
+  assert.equal(status.tasks.everyday.capabilities.includes('analysis-backlog-v1'), false);
 });
 
 test('incomplete answers are not shown as complete', async t => {

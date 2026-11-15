@@ -45,18 +45,21 @@ test('a backlog batch carries twelve new sources beside the context', () => {
 
 test('v2 candidates require new evidence sources and explicit unambiguous open replacement', () => {
   assert.equal(typeof analysis.validateAnalysisV2Result, 'function');
-  assert.equal(analysis.validateAnalysisV2Result(result, payload), result);
-  for (const patch of [{ sourceIDs: [oldID], evidence: 'Vi ses' }, { sourceIDs: ['invented'] },
+  assert.deepEqual(analysis.validateAnalysisV2Result(result, payload), result);
+  const dropped = (value, request = payload) => assert.deepEqual(analysis.validateAnalysisV2Result(value, request).candidates, []);
+  for (const patch of [{ sourceIDs: [oldID], evidence: 'Vi ses' },
     { replacesID: null }, { replacesID: 'invalid' }, { replacesID: '00000000-0000-0000-0000-000000000004' },
     { kind: 'task' }, { sourceIDs: [newID] }, { evidence: 'never said' }]) {
-    assert.throws(() => analysis.validateAnalysisV2Result({ ...result, candidates: [{ ...result.candidates[0], ...patch }] }, payload));
+    dropped({ ...result, candidates: [{ ...result.candidates[0], ...patch }] });
   }
   const { replacesID, ...missing } = result.candidates[0];
   assert.throws(() => analysis.validateAnalysisV2Result({ ...result, candidates: [missing] }, payload));
-  assert.throws(() => analysis.validateAnalysisV2Result(result, { ...payload, priorDecisions: [{ ...payload.priorDecisions[0], isOpen: false }] }));
-  assert.throws(() => analysis.validateAnalysisV2Result(result, { ...payload, priorDecisions: [...payload.priorDecisions,
-    { ...payload.priorDecisions[0], id: '00000000-0000-0000-0000-000000000004' }] }));
-  assert.throws(() => analysis.validateAnalysisV2Result({ ...result, candidates: [...result.candidates, ...result.candidates] }, payload));
+  // A closed decision is never revived and a shared source never picks a decision.
+  dropped(result, { ...payload, priorDecisions: [{ ...payload.priorDecisions[0], isOpen: false }] });
+  dropped(result, { ...payload, priorDecisions: [...payload.priorDecisions,
+    { ...payload.priorDecisions[0], id: '00000000-0000-0000-0000-000000000004' }] });
+  // One decision is replaced by at most one candidate; the first stays.
+  assert.deepEqual(analysis.validateAnalysisV2Result({ ...result, candidates: [...result.candidates, ...result.candidates] }, payload).candidates, result.candidates);
   assert.doesNotThrow(() => analysis.validateAnalysisV2Result({ ...result, candidates: [{ ...result.candidates[0], sourceIDs: [newID], replacesID: null }] }, payload));
   assert.doesNotThrow(() => analysis.validateAnalysisV2Result({ ...result, candidates: [{ ...result.candidates[0], replacesID: null }] }, { ...payload, priorDecisions: [] }));
   assert.doesNotThrow(() => analysis.validateAnalysisV2Result({ ...result, candidates: [{ ...result.candidates[0], sourceIDs: [newID], replacesID: null }] }, { ...payload, priorDecisions: [{ ...payload.priorDecisions[0], isOpen: false }] }));
@@ -96,7 +99,7 @@ test('v2 HTTP endpoint validates before quota and returns sanitized metadata on 
   assert.equal(f.calls(), 0);
   const r = await f.send(); assert.equal(r.status, 200); assert.deepEqual(await r.json(), result);
   for (const response of [r, await f.send(payload, 'wrong')]) {
-    assert.equal(response.headers.get('x-mio-release'), '2026-10-13.2');
+    assert.equal(response.headers.get('x-mio-release'), '2026-11-15.1');
     assert.equal(response.headers.get('x-mio-provider'), 'groq');
     assert.equal(response.headers.get('x-mio-model'), 'qwen/qwen3.8-27b');
     assert.equal(response.headers.get('x-mio-prompt-version'), '2026-10-13.2');
@@ -108,7 +111,7 @@ test('status authenticates without model calls or budget and advertises implemen
   const f = await fixture(t);
   assert.equal((await f.get('wrong')).status, 401);
   const r = await f.get(token); assert.equal(r.status, 200);
-  assert.deepEqual(await r.json(), { protocolVersion: 2, release: '2026-10-13.2', configured: true,
+  assert.deepEqual(await r.json(), { protocolVersion: 2, release: '2026-11-15.1', configured: true,
     provider: 'groq', model: 'qwen/qwen3.8-27b', promptVersion: '2026-10-13.2',
     capabilities: ['analysis-context-v2', 'ask-v1', 'analysis-v1', 'lesson-notes-v1'] });
   assert.equal(f.calls(), 0);
@@ -116,6 +119,6 @@ test('status authenticates without model calls or budget and advertises implemen
 
 test('v2 invalid upstream replacement cannot escape as a proposal', async t => {
   const f = await fixture(t, { ...result, candidates: [{ ...result.candidates[0], replacesID: null }] });
-  const r = await f.send(); assert.equal(r.status, 502);
-  assert.deepEqual(await r.json(), { error: 'invalid_analysis_result' });
+  const r = await f.send(); assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { candidates: [], highlights: [], uncertainties: [] });
 });

@@ -3,7 +3,7 @@ import { PROVIDERS, providerProfile } from './provider.mjs';
 import { ANALYSIS_V2_PROMPT_VERSION, PROMPT_VERSION } from './prompts.mjs';
 import { TASK_IDS, resolveTaskProfile, taskProfiles, taskConfigurationIdentifiers, safeModelIdentifier, safeProviderIdentifier } from './task-profiles.mjs';
 
-export const RELEASE = '2026-10-13.2';
+export const RELEASE = '2026-11-15.1';
 export function gatewayStatus(config, valid = true) {
   // Older clients only call /v1/analyze, so v1 status describes the effective everyday task.
   const { provider, model } = valid ? taskConfigurationIdentifiers(config, 'everyday')
@@ -43,8 +43,12 @@ export function metadataHeaders(status, promptVersion = status.promptVersion ?? 
 }
 
 const taskPromptVersion = task => task === 'everyday' ? ANALYSIS_V2_PROMPT_VERSION : PROMPT_VERSION;
-const taskCapabilities = task => ['reasoning-off', 'temperature-zero', 'strict-json',
-  ...(task === 'ask' ? ['ask-v1'] : task === 'everyday' ? ['analysis-context-v2', 'analysis-backlog-v1'] : ['lesson-notes-v1'])];
+// A backlog batch (twelve sources, 16,000 bytes) cannot fit an 8,000-token minute, so it is
+// offered only without per-minute sizing or with a budget that holds it.
+export const acceptsBacklog = config => config.tokensPerMinute == null || config.tokensPerMinute >= 20_000;
+const taskCapabilities = (task, config) => ['reasoning-off', 'temperature-zero', 'strict-json',
+  ...(task === 'ask' ? ['ask-v1'] : task === 'everyday'
+    ? ['analysis-context-v2', ...(acceptsBacklog(config) ? ['analysis-backlog-v1'] : [])] : ['lesson-notes-v1'])];
 // null means no daily cap; status then reports quota as null instead of an invented limit.
 // A token cap (the binding Groq free-tier limit) takes precedence over a request cap.
 const positiveLimit = value => Number.isSafeInteger(value) && value > 0 ? value : null;
@@ -64,15 +68,15 @@ export function configurationRevision(config) {
     const identifiers = taskConfigurationIdentifiers(config, task);
     const profile = selected.configured ? providerProfile(selected.config) : null;
     return [task, { ...identifiers, configured: selected.configured, configurationError: selected.configurationError,
-      promptVersion: taskPromptVersion(task), capabilities: taskCapabilities(task),
+      promptVersion: taskPromptVersion(task), capabilities: taskCapabilities(task, config),
       options: profile?.options ?? {},
       // The endpoint identity affects review even though neither it nor credentials
       // are published. Only providerProfile's validated credential-free base is used.
       endpoint: profile?.base ?? null }];
   }));
   const publicConfiguration = { protocolVersion: 2, release: RELEASE, tasks,
-    limits: { requestsPerMinute: config.requestsPerMinute ?? 3, requestsPerDay: positiveLimit(config.requestsPerDay),
-      tokensPerDay: positiveLimit(config.tokensPerDay),
+    limits: { requestsPerMinute: config.requestsPerMinute ?? 10, requestsPerDay: positiveLimit(config.requestsPerDay),
+      tokensPerDay: positiveLimit(config.tokensPerDay), tokensPerMinute: positiveLimit(config.tokensPerMinute),
       lessonIntervalSeconds: config.lessonIntervalSeconds ?? 60, upstreamTimeoutMs: config.upstreamTimeoutMs ?? 40_000,
       bodyTimeoutMs: config.bodyTimeoutMs ?? 5_000, concurrency: 2 } };
   return createHash('sha256').update(JSON.stringify(canonical(publicConfiguration))).digest('hex');
@@ -82,7 +86,7 @@ export function gatewayStatusV2(config, quota = null) {
   const selected = taskProfiles(config);
   const tasks = Object.fromEntries(TASK_IDS.map(task => [task, {
     configured: selected[task].configured, ...taskConfigurationIdentifiers(config, task),
-    promptVersion: taskPromptVersion(task), capabilities: taskCapabilities(task),
+    promptVersion: taskPromptVersion(task), capabilities: taskCapabilities(task, config),
     configurationError: selected[task].configurationError
   }]));
   const limit = quotaLimit(config);

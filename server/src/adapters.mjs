@@ -125,13 +125,16 @@ export function normalizeProviderError({ status, data, headers, now = Date.now()
   if (status === 401 || ['authentication_error', 'invalid_api_key', 'UNAUTHENTICATED'].includes(code)) category = 'provider_authentication';
   // Exhausted billing is an account problem, not a temporary quota; retrying cannot help.
   else if ([402, 403].includes(status) || ['permission_error', 'billing_hard_limit_reached', 'insufficient_quota', 'PERMISSION_DENIED'].includes(code)) category = 'provider_account';
+  // Groq answers 413 (code rate_limit_exceeded) when prompt + max_tokens of ONE request exceed the
+  // per-minute token budget. Waiting never helps; the request must get smaller (2026-11-15).
+  else if (status === 413) category = 'provider_request_too_large';
   else if (status === 404 || ['model_not_found', 'model_not_available', 'not_found_error', 'NOT_FOUND'].includes(code)) category = 'provider_model_unavailable';
   else if (status === 429 || ['rate_limit_error', 'rate_limit_exceeded', 'RESOURCE_EXHAUSTED'].includes(code)) category = 'provider_quota';
   else if ([400, 422].includes(status) || ['invalid_request_error', 'unsupported_parameter'].includes(code)) category = 'provider_parameters';
   else category = 'provider_infrastructure';
   const value = header(headers, 'retry-after');
   let retryAfter;
-  if (typeof value === 'string' && /^\d+$/u.test(value.trim())) retryAfter = Math.min(3_600, Number(value));
+  if (typeof value === 'string' && /^\d{1,12}(?:\.\d{1,6})?$/u.test(value.trim())) retryAfter = Math.min(3_600, Math.ceil(Number(value)));
   else if (typeof value === 'string' && /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/u.test(value)) {
     const date = Date.parse(value);
     if (Number.isFinite(date) && Number.isFinite(now)) retryAfter = Math.max(0, Math.min(3_600, Math.ceil((date - now) / 1_000)));

@@ -54,7 +54,6 @@ struct MioComputerSection: View {
                 }
                 .disabled(isChecking)
                 .accessibilityIdentifier("mio.computer.check")
-                NavigationLink("Transkription och Tailscale") { MioTranscriptionDetailsView(model: model) }
                 Button("Glöm datorn", role: .destructive) { confirmForget = true }
                     .disabled(!canEdit)
                     .confirmationDialog("Glömma datorn?", isPresented: $confirmForget, titleVisibility: .visible) {
@@ -184,6 +183,9 @@ struct MioTranscriptionDetailsView: View {
                 LabeledContent("Server", value: model.connectionState.title)
                 if let date = model.connectionCheckedAt { LabeledContent("Senast verifierad", value: date.formatted()) }
                 if let version = model.serverVersion { LabeledContent("Serverversion", value: version) }
+                if let vocabulary = model.serverVocabulary {
+                    LabeledContent("Egna ord", value: vocabulary == 0 ? "Inga" : "\(vocabulary) aktiva")
+                }
                 if let metadata = model.serverMetadata {
                     LabeledContent("Modell", value: metadata.model)
                     LabeledContent("Revision", value: metadata.revision)
@@ -193,12 +195,15 @@ struct MioTranscriptionDetailsView: View {
             Section("Tailscale och integritet") {
                 Text("Anslut iPhone till samma tailnet som datorn. Aktivera VPN On Demand i Tailscale för Wi-Fi och mobilnät. Mio kontrollerar serverns nåbarhet; det kan inte läsa Tailscales interna VPN-status.")
                 Text("Starta Mio eller Starta lektion godkänner ljudöverföring till datorn tills du pausar eller stoppar. Ingen ljudfil sparas. Bara de senaste 60 sekunderna kan räddas vid ett längre avbrott.")
-                Text("Efter SideStore-förnyelse med LocalDevVPN: återanslut Tailscale och kontrollera anslutningen under Dator.")
+                Text("Efter SideStore-förnyelse med LocalDevVPN: återanslut Tailscale och kontrollera anslutningen under Parning.")
+                Text("Blir namn och facktermer ofta fel? Lägg dem i ordlistan på datorn (/etc/mio-transcription-vocabulary.txt, ett ord per rad) och starta om tjänsten. Antalet aktiva ord visas ovan.")
                 Link("Tailscales guide för iPhone", destination: URL(string: "https://tailscale.com/docs/features/client/ios-vpn-on-demand")!)
             }
             .font(.footnote)
         }
+        .mioListGround()
         .navigationTitle("Transkription")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

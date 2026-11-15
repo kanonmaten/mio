@@ -4,10 +4,12 @@ import { ASK_FORMAT, ANALYSIS_FORMAT, ANALYSIS_V2_FORMAT, LESSON_FORMAT,
   validateAskResult, validateAnalysisResult, validateAnalysisV2Result, validateLessonResult } from './analysis.mjs';
 
 const POLICY = Object.freeze({ reasoning: 'off', temperature: 0, tools: 'none' });
+// Output limits are reservations against the provider's per-minute token budget, so they stay
+// close to what each task writes: a short answer, at most six bodiless candidates, or lesson notes.
 const definitions = Object.freeze({
-  ask: { system: ASK_SYSTEM, format: ASK_FORMAT, limit: 1_000, version: PROMPT_VERSION, validate: validateAskResult },
-  analyze: { system: ANALYSIS_SYSTEM, format: ANALYSIS_FORMAT, limit: 3_000, version: PROMPT_VERSION, validate: validateAnalysisResult },
-  'analyze-v2': { system: ANALYSIS_V2_SYSTEM, format: ANALYSIS_V2_FORMAT, limit: 3_000,
+  ask: { system: ASK_SYSTEM, format: ASK_FORMAT, limit: 1_200, version: PROMPT_VERSION, validate: validateAskResult },
+  analyze: { system: ANALYSIS_SYSTEM, format: ANALYSIS_FORMAT, limit: 1_500, version: PROMPT_VERSION, validate: validateAnalysisResult },
+  'analyze-v2': { system: ANALYSIS_V2_SYSTEM, format: ANALYSIS_V2_FORMAT, limit: 1_500,
     version: ANALYSIS_V2_PROMPT_VERSION, validate: validateAnalysisV2Result },
   lesson: { system: LESSON_SYSTEM, format: LESSON_FORMAT, limit: 3_000, version: PROMPT_VERSION, validate: validateLessonResult }
 });

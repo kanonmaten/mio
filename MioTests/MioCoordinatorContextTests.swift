@@ -356,6 +356,88 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
         coordinator.disable()
     }
 
+    /// The loop the user reported 2026-11-15: Groq refused a batch as too large for its
+    /// per-minute token budget, Mio waited 60 s and sent the very same batch again, forever.
+    @MainActor
+    func testTooLargeBatchIsSentAgainInSmallerBatchesAndNeverUnchanged() async throws {
+        let assistant = assistant(self)
+        var clock = Date.now
+        var sent: [[String]] = []
+        let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) },
+            send: { request, _ in
+                sent.append(request.fragments.map(\.text))
+                if sent.count == 1 { throw MioCloudError.gateway(413, .providerRequestTooLarge) }
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            },
+            wait: { clock.addTimeInterval($0) }, now: { clock })
+        try await coordinator.enable(existingSessions: [])
+        let texts = (1...5).map { "Syntetiskt underlag \($0)." }
+        coordinator.observe(MioSession(transcripts: texts.map { TranscriptSegment(createdAt: clock, text: $0, containsMio: false) }), assistant: assistant)
+        for _ in 0..<40_000 { if coordinator.sentBatches == 3 || !coordinator.enabled { break }; await Task.yield() }
+        XCTAssertTrue(coordinator.enabled, "A too-large batch must not switch AI off")
+        XCTAssertNil(coordinator.errorMessage)
+        XCTAssertNil(coordinator.pausedUntil, "A size refusal is not a quota wait")
+        XCTAssertEqual(sent.map(\.count), [5, 2, 2, 1])
+        XCTAssertEqual(sent.dropFirst().flatMap { $0 }, texts, "Every excerpt is analysed once, in order")
+        coordinator.disable()
+    }
+
+    @MainActor
+    func testRejectedEverydayAnswerIsSkippedAndLaterTextIsStillAnalysed() async throws {
+        let assistant = assistant(self)
+        var clock = Date.now
+        var sent: [[String]] = []
+        let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) },
+            send: { request, _ in
+                sent.append(request.fragments.map(\.text))
+                if sent.count == 1 { throw MioCloudError.gateway(502, .invalidAnalysisResult) }
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            },
+            wait: { clock.addTimeInterval($0) }, now: { clock })
+        try await coordinator.enable(existingSessions: [])
+        var session = MioSession(transcripts: [TranscriptSegment(createdAt: clock, text: "Otolkbart underlag.", containsMio: false)])
+        coordinator.observe(session, assistant: assistant)
+        for _ in 0..<20_000 { if (sent.count == 1 && !coordinator.isWorking) || !coordinator.enabled { break }; await Task.yield() }
+        XCTAssertTrue(coordinator.enabled, "A rejected answer used to stop AI until the app was reopened")
+        XCTAssertNil(coordinator.errorMessage)
+        XCTAssertEqual(sent.count, 1, "The rejected text is not sent again")
+        clock.addTimeInterval(1)
+        session.transcripts.append(TranscriptSegment(createdAt: clock, text: "Nytt underlag.", containsMio: false))
+        coordinator.observe(session, assistant: assistant)
+        for _ in 0..<20_000 { if coordinator.sentBatches == 1 || !coordinator.enabled { break }; await Task.yield() }
+        XCTAssertTrue(coordinator.enabled)
+        XCTAssertEqual(sent, [["Otolkbart underlag."], ["Nytt underlag."]])
+        coordinator.disable()
+    }
+
+    @MainActor
+    func testBriefProviderFailurePausesAMinuteAndThenSucceeds() async throws {
+        let assistant = assistant(self)
+        var clock = Date.now
+        var sends: [Date] = []
+        let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) },
+            send: { _, _ in
+                sends.append(clock)
+                if sends.count == 1 { throw MioCloudError.gateway(502, .providerInfrastructure) }
+                if sends.count == 2 { throw MioCloudError.gateway(504, .upstreamTimeout) }
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            },
+            wait: { clock.addTimeInterval($0) }, now: { clock })
+        try await coordinator.enable(existingSessions: [])
+        coordinator.observe(MioSession(transcripts: [TranscriptSegment(createdAt: clock, text: "Syntetiskt underlag.", containsMio: false)]), assistant: assistant)
+        for _ in 0..<40_000 { if coordinator.sentBatches == 1 || !coordinator.enabled { break }; await Task.yield() }
+        XCTAssertTrue(coordinator.enabled, "A brief provider failure used to stop AI until the app was reopened")
+        XCTAssertNil(coordinator.errorMessage)
+        XCTAssertEqual(sends.count, 3)
+        XCTAssertGreaterThanOrEqual(sends[1].timeIntervalSince(sends[0]), 60)
+        // The second pause in a row is twice as long.
+        XCTAssertGreaterThanOrEqual(sends[2].timeIntervalSince(sends[1]), 120)
+        coordinator.disable()
+    }
+
     @MainActor
     func testTokenLimitPausesUntilRetryAfterAndSkipsTextMeanwhile() async throws {
         let assistant = assistant(self)

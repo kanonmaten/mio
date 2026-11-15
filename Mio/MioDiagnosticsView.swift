@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// MetricKit reports kept on the phone. Plain native list; the visual redesign restyles it later.
+/// MetricKit reports kept on the phone. A plain native list on the graphite ground.
 struct MioDiagnosticsView: View {
     @State private var reports: [MioMetricReport] = []
     @State private var hasLoaded = false
@@ -37,7 +37,9 @@ struct MioDiagnosticsView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
+        .mioListGround()
         .navigationTitle("Diagnostik")
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             reports = await MioMetricArchive.shared.reports()
             hasLoaded = true

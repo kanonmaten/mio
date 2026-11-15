@@ -10,6 +10,27 @@ RATE = 16_000
 MAX_BYTES = 1_048_576
 MAX_RESPONSE_BYTES = 262_144
 MAX_SAMPLES = RATE * 24
+MAX_VOCABULARY = 500
+
+
+def parse_vocabulary(text):
+    """The user's own words and names for phrase boosting: one per line, case sensitive.
+
+    Blank lines and lines starting with # are skipped, inner whitespace is collapsed,
+    duplicates and phrases over 100 UTF-8 bytes or with control characters are dropped,
+    and at most MAX_VOCABULARY phrases are kept in file order.
+    """
+    phrases, seen = [], set()
+    for line in text.splitlines():
+        phrase = " ".join(line.split())
+        if (not phrase or phrase.startswith("#") or phrase in seen or len(phrase.encode()) > 100
+                or any(ord(character) < 32 or ord(character) == 127 for character in phrase)):
+            continue
+        seen.add(phrase)
+        phrases.append(phrase)
+        if len(phrases) == MAX_VOCABULARY:
+            break
+    return phrases
 
 
 class RequestError(Exception):

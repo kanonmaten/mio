@@ -58,6 +58,12 @@ step "Konfiguration $config"
 sudo install -d -m 700 "$config_dir"
 if sudo test -f "$config" && ! $replace_key; then
     echo "Finns redan; Groq-nyckel och gatewaytoken behålls."
+    # 2026-11-15: the old installer default of three requests per minute made asking Mio fail
+    # while analysis ran. Requests are now sized to the tokens-per-minute budget instead.
+    # A value you changed yourself is left alone.
+    sudo sed -i 's/^MIO_REQUESTS_PER_MINUTE=3$/MIO_REQUESTS_PER_MINUTE=10/' "$config"
+    sudo grep -q '^MIO_TOKENS_PER_MINUTE=' "$config" \
+        || printf 'MIO_TOKENS_PER_MINUTE=8000\n' | sudo tee -a "$config" >/dev/null
 else
     echo "Skapa en nyckel på https://console.groq.com/keys (gratisnivån räcker)."
     # Hidden prompt: the key never appears on screen, in argv, shell history or logs.
@@ -74,9 +80,9 @@ const lines = [
   '# Mio gateway. Skapad av install.sh. Dela aldrig denna fil.',
   `GROQ_API_KEY=${key}`, `MIO_GATEWAY_TOKEN=${token}`,
   'MIO_AI_PROVIDER=groq', `MIO_AI_MODEL=${model}`,
-  // Groq free tier for this model: 30 RPM, 8,000 TPM, 200,000 tokens/day. Three requests per
-  // minute keeps lesson parts under the token-per-minute limit; the daily cap leaves a margin.
-  'MIO_REQUESTS_PER_MINUTE=3', 'MIO_TOKENS_PER_DAY=190000', 'MIO_REQUESTS_PER_DAY=',
+  // Groq free tier for this model: 30 RPM, 8,000 TPM, 200,000 tokens/day. The gateway sizes each
+  // request to the tokens-per-minute budget; the daily cap leaves a margin.
+  'MIO_REQUESTS_PER_MINUTE=10', 'MIO_TOKENS_PER_MINUTE=8000', 'MIO_TOKENS_PER_DAY=190000', 'MIO_REQUESTS_PER_DAY=',
   'MIO_LESSON_INTERVAL_SECONDS=60', `PORT=${port}`, ''];
 const temporary = `${path}.tmp`;
 fs.writeFileSync(temporary, lines.join('\n'), { mode: 0o600 });
@@ -113,4 +119,4 @@ sudo tailscale serve --bg --https="$https_port" "http://127.0.0.1:$port"
 sudo tailscale serve status 2>/dev/null || true
 
 step "Klart"
-echo "Para telefonen: kör  mio-pair  och skanna QR-koden i Mio (Inställningar → Dator)."
+echo "Para telefonen: kör  mio-pair  och skanna QR-koden i Mio (Inställningar → Parning)."

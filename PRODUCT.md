@@ -27,8 +27,8 @@ Allt tal stannar hos användaren: inget ljud sparas, transkriptionen sker på de
 
 ## Capabilities and Constraints
 
-- Fyra flikar: Hem, Lektioner, Kalender, Anteckningar, plus en separat mikrofonknapp. En inställningspanel från höger.
-- AI är på som standard när datorn är parad, med snabbpaus. Enskilda frågor skickas utan förhandsgranskning; förslag kräver Ja.
+- Tre flikar: Hem, Lektioner, Förslag, plus en separat mikrofonknapp. Ett inställningsark bakom kugghjulet; andra skärmar visar bara statusbrickor som öppnar det.
+- AI är på som standard när datorn är parad och pausas under Inställningar → AI. Enskilda frågor skickas utan förhandsgranskning; förslag kräver Ja.
 - Groqs gratisnivå: vardagsutdrag analyseras i omgångar högst var femte minut, och dygnets tokens kan ta slut. Appen visar då när AI fungerar igen.
 - Rättelser är ett visningslager; originaltranskriptet ändras aldrig. Talarnamn är också ett visningslager.
 - Inga icke-mål i 0.9.0: ingen chatthistorik, strömmande svar, TTS eller automatiska åtgärder.
@@ -37,7 +37,7 @@ Allt tal stannar hos användaren: inget ljud sparas, transkriptionen sker på de
 
 - Namnet Mio.
 - Röst: kort och lugn svenska (svar 2026-10-11: "Kort och lugn"). Inga utrop, ingen peppning, ingen skuld. Detaljer bakom ⓘ.
-- Utseende valt 2026-10-11: violett instrumentpanel i stil med CardPointers blandat med bankappars glas. Liquid Glass bara på kontroller och navigering; anteckningar, transkript och listor är vanliga läsytor.
+- Utseende ändrat 2026-11-15 (svar: "Graphite + blue", "Glass cards too"): rent och svartvitt i stil med MacroFactor men med mer Liquid Glass, en blå accent och aldrig det violetta AI-utseendet. Glas på kontroller, navigering och kort för status och sammanfattning; transkript, anteckningar och listor är vanliga läsytor.
 - Hem ändras med tiden på dagen (morgon, skoldag, kväll).
 - Synliga framsteg: rutnät med 12 veckors svit och räknare som "3 att granska".
 

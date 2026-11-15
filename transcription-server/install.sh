@@ -78,6 +78,20 @@ with os.fdopen(fd, 'w') as f:
 PY
     echo "Skapad med ny token och senaste modellversion."
 fi
+# The user's own words and names (README "Egna ord"). Created once and never overwritten;
+# the service account may read it, only root may change it.
+vocabulary=/etc/mio-transcription-vocabulary.txt
+if ! sudo test -f "$vocabulary"; then
+    sudo tee "$vocabulary" >/dev/null <<'TXT'
+# Egna ord för Mios transkription: namn, platser och facktermer som ofta blir fel.
+# Ett ord eller en fras per rad, exakt som det ska stavas (stor och liten bokstav räknas).
+# Rader som börjar med # hoppas över. Högst 500 rader används.
+# Starta om efter ändring: sudo systemctl restart mio-transcription
+TXT
+    echo "Skapade $vocabulary (tom ordlista)."
+fi
+sudo chown root:mio-transcription "$vocabulary"
+sudo chmod 640 "$vocabulary"
 model_id="$(sudo sed -n 's/^MIO_MODEL_ID=//p' "$config")"
 model_revision="$(sudo sed -n 's/^MIO_MODEL_REVISION=//p' "$config")"
 [[ $model_revision =~ ^[a-f0-9]{40}$ ]] || fail "MIO_MODEL_REVISION i $config måste vara en full commit (40 tecken)."
@@ -146,4 +160,4 @@ fi
 sudo tailscale serve status 2>/dev/null || true
 
 printf '\nKlart. Installera AI-gatewayen (server/install.sh) om du inte redan gjort det,\n'
-printf 'och para sedan telefonen: kör  mio-pair  och skanna QR-koden i Mio (Inställningar → Dator).\n'
+printf 'och para sedan telefonen: kör  mio-pair  och skanna QR-koden i Mio (Inställningar → Parning).\n'

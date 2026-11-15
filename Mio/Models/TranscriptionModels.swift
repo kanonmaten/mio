@@ -40,6 +40,9 @@ struct TranscriptionHealth: Decodable, Sendable {
     let encoding: String
     let maxSeconds: Int
     let maxBytes: Int
+    /// Additive in API v1 (2026-11-15): how many of the user's own words the server's decoder
+    /// boosts. Nil from an older server. The word list itself never leaves the PC.
+    var vocabulary: Int? = nil
 
     /// Pause-cut chunks reach 1 + 22 + 1 s, exactly API v1's 24 s / 768,044-byte limit.
     static let requiredSeconds = 24
@@ -374,7 +377,7 @@ enum TranscriptionError: LocalizedError, Sendable {
     }
     var errorDescription: String? {
         switch self {
-        case .notConfigured: "Para datorn under Inställningar → Dator först."
+        case .notConfigured: "Para datorn under Inställningar → Parning först."
         case .invalidAddress: "Ange serverns privata HTTPS-adress som slutar med .ts.net, utan sökväg."
         case .invalidToken: "Ange en åtkomsttoken med 32–256 bokstäver, siffror, bindestreck eller understreck."
         case .keychain: "Åtkomsttoken kunde inte läsas eller sparas säkert. Lås upp telefonen och försök igen."

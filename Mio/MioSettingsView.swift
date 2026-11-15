@@ -39,31 +39,64 @@ struct MioPressStyle: ButtonStyle {
     }
 }
 
+/// Transcription state as a chip; opens settings, where the connection is managed.
 struct TranscriptionStatusView: View {
     let model: MioViewModel
     @Environment(\.openMioSettings) private var openSettings
+
     var body: some View {
-        Button(action: openSettings) {
-            HStack(spacing: 8) {
-                Image(systemName: model.connectionState == .connected ? "checkmark.icloud" : "network")
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Transkriptionsserver · \(model.connectionState.title)").font(.subheadline.weight(.medium))
-                    if model.connectionState == .offline, model.runState == .listening {
-                        Text("Mikrofonen är aktiv. Återansluter automatiskt. Ljud väntar högst 60 sekunder i minnet.").font(.caption)
-                    } else {
-                        Text("Privat via Tailscale · mål: text efter 15–30 sekunder, ännu inte telefonmätt").font(.caption)
-                    }
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.caption)
-            }
-            .foregroundStyle(model.connectionState == .connected ? Color.primary : Color.secondary)
-            .padding(12)
-            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        MioStatusChip(title: "Transkription", state: state, level: level, action: openSettings)
+            .accessibilityIdentifier("mio.transcription-state")
+    }
+
+    private var state: String {
+        if model.connectionState == .offline, model.runState == .listening { return "Återansluter" }
+        return model.connectionState.title
+    }
+
+    private var level: MioStatusChip.Level {
+        switch model.connectionState {
+        case .connected: .good
+        case .offline, .actionRequired: .warning
+        case .unchecked, .connecting: .idle
         }
-        .buttonStyle(MioPressStyle())
-        .accessibilityHint("Öppnar inställningar för anslutningen")
-        .accessibilityIdentifier("mio.transcription-state")
+    }
+}
+
+/// AI state as a chip; opens settings, where AI is paused and resumed.
+struct MioAIStatusChip: View {
+    @Environment(MioAnalysisCoordinator.self) private var analysis
+    @Environment(MioWorkflowCoordinator.self) private var workflow
+    @Environment(\.openMioSettings) private var openSettings
+    @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
+    @AppStorage(MioCloudSettings.serverKey) private var server = ""
+
+    var body: some View {
+        MioStatusChip(title: "AI", state: MioAIStateText.describe(paired: !server.isEmpty, enabled: aiEnabled,
+                          analysis: analysis, isSendingQuestion: workflow.questions.isSending),
+                      level: level, action: openSettings)
+            .accessibilityIdentifier("mio.text-ai-state")
+    }
+
+    private var level: MioStatusChip.Level {
+        if server.isEmpty || !aiEnabled { return .idle }
+        if analysis.errorMessage != nil || !analysis.enabled { return .warning }
+        if let pausedUntil = analysis.pausedUntil, pausedUntil > .now { return .warning }
+        return .good
+    }
+}
+
+/// The two connection states side by side; stacked at accessibility text sizes.
+struct MioStatusChips: View {
+    let model: MioViewModel
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
+        layout {
+            TranscriptionStatusView(model: model)
+            MioAIStatusChip()
+        }
     }
 }
 
@@ -85,43 +118,99 @@ struct CaptureGapsView: View {
     }
 }
 
-/// The content of the single settings panel: one scrolling page in a fixed section order.
+/// The top level of settings: four short groups, each row showing its state. Everything about
+/// the PC, transcription and AI lives behind the first group and nowhere else in the app.
 struct MioSettingsView: View {
     let model: MioViewModel
     let contentModel: MioContentViewModel
+    @Environment(MioAnalysisCoordinator.self) private var analysis
+    @Environment(MioWorkflowCoordinator.self) private var workflow
     @AppStorage("mio.feedback.haptics") private var haptics = true
+    @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
+    @AppStorage(MioCloudSettings.serverKey) private var server = ""
+
     var body: some View {
         Form {
-            MioComputerSection(model: model)
+            Section {
+                NavigationLink { MioComputerSettingsView(model: model) } label: {
+                    MioSettingsRow(title: "Parning", symbol: "desktopcomputer", value: pairingState)
+                }
+                .accessibilityIdentifier("mio.settings.pairing")
+                NavigationLink { MioTranscriptionDetailsView(model: model) } label: {
+                    MioSettingsRow(title: "Transkription", symbol: "waveform", value: model.connectionState.title)
+                }
+                NavigationLink { MioAISettingsView(model: model) } label: {
+                    MioSettingsRow(title: "AI", symbol: "text.bubble", value: aiState)
+                }
+                .accessibilityIdentifier("mio.settings.ai")
+            } header: { Text("Dator") } footer: {
+                Text("Ljud går till Pianissimo och text till AI-gatewayen, båda på din egen dator via Tailscale.")
+            }
+            Section("Mio") {
+                NavigationLink { MioNotificationSettingsView() } label: {
+                    MioSettingsRow(title: "Notiser", symbol: "bell")
+                }
+                Toggle(isOn: $haptics) { Label("Diskreta vibrationer", systemImage: "iphone.radiowaves.left.and.right") }
+                NavigationLink { MioGuideView() } label: {
+                    MioSettingsRow(title: "Så använder du Mio", symbol: "questionmark.circle")
+                }
+            }
+            Section("Integritet och data") {
+                NavigationLink { MioPrivacySettingsView(model: model, contentModel: contentModel) } label: {
+                    MioSettingsRow(title: "Export, radering och behörigheter", symbol: "hand.raised")
+                }
+            }
+            Section("Om") {
+                LabeledContent("Version", value: "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
+                NavigationLink { MioDiagnosticsView() } label: {
+                    MioSettingsRow(title: "Diagnostik", symbol: "waveform.path.ecg")
+                }
+            }
+        }
+        .mioListGround()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("mio.settings.panel")
+    }
+
+    private var pairingState: String {
+        guard !server.isEmpty else { return "Inte parad" }
+        return URLComponents(string: server)?.host?.split(separator: ".").first.map(String.init) ?? "Parad"
+    }
+
+    private var aiState: String {
+        MioAIStateText.describe(paired: !server.isEmpty, enabled: aiEnabled, analysis: analysis,
+                                isSendingQuestion: workflow.questions.isSending)
+    }
+}
+
+/// Settings → Parning: pair, check and forget the PC.
+struct MioComputerSettingsView: View {
+    let model: MioViewModel
+
+    var body: some View {
+        Form { MioComputerSection(model: model) }
+            .mioListGround()
+            .navigationTitle("Parning")
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Settings → AI: the on/pause switch, its live state, capacity, and what AI does with lessons.
+struct MioAISettingsView: View {
+    let model: MioViewModel
+
+    var body: some View {
+        Form {
             MioAISettingsSection(model: model)
             Section {
                 Text("Starta en lektion under Lektioner. Vardags-Mio pausas under tiden. När du avslutar skriver AI detaljerade anteckningar i sparade delar, med minst en minut mellan delarna. Ofullständiga anteckningar märks och fortsätter senare.")
                     .font(.footnote)
                 Text("Historik och råtext finns under fliken Lektioner.").font(.footnote).foregroundStyle(.secondary)
             } header: { Text("Lektioner") }
-            Section("Notiser") {
-                NavigationLink { MioNotificationSettingsView() } label: {
-                    Label("Morgon- och kvällsnotis", systemImage: "bell")
-                }
-            }
-            Section {
-                Toggle("Diskreta vibrationer", isOn: $haptics)
-                NavigationLink { MioGuideView() } label: { Label("Så använder du Mio", systemImage: "questionmark.circle") }
-            } header: { Text("Mio") } footer: {
-                Text("Mikrofonen startas av dig. Vid nätavbrott återansluter en aktiv session automatiskt; högst 60 sekunder ljud behålls i minnet.")
-            }
-            Section("Integritet och data") {
-                NavigationLink("Export, radering och behörigheter") { MioPrivacySettingsView(model: model, contentModel: contentModel) }
-            }
-            Section("Om") {
-                LabeledContent("Version", value: "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
-                NavigationLink("Diagnostik") { MioDiagnosticsView() }
-            }
         }
-        // The panel's glass chrome shows between plain rows; with Reduce Transparency it is solid.
-        .scrollContentBackground(.hidden)
-        .toolbar(.hidden, for: .navigationBar)
-        .navigationTitle("Inställningar")
+        .mioListGround()
+        .navigationTitle("AI")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -160,7 +249,7 @@ struct MioAISettingsSection: View {
         } header: {
             Text("AI")
         } footer: {
-            Text("Vardagstal skickas samlat högst var femte minut, så att en dag ryms i Groqs gratiskvot. Frågor skickas direkt. Förslag sparas först när du väljer Ja. Pausen gäller tills du slår på AI igen.")
+            Text("Vardagstal skickas samlat högst var femte minut, så att en dag ryms i Groqs gratiskvot. Frågor skickas direkt; är AI-tjänsten upptagen väntar Mio en stund och skickar igen. Förslag sparas först när du väljer Ja. Pausen gäller tills du slår på AI igen.")
         }
     }
 }
@@ -257,7 +346,9 @@ struct MioAIConnectionStatusView: View {
                 }
             }
         }
-        .navigationTitle("AI-anslutning och kapacitet")
+        .mioListGround()
+        .navigationTitle("Kapacitet och uppgifter")
+        .navigationBarTitleDisplayMode(.inline)
         .onDisappear { checkTask?.cancel() }
     }
 
@@ -287,7 +378,7 @@ struct MioPrivacySettingsView: View {
                 }
             }.padding().frame(maxWidth: 680)
         }
-        .background(Color(uiColor: .systemGroupedBackground))
+        .mioGround()
         .navigationTitle("Integritet och data")
         .confirmationDialog("Radera all lokal Mio-data?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
             Button("Radera permanent", role: .destructive) { Task { await deleteEverything() } }

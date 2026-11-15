@@ -16,6 +16,8 @@ final class MioViewModel {
     var connectionState: TranscriptionConnectionState = .unchecked
     var serverMetadata: TranscriptionMetadata?
     var serverVersion: String?
+    /// Own words active on the transcription server; nil when it has not reported any count.
+    var serverVocabulary: Int?
     var connectionCheckedAt: Date?
     @ObservationIgnored private var finishingPipeline: (any MioCapturePipeline)?
     @ObservationIgnored private var connectionGeneration = UUID()
@@ -147,6 +149,7 @@ final class MioViewModel {
             guard generation == connectionGeneration else { throw CancellationError() }
             serverMetadata = health.metadata
             serverVersion = health.serverVersion
+            serverVocabulary = health.vocabulary
             connectionState = .connected
             connectionCheckedAt = .now
         } catch {
@@ -166,7 +169,7 @@ final class MioViewModel {
         if let pipeline { await pipeline.stop(discard: true) }
         await finishingPipeline?.stop(discard: true)
         self.pipeline = nil
-        serverMetadata = nil; serverVersion = nil; connectionState = .unchecked; connectionCheckedAt = nil
+        serverMetadata = nil; serverVersion = nil; serverVocabulary = nil; connectionState = .unchecked; connectionCheckedAt = nil
         if let currentSession, currentSession.endedAt == nil {
             runState = .paused
             statusMessage = "Anslutningen ändrades. Mikrofonen är av; tryck Fortsätt när anslutningen är klar."
@@ -356,6 +359,7 @@ final class MioViewModel {
             statusMessage = isLessonActive ? "Lektionsläge: fångar underlag till anteckningar. Vardags-Mio är pausat." : "Mio lyssnar. När AI är på kan Mio föreslå händelser och att göra ur vanliga samtal."
             serverMetadata = details.health.metadata
             serverVersion = details.health.serverVersion
+            serverVocabulary = details.health.vocabulary
             connectionState = .connected; connectionCheckedAt = .now
             appendEvent(kind: .info, message: "Mikrofonen startade. Privat transkription: \(details.health.metadata.model), revision \(details.health.metadata.revision).")
             // Ask on screen now; iOS cannot show the permission prompt from the background.

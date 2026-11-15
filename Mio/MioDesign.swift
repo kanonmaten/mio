@@ -1,32 +1,76 @@
 import SwiftUI
 
-/// The week-planner world: a violet-tinted ground, plain reading panels on top, one violet
-/// tint for controls. Liquid Glass stays on system bars and controls; panels never use it.
+/// The week-planner world in graphite and blue (2026-11-15): a neutral ground with soft light,
+/// Liquid Glass cards and controls on top, one blue tint for everything interactive. Long
+/// reading text (transcripts, lesson notes, lists) stays on plain surfaces so it is easy to read.
 enum MioTheme {
     static let ground = Color("MioGround")
     static let surface = Color("MioSurface")
     static let ribbon = Color("MioRibbon")
     /// Named asset, not `Color.accentColor`: the environment's accent resolved to system blue
-    /// in the 2026-10-11 simulator build, while this asset is the violet the design needs.
+    /// in the 2026-10-11 simulator build; the asset is the exact blue of the design.
     static let tint = Color("AccentColor")
     static let swedish = Locale(identifier: "sv_SE")
     static let panelRadius: CGFloat = 22
 }
 
-extension View {
-    /// Tinted ground behind a scroll view.
-    func mioGround() -> some View {
-        background(MioTheme.ground.ignoresSafeArea())
-    }
+/// The ground behind every screen: graphite with two very soft lights, so glass has something
+/// to bend. Static and cheap; nothing moves.
+struct MioBackdrop: View {
+    @Environment(\.colorScheme) private var scheme
 
-    /// Tinted ground behind a List or Form; rows keep their plain grouped surface.
-    func mioListGround() -> some View {
-        scrollContentBackground(.hidden)
-            .background(MioTheme.ground.ignoresSafeArea())
+    var body: some View {
+        ZStack {
+            MioTheme.ground
+            RadialGradient(colors: [MioTheme.tint.opacity(scheme == .dark ? 0.20 : 0.12), .clear],
+                           center: .topLeading, startRadius: 0, endRadius: 520)
+            RadialGradient(colors: [Color.primary.opacity(scheme == .dark ? 0.08 : 0.05), .clear],
+                           center: .bottomTrailing, startRadius: 0, endRadius: 620)
+        }
+        .ignoresSafeArea()
     }
 }
 
-/// A plain reading panel. No glass, no halo; the ground's tint separates it.
+/// Liquid Glass behind a card. With Reduce Transparency the card is the plain surface instead.
+private struct MioGlassSurface: ViewModifier {
+    let radius: CGFloat
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        if reduceTransparency {
+            content.background(MioTheme.surface, in: shape)
+        } else {
+            content.glassEffect(.regular, in: shape)
+        }
+    }
+}
+
+extension View {
+    /// Graphite ground behind a scroll view.
+    func mioGround() -> some View {
+        background { MioBackdrop() }
+    }
+
+    /// Graphite ground behind a List or Form; rows keep their plain grouped surface.
+    func mioListGround() -> some View {
+        scrollContentBackground(.hidden)
+            .background { MioBackdrop() }
+    }
+
+    /// A glass card surface for status, summaries and controls.
+    func mioGlass(radius: CGFloat = MioTheme.panelRadius) -> some View {
+        modifier(MioGlassSurface(radius: radius))
+    }
+
+    /// An opaque surface for text that is read at length.
+    func mioReadingSurface(radius: CGFloat = MioTheme.panelRadius) -> some View {
+        background(MioTheme.surface, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+    }
+}
+
+/// A glass card: the summary and status surface on Hem and Fånga.
 struct MioPanel<Content: View>: View {
     let content: Content
 
@@ -36,7 +80,51 @@ struct MioPanel<Content: View>: View {
         VStack(alignment: .leading, spacing: 12) { content }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(MioTheme.surface, in: RoundedRectangle(cornerRadius: MioTheme.panelRadius, style: .continuous))
+            .mioGlass()
+    }
+}
+
+/// A small glass capsule that names one state ("Transkription · Ansluten") and opens settings.
+struct MioStatusChip: View {
+    let title: String
+    let state: String
+    let level: Level
+    let action: () -> Void
+
+    enum Level { case good, idle, warning }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 8, height: 8)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.caption).foregroundStyle(.secondary)
+                    Text(state).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                }
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .mioGlass(radius: 18)
+        }
+        .buttonStyle(MioPressStyle())
+        .accessibilityLabel("\(title): \(state)")
+        .accessibilityHint("Öppnar inställningar")
+    }
+
+    private var dotColor: Color {
+        switch level {
+        case .good: MioTheme.tint
+        case .idle: .secondary
+        case .warning: .orange
+        }
     }
 }
 

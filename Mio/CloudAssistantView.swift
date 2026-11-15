@@ -15,6 +15,7 @@ struct CloudAssistantView: View {
     @State private var answer: String?
     @State private var answerNoteReview: MioAnswerNoteDraft?
     @State private var isPreparing = false
+    @State private var resendAt: Date?
     @State private var errorMessage: String?
     @State private var requestTask: Task<Void, Never>?
     @State private var activeRequestID: UUID?
@@ -36,7 +37,7 @@ struct CloudAssistantView: View {
         Form {
             if !isPaired {
                 Section {
-                    Text("Para datorn under Inställningar → Dator först.")
+                    Text("Para datorn under Inställningar → Parning först.")
                     Button("Öppna inställningar") { openSettings() }
                 }
             }
@@ -87,7 +88,15 @@ struct CloudAssistantView: View {
 
             Section {
                 if isAsking {
-                    ProgressView(isPreparing ? "Kontrollerar AI-gatewayen …" : "Väntar på svar …")
+                    if let resendAt {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                            Text("AI-tjänsten är upptagen. Skickar igen om")
+                            Text(resendAt, style: .timer).monospacedDigit()
+                        }
+                    } else {
+                        ProgressView(isPreparing ? "Ansluter till datorn …" : "Väntar på svar …")
+                    }
                     Button("Avbryt frågan", role: .cancel) { cancelRequest() }
                     Text("En redan skickad fråga kan inte återkallas. Servern försöker avbryta när anslutningen stängs.")
                         .font(.footnote).foregroundStyle(.secondary)
@@ -218,29 +227,53 @@ struct CloudAssistantView: View {
         errorMessage = nil
         requestTask = Task {
             defer {
-                if activeRequestID == requestID { activeRequestID = nil; requestTask = nil; isPreparing = false }
+                if activeRequestID == requestID { activeRequestID = nil; requestTask = nil; isPreparing = false; resendAt = nil }
             }
-            let prepared: MioPreparedConnection
-            do {
-                prepared = try await MioConnectionDiscovery.shared.prepare(connection: connection, task: .ask)
-            } catch {
+            // A short rate limit or a brief failure is waited out and the same question sent
+            // again, at most twice, instead of asking the user to do it (2026-11-15).
+            for attempt in 1...3 {
+                isPreparing = true
+                let prepared: MioPreparedConnection
+                do {
+                    prepared = try await MioConnectionDiscovery.shared.prepare(connection: connection, task: .ask)
+                } catch {
+                    guard !Task.isCancelled, activeRequestID == requestID, workflow.questions.generation == generation else { return }
+                    MioConnectionDiscovery.shared.handle(error: error)
+                    if attempt < 3, let seconds = MioAnalysisSchedule.questionRetrySeconds(after: error) {
+                        guard await waitBeforeResend(seconds, requestID: requestID, generation: generation) else { return }
+                        continue
+                    }
+                    errorMessage = error.localizedDescription
+                    return
+                }
                 guard !Task.isCancelled, activeRequestID == requestID, workflow.questions.generation == generation else { return }
-                MioConnectionDiscovery.shared.handle(error: error)
-                errorMessage = error.localizedDescription
+                isPreparing = false
+                let result = await workflow.questions.sendApproved(request, connection: prepared.connection,
+                                                                   expectedGeneration: generation)
+                guard !Task.isCancelled, activeRequestID == requestID, workflow.questions.generation == generation else { return }
+                if result.outcome.isSuccess, let received = result.answer {
+                    answer = received
+                    onAnswerReceived?()
+                    return
+                }
+                if attempt < 3, let seconds = result.retryAfterSeconds {
+                    guard await waitBeforeResend(seconds, requestID: requestID, generation: generation) else { return }
+                    continue
+                }
+                if result.outcome != .cancelled { errorMessage = result.outcome.message }
                 return
             }
-            guard !Task.isCancelled, activeRequestID == requestID, workflow.questions.generation == generation else { return }
-            isPreparing = false
-            let result = await workflow.questions.sendApproved(request, connection: prepared.connection,
-                                                               expectedGeneration: generation)
-            guard !Task.isCancelled, activeRequestID == requestID, workflow.questions.generation == generation else { return }
-            if result.outcome.isSuccess, let received = result.answer {
-                answer = received
-                onAnswerReceived?()
-            } else if result.outcome != .cancelled {
-                errorMessage = result.outcome.message
-            }
         }
+    }
+
+    /// False when the request was cancelled or replaced while waiting.
+    private func waitBeforeResend(_ seconds: Int, requestID: UUID, generation: UUID) async -> Bool {
+        if seconds > 0 {
+            resendAt = Date.now.addingTimeInterval(TimeInterval(seconds) + 1)
+            try? await Task.sleep(for: .seconds(seconds + 1))
+            resendAt = nil
+        }
+        return !Task.isCancelled && activeRequestID == requestID && workflow.questions.generation == generation
     }
 
     private func cancelRequest(invalidateWorkflow: Bool = true) {
@@ -254,6 +287,7 @@ struct CloudAssistantView: View {
         requestTask = nil
         activeRequestID = nil
         isPreparing = false
+        resendAt = nil
     }
 
     private func clearConversation(invalidateWorkflow: Bool = true) {

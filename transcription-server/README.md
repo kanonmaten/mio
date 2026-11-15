@@ -31,7 +31,7 @@ Skriptet frågar efter ditt lösenord för `sudo` och gör sedan allt detta. Fö
 1. Installerar `uv`, `rsync`, `curl` och `tailscale` om de saknas.
 2. Skapar tjänstekontot `mio-transcription` och kopierar bara serverkoden till `/opt/mio-transcription`.
 3. Installerar Python 3.12 och exakt låsta paket (NeMo, PyTorch med CUDA).
-4. Skapar `/etc/mio-transcription.conf` med en ny hemlig token och senaste Pianissimo-versionen. Saknas talarmodellens version läggs den till (låst commit).
+4. Skapar `/etc/mio-transcription.conf` med en ny hemlig token och senaste Pianissimo-versionen, och en tom ordlista för [egna ord](#egna-ord). Saknas talarmodellens version läggs den till (låst commit).
 5. Laddar ner modellerna, startar tjänsten och väntar tills den svarar "redo".
 6. Slår på en nattlig uppdatering av Pianissimo (se [Uppdateringar](#uppdateringar)).
 7. Kopplar tjänsten till Tailscale om Tailscale redan är inloggat.
@@ -67,7 +67,7 @@ Granskar du en befintlig policy: en grant lägger bara till åtkomst, så breda 
 ## 3. Telefonen
 
 1. Installera Tailscale från App Store och logga in med samma konto. Slå på **VPN On Demand** för Wi-Fi och mobilnät ([guide](https://tailscale.com/docs/features/client/ios-vpn-on-demand)).
-2. Installera [AI-gatewayen](../server/README.md) om du inte redan gjort det. Kör sedan `mio-pair` på datorn och skanna QR-koden i Mio under **Inställningar → Dator**. Koden innehåller adresser och tokens för både Pianissimo och AI, så du behöver inte skriva av något.
+2. Installera [AI-gatewayen](../server/README.md) om du inte redan gjort det. Kör sedan `mio-pair` på datorn och skanna QR-koden i Mio under **Inställningar → Parning**. Koden innehåller adresser och tokens för både Pianissimo och AI, så du behöver inte skriva av något.
 3. Tryck **Kontrollera anslutningen**. Inget ljud skickas. Starta sedan Mio och läs en mening med namn, datum och siffror; texten kommer efter 15 till 30 sekunder.
 
 Efter en SideStore-förnyelse med LocalDevVPN: slå på Tailscale igen. Datorn måste vara igång och vaken; ställ in energisparläget så att den inte somnar medan du använder Mio.
@@ -112,7 +112,25 @@ Om du använder Mio just när bytet sker blir det en kort lucka i texten.
 
 **Byta token:** `sudo rm /etc/mio-transcription.conf` och kör `install.sh` igen. Det skapar en ny token (och tar senaste modellen). Para sedan om telefonen med `mio-pair`.
 
-Appen behöver ingen ny version när modellen uppdateras, eftersom API:t är detsamma. Modellversionen syns under Inställningar → Dator → Transkription och Tailscale.
+Appen behöver ingen ny version när modellen uppdateras, eftersom API:t är detsamma. Modellversionen syns under Inställningar → Transkription.
+
+## Egna ord
+
+Pianissimo stavar ibland ovanliga namn och facktermer fel. Du kan ge modellen en egen ordlista (NeMos *phrase boosting*, enligt [modellkortet](https://huggingface.co/KlangAI/pianissimo-sv#vocabulary)), så väljer den oftare rätt stavning när ordet sägs. I KlangAI:s mätning stavades 64 % av svåra namn rätt med ordlista mot 39 % utan, medan övrig text var i stort sett oförändrad.
+
+```bash
+sudo nano /etc/mio-transcription-vocabulary.txt
+sudo systemctl restart mio-transcription
+```
+
+- Ett ord eller en fras per rad, exakt som det ska stavas. Stor och liten bokstav räknas: skriv `Åsa Lindqvist`, inte `åsa lindqvist`.
+- Lägg in sådant som faktiskt blir fel: namn på personer, lärare, platser, kurser, böcker och facktermer. Vanliga ord behövs inte.
+- Rader som börjar med `#` hoppas över. Högst 500 rader används, högst 100 byte per rad.
+- `check.sh` och Mio (Inställningar → Transkription) visar `"vocabulary"`: antalet ord som är aktiva.
+
+Ordlistan finns bara på datorn och lämnar den aldrig; den skrivs aldrig i loggen. Kan den inte läsas eller aktiveras skrivs en rad i journalen och transkriptionen fortsätter som vanligt, utan egna ord. Styrkan kan ändras med `MIO_VOCABULARY_BOOST` i `/etc/mio-transcription.conf` (0–2, standard 1.0; 0 stänger av). Högre än 1.0 kan göra att listade ord skrivs fast de inte sades.
+
+**Ej verifierat:** ordlistan är provad med en syntetisk modell, inte med den riktiga modellen på GPU.
 
 ## Förbehandling och talarmärkning
 
@@ -167,6 +185,7 @@ WER räknas på ordnivå efter gemener och borttagen interpunktion; siffror skri
 sudo systemctl disable --now mio-transcription.service mio-pianissimo-update.timer
 sudo tailscale serve reset
 sudo rm -rf /opt/mio-transcription /opt/mio-python /var/lib/mio-transcription /etc/mio-transcription.conf \
+    /etc/mio-transcription-vocabulary.txt \
     /etc/systemd/system/mio-transcription.service /etc/systemd/system/mio-pianissimo-update.*
 sudo systemctl daemon-reload
 sudo userdel mio-transcription
@@ -192,4 +211,4 @@ uv --directory ~/mio/transcription-server sync --locked --extra test --python 3.
 uv --directory ~/mio/transcription-server run pytest -q tests
 ```
 
-Tjänsten kräver CUDA och byter aldrig till CPU. Installationen följer modellkortets [NeMo-användning](https://huggingface.co/KlangAI/pianissimo-sv) och NVIDIAs [NeMo-installation](https://docs.nvidia.com/nemo/speech/3.0.0/starthere/install.html), med Mios låsta `uv.lock` (NeMo 2.7.0). En ny Pianissimo-version som kräver nyare NeMo blir inte redo; då återgår nattuppdateringen till föregående version. Uppdatera i så fall `pyproject.toml`/`uv.lock` och kör `install.sh`.
+Tjänsten kräver CUDA och byter aldrig till CPU. Installationen följer modellkortets [NeMo-användning](https://huggingface.co/KlangAI/pianissimo-sv) och NVIDIAs [NeMo-installation](https://docs.nvidia.com/nemo/speech/3.0.0/starthere/install.html), med Mios låsta `uv.lock` (NeMo 3.0.0). En ny Pianissimo-version som kräver nyare NeMo blir inte redo; då återgår nattuppdateringen till föregående version. Uppdatera i så fall `pyproject.toml`/`uv.lock` och kör `install.sh`.

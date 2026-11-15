@@ -38,7 +38,9 @@ struct MioNotificationSettingsView: View {
                 Text("Dagliga notiser är valfria. De innehåller bara en uppmaning att öppna Mio; översikten beräknas på telefonen när du öppnar appen. Att ändra en tid kräver Spara.")
             }
         }
+        .mioListGround()
         .navigationTitle("Notiser")
+        .navigationBarTitleDisplayMode(.inline)
         .disabled(service.isBusy)
         .refreshable { await service.refresh() }
         .task { await service.refresh() }

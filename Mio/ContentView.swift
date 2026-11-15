@@ -42,8 +42,8 @@ struct ContentView: View {
         .modifier(MioListeningAccessory(model: model))
         .disabled(maintenance.blocksWork)
         .environment(\.openMioSettings, { showSettings = true })
-        .mioSettingsPanel(isPresented: $showSettings, onDismiss: resolveNotificationRoute) {
-            MioSettingsView(model: model, contentModel: contentModel)
+        .sheet(isPresented: $showSettings, onDismiss: resolveNotificationRoute) {
+            MioSettingsScreen(model: model, contentModel: contentModel)
                 .disabled(maintenance.blocksWork)
         }
         .sheet(item: $navigation.presentedSession) { session in
@@ -183,8 +183,7 @@ private struct MioCaptureView: View {
                     if let session = model.currentSession, session.endedAt == nil {
                         LiveTranscriptCard(model: model, session: session)
                     }
-                    TranscriptionStatusView(model: model)
-                    TextAIStateCard()
+                    MioStatusChips(model: model)
                     if !workflow.pendingLessonIDs.isEmpty {
                         Card(title: "Lektionen behöver sparas färdigt", symbol: "exclamationmark.triangle") {
                             if let message = workflow.lastOutcome?.message { Text(message).font(.subheadline) }
@@ -316,44 +315,6 @@ private struct StatusHeader: View {
     }
 }
 
-private struct TextAIStateCard: View {
-    @Environment(MioAnalysisCoordinator.self) private var analysis
-    @Environment(MioWorkflowCoordinator.self) private var workflow
-    @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
-    @AppStorage(MioCloudSettings.serverKey) private var server = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Quick pause; the choice is saved and also shown under Inställningar → AI.
-            Toggle(isOn: $aiEnabled) {
-                Label("AI · \(state)", systemImage: "text.bubble")
-                    .font(.subheadline.weight(.medium))
-            }
-            .disabled(server.isEmpty)
-            .accessibilityIdentifier("mio.text-ai-toggle")
-            Text(server.isEmpty ? "Para datorn under Inställningar → Dator." : analysis.errorMessage ?? analysis.status)
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(MioTheme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("mio.text-ai-state")
-    }
-
-    private var state: String {
-        if server.isEmpty { return "Inte parad" }
-        if !aiEnabled { return "Pausad" }
-        if workflow.questions.isSending { return "Fråga skickad" }
-        if let pausedUntil = analysis.pausedUntil, pausedUntil > .now {
-            return "Fortsätter kl. \(pausedUntil.formatted(date: .omitted, time: .shortened))"
-        }
-        if analysis.isWorking { return "Arbetar" }
-        if analysis.enabled { return "På" }
-        return "Startar inte"
-    }
-}
-
 private struct ControlsCard: View {
     let model: MioViewModel
 
@@ -471,7 +432,7 @@ private struct LiveTranscriptCard: View {
     let session: MioSession
 
     var body: some View {
-        Card(title: "Live-test", symbol: "quote.bubble") {
+        Card(title: "Live-test", symbol: "quote.bubble", reading: true) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Säg till exempel: “I dag testar vi procent. Mio, kom ihåg att provet är på fredag.”")
                     .font(.footnote)
@@ -576,7 +537,7 @@ private struct TranscriptCard: View {
     let session: MioSession
 
     var body: some View {
-        Card(title: "Tidsstämplad text", symbol: "text.document") {
+        Card(title: "Tidsstämplad text", symbol: "text.document", reading: true) {
             if session.transcripts.isEmpty {
                 Text("Här visas färdiga lokala textdelar.")
                     .foregroundStyle(.secondary)
@@ -634,7 +595,7 @@ private struct DiagnosticCard: View {
     let session: MioSession
 
     var body: some View {
-        Card(title: "Händelselogg", symbol: "list.bullet.rectangle") {
+        Card(title: "Händelselogg", symbol: "list.bullet.rectangle", reading: true) {
             if session.events.isEmpty {
                 Text("Inga händelser ännu.")
                     .foregroundStyle(.secondary)
@@ -741,7 +702,7 @@ private struct FirstRunCard: View {
     var body: some View {
         Card(title: "Börja med Mio", symbol: "1.circle") {
             VStack(alignment: .leading, spacing: 9) {
-                Text("1. Para datorn under Inställningar → Dator. Starta sedan Mio och tillåt mikrofonen.")
+                Text("1. Para datorn under Inställningar → Parning. Starta sedan Mio och tillåt mikrofonen.")
                 Text("2. Säg svenska meningar och ordet Mio.")
                 Text("3. Prova ‘Mio, anteckna att vi arbetar med procent’. Granska förslaget på Hem och välj Ja, Nej eller Inte nu.")
                 Text("4. Använd Starta lektion för lektionsläge. Historik och råtext finns under Lektioner.")
@@ -775,18 +736,23 @@ private struct ErrorCard: View {
     }
 }
 
+/// A titled card on Fånga. Glass for status and summaries; `reading` gives the plain surface
+/// that transcripts and other text read at length stay on.
 private struct Card<Content: View>: View {
     let title: String?
     let symbol: String?
+    let reading: Bool
     let content: Content
 
     init(
         title: String? = nil,
         symbol: String? = nil,
+        reading: Bool = false,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.symbol = symbol
+        self.reading = reading
         self.content = content()
     }
 
@@ -800,7 +766,16 @@ private struct Card<Content: View>: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(MioTheme.surface, in: RoundedRectangle(cornerRadius: MioTheme.panelRadius, style: .continuous))
+        .modifier(CardSurface(reading: reading))
+    }
+}
+
+private struct CardSurface: ViewModifier {
+    let reading: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if reading { content.mioReadingSurface() } else { content.mioGlass() }
     }
 }
 

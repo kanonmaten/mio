@@ -93,12 +93,16 @@ test('the chat adapter rejects truncation, refusals, tools and observable reason
 
 test('detailed notes retain worked steps and exact grounding; invented evidence and notes-as-homework fail', () => {
   assert.equal(validateLessonPayload(payload), payload);
-  assert.equal(validateLessonResult(notes, payload), notes);
-  for (const patch of [{ evidence: 'påhittat' }, { sourceIDs: ['unknown'] }, { heading: '' },
-    { body: 'x'.repeat(8001) }, { sourceIDs: [id, id] }, { slides: [] }]) {
+  assert.deepEqual(validateLessonResult(notes, payload), notes);
+  // A section is the notes themselves: one that cannot be grounded rejects the whole part.
+  for (const patch of [{ evidence: 'påhittat' }, { heading: '' },
+    { body: 'x'.repeat(8001) }, { slides: [] }]) {
     assert.throws(() => validateLessonResult({ ...notes, sections: [{ ...notes.sections[0], ...patch }] }, payload));
   }
-  assert.throws(() => validateLessonResult({ ...notes, candidates: [{ ...notes.candidates[0], kind: 'note' }] }, payload));
+  assert.deepEqual(validateLessonResult({ ...notes, sections: [{ ...notes.sections[0], sourceIDs: [id, id, 'unknown'] }] }, payload).sections[0].sourceIDs, [id]);
+  // Notes offered as homework are dropped; the sections stay.
+  const cleaned = validateLessonResult({ ...notes, candidates: [{ ...notes.candidates[0], kind: 'note' }] }, payload);
+  assert.deepEqual(cleaned.candidates, []); assert.deepEqual(cleaned.sections, notes.sections);
   assert.throws(() => validateLessonPayload({ ...payload, mode: 'everyday' }));
   assert.throws(() => validateLessonPayload({ ...payload, fragments: [{ ...payload.fragments[0], text: 'å'.repeat(1751) }] }));
   assert.throws(() => validateAskResult({ answer: 'test', action: 'create' }));

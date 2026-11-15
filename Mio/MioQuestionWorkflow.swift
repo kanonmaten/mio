@@ -4,6 +4,9 @@ import Observation
 struct MioQuestionResult: Equatable, Sendable {
     let outcome: MioOperationOutcome
     let answer: String?
+    /// Set when the failure passes by itself (a short rate limit, a brief server error or a
+    /// changed gateway revision): the view waits this long and sends the same question again.
+    var retryAfterSeconds: Int? = nil
 }
 
 struct MioAnswerNoteDraft: Identifiable, Equatable, Sendable {
@@ -97,7 +100,8 @@ final class MioQuestionWorkflow {
                     return MioQuestionResult(outcome: .cancelled, answer: nil)
                 }
                 MioConnectionDiscovery.shared.handle(error: error)
-                return MioQuestionResult(outcome: .failure(error.localizedDescription), answer: nil)
+                return MioQuestionResult(outcome: .failure(error.localizedDescription), answer: nil,
+                                         retryAfterSeconds: MioAnalysisSchedule.questionRetrySeconds(after: error))
             }
         } onCancel: { task.cancel() }
     }

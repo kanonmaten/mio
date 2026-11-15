@@ -41,4 +41,6 @@ AI-leverantör och kompatibel modell byts i Cloudflare, utan modellväljare i ap
 
 Användaren valde designen veckoplaneraren: violett grund, vanliga läsytor för anteckningar, transkript och listor, och Liquid Glass bara på flikfält och knappar. Appen har fyra flikar, Hem, Lektioner, Kalender och Anteckningar, och en separat rund mikrofonknapp, Fånga. Morgon-fliken är borta; morgon- och kvällsöversikten finns på Hem. Varje skärm ska ha en tydlig nästa sak.
 
+2026-11-15 bytte användaren den violetta grunden mot grafitgrått med en blå ton, lät kort för status och sammanfattning bli Liquid Glass (lång lästext är fortfarande vanliga ytor) och samlade inställningarna i ett ark. Flikarna är sedan 0.9.1 Hem, Lektioner och Förslag.
+
 Samma dag flyttade AI-gatewayen från Cloudflare till användarens dator bredvid Pianissimo, med Groq som enda leverantör. Modell byts på datorn, fortfarande utan modellväljare i appen. Reasoning av, temperatur 0 och strikt schema gäller som förut.

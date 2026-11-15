@@ -6,11 +6,41 @@ import { ProviderResponseError, ProviderCompatibilityError } from './provider.mj
 
 const MAX_UPSTREAM_BYTES = 65_536;
 const errorStatus = category => category === 'provider_quota' ? 429
+  : category === 'provider_request_too_large' ? 413
   : ['provider_model_unavailable', 'provider_parameters'].includes(category) ? 422 : 502;
 
 function providerFailure(response, data, now) {
   const error = normalizeProviderError({ status: response.status, data, headers: response.headers, now: now() });
-  return new RequestError(errorStatus(error.category), error.category, error.retryAfter ?? 60);
+  const failure = new RequestError(errorStatus(error.category), error.category, error.retryAfter ?? 60);
+  // Only a wait the provider itself named may be honoured by the single retry below.
+  failure.providerRetryAfter = error.retryAfter;
+  return failure;
+}
+
+// Groq's free tier admits a request only when prompt + max_tokens fit the per-minute token
+// budget, and the reservation counts whether or not the answer uses it. Three UTF-8 bytes per
+// token overestimates Swedish text, so a request sized here is accepted by the provider.
+const estimateTokens = value => Math.ceil(Buffer.byteLength(value, 'utf8') / 3);
+const MINIMUM_ANSWER_TOKENS = Object.freeze({ ask: 300, everyday: 500, lesson: 1_200 });
+export function fitToMinuteBudget(generation, taskID, tokensPerMinute) {
+  if (tokensPerMinute == null) return generation;
+  const prompt = generation.messages.reduce((sum, message) => sum + estimateTokens(message.content) + 8, 0)
+    + estimateTokens(JSON.stringify(generation.structuredOutput.schema)) + 50;
+  const room = tokensPerMinute - prompt;
+  if (room < Math.min(generation.maxOutputTokens, MINIMUM_ANSWER_TOKENS[taskID])) {
+    throw new RequestError(413, 'provider_request_too_large');
+  }
+  return room >= generation.maxOutputTokens ? generation : { ...generation, maxOutputTokens: room };
+}
+
+/** Milliseconds before the one retry, or null when the failure must be reported at once. */
+function retryDelay(error, config) {
+  if (!(error instanceof RequestError)) return null;
+  if (error.code === 'provider_quota') {
+    return Number.isFinite(error.providerRetryAfter) && error.providerRetryAfter <= 20
+      ? error.providerRetryAfter * 1_000 + 250 : null;
+  }
+  return ['provider_infrastructure', 'provider_transport'].includes(error.code) ? config.retryDelayMs ?? 1_000 : null;
 }
 
 async function readUpstream(response, profile, signal, now) {
@@ -82,22 +112,37 @@ export async function executeGeneration({ config, mode, payload, fetchImpl, sign
     const taskID = mode === 'lesson' ? 'lesson' : mode === 'ask' ? 'ask' : 'everyday';
     const selected = resolveTaskProfile(config, taskID);
     if (!selected.configured) throw new RequestError(422, 'task_configuration_invalid');
-    const generation = createTaskRequest(mode, payload);
+    const generation = fitToMinuteBudget(createTaskRequest(mode, payload), taskID, config.tokensPerMinute);
     // Options and immutable policy must be checked before consuming shared quota.
     const provider = buildProviderRequest(selected.config, generation);
     ensureCurrent();
     reserveRequest();
     ensureCurrent();
-    let upstream;
-    try {
-      upstream = await awaitWithSignal(fetchImpl(provider.url, { method: 'POST', headers: provider.headers,
-        redirect: 'manual', signal: controller.signal, body: JSON.stringify(provider.body) }), controller.signal,
-      value => cancelBody(value.body));
-    } catch (error) {
-      if (controller.signal.aborted) throw controller.signal.reason;
-      throw new RequestError(502, 'provider_transport');
+    const attempt = async () => {
+      let upstream;
+      try {
+        upstream = await awaitWithSignal(fetchImpl(provider.url, { method: 'POST', headers: provider.headers,
+          redirect: 'manual', signal: controller.signal, body: JSON.stringify(provider.body) }), controller.signal,
+        value => cancelBody(value.body));
+      } catch (error) {
+        if (controller.signal.aborted) throw controller.signal.reason;
+        throw new RequestError(502, 'provider_transport');
+      }
+      return readUpstream(upstream, provider.profile, controller.signal, now);
+    };
+    // One retry with the identical request (user decision 2026-11-15): after a short wait the
+    // provider named, or a brief pause after a provider/network failure. Never a second retry,
+    // never another model or other parameters, and only while the call's own deadline allows it.
+    let normalized;
+    for (let retried = false; ; retried = true) {
+      try { normalized = await attempt(); break; }
+      catch (error) {
+        const delay = retried || controller.signal.aborted ? null : retryDelay(error, config);
+        const remaining = config.upstreamTimeoutMs - (performance.now() - started);
+        if (delay === null || remaining < delay + config.upstreamTimeoutMs / 5) throw error;
+        await awaitWithSignal(new Promise(resolve => { setTimeout(resolve, delay).unref?.(); }), controller.signal);
+      }
     }
-    const normalized = await readUpstream(upstream, provider.profile, controller.signal, now);
     ensureCurrent();
     let result;
     try { result = validateTaskResult(mode, normalized.text, payload); }

@@ -7,11 +7,13 @@ enum MioEverydayContext {
 
     /// Normal batches hold five new sources. A backlog (user decision 2026-10-13) holds twelve,
     /// so a long queue catches up in fewer calls; the fixed prompt then costs fewer tokens too.
-    static func batches(_ fragments: [MioAnalysisFragment], backlog: Bool = false) -> [[MioAnalysisFragment]] {
+    /// `shrink` halves both limits per step after the provider refused a batch as too large.
+    static func batches(_ fragments: [MioAnalysisFragment], backlog: Bool = false, shrink: Int = 0) -> [[MioAnalysisFragment]] {
         var result: [[MioAnalysisFragment]] = []
         var batch: [MioAnalysisFragment] = []
         var bytes = 0
-        let count = backlog ? 12 : 5, limit = backlog ? 12_000 : 6_000
+        let step = min(max(shrink, 0), MioWorkSplit.maximumShrink)
+        let count = max(1, (backlog && step == 0 ? 12 : 5) >> step), limit = (backlog && step == 0 ? 12_000 : 6_000) >> step
         for fragment in fragments {
             // Reserve three source slots and 4,000 bytes for continuity.
             if !batch.isEmpty && (batch.count == count || bytes + fragment.text.utf8.count > limit) {
@@ -25,7 +27,7 @@ enum MioEverydayContext {
 
     static func request(fragments: [MioAnalysisFragment], session: MioSession,
                         eligibleSegmentIDs: Set<UUID>, continuityStartedAt: Date,
-                        decisions: [MioAnalysisDecision]) throws -> MioAnalysisRequest {
+                        decisions: [MioAnalysisDecision], shrink: Int = 0) throws -> MioAnalysisRequest {
         let newIDs = Set(fragments.map(\.id))
         // The live session is not repository-validated; duplicates must fail, not trap.
         let segmentIDs = Set(session.transcripts.map(\.id))
@@ -54,10 +56,12 @@ enum MioEverydayContext {
         let fragmentBytes = context.map { $0.text.utf8.count }
         var contextBytes = fragmentBytes.reduce(0, +)
         let newBytes = fragments.reduce(0) { $0 + $1.text.utf8.count }
+        // A shrunk batch also carries less earlier context, so the whole request gets smaller.
+        let contextLimit = 4_000 >> min(max(shrink, 0), MioWorkSplit.maximumShrink)
         while !context.isEmpty {
             let allCount = context.count + fragments.count
             let totalLimit = allCount > 8 ? 16_000 : 10_000
-            guard allCount > 16 || contextBytes > 4_000 || contextBytes + newBytes > totalLimit else { break }
+            guard allCount > 16 || contextBytes > contextLimit || contextBytes + newBytes > totalLimit else { break }
             contextBytes -= context.removeFirst().text.utf8.count
             limited = true
         }

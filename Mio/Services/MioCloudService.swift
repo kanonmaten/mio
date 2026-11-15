@@ -70,7 +70,7 @@ enum MioCloudError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .disabled: "AI är pausad."
-        case .notPaired: "Para datorn under Inställningar → Dator först."
+        case .notPaired: "Para datorn under Inställningar → Parning först."
         case .invalidServer: "Ange serverns HTTPS-adress utan sökväg, inloggning, frågetecken eller fragment, till exempel https://mio.example.se."
         case .invalidToken: "Ange serverns separata åtkomsttoken: 32–256 bokstäver, siffror, bindestreck eller understreck. Använd aldrig en leverantörs API-nyckel i appen. Vid byte av server krävs en ny token."
         case .keychain: "Kunde inte läsa eller ändra de skyddade anslutningsuppgifterna. Lås upp telefonen och försök igen."
@@ -79,8 +79,8 @@ enum MioCloudError: LocalizedError {
         case .changedConfiguration: "Anslutningen till datorn ändrades. Försök igen."
         case .invalidResponse: "Servern gav inget fullständigt läsbart svar. Försök med en kortare fråga."
         case .oversizedResponse: "Serverns svar var för stort och avbröts."
-        case .network: "Kunde inte nå servern. Kontrollera internet, HTTPS-adressen och serverns konfiguration. Inget nytt försök görs automatiskt."
-        case .rateLimited(let seconds): "AI-gränsen är nådd. Vänta minst \(seconds) sekunder och fortsätt sedan manuellt. Sparade lektionsdelar finns kvar."
+        case .network: "Kunde inte nå datorn. Kontrollera att Tailscale är på i telefonen och att datorn är igång och vaken."
+        case .rateLimited(let seconds): "AI-tjänsten är upptagen. Försök igen om \(seconds) sekunder."
         case .gatewayRateLimited(let code, _): MioCloudError.gateway(429, code).errorDescription
         case .incompatibleGateway: "Gatewayen saknar ett giltigt kontrakt för den valda Mio-uppgiften. Uppdatera eller kontrollera servern innan du fortsätter."
         case .gateway(let status, let code):
@@ -94,15 +94,16 @@ enum MioCloudError: LocalizedError {
             case .providerParameters: "AI-leverantören accepterade inte serverns modellinställningar. Kontrollera uppgiftens profil."
             case .providerRefusal: "AI-leverantören avstod från att besvara underlaget. Inget innehåll har godkänts från svaret."
             case .providerTruncated: "AI-svaret avbröts innan det var fullständigt. Inget innehåll har godkänts från svaret."
-            case .localMinuteLimit: "Mios gemensamma minutgräns är nådd. Vänta och fortsätt manuellt senare."
+            case .localMinuteLimit: "Många AI-anrop på kort tid. Försök igen om en minut."
             case .localDayLimit: "Mios gemensamma dagsgräns är nådd. AI fortsätter efter nästa återställning."
             case .localTokenLimit: "Dagens AI-token är slut. AI fortsätter efter nästa återställning."
-            case .localConcurrencyLimit: "Servern behandlar redan så många AI-anrop som tillåts. Vänta och fortsätt manuellt senare."
+            case .localConcurrencyLimit: "Datorn arbetar redan med andra AI-anrop. Försök igen om en stund."
             case .localRequestLimit: "Mios gemensamma AI-kvot nekade anropet. Vänta och fortsätt manuellt senare."
-            case .providerQuota: "AI-leverantörens kvot är nådd. Kontrollera kontot och fortsätt manuellt senare."
+            case .providerQuota: "AI-tjänsten är upptagen just nu. Försök igen om en minut."
+            case .providerRequestTooLarge: "Frågan och den valda kontexten är för stora för AI-tjänsten. Korta ner frågan eller ta bort kontext."
             case .budgetStoreFailed: "Servern kunde inte kontrollera den gemensamma AI-kvoten. Inget nytt försök görs automatiskt."
             case .providerModelIncompatible: "Modellen stöder inte Mios krav: reasoning av, temperatur 0 och strikt JSON-schema."
-            case .upstreamTimeout, .requestTimeout: "AI-anropet tog för lång tid. Fortsätt manuellt senare; inget nytt försök görs automatiskt."
+            case .upstreamTimeout, .requestTimeout: "AI-anropet tog för lång tid. Försök igen."
             case .rateLimited, .dailyLimitReached, .requestLimit: "AI-kvoten är nådd. Vänta och fortsätt manuellt senare."
             case .invalidUpstreamAnswer, .invalidUpstreamResponse, .incompleteUpstreamResponse, .invalidAnalysisResult, .invalidLessonResult, .providerInvalidResponse: "AI-leverantören gav ett ogiltigt svar. Inget innehåll har godkänts från svaret."
             case .upstreamUnavailable, .providerInfrastructure: "AI-leverantören kunde inte nås. Kontrollera gatewayens leverantörsinställningar och försök senare."
@@ -114,6 +115,7 @@ enum MioCloudError: LocalizedError {
             case 401, 403: "Datorn nekade åtkomst. Para om med en ny kod från mio-pair."
             case 300...399: "Servern hänvisade till en annan adress. Mio följer inte omdirigeringar; para om med en ny kod från mio-pair."
             case 422: "Modellen stöder inte Mios krav: reasoning av, temperatur 0 och strikt JSON-schema. Kontrollera modellvalet på datorn."
+            case 413: "Frågan och den valda kontexten är för stora för AI-tjänsten. Korta ner frågan eller ta bort kontext."
             case 429: "Serverns frågegräns är nådd. Vänta och försök senare."
             case 504: "Svaret tog för lång tid. Försök senare med en kortare fråga."
             default: "Servern kunde inte besvara frågan. Kontrollera servern och försök senare."
@@ -527,8 +529,20 @@ enum MioCloudService {
                 let (bytes, response) = try await transport(request)
                 return try await readResponse(bytes, response: response, event: &event)
             }
-            let (bytes, response) = try await session.bytes(for: request, delegate: MioCloudRedirectGuard())
-            return try await readResponse(bytes, response: response, event: &event)
+            // The first connection after the phone was idle often fails at once because the
+            // on-demand VPN is not up yet. Those failures happen before anything is sent, so the
+            // same request is tried again after a moment (see `MioCloudRetry`).
+            var attempt = 1
+            while true {
+                do {
+                    let (bytes, response) = try await session.bytes(for: request, delegate: MioCloudRedirectGuard())
+                    return try await readResponse(bytes, response: response, event: &event)
+                } catch let error as NSError where error.domain == NSURLErrorDomain {
+                    guard let delay = MioCloudRetry.delay(urlErrorCode: error.code, attempt: attempt) else { throw error }
+                    attempt += 1
+                    try await Task.sleep(for: .seconds(delay))
+                }
+            }
         } catch is CancellationError { throw CancellationError() }
         catch let error as MioCloudError { throw error }
         catch {

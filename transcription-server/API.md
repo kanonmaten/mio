@@ -14,13 +14,13 @@ API:t är oberoende av modell/NeMo-version. HTTPS via Tailscale Serve, Bearer-to
   "metadata": {"model": "KlangAI/pianissimo-sv", "revision": "full-model-commit", "backend": "nemo-pytorch-cuda"},
   "sampleRate": 16000, "channels": 1, "encoding": "pcm_s16le_wav",
   "maxSeconds": 24, "maxBytes": 1048576,
-  "preprocessing": true, "speakerLabels": "ready"
+  "preprocessing": true, "speakerLabels": "ready", "vocabulary": 0
 }
 ```
 
 Klienten kräver API 1, redo, giltig metadata, exakt ljudformat och kapacitet för sin största del: med pausstyrda delar (se nedan) minst 24 sekunder/768044 byte; den äldre klienten med fasta 20 s krävde 22 sekunder/704044 byte. Fler additiva fält accepteras.
 
-Additiva fält (från 2026-10-11, valfria för klienten): `preprocessing` är `true` när serverns förbehandling är på. `speakerLabels` är `loading` medan talarmodellen laddas, `ready` när ord får talare och `off` när talarmärkning är avstängd eller modellen inte kunde laddas. Transkriptionen är redo oberoende av talarmodellen; `status` påverkas aldrig av den. Brytande ändringar ska få nytt API-kontrakt; behåll v1 under migrationen. Modellnamn eller revision väljs aldrig av appen.
+Additiva fält (från 2026-10-11, valfria för klienten): `preprocessing` är `true` när serverns förbehandling är på. `speakerLabels` är `loading` medan talarmodellen laddas, `ready` när ord får talare och `off` när talarmärkning är avstängd eller modellen inte kunde laddas. `vocabulary` (från 2026-11-15) är antalet egna ord som är aktiva i modellens avkodning, 0–500; 0 betyder ingen ordlista eller att den inte kunde aktiveras. Ordlistan ligger i en fil på servern och skickas aldrig av appen. Transkriptionen är redo oberoende av talarmodellen; `status` påverkas aldrig av den. Brytande ändringar ska få nytt API-kontrakt; behåll v1 under migrationen. Modellnamn eller revision väljs aldrig av appen.
 
 ## POST /v1/transcribe
 

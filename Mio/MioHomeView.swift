@@ -27,6 +27,8 @@ struct MioHomeView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     weekHeader
                     MioWeekRibbon(week: week, selectedDate: day.overviewDate, calendar: day.calendar) { day.select($0) }
+                        .padding(6)
+                        .mioGlass()
                     errors
                     if isTodaySelected {
                         MioSectionTitle("Nästa")

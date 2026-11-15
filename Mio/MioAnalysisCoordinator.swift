@@ -38,6 +38,14 @@ final class MioAnalysisCoordinator {
     /// Rejected answers per lesson part (see `MioLessonRetry`). Kept across pause and re-pairing
     /// so a part cannot be retried forever; a restart of the app starts the count again.
     @ObservationIgnored private var lessonRejections: [String: Int] = [:]
+    /// Halvings of the everyday batch size after the provider refused a batch as too large.
+    /// Kept for the rest of this run, like `lessonRejections`, so the same size is not tried again.
+    @ObservationIgnored private var everydayShrink = 0
+    /// Everyday text whose answer was rejected or that cannot be made small enough. It stays
+    /// on the phone and is not queued again during this run.
+    @ObservationIgnored private var skippedFragmentIDs: Set<String> = []
+    /// Pauses in a row without a successful call; see `MioAnalysisSchedule.backoff`.
+    @ObservationIgnored private var consecutivePauses = 0
     @ObservationIgnored private var deletedSessionIDs: Set<UUID> = []
     @ObservationIgnored private let loadConnection: @MainActor () throws -> MioCloudConnection
     @ObservationIgnored private let configurationMatches: @MainActor (MioCloudConnection) -> Bool
@@ -166,7 +174,7 @@ final class MioAnalysisCoordinator {
                 groups[start, default: []].append(segment)
             }
             for (start, segments) in groups {
-                let fragments = segments.flatMap(MioAnalysisFragment.make).filter { !processed.contains($0.id) }
+                let fragments = segments.flatMap(MioAnalysisFragment.make).filter { !processed.contains($0.id) && !skippedFragmentIDs.contains($0.id) }
                 if !fragments.isEmpty {
                     backlog.append(Backlog(session: session, start: start, fragments: fragments, segmentIDs: Set(segments.map(\.id))))
                 }
@@ -176,7 +184,7 @@ final class MioAnalysisCoordinator {
         backlog.sort { ($0.fragments.map(\.occurredAt).max() ?? "") > ($1.fragments.map(\.occurredAt).max() ?? "") }
         var kept: [Backlog] = []
         for var item in backlog where budget > 0 {
-            let batches = MioEverydayContext.batches(item.fragments)
+            let batches = MioEverydayContext.batches(item.fragments, shrink: everydayShrink)
             item.fragments = batches.suffix(budget).flatMap { $0 }
             budget -= min(budget, batches.count)
             kept.append(item)
@@ -269,7 +277,7 @@ final class MioAnalysisCoordinator {
         eligible[session.id, default: []].formUnion(fresh.map(\.id))
         guard !fresh.isEmpty else { return }
         let processed = assistant.analyzedFragmentIDs(for: session.id)
-        let fragments = fresh.flatMap(MioAnalysisFragment.make).filter { !processed.contains($0.id) }
+        let fragments = fresh.flatMap(MioAnalysisFragment.make).filter { !processed.contains($0.id) && !skippedFragmentIDs.contains($0.id) }
         enqueueEveryday(session: session, fragments: fragments, boundary: boundary, assistant: assistant)
     }
 
@@ -343,8 +351,10 @@ final class MioAnalysisCoordinator {
         for start in groups.keys.sorted() {
             guard let group = groups[start] else { continue }
             // More than one normal batch waiting means AI is behind: send larger batches.
-            var batches = MioEverydayContext.batches(group.fragments)
-            if acceptsBacklogBatches, batches.count > 1 { batches = MioEverydayContext.batches(group.fragments, backlog: true) }
+            var batches = MioEverydayContext.batches(group.fragments, shrink: everydayShrink)
+            if acceptsBacklogBatches, everydayShrink == 0, batches.count > 1 {
+                batches = MioEverydayContext.batches(group.fragments, backlog: true)
+            }
             queue += batches.map {
                 Work(session: session, request: MioAnalysisRequest(mode: .everyday, timeZone: TimeZone.current.identifier, fragments: $0),
                      enqueuedAt: group.enqueuedAt, waited: group.waited, continuityStartedAt: start,
@@ -386,7 +396,8 @@ final class MioAnalysisCoordinator {
         let reason = switch error as? MioCloudError {
         case .network?: "Datorn svarar inte."
         case .gatewayRateLimited(.localTokenLimit, _)?: "Dagens AI-token är slut."
-        default: "AI-gränsen är nådd."
+        case .gatewayRateLimited?, .rateLimited?: "AI-tjänsten är upptagen."
+        default: "AI-tjänsten svarade inte."
         }
         errorMessage = nil
         status = "\(reason) AI fortsätter kl. \(deadline.formatted(date: .omitted, time: .shortened))."
@@ -436,7 +447,7 @@ final class MioAnalysisCoordinator {
                         if request.mode == .everyday {
                             request = try MioEverydayContext.request(fragments: request.fragments, session: session,
                                 eligibleSegmentIDs: work.eligibleSegmentIDs, continuityStartedAt: work.continuityStartedAt,
-                                decisions: assistant.analysisDecisions)
+                                decisions: assistant.analysisDecisions, shrink: self.everydayShrink)
                             if session.captureGaps?.contains(where: { $0.endedAt == work.continuityStartedAt }) == true {
                                 request.contextLimited = true
                             }
@@ -464,13 +475,25 @@ final class MioAnalysisCoordinator {
                         if let metadata = result.metadata { self.lessonInterval = TimeInterval(metadata.lessonIntervalSeconds) }
                         let count = try await assistant.applyAnalysis(result, request: request, session: session)
                         self.activeSessionID = nil; self.sentBatches += 1
+                        self.consecutivePauses = 0
                         self.status = "Senast analyserat \(self.now().formatted(date: .omitted, time: .shortened)). \(count) nya förslag."
                         if request.mode == .lesson { self.status = MioLessonDocument(session: session, records: assistant.analyses).progress }
                         self.isWorking = false
                     } catch {
-                        if work.request.mode == .lesson, MioLessonRetry.isRejectedAnswer(error),
+                        let needsSmaller = MioWorkSplit.needsSmallerRequest(error)
+                        if work.request.mode == .lesson, needsSmaller || MioLessonRetry.isRejectedAnswer(error),
                            self.generation == token, self.enabled {
+                            // The same part can never fit: go straight to splitting it.
+                            if needsSmaller {
+                                let key = MioLessonRetry.key(work.request.fragments)
+                                self.lessonRejections[key] = max(self.lessonRejections[key] ?? 0, MioLessonRetry.attemptsPerPart - 1)
+                            }
                             try await self.handleRejectedLessonPart(work, assistant: assistant)
+                            continue
+                        }
+                        if work.request.mode == .everyday, needsSmaller || MioLessonRetry.isRejectedAnswer(error),
+                           self.generation == token, self.enabled {
+                            self.handleRejectedEverydayWork(work, needsSmaller: needsSmaller)
                             continue
                         }
                         // Quota, rate limits and an unreachable PC pause instead of stopping AI.
@@ -482,7 +505,9 @@ final class MioAnalysisCoordinator {
                         MioConnectionDiscovery.shared.handle(error: error)
                         self.queue.insert(work, at: 0)
                         self.isWorking = false; self.activeSessionID = nil
-                        self.pause(until: deadline, after: error)
+                        self.pause(until: MioAnalysisSchedule.backoff(deadline, now: self.now(),
+                                                                       consecutivePauses: self.consecutivePauses), after: error)
+                        self.consecutivePauses += 1
                     }
                 }
             } catch is CancellationError {
@@ -525,6 +550,29 @@ final class MioAnalysisCoordinator {
             lessonRejections[key] = nil
             try await assistant.markLessonPartUnprocessed(request: work.request, session: work.session)
             status = MioLessonDocument(session: work.session, records: assistant.analyses).progress
+        }
+    }
+
+    /// Everyday text the provider cannot take as sent. Resending it unchanged repeated the same
+    /// failure every minute without end (2026-11-15). A too-large or cut-off batch is sent again
+    /// in smaller batches; text that still fails, and an answer rejected as invalid, is skipped
+    /// so the queue moves on. Never stops AI.
+    private func handleRejectedEverydayWork(_ work: Work, needsSmaller: Bool) {
+        isWorking = false; activeSessionID = nil
+        let fragments = work.request.fragments
+        if needsSmaller, everydayShrink < MioWorkSplit.maximumShrink || fragments.count > 1 {
+            everydayShrink = min(MioWorkSplit.maximumShrink, everydayShrink + 1)
+            let parts = MioEverydayContext.batches(fragments, shrink: everydayShrink).map {
+                Work(session: work.session,
+                     request: MioAnalysisRequest(mode: .everyday, timeZone: work.request.timeZone, fragments: $0),
+                     enqueuedAt: work.enqueuedAt, waited: work.waited, continuityStartedAt: work.continuityStartedAt,
+                     eligibleSegmentIDs: work.eligibleSegmentIDs, isFinal: work.isFinal)
+            }
+            queue.insert(contentsOf: parts, at: 0)
+            status = "Textutdraget var för stort för AI-tjänsten. Skickar det i mindre delar."
+        } else {
+            skippedFragmentIDs.formUnion(fragments.map(\.id))
+            status = "AI kunde inte tolka ett textutdrag. Det hoppades över; texten finns kvar lokalt."
         }
     }
 

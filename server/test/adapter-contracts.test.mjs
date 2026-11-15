@@ -60,7 +60,7 @@ test('task definition owns prompt, schema, budget and validates domain independe
   assert.equal(typeof tasks.createTaskRequest, 'function');
   assert.equal(typeof tasks.validateTaskResult, 'function');
   const ask = tasks.createTaskRequest('ask', { question: 'Syntetisk fråga', context: [] });
-  assert.equal(ask.maxOutputTokens, 1_000);
+  assert.equal(ask.maxOutputTokens, 1_200);
   assert.deepEqual(ask.policy, { reasoning: 'off', temperature: 0, tools: 'none' });
   assert.equal(ask.messages[1].content, '{"question":"Syntetisk fråga","context":[]}');
   assert.ok(Object.isFrozen(ask.policy));
@@ -166,7 +166,7 @@ test('Retry-After accepts bounded seconds and HTTP dates and drops malformed val
   const now = Date.parse('2026-10-02T10:00:00Z');
   for (const [value, expected] of [['123', 123], ['99999999', 3600],
     ['Fri, 02 Oct 2026 10:02:00 GMT', 120], ['Fri, 02 Oct 2026 09:59:00 GMT', 0], ['-1', undefined],
-    ['private-token', undefined], ['1.5', undefined]]) {
+    ['private-token', undefined], ['1.5', 2], ['1.5.2', undefined]]) {
     const result = normalizeError({ status: 429, headers: new Headers({ 'retry-after': value }), now });
     assert.equal(result.category, 'provider_quota'); assert.equal(result.retryAfter, expected);
   }

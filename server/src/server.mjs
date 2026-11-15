@@ -69,9 +69,11 @@ export function loadConfig(env = process.env) {
     gatewayToken: env.MIO_GATEWAY_TOKEN ?? '',
     model: env.MIO_AI_MODEL ?? '',
     port: positiveInteger(env.PORT, 8787, 65_535),
-    // Groq's free tier allows 30 requests but only 8,000 tokens per minute; a lesson
-    // part alone is a few thousand tokens, so three requests per minute is the ceiling.
-    requestsPerMinute: positiveInteger(env.MIO_REQUESTS_PER_MINUTE, 3, 60),
+    // Groq's free tier allows 30 requests and 8,000 tokens per minute. The token budget is what
+    // binds, and each request is sized against it (tokensPerMinute), so the request cap only
+    // stops a runaway client. Unset or 0 tokens per minute means no per-minute sizing (paid plan).
+    requestsPerMinute: positiveInteger(env.MIO_REQUESTS_PER_MINUTE, 10, 60),
+    tokensPerMinute: env.MIO_TOKENS_PER_MINUTE === undefined ? 8_000 : dailyLimit(env.MIO_TOKENS_PER_MINUTE),
     requestsPerDay: dailyLimit(env.MIO_REQUESTS_PER_DAY),
     tokensPerDay: dailyLimit(env.MIO_TOKENS_PER_DAY, MAX_TOKENS_PER_DAY),
     upstreamTimeoutMs: 40_000,
@@ -93,6 +95,10 @@ function validateConfig(config) {
       || config.requestsPerDay > MAX_REQUESTS_PER_DAY)) throw new Error('Ogiltig dagsgräns.');
   if (config.tokensPerDay != null && (!Number.isSafeInteger(config.tokensPerDay) || config.tokensPerDay < 1
       || config.tokensPerDay > MAX_TOKENS_PER_DAY)) throw new Error('Ogiltig tokengräns.');
+  if (config.tokensPerMinute != null && (!Number.isSafeInteger(config.tokensPerMinute) || config.tokensPerMinute < 2_000
+      || config.tokensPerMinute > MAX_TOKENS_PER_DAY)) throw new Error('Ogiltig tokengräns per minut.');
+  if (config.retryDelayMs !== undefined && (!Number.isSafeInteger(config.retryDelayMs) || config.retryDelayMs < 0
+      || config.retryDelayMs > 5_000)) throw new Error('Ogiltig väntetid före nytt försök.');
   for (const field of ['requestsPerMinute', 'upstreamTimeoutMs', 'bodyTimeoutMs']) {
     if (!Number.isSafeInteger(config[field]) || config[field] < 1) throw new Error('Ogiltig servergräns.');
   }

@@ -73,6 +73,10 @@ def test_health_reports_contract_without_audio(service):
     assert response.json()["encoding"] == "pcm_s16le_wav"
     assert response.headers["cache-control"] == "no-store"
     assert backend.calls == 0
+    assert response.json()["vocabulary"] == 0
+    for size, shown in [(12, 12), (500, 500), (501, 0), (-1, 0), (True, 0), ("12", 0)]:
+        backend.vocabulary_size = lambda size=size: size
+        assert client.get("/health", headers=headers()).json()["vocabulary"] == shown
 
 
 @pytest.mark.parametrize("route,method", [("/health", "get"), ("/v1/transcribe", "post")])

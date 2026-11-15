@@ -11,7 +11,7 @@ related_targets: []
 
 THESIS: Mio's home is a Swedish week planner, not a widget dashboard. The week number and the seven days organise everything; the category default of a hero card over a 2x2 tile grid is refused as the page's organisation.
 
-OWN-WORLD: Violet tinted ground (deep violet in dark, pale lilac in light) with plain reading surfaces. One saturated violet tint drives controls. Liquid Glass only on tab bar, mic button, listening bar and settings panel. SF Pro text styles; the week number set large in SF Rounded semibold. Day cells as rounded squares; today ringed in the tint. State colours only for gaps and quota.
+OWN-WORLD (revised 2026-11-15, the user's choice; replaces the violet world): Graphite ground with two very soft lights, near white in light and near black in dark. One clear blue tint drives controls. Liquid Glass on tab bar, mic button, listening bar, buttons, and on summary and status cards; text read at length stays on plain surfaces. Settings are one full-height sheet. SF Pro text styles; the week number set large in SF Rounded semibold. Day cells as rounded squares; today ringed in the tint. State colours only for gaps and quota.
 
 STORY: The user glances, sees which week and day it is, the one next thing, and how many items wait for review, then acts once and leaves.
 

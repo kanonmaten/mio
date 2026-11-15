@@ -45,7 +45,7 @@ payload="$(sudo cat "${files[@]}" | node -e '
     transcriptionURL: stt ? `https://${host}` : null, transcriptionToken: stt }));' "$host")"
 
 printf '%s' "$payload" | qrencode -t ansiutf8 -m 2 -l M
-echo "Skanna i Mio: Inställningar → Dator → Skanna QR-kod."
+echo "Skanna i Mio: Inställningar → Parning → Skanna QR-kod."
 echo "Dator: $host (AI på port 8443$( (( ${#files[@]} == 2 )) && echo ', Pianissimo på 443' || echo '; Pianissimo saknas än'))"
 if $show_text; then
     printf '%s' "$payload" | node -e '

@@ -123,6 +123,14 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
     def ready():
         return state["status"] == "ready" and backend.is_ready()
 
+    def vocabulary_size():
+        # Additive and optional: a backend without own-word support reports none.
+        try:
+            size = getattr(backend, "vocabulary_size", lambda: 0)()
+        except Exception:
+            return 0
+        return size if isinstance(size, int) and not isinstance(size, bool) and 0 <= size <= 500 else 0
+
     def json_response(body):
         return Response(body, media_type="application/json", headers={"Cache-Control": "no-store"})
 
@@ -132,7 +140,7 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
         return JSONResponse({"apiVersion": 1, "serverVersion": "1.0.0", "status": state["status"],
                              "metadata": metadata(), "sampleRate": RATE, "channels": 1,
                              "encoding": "pcm_s16le_wav", "maxSeconds": 24, "maxBytes": MAX_BYTES,
-                             "preprocessing": preprocessing,
+                             "preprocessing": preprocessing, "vocabulary": vocabulary_size(),
                              "speakerLabels": labeler.status if labeler else "off"},
                             status_code=200 if ready() else 503,
                             headers={"Cache-Control": "no-store"})

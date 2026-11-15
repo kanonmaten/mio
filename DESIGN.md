@@ -1,15 +1,15 @@
 ---
 name: Mio
-description: Svensk veckoalmanacka för en privat vardagsassistent – violett mark, vanliga läsytor, en violett ton för kontroller.
+description: Svensk veckoalmanacka för en privat vardagsassistent – grafitgrå mark med mjukt ljus, kort i Liquid Glass, en blå ton för kontroller.
 colors:
-  violet-tint: "#6B3FD4"
-  violet-tint-dark: "#AE91FF"
-  lilac-ground: "#F2EEFB"
-  night-violet-ground: "#1A1230"
+  blue-tint: "#0A6CF0"
+  blue-tint-dark: "#4A9DFF"
+  graphite-ground: "#F1F2F4"
+  night-graphite-ground: "#0D0E10"
   paper-surface: "#FFFFFF"
-  plum-surface: "#261C3D"
-  lavender-ribbon: "#E4DCF8"
-  dusk-ribbon: "#322750"
+  slate-surface: "#1B1C1F"
+  mist-ribbon: "#E3E5E9"
+  slate-ribbon: "#2A2C31"
 typography:
   display:
     fontFamily: "SF Pro Display"
@@ -51,7 +51,7 @@ rounded:
   streak-cell: "4pt"
   day-cell: "14pt"
   panel: "22pt"
-  side-panel: "28pt"
+  chip: "18pt"
   capsule: "9999pt"
 spacing:
   hairline: "3pt"
@@ -65,13 +65,23 @@ spacing:
   content-max: "680pt"
 components:
   panel:
+    material: "Liquid Glass (regular)"
+    fallback: "{colors.paper-surface}"
+    rounded: "{rounded.panel}"
+    padding: "16pt"
+  reading-surface:
     backgroundColor: "{colors.paper-surface}"
     rounded: "{rounded.panel}"
     padding: "16pt"
-  panel-dark:
-    backgroundColor: "{colors.plum-surface}"
+  reading-surface-dark:
+    backgroundColor: "{colors.slate-surface}"
     rounded: "{rounded.panel}"
     padding: "16pt"
+  status-chip:
+    material: "Liquid Glass (regular)"
+    rounded: "{rounded.chip}"
+    height: "44pt"
+    padding: "10pt 14pt"
   section-title:
     typography: "{typography.headline}"
   day-cell:
@@ -79,25 +89,25 @@ components:
     typography: "{typography.day-numeral}"
     height: "76pt"
   day-cell-today:
-    textColor: "{colors.violet-tint}"
+    textColor: "{colors.blue-tint}"
     rounded: "{rounded.day-cell}"
     height: "76pt"
   day-cell-selected:
-    backgroundColor: "#6B3FD429"
-    textColor: "{colors.violet-tint}"
+    backgroundColor: "#0A6CF029"
+    textColor: "{colors.blue-tint}"
     rounded: "{rounded.day-cell}"
     height: "76pt"
   streak-cell:
-    backgroundColor: "{colors.lavender-ribbon}"
+    backgroundColor: "{colors.mist-ribbon}"
     rounded: "{rounded.streak-cell}"
   button-primary:
-    backgroundColor: "{colors.violet-tint}"
+    backgroundColor: "{colors.blue-tint}"
     textColor: "{colors.paper-surface}"
     typography: "{typography.title}"
     rounded: "{rounded.capsule}"
     padding: "6pt 0"
   button-secondary:
-    textColor: "{colors.violet-tint}"
+    textColor: "{colors.blue-tint}"
     rounded: "{rounded.capsule}"
   item-row:
     typography: "{typography.body}"
@@ -115,34 +125,35 @@ components:
 
 Mio ser ut som en svensk veckoalmanacka, inte som en widgetpanel. Veckonumret ("v. 41") är sidans största text, och de sju dagarna Mån–Sön organiserar allt under det: nästa sak, det som väntar på granskning, dagens morgon- eller kvällsöversikt och tolv veckors användning. Ingen hjältekort-över-rutnät-uppställning; ordningen är almanackans.
 
-Världen är en violett tonad mark (blek lila i ljust läge, djup nattviolett i mörkt) med vanliga, ogenomskinliga läsytor ovanpå. En enda mättad violett ton bär kontroller, markeringar och framsteg. Liquid Glass hör till systemets kontroller och navigering – flikfältet, den runda Fånga-knappen, lyssningsfältet, inställningspanelen och de framträdande knapparna – och aldrig till anteckningar, transkript eller listor. Typografin är Apples egen: SF Pro i textstilar som skalas med Dynamic Type, och SF Rounded för datumsiffrorna i veckoraden, så att de känns som en almanacka.
+Världen är grafitgrå och blå (vald 2026-11-15, ersätter den violetta): en neutral mark, nästan vit i ljust läge och nästan svart i mörkt, med två mycket mjuka ljus bakom innehållet så att glaset har något att bryta. Kort för sammanfattning och status är Liquid Glass. En enda klar blå ton bär kontroller, markeringar och framsteg; i övrigt är bilden svartvit, i stil med MacroFactor. Text som läses länge – transkript, lektionsanteckningar och listor – ligger på vanliga, ogenomskinliga ytor. Typografin är Apples egen: SF Pro i textstilar som skalas med Dynamic Type, och SF Rounded för datumsiffrorna i veckoraden, så att de känns som en almanacka.
 
-Tätheten är låg och lugn: få val per vy, korta svenska rader, framsteg som syns utan att skuldbelägga. Lyssnandet är diskret i rummet – en liten prick och ett ord, inget rött, ingen vågform.
+Tätheten är låg och lugn: få val per vy, korta svenska rader, framsteg som syns utan att skuldbelägga. Lyssnandet är diskret i rummet – en liten prick och ett ord, inget rött, ingen vågform. Allt som rör datorn, transkriptionen och AI ställs in på ett enda ställe, inställningsarket; övriga skärmar visar bara en liten statusbricka som öppnar det.
 
 **Key Characteristics:**
 - Veckonummer som systemets stora titel; datum och sju dagceller direkt under.
-- Violett mark, vanliga paneler med 22 pt kontinuerliga hörn, inga skuggor.
-- En ton för allt interaktivt; tillståndsfärger bara för luckor, varningar och fel.
-- Glas bara på kontroller och navigering; läsytor är alltid ogenomskinliga.
+- Grafitgrå mark med mjukt ljus, glaskort med 22 pt kontinuerliga hörn, inga skuggor.
+- En blå ton för allt interaktivt; tillståndsfärger bara för luckor, varningar och fel.
+- Glas på kontroller, navigering och kort för sammanfattning och status; långa lästexter är alltid ogenomskinliga.
+- Ett inställningsark med en kort lista; statusbrickor i stället för inställningar utspridda i appen.
 - Allt skalas med Dynamic Type och byter layout vid tillgänglighetsstorlekar i stället för att klippa.
 
 ## Colors
 
-En enfärgad violett värld: mark, yta och band är tonade varianter av samma nyans, och accenten är den enda mättade färgen. Varje token finns i ett ljust och ett mörkt utförande (asset-katalogens `Any`/`Dark`), så paren nedan är samma roll i två lägen.
+En svartvit värld med en accent: mark, yta och band är neutrala grafittoner, och den blå tonen är den enda mättade färgen. Varje token finns i ett ljust och ett mörkt utförande (asset-katalogens `Any`/`Dark`), så paren nedan är samma roll i två lägen.
 
 ### Primary
-- **Almanacksviolett** (`violet-tint` / `violet-tint-dark`): appens `AccentColor` och `MioTheme.tint`. Driver flikfältets markering, knappar, ikoner i rader, dagens ring, vald dag (16 % fyllning), aktivitetsprickar, strecknätets fyllnadsgrader och lyssningsprickens "lyssnar"-läge. Den mörka varianten är ljusare så att den håller kontrast mot nattviolett.
+- **Almanacksblå** (`blue-tint` / `blue-tint-dark`): appens `AccentColor` och `MioTheme.tint`. Driver flikfältets markering, knappar, ikoner i rader, dagens ring, vald dag (16 % fyllning), aktivitetsprickar, strecknätets fyllnadsgrader, statusbrickans prick och lyssningsprickens "lyssnar"-läge. Den mörka varianten är ljusare så att den håller kontrast mot nattgrafit.
 
 ### Neutral
-- **Lila mark** (`lilac-ground`) / **Nattviolett mark** (`night-violet-ground`): `MioGround`, bakom varje skrollvy (`mioGround()`) och bakom listor och formulär (`mioListGround()`, som döljer listans egen bakgrund).
-- **Papper** (`paper-surface`) / **Plommonyta** (`plum-surface`): `MioSurface`, fyllningen i `MioPanel` och i kort på Fånga. Separeras från marken enbart genom ton.
-- **Lavendelband** (`lavender-ribbon`) / **Skymningsband** (`dusk-ribbon`): `MioRibbon`, tomma och framtida rutor i strecknätet (framtida rutor med 45 % opacitet).
+- **Grafitmark** (`graphite-ground`) / **Nattgrafit** (`night-graphite-ground`): `MioGround`, basen i `MioBackdrop`, som ligger bakom varje skrollvy (`mioGround()`) och bakom listor och formulär (`mioListGround()`, som döljer listans egen bakgrund). Ovanpå basen ligger två stilla radiella ljus: tonen på 12 % (20 % i mörkt läge) uppe till vänster och primärfärgen på 5 % (8 %) nere till höger.
+- **Papper** (`paper-surface`) / **Skiffer** (`slate-surface`): `MioSurface`, läsytan (`mioReadingSurface()`) för transkript och annan lång text, och glaskortens ersättning när Reduce Transparency är på.
+- **Dimband** (`mist-ribbon`) / **Skifferband** (`slate-ribbon`): `MioRibbon`, tomma och framtida rutor i strecknätet (framtida rutor med 45 % opacitet).
 - **Systemets semantiska textfärger** (`.primary`, `.secondary`, `.tertiary`): all text. Inga egna gråtoner.
 
 ### Named Rules
-**The One Tint Rule.** Allt som går att trycka på eller som visar framsteg använder `MioTheme.tint`. Ingen andra accentfärg införs.
+**The One Tint Rule.** Allt som går att trycka på eller som visar framsteg använder `MioTheme.tint`. Ingen andra accentfärg införs, och ingen violett.
 
-**The State Colours Rule.** Systemets orange betyder avbrott eller varning (avbrutet lyssnande, pausgräns), rött betyder fel eller att stänga av, grönt betyder klart eller godkänt. De används bara för just de tillstånden, aldrig som dekor.
+**The State Colours Rule.** Systemets orange betyder avbrott eller varning (avbrutet lyssnande, pausgräns, en statusbricka som behöver åtgärd), rött betyder fel eller att stänga av, grönt betyder klart eller godkänt. De används bara för just de tillstånden, aldrig som dekor.
 
 ## Typography
 
@@ -171,22 +182,22 @@ Hem är en enkel vertikal stapel (14 pt mellan block) inuti en skrollvy, centrer
 
 Veckobandet är sju lika breda celler med 6 pt mellanrum. Vid tillgänglighetsstorlekar blir det ett rutnät med fyra kolumner (två rader) så att alla dagar och dagens ring syns utan dold skrollning. Samma princip gäller statusrader och översiktens rubrik: vid tillgänglighetsstorlekar staplas knapp och segmentväljare under texten i stället för bredvid.
 
-Paneler har 16 pt inre marginal och 12 pt mellan innehåll. Rader har minst 44 pt höjd, ikonkolumnen är 28 pt bred och varje fristående ikonknapp får en träffyta på minst 44 × 44 pt. Strecknätet är 12 kolumner × 7 rader (måndag överst) med 4 pt mellanrum och kvadratiska celler. Övriga flikar är `insetGrouped`-listor på den tonade marken.
+Veckobandet ligger i en egen glasremsa med 6 pt inre marginal. Paneler har 16 pt inre marginal och 12 pt mellan innehåll. Rader har minst 44 pt höjd, ikonkolumnen är 28 pt bred och varje fristående ikonknapp får en träffyta på minst 44 × 44 pt. Strecknätet är 12 kolumner × 7 rader (måndag överst) med 4 pt mellanrum och kvadratiska celler. Övriga flikar är `insetGrouped`-listor på grafitmarken. På Fånga ligger två statusbrickor (Transkription och AI) bredvid varandra, staplade vid tillgänglighetsstorlekar.
 
-Skalet är en `TabView` med tre flikar (Hem, Lektioner, Förslag; Kalender och Anteckningar togs bort i 0.9.1) och Fånga som den separata runda knappen längst ut i flikfältet (`role: .search`). Flikfältet krymper vid skroll nedåt. Inställningar öppnas som en panel från höger.
+Skalet är en `TabView` med tre flikar (Hem, Lektioner, Förslag; Kalender och Anteckningar togs bort i 0.9.1) och Fånga som den separata runda knappen längst ut i flikfältet (`role: .search`). Flikfältet krymper vid skroll nedåt. Inställningar öppnas som ett vanligt ark i full höjd (`MioSettingsScreen`) med en kort lista: Dator (Parning, Transkription, AI), Mio (Notiser, vibrationer, guide), Integritet och data, Om. Varje rad visar sitt läge till höger och leder till en egen sida.
 
 ## Elevation & Depth
 
-Mio har inga skuggor. Djup skapas av ton: lila mark under papper/plommonytor, och av systemets Liquid Glass på kontroller och navigering. Glaset är den enda "upphöjda" materialet och finns bara på flikfältet, Fånga-knappen, lyssningsfältet (`tabViewBottomAccessory`), inställningspanelens ram (`glassEffect(.regular)`, 28 pt hörn) och knappar med `.glass`/`.glassProminent`. Med Reduce Transparency ersätts panelens glas av `systemGroupedBackground`.
+Mio har inga skuggor. Djup skapas av marken med sitt mjuka ljus och av systemets Liquid Glass ovanpå. Glas finns på flikfältet, Fånga-knappen, lyssningsfältet (`tabViewBottomAccessory`), knappar med `.glass`/`.glassProminent`, och från 2026-11-15 på kort för sammanfattning och status: `MioPanel` på Hem, veckobandets remsa, korten på Fånga och statusbrickorna (`mioGlass()`, `glassEffect(.regular)` i en kontinuerligt rundad rektangel). Med Reduce Transparency ersätts glaset av `MioSurface`.
 
 ### Named Rules
-**The Glass-on-Controls Rule.** Liquid Glass hör till kontroller och navigering. Anteckningar, transkript, listor och `MioPanel` är alltid ogenomskinliga läsytor.
+**The Glass-for-Glances Rule.** Glas hör till kontroller, navigering och det man ser med en blick: status, nästa sak, antal, framsteg. Text som läses länge – transkript, lektionsanteckningar, tidsstämplad text, händelseloggar och listrader – ligger alltid på en ogenomskinlig läsyta (`mioReadingSurface()` eller listans grupperade rader).
 
-**The Flat Panel Rule.** Paneler skiljs från marken enbart genom ton – ingen skugga, ingen kant, ingen gloria.
+**The No-Shadow Rule.** Ingen skugga, ingen kant, ingen gloria. Glas och ton räcker.
 
 ## Shapes
 
-Formspråket är kontinuerliga rundade rektanglar (`style: .continuous`) i fyra storlekar som följer elementets skala: 4 pt för strecknätets små rutor, 14 pt för dagceller, 22 pt för paneler (`MioTheme.panelRadius`) och 28 pt för inställningspanelens ram. Knappar är kapslar (`buttonBorderShape(.capsule)`). Aktivitetsprickarna är 5 pt kapslar, tre per dag. Dagens ring är en 2 pt kontur i tonen (1,5 pt i strecknätet). Inga andra kanter eller avdelare förutom systemets `Divider` inne i en panel.
+Formspråket är kontinuerliga rundade rektanglar (`style: .continuous`) i fyra storlekar som följer elementets skala: 4 pt för strecknätets små rutor, 14 pt för dagceller, 18 pt för statusbrickor och 22 pt för paneler (`MioTheme.panelRadius`). Knappar är kapslar (`buttonBorderShape(.capsule)`). Aktivitetsprickarna är 5 pt kapslar, tre per dag. Dagens ring är en 2 pt kontur i tonen (1,5 pt i strecknätet). Inga andra kanter eller avdelare förutom systemets `Divider` inne i en panel.
 
 ## Components
 
@@ -198,11 +209,15 @@ Formspråket är kontinuerliga rundade rektanglar (`style: .continuous`) i fyra 
 
 ### Cards / Containers
 - **Corner Style:** 22 pt kontinuerligt.
-- **Background:** `MioSurface`.
+- **Material:** Liquid Glass (`mioGlass()`); `MioSurface` med Reduce Transparency.
 - **Shadow Strategy:** ingen; se Elevation & Depth.
 - **Border:** ingen.
 - **Internal Padding:** 16 pt, 12 pt mellan innehåll.
-- `MioPanel` är den enda läsytan på Hem. Granskningsraden är en hel panel som länk (ikon i tonen, "3 att granska" i headline, "sparade till senare" i sekundär färg, avslutande chevron i tertiär färg).
+- `MioPanel` är kortet på Hem. Granskningsraden är en hel panel som länk (ikon i tonen, "3 att granska" i headline, "sparade till senare" i sekundär färg, avslutande chevron i tertiär färg).
+- På Fånga är `Card` glas för status, mätningar och hjälp, och läsyta (`reading: true`) för Live-test, Tidsstämplad text och Händelselogg.
+
+### Statusbricka (`MioStatusChip`)
+En glasbricka med 18 pt hörn och minst 44 pt höjd: en 8 pt prick (ton = fungerar, sekundär = av eller ej kontrollerad, orange = behöver åtgärd), en liten etikett ("Transkription", "AI") och läget i subheadline medium ("Ansluten", "På", "Fortsätter kl. 14.05"). Ett tryck öppnar inställningsarket. Brickorna ersätter de tidigare statuskorten och AI-reglaget på Fånga; AI pausas och slås på under Inställningar → AI.
 
 ### Navigation
 - Systemets `TabView` med SF Symbols och tonen som markering; Fånga som femte flik med sökrollen; systemet avgör om den visas som separat rund knapp (i simulatorn för iOS 27 hamnade den i raden). Stora navigeringstitlar i systemets stil. Verktygsfältet bär "Fråga Mio" till vänster och inställningar till höger.
@@ -222,16 +237,17 @@ Medvetet diskret: 8 pt prick (ton när den lyssnar, orange vid avbrott, annars s
 ## Do's and Don'ts
 
 ### Do:
-- **Do** lägg varje ny skärm på `mioGround()` eller `mioListGround()` och dess läsinnehåll i `MioPanel` eller vanliga grupperade rader.
+- **Do** lägg varje ny skärm på `mioGround()` eller `mioListGround()`, sammanfattning och status i `MioPanel`/`mioGlass()` och lång lästext på `mioReadingSurface()` eller i vanliga grupperade rader.
 - **Do** använd `MioTheme.tint` för allt interaktivt och för framsteg; låt systemets semantiska färger bära texten.
-- **Do** använd kontinuerliga hörn i skalan 4 / 14 / 22 / 28 pt och kapslar för knappar.
+- **Do** använd kontinuerliga hörn i skalan 4 / 14 / 18 / 22 pt och kapslar för knappar.
+- **Do** lägg nya inställningar i inställningsarket och visa på sin höjd en statusbricka på andra skärmar.
 - **Do** ange typografi som textstilar och testa i den största tillgänglighetsstorleken; stapla eller bryt till rutnät hellre än att klippa eller dölja i skroll.
 - **Do** ge varje ikonknapp minst 44 × 44 pt träffyta och ett svenskt tillgänglighetsnamn.
 - **Do** visa en enda primär åtgärd per panel.
 
 ### Don't:
-- **Don't** lägg Liquid Glass, material eller skuggor på anteckningar, transkript, listor eller paneler.
-- **Don't** inför en andra accentfärg eller använd orange, rött eller grönt för annat än varning, fel och klart.
+- **Don't** lägg Liquid Glass eller material på transkript, lektionsanteckningar eller listrader, och inga skuggor någonstans.
+- **Don't** inför en andra accentfärg, violett eller lila toner eller färgade övertoningar i AI-stil, och använd inte orange, rött eller grönt för annat än varning, fel och klart.
 - **Don't** gör lyssningsfältet iögonfallande: inget rött, ingen vågform, ingen pulserande animation där.
 - **Don't** använd SF Rounded för brödtext eller rubriker; den hör till veckoradens datumsiffror.
 - **Don't** ange fasta punktstorlekar för text som ska skalas med Dynamic Type.

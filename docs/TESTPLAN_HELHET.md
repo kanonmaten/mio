@@ -76,7 +76,7 @@ Använd [gatewayguiden](../server/README.md); gatewayen kör på din dator med G
 | AI03 | Skicka en fråga och tryck Avbryt medan svaret inväntas. Skicka sedan igen. | Avbrott ger inget sent svar. Lyckat svar är tillfälligt, utan automatisk post, historik eller systemåtgärd. |
 | AI04 | Säg ”Mio, fråga varför himlen är blå”. Välj Inte nu, öppna senare via "att granska" på Hem och skicka. | Röstfrågan stannar lokalt i inkorgen tills du skickar den. Ingen kontext följer med automatiskt. Fel/avbryt lämnar frågan väntande; lyckat svar avför den. |
 | AI05 | Prova fel token, frånkopplat nät, för långt utdrag, en server som svarar med redirect och slut på dygnets token. | Begripliga fel; fel token ber dig para om. Ingen privat text skickas till redirectmål. Tokenstopp visar när AI fortsätter. Ingen automatisk retry efter avbryt. |
-| AI06 | Pausa AI på Fånga, kontrollera Hem, slå på igen. Radera all lokal data medan Fråga Mio varit öppen. | Pausen sparas och inga anrop görs under den. Efter radering ligger inga frågor, utdrag eller svar kvar; token ingår aldrig i export. |
+| AI06 | Pausa AI under Inställningar → AI, kontrollera Hem och AI-brickan på Fånga, slå på igen. Radera all lokal data medan Fråga Mio varit öppen. | Pausen sparas och inga anrop görs under den. Efter radering ligger inga frågor, utdrag eller svar kvar; token ingår aldrig i export. |
 
 ## Felvägar och tillgänglighet
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
 import { createMioServer } from '../src/server.mjs';
-import { validateAnalysisPayload, validateAnalysisResult } from '../src/analysis.mjs';
+import { exactQuote, validateAnalysisPayload, validateAnalysisResult } from '../src/analysis.mjs';
 import { providerRequest } from '../src/provider.mjs';
 
 const id = '00000000-0000-0000-0000-000000000001:0';
@@ -31,7 +31,7 @@ test('source and proposed timestamps reject normalized calendar dates and invali
     '2026-01-01T12:00:00+24:00', '2026-01-01T12:00:00-12:60'];
   for (const occurredAt of invalid) {
     assert.throws(() => validateAnalysisPayload({ ...payload, fragments: [{ ...payload.fragments[0], occurredAt }] }), occurredAt);
-    assert.throws(() => validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], scheduledAt: occurredAt }] }, payload), occurredAt);
+    assert.deepEqual(validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], scheduledAt: occurredAt }] }, payload).candidates, [], occurredAt);
   }
   for (const occurredAt of ['2024-02-29T23:59:59.123Z', '2000-02-29T00:00:00+05:45', '2026-12-31T23:59:59-03:30']) {
     assert.doesNotThrow(() => validateAnalysisPayload({ ...payload, fragments: [{ ...payload.fragments[0], occurredAt }] }));
@@ -44,20 +44,60 @@ test('a proposal may name only a day, which the app treats as all-day; sources s
     assert.doesNotThrow(() => validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], scheduledAt }] }, payload), scheduledAt);
   }
   for (const scheduledAt of ['2026-02-29', '2026-13-01', '2026-10-1', '15 oktober', '2026-10-15T', '2026-10-15 15:00']) {
-    assert.throws(() => validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], scheduledAt }] }, payload), scheduledAt);
+    assert.deepEqual(validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], scheduledAt }] }, payload).candidates, [], scheduledAt);
+  }
+  // A clock time without an offset is the request's local time: summer +02:00, winter +01:00.
+  for (const [scheduledAt, expected] of [['2026-09-29T15:00:00', '2026-09-29T15:00:00+02:00'],
+    ['2026-09-29T15:00', '2026-09-29T15:00:00+02:00'], ['2026-12-01T08:30:00', '2026-12-01T08:30:00+01:00']]) {
+    assert.equal(validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], scheduledAt }] }, payload)
+      .candidates[0].scheduledAt, expected);
   }
   assert.throws(() => validateAnalysisPayload({ ...payload, fragments: [{ ...payload.fragments[0], occurredAt: '2026-10-15' }] }));
 });
 
-test('analysis rejects invented citations, personal memories, unsupported dates and everyday lesson notes', () => {
-  assert.equal(validateAnalysisResult(result, payload), result);
-  for (const patch of [{ evidence: 'Text som aldrig sades' }, { sourceIDs: ['unknown'] },
-    { kind: 'memory' }, { scheduledAt: 'Tuesday' }, { title: '' }, { sourceIDs: [] }]) {
-    assert.throws(() => validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], ...patch }] }, payload));
+test('analysis drops invented citations, personal memories, unsupported dates and everyday lesson notes', () => {
+  assert.deepEqual(validateAnalysisResult(result, payload), result);
+  const good = { ...result.candidates[0], title: 'Kvar' };
+  for (const patch of [{ evidence: 'Text som aldrig sades' }, { kind: 'memory' }, { scheduledAt: 'Tuesday' },
+    { title: '' }, { title: 'x'.repeat(241) }, { evidence: '' }, { evidence: 'PÅ' }, { sourceIDs: 'unknown' }]) {
+    // The bad candidate is removed; a good one in the same answer survives.
+    const cleaned = validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], ...patch }, good] }, payload);
+    assert.deepEqual(cleaned.candidates, [good], JSON.stringify(patch));
   }
-  assert.throws(() => validateAnalysisResult({ ...result, highlights: [{ text: 'Punkt', sourceIDs: [id], evidence: 'Vi ses' }] }, payload));
-  assert.doesNotThrow(() => validateAnalysisResult({ candidates: [], highlights: [
-    { text: 'Punkt', sourceIDs: [id], evidence: 'Vi ses' }], uncertainties: ['Osäkert ord'] }, { ...payload, mode: 'lesson' }));
+  // The answer's shape itself is still all-or-nothing.
+  for (const broken of [{ ...result, extra: 1 }, { ...result, candidates: [{ ...good, action: 'book' }] },
+    { ...result, candidates: 'none' }, { candidates: [], highlights: [] }]) {
+    assert.throws(() => validateAnalysisResult(broken, payload));
+  }
+  assert.deepEqual(validateAnalysisResult({ ...result, highlights: [{ text: 'Punkt', sourceIDs: [id], evidence: 'Vi ses' }] }, payload).highlights, []);
+  assert.equal(validateAnalysisResult({ candidates: [], highlights: [
+    { text: 'Punkt', sourceIDs: [id], evidence: 'Vi ses' }], uncertainties: ['Osäkert ord'] }, { ...payload, mode: 'lesson' }).highlights.length, 1);
+  assert.equal(validateAnalysisResult({ ...result, candidates: Array(8).fill(good),
+    uncertainties: [...Array(8).fill('Oklart ord'), '', 'x'.repeat(501)] }, payload).candidates.length, 6);
+  assert.equal(validateAnalysisResult({ ...result, uncertainties: [...Array(8).fill('Oklart ord'), '', 'x'.repeat(501)] }, payload).uncertainties.length, 6);
+  assert.equal(validateAnalysisResult({ ...result, candidates: [{ ...good, body: 'x'.repeat(2_001) }] }, payload).candidates[0].body, '');
+});
+
+test('a misquoted source is repaired to the exact source text, and only when the source proves it', () => {
+  const source = payload.fragments[0].text;
+  for (const [evidence, expected] of [
+    ['vi ses på biblioteket på tisdag klockan 15', 'Vi ses på biblioteket på tisdag klockan 15'],
+    ['"Vi ses  på biblioteket, på tisdag"', 'Vi ses på biblioteket på tisdag'],
+    ['Vi ses … på tisdag klockan 15.', 'på tisdag klockan 15'],
+    ['Vi ses pa\u030a biblioteket', 'Vi ses på biblioteket']]) {
+    const cleaned = validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], evidence }] }, payload);
+    assert.equal(cleaned.candidates[0].evidence, expected);
+    assert.ok(source.includes(cleaned.candidates[0].evidence));
+  }
+  assert.equal(exactQuote(source, 'Vi ses på torget på tisdag'), null);
+  // A repaired quote needs at least four matching letters or digits; an exact one is taken as is.
+  assert.equal(exactQuote(source, 'SES'), null);
+  assert.equal(exactQuote(source, 'ses'), 'ses');
+  assert.equal(exactQuote(source, '...'), null);
+  // Unknown or duplicate source IDs are removed; the fragment that holds the quote is the source.
+  const repaired = validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], sourceIDs: ['unknown', id, id] }] }, payload);
+  assert.deepEqual(repaired.candidates[0].sourceIDs, [id]);
+  assert.deepEqual(validateAnalysisResult({ ...result, candidates: [{ ...result.candidates[0], sourceIDs: [] }] }, payload).candidates[0].sourceIDs, [id]);
 });
 
 test('provider contract uses strict schema and treats transcripts as data, without tools or retention', () => {
@@ -104,9 +144,12 @@ test('analysis endpoint authenticates before model access and returns only valid
   assert.equal(f.calls(), 1);
 });
 
-test('hallucinated model output is rejected without exposing upstream text', async t => {
+test('hallucinated model output never reaches the app and a malformed answer exposes no upstream text', async t => {
   const f = await fixture(t, { ...result, candidates: [{ ...result.candidates[0], evidence: 'invented private upstream text' }] });
   const response = await f.send();
-  assert.equal(response.status, 502);
-  assert.deepEqual(await response.json(), { error: 'invalid_analysis_result' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { candidates: [], highlights: [], uncertainties: [] });
+  const malformed = await (await fixture(t, { ...result, private: 'invented private upstream text' })).send();
+  assert.equal(malformed.status, 502);
+  assert.deepEqual(await malformed.json(), { error: 'invalid_analysis_result' });
 });
