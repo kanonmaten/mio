@@ -4,6 +4,16 @@ import XCTest
 /// permissions, AI-send, or destructive controls, and never hand anything to Apple's apps.
 /// Run in a test simulator; Linux cannot run it.
 final class MioUISmokeTests: XCTestCase {
+    /// Keeps a picture of the screen in the result bundle, so the design can be reviewed from a
+    /// cloud run. The simulator has no user data, so nothing private can appear in it.
+    @MainActor
+    private func keepScreenshot(_ name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot(), quality: .original)
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
     @MainActor
     func testThreeTabsPlusCaptureButtonAndIndependentActivityStates() throws {
         let app = XCUIApplication()
@@ -21,6 +31,7 @@ final class MioUISmokeTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["mio.microphone-state"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["mio.transcription-state"].firstMatch.exists)
         XCTAssertTrue(app.descendants(matching: .any)["mio.text-ai-state"].firstMatch.exists)
+        keepScreenshot("fanga")
         try app.performAccessibilityAudit(for: [.elementDetection, .sufficientElementDescription])
     }
 
@@ -45,6 +56,7 @@ final class MioUISmokeTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Dator"].firstMatch.exists, "The panel starts with the Dator section")
         let done = app.buttons["mio.settings.done"]
         XCTAssertTrue(done.exists)
+        keepScreenshot("installningar")
         done.tap()
         XCTAssertTrue(app.descendants(matching: .any)["mio.settings.panel"].firstMatch.waitForNonExistence(timeout: 5))
     }
@@ -57,6 +69,7 @@ final class MioUISmokeTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Förslag"].waitForExistence(timeout: 10))
         app.tabBars.buttons["Förslag"].tap()
         XCTAssertTrue(app.navigationBars["Förslag"].waitForExistence(timeout: 5))
+        keepScreenshot("forslag")
         XCTAssertFalse(app.buttons["Lägg till"].exists)
         XCTAssertFalse(app.buttons["Skriv förslag"].exists)
         XCTAssertFalse(app.tabBars.buttons["Kalender"].exists)
