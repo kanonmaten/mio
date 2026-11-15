@@ -3,7 +3,7 @@ name: Mio
 description: Svensk veckoalmanacka för en privat vardagsassistent – grafitgrå mark med mjukt ljus, kort i Liquid Glass, en blå ton för kontroller.
 colors:
   blue-tint: "#0A6CF0"
-  blue-tint-dark: "#4A9DFF"
+  blue-tint-dark: "#2E84FF"
   graphite-ground: "#F1F2F4"
   night-graphite-ground: "#0D0E10"
   paper-surface: "#FFFFFF"
@@ -145,7 +145,7 @@ En svartvit värld med en accent: mark, yta och band är neutrala grafittoner, o
 - **Almanacksblå** (`blue-tint` / `blue-tint-dark`): appens `AccentColor` och `MioTheme.tint`. Driver flikfältets markering, knappar, ikoner i rader, dagens ring, vald dag (16 % fyllning), aktivitetsprickar, strecknätets fyllnadsgrader, statusbrickans prick och lyssningsprickens "lyssnar"-läge. Den mörka varianten är ljusare så att den håller kontrast mot nattgrafit.
 
 ### Neutral
-- **Grafitmark** (`graphite-ground`) / **Nattgrafit** (`night-graphite-ground`): `MioGround`, basen i `MioBackdrop`, som ligger bakom varje skrollvy (`mioGround()`) och bakom listor och formulär (`mioListGround()`, som döljer listans egen bakgrund). Ovanpå basen ligger två stilla radiella ljus: tonen på 12 % (20 % i mörkt läge) uppe till vänster och primärfärgen på 5 % (8 %) nere till höger.
+- **Grafitmark** (`graphite-ground`) / **Nattgrafit** (`night-graphite-ground`): `MioGround`, basen i `MioBackdrop`, som ligger bakom varje skrollvy (`mioGround()`) och bakom listor och formulär (`mioListGround()`, som döljer listans egen bakgrund). Ovanpå basen ligger två stilla radiella ljus: tonen på 6 % (12 % i mörkt läge) uppe till vänster och primärfärgen på 5 % (8 %) nere till höger.
 - **Papper** (`paper-surface`) / **Skiffer** (`slate-surface`): `MioSurface`, läsytan (`mioReadingSurface()`) för transkript och annan lång text, och glaskortens ersättning när Reduce Transparency är på.
 - **Dimband** (`mist-ribbon`) / **Skifferband** (`slate-ribbon`): `MioRibbon`, tomma och framtida rutor i strecknätet (framtida rutor med 45 % opacitet).
 - **Systemets semantiska textfärger** (`.primary`, `.secondary`, `.tertiary`): all text. Inga egna gråtoner.

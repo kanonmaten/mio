@@ -1,6 +1,6 @@
 # Bygg- och teststatus
 
-Senast uppdaterad **2026-10-13**. Version **0.9.1, ej släppt** (0.9.0 är revisionen `8f90ddc`, ej taggad). Den här filen innehåller bara vad som faktiskt är kontrollerat. Äldre poster finns i Git-historiken (`git log -- docs/STATUS.md`). [Ändringsloggen](../CHANGELOG.md) beskriver vad koden gör; [helhetstestet](TESTPLAN_HELHET.md) beskriver acceptansproven.
+Senast uppdaterad **2026-11-15**. Version **0.9.1, ej släppt** (0.9.0 är revisionen `8f90ddc`, ej taggad). Den här filen innehåller bara vad som faktiskt är kontrollerat. Äldre poster finns i Git-historiken (`git log -- docs/STATUS.md`). [Ändringsloggen](../CHANGELOG.md) beskriver vad koden gör; [helhetstestet](TESTPLAN_HELHET.md) beskriver acceptansproven.
 
 ## Aktuellt bygge: helhetsbygget 2026-10-11
 
@@ -15,6 +15,19 @@ Klart på `main`: gateway på datorn med Groq, Pianissimo med förbehandling och
 | Xcode (IPA-workflowen) | Körning #30 för `8dc0025`: strikt concurrency, Release-bygge med Live Activity-tillägget, alla enhetstester och UI-tester i simulatorn godkända, IPA skapad. Skärmbilderna visade att tonen blev systemblå; rättat i `e7b41b8`. Körning #31 för `e7b41b8`: bygge och enhetstester godkända, men UI-testet för att markera en uppgift klar överskred sin tidsgräns två gånger, eftersom simulatorn för iOS 27 rapporterade appen som upptagen i 60 s efter ett tryck. Orsaken är inte hittad; testets tidsgräns höjdes i `72dbf43`. **Körning #32 för `72dbf43`: allt godkänt** (strikt concurrency, Release-bygge med Live Activity-tillägget, enhetstester och tre UI-tester, skärmbilder med violett ton), IPA skapad: artefakten `Mio-IPA` (sha256 `8955fed6…c913`, version 0.9.0, bygge 5), [körning #32](https://github.com/kanonmaten/mio/actions/runs/38184332670). IPA-filens egen kontrollsumma står i `Mio-buildinfo.txt` i artefakten. Körning #33 för `e009ef3` misslyckades på stegets tidsgräns: samma UI-test hängde och simulatorn stod sedan still; ingen IPA skapades. Workflowen delades därefter upp i enhets- och UI-teststeg; körning #35 för `9089bb3` tog 21 min. Från 2026-10-13 bygger ett eget jobb IPA:n parallellt med testerna. Körning #37 för `034cdbc` och #38 för `8f90ddc` (0.9.0): IPA skapad och enhetstester godkända, men UI-testet för att markera en uppgift klar hängde igen och den native concurrency-diagnosen visade 88 varningsblock i båda (steget stoppar inte jobbet; varningarna finns i SwiftData-predikat, AlarmKit, Live Activity, en miljönyckel och batteriobservatörer, inte i ändringarna från 2026-10-13). **Körning #39 för `b72bf7e` (0.9.1, bygge 39): IPA skapad, enhetstester, tre UI-tester (inklusive Förslag-flikens tillgänglighetsgranskning) och skärmbilder av Hem godkända**; native concurrency oförändrat 88 varningsblock. [Körning #39](https://github.com/kanonmaten/mio/actions/runs/38421316110). |
 | Strikt concurrency | Native-steget i "Bygg Mio IPA" underkänt i körning #37–#39 (senast [#39](https://github.com/kanonmaten/mio/actions/runs/38421316110) för `b72bf7e`: 88 varningsblock från fem orsaker), men steget stoppar inte IPA:n. Rättat i `8d9cccc`. Där är hela `verify.py` godkänd i molnmiljön (Swift 6.3.3, Node 26.10): 256 strukturkontroller, 97 Node-tester, 82 pytest, 330 portabla XCTest och den portabla concurrency-kontrollen, som nu kör SIL-isoleringsanalysen. Native-steget är **inte kört** för `8d9cccc`. |
 | Telefon | Varken 0.9.0 (bygge 38) eller 0.9.1 (bygge 39) är installerat eller provat. |
+
+## Ändringarna 2026-11-15 (`6777044`)
+
+AI-kön mot Groqs minutgräns, ett nytt försök i gatewayen, validering per förslag, egna ord i transkriptionen, grafit och blått med glaskort samt ett inställningsark. Se [ändringsloggen](../CHANGELOG.md) och [besluten](DECISIONS.md).
+
+| Kontroll | Resultat |
+|---|---|
+| Hela `verify.py`, lokalt (Swift 6.4.2, Node 26.13, uv 0.13.8) | Godkänd på arbetskopian som blev `6777044`: 259 strukturkontroller, 101 Node-tester, 95 pytest, 341 portabla XCTest, återhämtningskontrollen och den portabla concurrency-kontrollen. Före ändringarna föll ett ljudtest (`testOldReliableSampleExpiresBeforeConversionEvenWhenCallbackIsRecent`) en gång av tre körningar på samma kod; det är tidsberoende och inte utrett. |
+| Linux-grinden på GitHub | Godkänd för `6777044` ([körning 43738573061](https://github.com/kanonmaten/mio/actions/runs/43738573061), Swift 6.3.3). |
+| Xcode (IPA-workflowen) | **Körning #41 för `6777044` (0.9.1, bygge 41, Xcode 27.1): IPA skapad (sha256 `71a62410…e21d`), 353 enhetstester och tre UI-tester godkända, native concurrency utan varningar.** [Körning #41](https://github.com/kanonmaten/mio/actions/runs/43738573239). UI-testet för inställningar öppnar det nya arket, hittar Dator och stänger med Klar. |
+| Riktig modelltrafik | **Inte körd.** Groqs 413-beteende, storleksanpassningen, det nya försöket och citatreparationen är bara provade mot en syntetisk transport. |
+| GPU | **Inte körd.** Ordlistan för egna ord är provad med en syntetisk modell. |
+| Telefon | **Inte installerat eller provat.** Anslutningsförsöken efter vila (Tailscale) och hur glaset ser ut på en riktig skärm är overifierade. |
 
 ## Verifierat på telefonen
 

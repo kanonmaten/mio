@@ -22,8 +22,8 @@ struct MioBackdrop: View {
     var body: some View {
         ZStack {
             MioTheme.ground
-            RadialGradient(colors: [MioTheme.tint.opacity(scheme == .dark ? 0.20 : 0.12), .clear],
-                           center: .topLeading, startRadius: 0, endRadius: 520)
+            RadialGradient(colors: [MioTheme.tint.opacity(scheme == .dark ? 0.12 : 0.06), .clear],
+                           center: .topLeading, startRadius: 0, endRadius: 420)
             RadialGradient(colors: [Color.primary.opacity(scheme == .dark ? 0.08 : 0.05), .clear],
                            center: .bottomTrailing, startRadius: 0, endRadius: 620)
         }

@@ -24,8 +24,8 @@
       "blue-tint-dark": {
         "role": "primary",
         "displayName": "Almanacksblå (mörkt)",
-        "canonical": "#4A9DFF",
-        "oklch": "oklch(69.1% 0.166 254.4)",
+        "canonical": "#2E84FF",
+        "oklch": "oklch(63.0% 0.200 258.3)",
         "tonalRamp": [
           "#00081F",
           "#00234C",
