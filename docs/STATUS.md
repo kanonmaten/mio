@@ -16,15 +16,16 @@ Klart på `main`: gateway på datorn med Groq, Pianissimo med förbehandling och
 | Strikt concurrency | Native-steget i "Bygg Mio IPA" underkänt i körning #37–#39 (senast [#39](https://github.com/kanonmaten/mio/actions/runs/38421316110) för `b72bf7e`: 88 varningsblock från fem orsaker), men steget stoppar inte IPA:n. Rättat i `8d9cccc`. Där är hela `verify.py` godkänd i molnmiljön (Swift 6.3.3, Node 26.10): 256 strukturkontroller, 97 Node-tester, 82 pytest, 330 portabla XCTest och den portabla concurrency-kontrollen, som nu kör SIL-isoleringsanalysen. Native-steget är **inte kört** för `8d9cccc`. |
 | Telefon | Varken 0.9.0 (bygge 38) eller 0.9.1 (bygge 39) är installerat eller provat. |
 
-## Ändringarna 2026-11-15 (`6777044`)
+## Ändringarna 2026-11-15 (`6777044`–`56447fe`)
 
-AI-kön mot Groqs minutgräns, ett nytt försök i gatewayen, validering per förslag, egna ord i transkriptionen, grafit och blått med glaskort samt ett inställningsark. Se [ändringsloggen](../CHANGELOG.md) och [besluten](DECISIONS.md).
+AI-kön mot Groqs minutgräns, ett nytt försök i gatewayen, validering per förslag, egna ord i transkriptionen, grafit och blått med glaskort samt ett inställningsark. Se [ändringsloggen](../CHANGELOG.md) och [besluten](DECISIONS.md). `9b0e79a` dämpade det blå ljuset och höjde kontrasten i mörkt läge efter de första skärmbilderna; `56447fe` lade bara till skärmbilder i UI-testerna.
 
 | Kontroll | Resultat |
 |---|---|
-| Hela `verify.py`, lokalt (Swift 6.4.2, Node 26.13, uv 0.13.8) | Godkänd på arbetskopian som blev `6777044`: 259 strukturkontroller, 101 Node-tester, 95 pytest, 341 portabla XCTest, återhämtningskontrollen och den portabla concurrency-kontrollen. Före ändringarna föll ett ljudtest (`testOldReliableSampleExpiresBeforeConversionEvenWhenCallbackIsRecent`) en gång av tre körningar på samma kod; det är tidsberoende och inte utrett. |
+| Hela `verify.py`, lokalt (Swift 6.4.2, Node 26.13, uv 0.13.8) | Godkänd på arbetskopian som blev `6777044`: 259 strukturkontroller, 101 Node-tester, 95 pytest, 341 portabla XCTest, återhämtningskontrollen och den portabla concurrency-kontrollen. Efter `6777044` ändrades bara färgvärden, dokument och UI-testerna; strukturkontrollen (263) är körd lokalt för dem. Före ändringarna föll ett ljudtest (`testOldReliableSampleExpiresBeforeConversionEvenWhenCallbackIsRecent`) en gång av tre körningar på samma kod; det är tidsberoende och inte utrett. |
 | Linux-grinden på GitHub | Godkänd för `6777044` ([körning 43738573061](https://github.com/kanonmaten/mio/actions/runs/43738573061), Swift 6.3.3). |
-| Xcode (IPA-workflowen) | **Körning #41 för `6777044` (0.9.1, bygge 41, Xcode 27.1): IPA skapad (sha256 `71a62410…e21d`), 353 enhetstester och tre UI-tester godkända, native concurrency utan varningar.** [Körning #41](https://github.com/kanonmaten/mio/actions/runs/43738573239). UI-testet för inställningar öppnar det nya arket, hittar Dator och stänger med Klar. |
+| Xcode (IPA-workflowen) | Körning #41 för `6777044` och **körning #44 för `56447fe` (0.9.1, bygge 44, Xcode 27.1): IPA skapad, 353 enhetstester och tre UI-tester godkända, native concurrency utan varningar.** [Körning #44](https://github.com/kanonmaten/mio/actions/runs/43762643005); IPA-filens kontrollsumma står i `Mio-buildinfo.txt` i artefakten `Mio-IPA`. UI-testet för inställningar öppnar det nya arket, hittar Dator och stänger med Klar. |
+| Skärmbilder från simulatorn | Granskade från körning #44: Hem i ljust och mörkt läge och i största textstorleken, samt Fånga, Inställningar och Förslag i ljust läge (ur UI-testernas resultat). Tom simulator utan parning och utan data, så listor med innehåll, lektioner, transkript och undersidorna i inställningarna är inte sedda. |
 | Riktig modelltrafik | **Inte körd.** Groqs 413-beteende, storleksanpassningen, det nya försöket och citatreparationen är bara provade mot en syntetisk transport. |
 | GPU | **Inte körd.** Ordlistan för egna ord är provad med en syntetisk modell. |
 | Telefon | **Inte installerat eller provat.** Anslutningsförsöken efter vila (Tailscale) och hur glaset ser ut på en riktig skärm är overifierade. |
