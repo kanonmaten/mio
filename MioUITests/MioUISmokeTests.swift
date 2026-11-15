@@ -61,6 +61,34 @@ final class MioUISmokeTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["mio.settings.panel"].firstMatch.waitForNonExistence(timeout: 5))
     }
 
+    /// 2026-11-15: everything about the PC, transcription and AI is reached from the one settings
+    /// sheet. Opens each page and keeps a picture; changes nothing and pairs nothing.
+    @MainActor
+    func testSettingsSheetLeadsToPairingTranscriptionAndAI() {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["Lektioner"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Lektioner"].tap()
+        XCTAssertTrue(app.navigationBars["Lektioner"].waitForExistence(timeout: 5))
+        keepScreenshot("lektioner")
+        let settings = app.buttons["Inställningar"].firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 5))
+        settings.tap()
+        XCTAssertTrue(app.buttons["mio.settings.done"].waitForExistence(timeout: 5))
+        for (row, title) in [("Parning", "Parning"), ("Transkription", "Transkription"), ("AI", "AI")] {
+            let link = app.staticTexts[row].firstMatch
+            XCTAssertTrue(link.waitForExistence(timeout: 5), "Missing settings row: \(row)")
+            link.tap()
+            let bar = app.navigationBars[title]
+            XCTAssertTrue(bar.waitForExistence(timeout: 5), "Settings page did not open: \(title)")
+            keepScreenshot("installningar-\(title.lowercased())")
+            bar.buttons.firstMatch.tap()
+            XCTAssertTrue(app.navigationBars["Inställningar"].waitForExistence(timeout: 5))
+        }
+        app.buttons["mio.settings.done"].tap()
+        XCTAssertTrue(app.buttons["mio.settings.done"].waitForNonExistence(timeout: 5))
+    }
+
     /// 0.9.1: nothing is created by hand in Mio; Förslag lists proposals and what was sent.
     @MainActor
     func testProposalsTabHasNoLocalCreationAndPassesTheAudit() throws {
