@@ -119,6 +119,7 @@ struct MioStatusChips: View {
             MioAIStatusChip()
             MioAIPauseButton()
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

@@ -110,7 +110,8 @@ struct MioStatusChip: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            // Fills the row's height, so two chips side by side stay equal when one wraps.
+            .frame(maxWidth: .infinity, minHeight: 44, maxHeight: .infinity, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .mioGlass(radius: 18)
         }
