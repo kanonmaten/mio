@@ -18,11 +18,12 @@ jobs:
     container: swift:6.3.3-noble
     timeout-minutes: 20
     steps:
-      - name: Installera Python för verifieraren
-        # The Swift image has no python3; the verifier itself needs the system interpreter.
+      - name: Installera Python och byggverktyg för verifieraren
+        # The Swift image has no python3 or curl; the verifier needs the system interpreter,
+        # rustup needs curl, and the gateway's TLS library compiles C code with gcc.
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends python3 ca-certificates
+          apt-get install -y --no-install-recommends python3 ca-certificates curl gcc libc6-dev
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -32,9 +33,12 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Installera Rust för gatewayen
         # Pinned to the toolchain the gateway was verified with; rustup checks the download.
+        # Downloaded to a file first: a failed download must fail the step, not pipe nothing into sh.
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-            | sh -s -- -y --profile minimal --component clippy --default-toolchain 1.100.0
+          set -eu
+          curl --proto '=https' --tlsv1.2 -sSf -o "$RUNNER_TEMP/rustup-init.sh" https://sh.rustup.rs
+          sh "$RUNNER_TEMP/rustup-init.sh" -y --profile minimal --component clippy --default-toolchain 1.100.0
+          "$HOME/.cargo/bin/cargo" --version
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
