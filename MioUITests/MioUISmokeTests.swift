@@ -31,6 +31,7 @@ final class MioUISmokeTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["mio.microphone-state"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["mio.transcription-state"].firstMatch.exists)
         XCTAssertTrue(app.descendants(matching: .any)["mio.text-ai-state"].firstMatch.exists)
+        XCTAssertTrue(app.buttons["mio.text-ai-toggle"].firstMatch.exists, "The quick AI pause sits beside the chips")
         keepScreenshot("fanga")
         try app.performAccessibilityAudit(for: [.elementDetection, .sufficientElementDescription])
     }

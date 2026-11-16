@@ -86,7 +86,28 @@ struct MioAIStatusChip: View {
     }
 }
 
-/// The two connection states side by side; stacked at accessibility text sizes.
+/// One-tap pause and resume for AI on Fånga (the user asked for it back, 2026-11-16). It is the
+/// same saved switch as Settings → AI, so the two can never disagree.
+struct MioAIPauseButton: View {
+    @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
+    @AppStorage(MioCloudSettings.serverKey) private var server = ""
+
+    var body: some View {
+        Button { aiEnabled.toggle() } label: {
+            Image(systemName: aiEnabled ? "pause.fill" : "play.fill")
+                .font(.body.weight(.semibold))
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .disabled(server.isEmpty)
+        .accessibilityLabel(aiEnabled ? "Pausa AI" : "Slå på AI")
+        .accessibilityIdentifier("mio.text-ai-toggle")
+    }
+}
+
+/// The two connection states side by side, with the quick AI pause; stacked at accessibility
+/// text sizes.
 struct MioStatusChips: View {
     let model: MioViewModel
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -96,6 +117,7 @@ struct MioStatusChips: View {
         layout {
             TranscriptionStatusView(model: model)
             MioAIStatusChip()
+            MioAIPauseButton()
         }
     }
 }

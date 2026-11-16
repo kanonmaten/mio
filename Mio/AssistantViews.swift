@@ -596,7 +596,7 @@ struct MioGuideView: View {
                 Text("Hem visar veckan, nästa påminnelse och dagens att göra från Påminnelser. Mio läser inte din kalender. Byt till Kväll för det du skickat och dagens sessioner. Morgon- och kvällsnotis finns under Inställningar → Notiser.")
             }
             Section("AI") {
-                Text("AI är på när datorn är parad. Nytt vardagstal skickas samlat högst var femte minut och kan ge förslag på händelser och att göra utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Alla föreslagna poster kräver Ja. Frågor skickas direkt. Pausa AI under Inställningar → AI; pausen sparas. Är AI-tjänsten upptagen väntar Mio och försöker igen av sig själv.")
+                Text("AI är på när datorn är parad. Nytt vardagstal skickas samlat högst var femte minut och kan ge förslag på händelser och att göra utan tilltalet Mio. Avslutade lektioner får AI-anteckningar med textunderlag. Alla föreslagna poster kräver Ja. Frågor skickas direkt. Pausa AI med pausknappen på Fånga eller under Inställningar → AI; pausen sparas. Är AI-tjänsten upptagen väntar Mio och försöker igen av sig själv.")
             }
             Section("Din kontroll") {
                 Text("Inget råljud sparas. Spela bara in andra med tydligt samtycke och enligt lokala regler. Minnen sparas i Apples Anteckningar, där du ändrar och raderar dem.")

@@ -217,7 +217,7 @@ Formspråket är kontinuerliga rundade rektanglar (`style: .continuous`) i fyra 
 - På Fånga är `Card` glas för status, mätningar och hjälp, och läsyta (`reading: true`) för Live-test, Tidsstämplad text och Händelselogg.
 
 ### Statusbricka (`MioStatusChip`)
-En glasbricka med 18 pt hörn och minst 44 pt höjd: en 8 pt prick (ton = fungerar, sekundär = av eller ej kontrollerad, orange = behöver åtgärd), en liten etikett ("Transkription", "AI") och läget i subheadline medium ("Ansluten", "På", "Fortsätter kl. 14.05"). Ett tryck öppnar inställningsarket. Brickorna ersätter de tidigare statuskorten och AI-reglaget på Fånga; AI pausas och slås på under Inställningar → AI.
+En glasbricka med 18 pt hörn och minst 44 pt höjd: en 8 pt prick (ton = fungerar, sekundär = av eller ej kontrollerad, orange = behöver åtgärd), en liten etikett ("Transkription", "AI") och läget i subheadline medium ("Ansluten", "På", "Fortsätter kl. 14.05"). Ett tryck öppnar inställningsarket. Brickorna ersätter de tidigare statuskorten på Fånga. Bredvid AI-brickan ligger en rund glasknapp (paus/spela) som pausar och slår på AI med ett tryck; det är samma sparade val som under Inställningar → AI (användarens val 2026-11-16).
 
 ### Navigation
 - Systemets `TabView` med SF Symbols och tonen som markering; Fånga som femte flik med sökrollen; systemet avgör om den visas som separat rund knapp (i simulatorn för iOS 27 hamnade den i raden). Stora navigeringstitlar i systemets stil. Verktygsfältet bär "Fråga Mio" till vänster och inställningar till höger.
@@ -240,7 +240,7 @@ Medvetet diskret: 8 pt prick (ton när den lyssnar, orange vid avbrott, annars s
 - **Do** lägg varje ny skärm på `mioGround()` eller `mioListGround()`, sammanfattning och status i `MioPanel`/`mioGlass()` och lång lästext på `mioReadingSurface()` eller i vanliga grupperade rader.
 - **Do** använd `MioTheme.tint` för allt interaktivt och för framsteg; låt systemets semantiska färger bära texten.
 - **Do** använd kontinuerliga hörn i skalan 4 / 14 / 18 / 22 pt och kapslar för knappar.
-- **Do** lägg nya inställningar i inställningsarket och visa på sin höjd en statusbricka på andra skärmar.
+- **Do** lägg nya inställningar i inställningsarket och visa på sin höjd en statusbricka på andra skärmar. Enda undantaget är snabbpausen för AI på Fånga.
 - **Do** ange typografi som textstilar och testa i den största tillgänglighetsstorleken; stapla eller bryt till rutnät hellre än att klippa eller dölja i skroll.
 - **Do** ge varje ikonknapp minst 44 × 44 pt träffyta och ett svenskt tillgänglighetsnamn.
 - **Do** visa en enda primär åtgärd per panel.
