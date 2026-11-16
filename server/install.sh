@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Installs or updates Mio's private AI gateway on CachyOS/Arch, next to Pianissimo.
 # Run as your normal user from any directory: ./install.sh  (it uses sudo where needed).
+# It builds the Rust gateway with cargo, so the PC needs no Node or other runtime.
 # Re-running is the update path: code and the systemd unit are refreshed; the Groq key,
 # gateway token and daily counters are kept. ./install.sh --ny-groq-nyckel replaces the key.
 set -euo pipefail
@@ -25,33 +26,36 @@ case "${1:-}" in
 esac
 
 [[ $EUID -ne 0 ]] || fail "Kör som din vanliga användare, inte root. Skriptet använder sudo själv."
-for file in package.json src/server.mjs systemd/mio-gateway.service mio-pair README.md; do
+for file in Cargo.toml Cargo.lock src/main.rs systemd/mio-gateway.service mio-pair README.md; do
     [[ -f "$source_dir/$file" ]] || fail "Hittar inte $file bredvid install.sh."
 done
 
 step "Kontrollerar verktyg"
 missing=()
-command -v node >/dev/null || missing+=(nodejs)
+command -v cargo >/dev/null || missing+=(rust)
 command -v qrencode >/dev/null || missing+=(qrencode)
 command -v tailscale >/dev/null || missing+=(tailscale)
 command -v curl >/dev/null || missing+=(curl)
-command -v rsync >/dev/null || missing+=(rsync)
 if ((${#missing[@]})); then
     sudo pacman -S --needed --noconfirm "${missing[@]}"
 fi
-node_major="$(node -p 'process.versions.node.split(".")[0]')"
-node_version="$(node --version)"
-(( node_major >= 26 )) || fail "Node $node_version är för gammal. Mio kräver Node 26.10 eller senare: sudo pacman -Syu nodejs"
-(( node_major == 26 )) || echo "OBS: Node $node_version är nyare än den testade 26-serien. Gatewayen startar, men rapportera fel."
+rust_version="$(cargo --version)"
+[[ $rust_version =~ ^cargo\ 1\.([0-9]+) ]] && (( BASH_REMATCH[1] >= 88 )) \
+    || fail "$rust_version är för gammal. Gatewayen kräver Rust 1.88 eller senare: sudo pacman -Syu rust"
+
+step "Bygger gatewayen (första gången några minuter)"
+# Built as you, from the locked dependency versions; only the finished binary is installed.
+cargo build --release --locked --manifest-path "$source_dir/Cargo.toml"
+binary="$source_dir/target/release/mio-gateway"
 
 step "Tjänstekonto och kod i $app_dir"
 getent passwd mio-gateway >/dev/null || sudo useradd --system --user-group \
     --home-dir /var/lib/mio-gateway --no-create-home --shell /usr/bin/nologin mio-gateway
-sudo install -d -m 755 "$app_dir/src"
-# Only the runtime is copied: no tests, Git history, exports or secrets.
-sudo rsync -a --delete --chown=root:root --chmod=D755,F644 \
-    --include='*.mjs' --exclude='*' "$source_dir/src/" "$app_dir/src/"
-sudo install -m 644 "$source_dir/package.json" "$source_dir/README.md" "$app_dir/"
+sudo install -d -m 755 "$app_dir"
+sudo install -m 755 -o root -g root "$binary" "$app_dir/mio-gateway"
+sudo install -m 644 "$source_dir/README.md" "$app_dir/"
+# 2026-11-16: the gateway moved from Node to Rust. The old JavaScript runtime is removed.
+sudo rm -rf "$app_dir/src" "$app_dir/package.json"
 sudo install -m 755 "$source_dir/mio-pair" /usr/local/bin/mio-pair
 
 step "Konfiguration $config"
@@ -69,28 +73,9 @@ else
     # Hidden prompt: the key never appears on screen, in argv, shell history or logs.
     IFS= read -rsp "Klistra in Groq-nyckeln (syns inte) och tryck Enter: " groq_key; echo
     [[ $groq_key =~ ^gsk_[A-Za-z0-9]{20,200}$ ]] || fail "Det ser inte ut som en Groq-nyckel (börjar med gsk_)."
-    write_config=$(cat <<'JS'
-const fs = require('node:fs'), crypto = require('node:crypto');
-const [path, model, port] = process.argv.slice(1);
-const key = fs.readFileSync(0, 'utf8');
-let token = crypto.randomBytes(32).toString('base64url');
-// Keep an existing gateway token so a key rotation does not force re-pairing the phone.
-try { token = /^MIO_GATEWAY_TOKEN=([A-Za-z0-9_-]{32,256})$/mu.exec(fs.readFileSync(path, 'utf8'))?.[1] ?? token; } catch {}
-const lines = [
-  '# Mio gateway. Skapad av install.sh. Dela aldrig denna fil.',
-  `GROQ_API_KEY=${key}`, `MIO_GATEWAY_TOKEN=${token}`,
-  'MIO_AI_PROVIDER=groq', `MIO_AI_MODEL=${model}`,
-  // Groq free tier for this model: 30 RPM, 8,000 TPM, 200,000 tokens/day. The gateway sizes each
-  // request to the tokens-per-minute budget; the daily cap leaves a margin.
-  'MIO_REQUESTS_PER_MINUTE=10', 'MIO_TOKENS_PER_MINUTE=8000', 'MIO_TOKENS_PER_DAY=190000', 'MIO_REQUESTS_PER_DAY=',
-  'MIO_LESSON_INTERVAL_SECONDS=60', `PORT=${port}`, ''];
-const temporary = `${path}.tmp`;
-fs.writeFileSync(temporary, lines.join('\n'), { mode: 0o600 });
-fs.renameSync(temporary, path);
-JS
-)
-    # The script travels in argv, the key only on stdin.
-    printf '%s' "$groq_key" | sudo node -e "$write_config" "$config" "$model" "$port"
+    # The key travels only on stdin; the gateway binary writes the root-only file (0600) and
+    # keeps an existing gateway token so a key rotation does not force re-pairing the phone.
+    printf '%s' "$groq_key" | sudo "$app_dir/mio-gateway" write-config "$config" "$model" "$port"
     unset groq_key
     echo "Sparad (endast root kan läsa den)."
 fi

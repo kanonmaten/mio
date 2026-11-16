@@ -1,0 +1,34 @@
+[package]
+name = "mio-gateway"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+description = "Mio's private AI gateway"
+
+[lib]
+name = "mio_gateway"
+
+[[bin]]
+name = "mio-gateway"
+path = "src/main.rs"
+
+[dependencies]
+getrandom = "0.4.3"
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", features = ["http1", "server"] }
+hyper-util = { version = "0.1.21", features = ["tokio"] }
+# Bundled time zone data: the same answer on the PC and in CI, independent of /usr/share/zoneinfo.
+jiff = { version = "1.0.0", default-features = false, features = ["std", "tzdb-bundle-always"] }
+# No proxy support, no HTTP/2, no compression: one fixed HTTPS endpoint.
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+# preserve_order: the approved payload reaches the model with its keys in the order the app sent them.
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+sha2 = "0.11.1"
+tokio = { version = "1.54.1", features = ["rt", "net", "time", "macros", "signal", "sync", "io-util"] }
+unicode-general-category = "1.1.0"
+unicode-normalization = "0.1.26"
+
+[profile.release]
+strip = true

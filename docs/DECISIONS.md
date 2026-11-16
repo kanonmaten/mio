@@ -2,6 +2,20 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Gatewayen i Rust, 2026-11-16
+
+Användaren frågade varför repot har JavaScript och Python, ville hellre ha Rust och bad sedan om att skriva om det som går. Valt:
+
+- **AI-gatewayen (`server/`) är nu ett Rust-program** (`mio-gateway`) med samma beteende mot appen: samma rutter, felkoder, rubriker, gränser, kvoträknare och samma bytes till modellen. Node behövs inte längre på datorn. `install.sh` bygger programmet med `cargo build --release --locked` och tar bort den gamla `/opt/mio-gateway/src/`. Hjälpkommandona `write-config`, `tailscale-host`, `pairing-payload` och `pairing-text` ersätter de inbäddade Node-skripten i `install.sh` och `mio-pair`; hemligheter går fortfarande bara via standard in och ut.
+- **Bevis för samma beteende:** före bytet spelades cirka 2 600 indata (validering, citatlagning, datum och tidszoner, leverantörssvar och fel, konfiguration och status) och 86 hela HTTP-utbyten mot en skriptad leverantör in från Node-versionen (`server/tests/golden/node-parity.json`). `tests/parity.rs` kräver identiska svar och identiska anrop till leverantören (SHA-256 av hela kroppen). Alla tio Node-testfiler är portade till Rust. Live mot båda servrarna gav 16 av 16 identiska svar på modellfria anrop; Rust-processen använder cirka 6 MB minne mot Nodes cirka 70 MB.
+- **Bibliotek:** `hyper` (HTTP/1, en begäran per anslutning), `reqwest` med `rustls` och `ring` (bara HTTPS, inga omdirigeringar, ingen proxy), `jiff` med inbyggd tidszonsdatabas (samma svar på datorn och i CI oberoende av `/usr/share/zoneinfo`), `serde_json` med bevarad nyckelordning (appens godkända text når modellen exakt som den skickades) och `unicode-normalization` för citatlagningen.
+- **Medvetna skillnader:** rubriknamn skickas med små bokstäver och svaren har `Content-Length` i stället för chunkad överföring (HTTP-rubriker är skiftlägesokänsliga, och appen läser dem så). Felsökningsutskrift av konfiguration och leverantörsanrop visar aldrig nycklar.
+- **Tre kantfall upptäcktes av inspelningen och följer nu Node:** tidszonen `Factory` avvisas, `Retry-After` med inledande blanksteg tolkas som datum, och en siffergräns med `+` framför (till exempel `MIO_REQUESTS_PER_MINUTE=+5`) godtas.
+
+Avböjt: **Pianissimo i Rust.** Taligenkänningen körs i NVIDIA NeMo, som bara finns för Python/PyTorch; en omskrivning kräver export till en annan körmiljö och ny mätning av ordfel, utan hastighetsvinst eftersom tiden går åt i modellen på GPU:n. **Behålla Node** var möjligt men gav en extra körmiljö på datorn utan fördel för appen.
+
+Inte provat: installationen på användarens dator och riktig Groq-trafik genom Rust-versionen. `systemd-analyze verify` på den ändrade tjänstefilen kräver att programmet ligger i `/opt` och körs först av `install.sh`.
+
 ## AI som inte fastnar, egna ord och grafit med glas, 2026-11-15
 
 Användaren rapporterade att AI "ständigt" visade att kvoten var nådd och att det skulle försöka igen om 60 sekunder, utan att något hände, att transkriptionen ofta gav fel ord, och att utseendet (violett, inställningar utspridda) inte höll. Besluten nedan är användarens svar på uttryckliga frågor samma dag eller följer av källorna.

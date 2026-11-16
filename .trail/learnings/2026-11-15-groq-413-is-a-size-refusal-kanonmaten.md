@@ -9,8 +9,8 @@ scope: repo
 status: active
 src: agent
 touches:
-  - server/src/adapters.mjs
-  - server/src/generation-execution.mjs
+  - server/src/adapters.rs
+  - server/src/generation.rs
   - "Mio/MioAnalysisCoordinator.swift#handleRejectedEverydayWork"
   - "Mio/Models/MioAnalysisSchedule.swift#MioWorkSplit"
 ---

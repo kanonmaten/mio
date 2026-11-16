@@ -194,9 +194,9 @@ def main():
     check(result.returncode == 0, 'git diff --check')
     for folder in ('Mio', 'MioTests', 'MioUITests', 'MioWidgets', 'server', 'transcription-server', 'scripts', 'docs'):
         for path in (ROOT / folder).rglob('*'):
-            if {'node_modules', '.wrangler', 'dist', '.venv', '__pycache__', '.pytest_cache'}.intersection(path.relative_to(ROOT).parts):
+            if {'node_modules', '.wrangler', 'dist', 'target', '.venv', '__pycache__', '.pytest_cache'}.intersection(path.relative_to(ROOT).parts):
                 continue
-            if not path.is_file() or '.git' in path.parts or path.suffix not in ('.swift', '.md', '.mjs', '.py', '.json'):
+            if not path.is_file() or '.git' in path.parts or path.suffix not in ('.swift', '.md', '.rs', '.toml', '.py', '.json'):
                 continue
             for number, line in enumerate(path.read_text().splitlines(), 1):
                 if line != line.rstrip():

@@ -1,8 +1,8 @@
 # Mios privata AI-gateway
 
-Gatewayen tar emot frågor, vardagsutdrag och lektionsdelar från appen och skickar dem till Groq. Den kör på din CachyOS-dator bredvid [Pianissimo](../transcription-server/README.md) och nås bara via Tailscale. Ljud skickas aldrig hit och ingen text sparas: den enda filen gatewayen skriver är en räknare med heltal.
+Gatewayen tar emot frågor, vardagsutdrag och lektionsdelar från appen och skickar dem till Groq. Den är ett enda Rust-program (`mio-gateway`) utan Node eller annan körmiljö. Den kör på din CachyOS-dator bredvid [Pianissimo](../transcription-server/README.md) och nås bara via Tailscale. Ljud skickas aldrig hit och ingen text sparas: den enda filen gatewayen skriver är en räknare med heltal.
 
-Beslut 2026-10-11: gatewayen flyttade från Cloudflare till datorn, och Groq är enda leverantör. Den gamla Cloudflare-koden finns kvar i Git-historiken.
+Beslut 2026-10-11: gatewayen flyttade från Cloudflare till datorn, och Groq är enda leverantör. Beslut 2026-11-16: gatewayen skrevs om från Node till Rust med samma beteende mot appen. Den gamla Cloudflare- och Node-koden finns kvar i Git-historiken.
 
 ## Installera på datorn (cirka 10 minuter)
 
@@ -15,7 +15,7 @@ Installera [Pianissimo](../transcription-server/README.md) först. Hela ordninge
    ./server/install.sh
    ```
 
-   Skriptet installerar `nodejs`, `qrencode`, `tailscale`, `curl` och `rsync` med pacman om de saknas. Det skapar tjänstekontot `mio-gateway`, frågar efter Groq-nyckeln (den syns inte när du klistrar in), startar systemd-tjänsten och kör `tailscale serve --bg --https=8443 http://127.0.0.1:8787`.
+   Skriptet installerar `rust`, `qrencode`, `tailscale` och `curl` med pacman om de saknas och bygger gatewayen med `cargo` (första gången några minuter). Det skapar tjänstekontot `mio-gateway`, frågar efter Groq-nyckeln (den syns inte när du klistrar in), startar systemd-tjänsten och kör `tailscale serve --bg --https=8443 http://127.0.0.1:8787`.
 3. Para telefonen:
 
    ```bash
@@ -30,10 +30,10 @@ Kör `./server/install.sh` igen för att uppdatera; nyckel, token och räknare b
 
 | Sökväg | Innehåll |
 |---|---|
-| `/opt/mio-gateway/src/` | Gatewayens kod (bara `*.mjs`), ägd av root |
+| `/opt/mio-gateway/mio-gateway` | Gatewayen (ett program), ägd av root. Har du en äldre Node-installation tar skriptet bort `/opt/mio-gateway/src/` |
 | `/etc/mio-gateway/gateway.env` | Groq-nyckel, gatewaytoken och gränser; root, 0600 |
 | `/var/lib/mio-gateway/counters.json` | Minut- och dygnsräknare (bara heltal); 0600 |
-| `/etc/systemd/system/mio-gateway.service` | Härdad tjänst: ingen root, skrivskyddat system, 384 MB minne |
+| `/etc/systemd/system/mio-gateway.service` | Härdad tjänst: ingen root, skrivskyddat system, högst 128 MB minne (använder cirka 6 MB) |
 | `/usr/local/bin/mio-pair` | Visar QR-koden för parning; sparar ingenting |
 
 Felsökning: `systemctl status mio-gateway`, `journalctl -u mio-gateway -n 50` och `curl http://127.0.0.1:8787/health`. Loggen innehåller aldrig frågor, svar, nycklar eller tokens.
@@ -71,7 +71,7 @@ Varje anrop kräver temperatur 0, `reasoning_effort: "none"`, strikt JSON-schema
 
 ### Lägga till en leverantör senare
 
-`src/model-profiles.mjs` har en leverantörssöm. En ny leverantör (till exempel Anthropic) kräver en post i `PROVIDERS`, en granskad modell i `reviewedModel` med dokumentationskällor, en adapter i `src/adapters.mjs` om API-formatet skiljer sig, och en nyckel i `gateway.env`. Ett leverantörsprefix eller en OpenAI-kompatibel adress räcker aldrig som bevis.
+`src/model_profiles.rs` har en leverantörssöm. En ny leverantör (till exempel Anthropic) kräver en post i `PROVIDERS`, en granskad modell i `reviewed_model` med dokumentationskällor, en adapter i `src/adapters.rs` om API-formatet skiljer sig, och en nyckel i `gateway.env`. Ett leverantörsprefix eller en OpenAI-kompatibel adress räcker aldrig som bevis.
 
 ## API
 
@@ -92,10 +92,10 @@ Gränser: fråga högst 2 000 byte, sex utdrag och 10 000 byte kontext. Analys 1
 
 ## Verifiera utan modelltrafik
 
-Node 26.10 eller senare i 26-serien. Gatewayen har inga beroenden utöver Node.
+Rust 1.88 eller senare. Beroendena är låsta i `Cargo.lock`.
 
 ```bash
-cd server && npm ci --ignore-scripts && npm test
+cd server && cargo test --locked && cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Testerna använder en syntetisk Groq-transport; ingen nyckel eller riktig modelltrafik behövs. Ett riktigt prov mot Groq med syntetisk svensk text görs först när gatewayen kör på datorn.
+Testerna använder en syntetisk Groq-transport; ingen nyckel eller riktig modelltrafik behövs. `tests/parity.rs` spelar upp cirka 2 600 indata och 86 hela HTTP-utbyten som spelades in från den sista Node-versionen (`tests/golden/node-parity.json`) och kräver samma svar, inklusive exakt samma bytes till modellen. Ett riktigt prov mot Groq med syntetisk svensk text görs först när gatewayen kör på datorn.

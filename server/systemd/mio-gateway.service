@@ -11,7 +11,7 @@ Group=mio-gateway
 # Read by systemd as root before privileges drop; the file itself stays root-only (0600).
 EnvironmentFile=/etc/mio-gateway/gateway.env
 Environment=MIO_STATE_FILE=/var/lib/mio-gateway/counters.json
-ExecStart=/usr/bin/node /opt/mio-gateway/src/server.mjs
+ExecStart=/opt/mio-gateway/mio-gateway
 Restart=on-failure
 RestartSec=5
 StateDirectory=mio-gateway
@@ -42,9 +42,10 @@ LockPersonality=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged
-# Node raises its own file limit at start; deny quietly instead of killing on a filtered call.
+# Deny a filtered call quietly instead of killing the service.
 SystemCallErrorNumber=EPERM
-MemoryMax=384M
+# The Rust gateway uses about 6 MB; the cap only stops a runaway.
+MemoryMax=128M
 TasksMax=64
 
 [Install]

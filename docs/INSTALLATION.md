@@ -62,7 +62,7 @@ Kräver en Mac som stöder vald Xcode-version och telefonens iOS. Kontrollera [A
 
 Linuxgrinden kör lokala kontroller med syntetiska data. Den publicerar ingenting och gör inga riktiga modellanrop. GitHub kör samma grind vid varje push (workflowen Verifiera Mio på Linux, i containern `swift:6.3.3-noble`).
 
-Lokalt behövs Linux, `python3`, `git`, Node 26 (minst 26.10), `npm`, `uv` och `swiftc` (eller `SWIFT_EXECUTABLE`). Kommandot kontrollerar arbetskopian där skriptet ligger:
+Lokalt behövs Linux, `python3`, `git`, Rust 1.88 eller senare (`cargo`, med clippy), `uv` och `swiftc` (eller `SWIFT_EXECUTABLE`). Kommandot kontrollerar arbetskopian där skriptet ligger:
 
 ```bash
 mio_repo_directory="$(git rev-parse --show-toplevel)"
@@ -73,7 +73,7 @@ python3 "$mio_repo_directory/scripts/verify.py"
 | Grind | Täcker | Täcker inte |
 |---|---|---|
 | Struktur | Projektidentitet, targets, länkar, integritets-/konfigurationsregler, workflowinställningar | SwiftUI/iOS-bygge |
-| Node-gateway | Gateway, Groq-adapter, routing, kvot och sparade räknare, deadlines med fixtures | Nyckel, modellåtkomst, modellkvalitet, installerad tjänst och Tailscale på datorn |
+| Rust-gateway | Gateway, Groq-adapter, routing, kvot och sparade räknare, deadlines med fixtures | Nyckel, modellåtkomst, modellkvalitet, installerad tjänst och Tailscale på datorn |
 | Privat transkriptions-API | Låst Pythonmiljö, API/cache/deadline med fake-backend | Pianissimo, GPU, svensk kvalitet |
 | Portable Swift, capture recovery, strikt concurrency | Modeller, actorpatchar, workflows, återhämtning | AVFoundation, Keychain, URLSession, UIKit/SwiftUI, iOS-filskydd |
 | Långhistorik (valfri) | Syntetisk session-store: kodning, patchskrivning, processminne | iPhone, ljud, batteri |

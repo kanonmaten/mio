@@ -18,6 +18,17 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 | Hem | Veckonummer, veckans dagar, Nästa, antal att granska, morgon-/kvällsöversikt (kväll från kl. 17) och tolv veckors aktivitet; morgon-/kvällsnotiser öppnar Hem | Härlett från lokala data; notiser har opaka ID:n utan privata rubriker; ingen molnsammanfattning |
 | AI | Gateway på datorn med Groq; löpande tolkning samlad högst var femte minut, enskilda frågor utan förhandsgranskning; anslutning/kvot; explicit spara ett svar som anteckning | På när datorn är parad och kan pausas; modellfri status bevisar inte leverantörsåtkomst eller kvalitet |
 
+## Planerat: kontrollpanel för datorn (önskemål 2026-11-16, inte påbörjat)
+
+Ett skrivbordsprogram i Rust byggt med [GPUI](https://www.gpui.rs/) som styr och kontrollerar allt Mio kör på datorn:
+
+- Visar om gatewayen, Pianissimo och Tailscale kör och svarar, med gatewayens modellfria status (`/v2/status`), dagens kvot och Pianissimos hälsa.
+- Kör verifieringen (`scripts/verify.py` och gatewayens tester) och visar resultatet per steg.
+- Sätter upp allt från början: Groq-nyckel, gatewayen, Pianissimo med transkriptionsmodellen och nattlig uppdatering, egna ord, Tailscale och parningskoden för telefonen.
+- Använd GPUI-skills och ett färdigt komponentbibliotek för GPUI (till exempel `gpui-component`) om det visar sig lämpligt när arbetet börjar; kontrollera aktuell dokumentation då.
+
+Claude Code påminner om detta när arbete på Mio börjar (se `CLAUDE.md`), tills det är byggt eller användaren stryker det.
+
 ## Gateway på datorn och veckoplaneraren, 2026-10-11
 
 AI-gatewayen kör nu på användarens dator med Groq ([beslut](DECISIONS.md#ai-gatewayen-på-datorn-med-groq-2026-10-11)); Cloudflare-avsnitten nedan är historik. Nedmontering av den publicerade Cloudflare-gatewayen och byte av den gamla Groq-nyckeln kräver separat godkännande. Appen får designen veckoplaneraren ([beslut](DECISIONS.md#veckoplaneraren-2026-10-11)). Nästa steg: Linuxgrinden och Swift-grinden i GitHub för exakt commit, därefter IPA och telefonprov enligt [helhetstestet](TESTPLAN_HELHET.md).

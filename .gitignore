@@ -26,6 +26,7 @@ node_modules/
 .dev.vars
 .dev.vars.*
 server/dist/
+server/target/
 
 # Transcription runtime and models
 .venv/

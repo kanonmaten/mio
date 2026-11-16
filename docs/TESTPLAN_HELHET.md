@@ -59,7 +59,7 @@ Gäller den privata Pianissimo-kedjan ([installation](../transcription-server/RE
 | T19 | Batteriprov 60 min, sedan 3–4 h; iPhone 16 Pro och därefter 13 | Dokumentera faktisk batteriåtgång, temperatur, app-RAM, server-GPU och luckor. Ingen garanti om heldag före mätning |
 | T20 | Modelluppdatering/rollback med samma API; negativt tailnet-grantprov | Appen behöver inte byggas om; metadata ändras, rätt identitet/token krävs, serverport endast loopback |
 
-Kör även H01–H17 och relevanta AI-/lektionsprov ovan. Gröna Python-/Node-tester eller en lyckad GPU-laddning ersätter inte Xcode-kompilering, XCTest, svenskt tal eller enhetsprov.
+Kör även H01–H17 och relevanta AI-/lektionsprov ovan. Gröna Python-/Rust-tester eller en lyckad GPU-laddning ersätter inte Xcode-kompilering, XCTest, svenskt tal eller enhetsprov.
 
 Använd [mätprotokollet](#mätprotokoll-och-resultatmall) för känt svenskt facit, delgränser, sample-/requestantal, nät-/datoromstart samt jämförbara batteri-/värme-/latensvärden. Resultat är separata för iPhone 16 Pro/iPhone 13 och varje exakt iOS-/app-/modellrevision; ingen förbättring tillskrivs koden utan jämförbart mätunderlag.
 
@@ -121,7 +121,7 @@ Bedöm kvalitetsproven separat: vad sades, vad transkriberades, vad valde modell
 
 ## Utbytbar AI och detaljerade anteckningar — nya prov, ej körda på iPhone
 
-Kör först [verifieringen](INSTALLATION.md#verifiera-före-bygge). Node-gatewayen använder syntetiska leverantörssvar; Python använder fake-backend. Inga betalda modellanrop görs. Verkliga modellprov nedan kräver separat godkänd sändning, uttryckligt vald kompatibel profil och tillgänglig kvot/saldo.
+Kör först [verifieringen](INSTALLATION.md#verifiera-före-bygge). Gatewayens tester använder syntetiska leverantörssvar; Python använder fake-backend. Inga betalda modellanrop görs. Verkliga modellprov nedan kräver separat godkänd sändning, uttryckligt vald kompatibel profil och tillgänglig kvot/saldo.
 
 | ID | Prov | Förväntat |
 |---|---|---|

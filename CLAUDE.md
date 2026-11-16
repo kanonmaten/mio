@@ -10,7 +10,7 @@ Before changing something, read the docs that cover it: [README](README.md), [de
 - Storage: SwiftData `Mio/store/Mio.store`; schema changes go through `VersionedSchema` and the migration plan. Never overwrite a stored document whose schema is unknown. Export stays versioned JSON.
 - Privacy: never store raw audio (RAM only, at most 60 s). Corrections and speaker names are a display layer; the original transcript and timings never change. Never commit exports, recordings, pairing data, certificates or keys, and never paste secrets into chat.
 - Transcription: Pianissimo on the user's CachyOS GPU, reached over Tailscale HTTPS. No Apple, CPU or cloud fallback. The user's own words (phrase boosting) live in a file on the PC and never leave it; a failing word list must never block transcription. The microphone restarts itself after interruptions but never after the user's pause or stop.
-- AI: a Node gateway on the same PC (`server/`), Groq `qwen/qwen3.8-27b` only, keep the provider seam. Every call has reasoning off, temperature 0 and strict JSON schema, with no silent model or parameter fallback; validate every response. The gateway sizes `max_tokens` to the provider's per-minute token budget and may retry the identical request once; an invalid item in an answer is dropped or repaired from the source, never passed on. A refused or failed batch is never resent unchanged in a loop: the app shrinks it, skips it or backs off. AI is on once paired. Suggestions need an explicit Yes. Everyday text is batched at most every 5 minutes, and unsent text from the last 12 h is caught up on start. A locked Keychain must never turn AI off.
+- AI: a Rust gateway on the same PC (`server/`, one binary, moved from Node 2026-11-16 with recorded parity tests), Groq `qwen/qwen3.8-27b` only, keep the provider seam. Every call has reasoning off, temperature 0 and strict JSON schema, with no silent model or parameter fallback; validate every response. The gateway sizes `max_tokens` to the provider's per-minute token budget and may retry the identical request once; an invalid item in an answer is dropped or repaired from the source, never passed on. A refused or failed batch is never resent unchanged in a loop: the app shrinks it, skips it or backs off. AI is on once paired. Suggestions need an explicit Yes. Everyday text is batched at most every 5 minutes, and unsent text from the last 12 h is caught up on start. A locked Keychain must never turn AI off.
 - UI: native navigation, semantic colors, Dynamic Type. Graphite ground, one blue tint, never violet. Liquid Glass on controls and on summary/status cards; text read at length (transcripts, notes, list rows) stays on plain surfaces. All settings live in the one settings sheet; other screens show at most a status chip that opens it, plus the one-tap AI pause on Fånga (user's choice 2026-11-16). See DESIGN.md.
 - Not in 0.9.0: chat history, streaming, model tools, autonomous actions, TTS, embeddings, model picker, automatic failover.
 
@@ -22,15 +22,16 @@ Before changing something, read the docs that cover it: [README](README.md), [de
 - Update `CHANGELOG.md` for user-visible changes. Edit `docs/STATUS.md` only with checks you actually ran. Never touch the measurements in `docs/TESTRESULTAT_V0_1.md`.
 - Git: commit finished, verified work and push to `main` without asking. No branches or pull requests, even if the session assigns one; never force-push. Tags, running the IPA workflow, real model traffic and anything on Cloudflare (the old Worker, D1 and Access are still deployed) need the user's approval.
 - Ask when a decision is the user's to make.
+- Reminder (user's request 2026-11-16): at the start of work on Mio, remind the user in one line of the planned GPUI control app for the PC in `docs/ROADMAP.md`. Keep doing so until it is built or the user drops it.
 
 ## Verifying
 
-Linux can't build the iOS app. On the user's PC (Node 26, `swiftc`, `uv`) run the full gate; in a cloud session run what the toolchain allows:
+Linux can't build the iOS app. On the user's PC (Rust 1.88+, `swiftc`, `uv`) run the full gate; in a cloud session run what the toolchain allows:
 
 ```sh
 python3 scripts/verify.py                  # everything below plus Swift XCTest and concurrency
 python3 scripts/verify_swift_core.py       # portable Swift XCTest only
-cd server && npm ci --ignore-scripts && npm test
+cd server && cargo test --locked && cargo clippy --locked --all-targets -- -D warnings
 cd transcription-server && uv sync --locked --extra test --python 3.12 && uv run pytest tests
 python3 scripts/verify_project.py && python3 -m unittest discover -s scripts/tests
 ```

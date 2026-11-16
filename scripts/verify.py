@@ -52,20 +52,20 @@ def main() -> int:
         return 2
     logs = (args.logs_dir or Path(tempfile.mkdtemp(prefix="mio-verify-"))).resolve()
     logs.mkdir(parents=True, exist_ok=True)
-    required = ["node", "npm", "uv", "git"]
+    required = ["cargo", "uv", "git"]
     if not args.skip_swift or args.measure_session_store:
         required.append(os.environ.get("SWIFT_EXECUTABLE", "swiftc"))
     missing = [name for name in required if not shutil.which(name)]
     if missing:
         print("UNAVAILABLE: required executables missing: " + ", ".join(missing))
         return 2
-    node_version = subprocess.check_output(["node", "--version"], text=True).strip()
-    match = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", node_version)
-    if not match or not ((26, 10, 0) <= tuple(map(int, match.groups())) < (27, 0, 0)):
-        print(f"UNAVAILABLE: Node {node_version}; supported and tested minimum is 26.10.0, range >=26.10.0 <27.")
+    rust_version = subprocess.check_output(["cargo", "--version"], text=True).strip()
+    match = re.match(r"cargo (\d+)\.(\d+)\.(\d+)", rust_version)
+    if not match or tuple(map(int, match.groups())) < (1, 88, 0):
+        print(f"UNAVAILABLE: {rust_version}; the gateway needs Rust 1.88 or later (edition 2024, let chains).")
         return 2
     receipt = {"startedAt": datetime.now(timezone.utc).isoformat(), **provenance(),
-               "node": node_version, "uv": subprocess.check_output(["uv", "--version"], text=True).strip(),
+               "rust": rust_version, "uv": subprocess.check_output(["uv", "--version"], text=True).strip(),
                "nativeIOS": "NOT RUN", "realProvider": "NOT RUN", "gates": []}
     environment = dict(os.environ)
     # A fresh lockfile environment avoids stale interpreter symlinks and excludes GPU extras.
@@ -74,8 +74,8 @@ def main() -> int:
         ("python-lock", ["uv", "--directory", str(ROOT / "transcription-server"), "sync", "--locked", "--extra", "test", "--python", "3.12"]),
         ("structure", ["uv", "--directory", str(ROOT / "transcription-server"), "run", "--no-sync", "--python", "3.12", "python", str(ROOT / "scripts/verify_project.py")]),
         ("verification-tools", ["uv", "--directory", str(ROOT / "transcription-server"), "run", "--no-sync", "--python", "3.12", "python", "-m", "unittest", "discover", "-s", str(ROOT / "scripts/tests")]),
-        ("node-dependencies", ["npm", "ci", "--prefix", str(ROOT / "server"), "--ignore-scripts"]),
-        ("node-tests", ["npm", "--prefix", str(ROOT / "server"), "test"]),
+        ("gateway-lint", ["cargo", "clippy", "--locked", "--manifest-path", str(ROOT / "server/Cargo.toml"), "--all-targets", "--", "-D", "warnings"]),
+        ("gateway-tests", ["cargo", "test", "--locked", "--manifest-path", str(ROOT / "server/Cargo.toml")]),
         ("transcription-fake", ["uv", "--directory", str(ROOT / "transcription-server"), "run", "--no-sync", "python", "-m", "pytest", "tests"]),
     ]
     if not args.skip_swift:
@@ -88,7 +88,7 @@ def main() -> int:
         receipt["gates"].append({"gate": "Swift core/capture/concurrency", "result": "SKIPPED"})
     if args.measure_session_store:
         steps.append(("session-store", [sys.executable, str(ROOT / "scripts/measure_session_store.py"), "--output", str(logs / "session-store.json")]))
-    print(f"Logs: {logs}\nNode {node_version}; base {receipt['baseCommit']}; dirty={receipt['dirtyWorktree']}\nSynthetic/local checks only. Xcode, installation and device/provider acceptance remain separate.", flush=True)
+    print(f"Logs: {logs}\n{rust_version}; base {receipt['baseCommit']}; dirty={receipt['dirtyWorktree']}\nSynthetic/local checks only. Xcode, installation and device/provider acceptance remain separate.", flush=True)
     failed = False
     for name, command in steps:
         log = logs / f"{name}.log"
