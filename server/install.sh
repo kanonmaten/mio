@@ -73,8 +73,9 @@ else
     # Hidden prompt: the key never appears on screen, in argv, shell history or logs.
     IFS= read -rsp "Klistra in Groq-nyckeln (syns inte) och tryck Enter: " groq_key; echo
     [[ $groq_key =~ ^gsk_[A-Za-z0-9]{20,200}$ ]] || fail "Det ser inte ut som en Groq-nyckel (börjar med gsk_)."
-    # The key travels only on stdin; the gateway binary writes the root-only file (0600) and
-    # keeps an existing gateway token so a key rotation does not force re-pairing the phone.
+    # The key travels only on stdin; the gateway binary writes the root-only file (0600). With an
+    # existing file only the GROQ_API_KEY line changes: the token (no re-pairing), limits, port
+    # and task profiles you set are kept.
     printf '%s' "$groq_key" | sudo "$app_dir/mio-gateway" write-config "$config" "$model" "$port"
     unset groq_key
     echo "Sparad (endast root kan läsa den)."

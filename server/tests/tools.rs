@@ -6,9 +6,13 @@ const TOKEN: &str = "fixture_gateway_token_01234567890123456789";
 const FRESH: &str = "fresh_gateway_token_0123456789012345678901";
 const KEY: &str = "gsk_fixture0123456789abcdefghij";
 
+fn text(bytes: Vec<u8>) -> String {
+    String::from_utf8(bytes).unwrap()
+}
+
 #[test]
 fn the_written_configuration_loads_and_keeps_an_existing_gateway_token() {
-    let fresh = gateway_env(KEY, None, "qwen/qwen3.8-27b", "8787", FRESH);
+    let fresh = text(gateway_env(KEY, None, "qwen/qwen3.8-27b", "8787", FRESH));
     assert!(fresh.starts_with("# Mio gateway.") && fresh.ends_with("PORT=8787\n"));
     assert!(fresh.contains(&format!("GROQ_API_KEY={KEY}\nMIO_GATEWAY_TOKEN={FRESH}\n")));
     // What install.sh writes is what the gateway reads: systemd passes each NAME=value line on.
@@ -18,10 +22,44 @@ fn the_written_configuration_loads_and_keeps_an_existing_gateway_token() {
     assert_eq!((config.requests_per_minute, config.tokens_per_minute, config.tokens_per_day, config.requests_per_day), (10, Some(8_000), Some(190_000), None));
     // A key rotation must not force re-pairing the phone.
     let existing = format!("# old\nGROQ_API_KEY=gsk_old\nMIO_GATEWAY_TOKEN={TOKEN}\nPORT=8787\n");
-    assert!(gateway_env(KEY, Some(&existing), "qwen/qwen3.8-27b", "8787", FRESH).contains(&format!("MIO_GATEWAY_TOKEN={TOKEN}\n")));
+    assert!(text(gateway_env(KEY, Some(existing.as_bytes()), "qwen/qwen3.8-27b", "8787", FRESH)).contains(&format!("MIO_GATEWAY_TOKEN={TOKEN}\n")));
     for damaged in ["MIO_GATEWAY_TOKEN=short\n", "MIO_GATEWAY_TOKEN=has spaces and is long enough to count 0123456789\n", " MIO_GATEWAY_TOKEN=indented\n", ""] {
-        assert!(gateway_env(KEY, Some(damaged), "m", "1", FRESH).contains(&format!("MIO_GATEWAY_TOKEN={FRESH}\n")), "{damaged}");
+        assert!(text(gateway_env(KEY, Some(damaged.as_bytes()), "m", "1", FRESH)).contains(&format!("MIO_GATEWAY_TOKEN={FRESH}\n")), "{damaged}");
     }
+}
+
+/// Ultrareview C2: `--ny-groq-nyckel` rewrote the whole file from the template, so limits,
+/// the port and task profiles the user had set were lost.
+#[test]
+fn a_key_rotation_changes_only_the_key_line() {
+    let customised = format!("# egen kommentar\nGROQ_API_KEY=gsk_old0123456789abcdefghij\nMIO_GATEWAY_TOKEN={TOKEN}\n\
+        MIO_AI_PROVIDER=groq\nMIO_AI_MODEL=qwen/qwen3.8-27b\nMIO_REQUESTS_PER_MINUTE=4\nMIO_TOKENS_PER_MINUTE=6000\n\
+        MIO_TOKENS_PER_DAY=50000\nMIO_AI_TASK_PROFILES={{\"ask\":{{\"maxOutputTokens\":800}}}}\nPORT=9999\n");
+    let rotated = text(gateway_env(KEY, Some(customised.as_bytes()), "qwen/qwen3.8-27b", "8787", FRESH));
+    assert_eq!(rotated, customised.replace("GROQ_API_KEY=gsk_old0123456789abcdefghij", &format!("GROQ_API_KEY={KEY}")));
+    // A file without a key line gets one, and a duplicate key line is not kept.
+    let without = format!("MIO_GATEWAY_TOKEN={TOKEN}\nPORT=9999");
+    assert_eq!(text(gateway_env(KEY, Some(without.as_bytes()), "m", "1", FRESH)), format!("MIO_GATEWAY_TOKEN={TOKEN}\nPORT=9999\nGROQ_API_KEY={KEY}\n"));
+    let twice = format!("GROQ_API_KEY=a\nMIO_GATEWAY_TOKEN={TOKEN}\nGROQ_API_KEY=b\n");
+    assert_eq!(text(gateway_env(KEY, Some(twice.as_bytes()), "m", "1", FRESH)), format!("GROQ_API_KEY={KEY}\nMIO_GATEWAY_TOKEN={TOKEN}\n"));
+}
+
+/// Ultrareview C3: a file saved with CRLF or with a Latin-1 byte lost its token, which forced
+/// re-pairing on a key rotation and made `mio-pair` report that there is no token.
+#[test]
+fn windows_line_ends_and_latin1_bytes_keep_the_token() {
+    let crlf = format!("# Mio\r\nGROQ_API_KEY=gsk_old\r\nMIO_GATEWAY_TOKEN={TOKEN}\r\nPORT=8787\r\n");
+    assert_eq!(text(gateway_env(KEY, Some(crlf.as_bytes()), "m", "1", FRESH)),
+        format!("# Mio\nGROQ_API_KEY={KEY}\nMIO_GATEWAY_TOKEN={TOKEN}\nPORT=8787\n"));
+    let payload: Value = serde_json::from_str(&pairing_payload(&crlf, "dator.tailnet.ts.net").unwrap()).unwrap();
+    assert_eq!(payload["aiToken"], TOKEN);
+    let mut latin1 = b"# r\xe4knare\nGROQ_API_KEY=gsk_old\n".to_vec();
+    latin1.extend_from_slice(format!("MIO_GATEWAY_TOKEN={TOKEN}\n").as_bytes());
+    let rotated = gateway_env(KEY, Some(&latin1), "m", "1", FRESH);
+    assert!(rotated.starts_with(b"# r\xe4knare\n"), "Other bytes are kept as they were");
+    assert!(String::from_utf8_lossy(&rotated).contains(&format!("MIO_GATEWAY_TOKEN={TOKEN}\n")));
+    let payload: Value = serde_json::from_str(&pairing_payload(&String::from_utf8_lossy(&latin1), "h").unwrap()).unwrap();
+    assert_eq!(payload["aiToken"], TOKEN);
 }
 
 #[test]

@@ -24,7 +24,7 @@ Installera [Pianissimo](../transcription-server/README.md) först. Hela ordninge
 
    Skanna QR-koden i Mio under Inställningar → Parning. `mio-pair --text` visar samma värden som text om kameran inte fungerar. Är Pianissimo inte installerat säger `mio-pair` det, och koden innehåller då bara AI. Kör den igen när Pianissimo är installerat och tryck **Para om med QR-kod** i Mio.
 
-Kör `./server/install.sh` igen för att uppdatera; nyckel, token och räknare behålls. `./server/install.sh --ny-groq-nyckel` byter Groq-nyckeln utan att telefonen behöver paras om.
+Kör `./server/install.sh` igen för att uppdatera; nyckel, token och räknare behålls. `./server/install.sh --ny-groq-nyckel` byter Groq-nyckeln utan att telefonen behöver paras om; bara nyckelraden i `gateway.env` ändras, så gränser, port och uppgiftsprofiler du ställt in finns kvar.
 
 ### Var saker ligger
 

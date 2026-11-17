@@ -9,9 +9,11 @@ use serde_json::{Value, json};
 
 use crate::config::is_gateway_token;
 
-/// The value of `NAME=value` on its own line, when it has the shape of a Mio token.
+/// The value of `NAME=value` on its own line, when it has the shape of a Mio token. A file
+/// saved with Windows line ends still yields its token (ultrareview C3).
 fn token_in<'a>(text: &'a str, name: &str) -> Option<&'a str> {
-    text.split('\n').filter_map(|line| line.strip_prefix(name)?.strip_prefix('='))
+    text.split('\n').map(|line| line.strip_suffix('\r').unwrap_or(line))
+        .filter_map(|line| line.strip_prefix(name)?.strip_prefix('='))
         .find(|value| (32..=256).contains(&value.len()) && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"_-".contains(&byte)))
 }
 
@@ -27,10 +29,43 @@ fn base64url(bytes: &[u8]) -> String {
     encoded
 }
 
-/// The contents of `gateway.env`. An existing gateway token is kept so a key rotation does not
-/// force re-pairing the phone.
-pub fn gateway_env(key: &str, existing: Option<&str>, model: &str, port: &str, fresh_token: &str) -> String {
-    let token = existing.and_then(|text| token_in(text, "MIO_GATEWAY_TOKEN")).unwrap_or(fresh_token);
+/// The contents of `gateway.env`. A file with a gateway token is a key rotation: only the
+/// `GROQ_API_KEY` line changes and every other line (limits, port, task profiles, the token) is
+/// kept, so the phone needs no re-pairing (ultrareview C2). Lines are compared as bytes, so
+/// non-UTF-8 text survives; Windows line ends become plain ones. Anything else gets a new file.
+pub fn gateway_env(key: &str, existing: Option<&[u8]>, model: &str, port: &str, fresh_token: &str) -> Vec<u8> {
+    match existing {
+        Some(existing) if token_in(&String::from_utf8_lossy(existing), "MIO_GATEWAY_TOKEN").is_some() => rotate_key(existing, key),
+        _ => fresh_env(key, model, port, fresh_token).into_bytes(),
+    }
+}
+
+fn rotate_key(existing: &[u8], key: &str) -> Vec<u8> {
+    let assignment = format!("GROQ_API_KEY={key}");
+    let mut contents = Vec::with_capacity(existing.len() + assignment.len());
+    let mut replaced = false;
+    let body = existing.strip_suffix(b"\n").unwrap_or(existing);
+    for line in body.split(|byte| *byte == b'\n') {
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if line.starts_with(b"GROQ_API_KEY=") {
+            if replaced {
+                continue;
+            }
+            contents.extend_from_slice(assignment.as_bytes());
+            replaced = true;
+        } else {
+            contents.extend_from_slice(line);
+        }
+        contents.push(b'\n');
+    }
+    if !replaced {
+        contents.extend_from_slice(assignment.as_bytes());
+        contents.push(b'\n');
+    }
+    contents
+}
+
+fn fresh_env(key: &str, model: &str, port: &str, token: &str) -> String {
     [
         "# Mio gateway. Skapad av install.sh. Dela aldrig denna fil.".to_owned(),
         format!("GROQ_API_KEY={key}"), format!("MIO_GATEWAY_TOKEN={token}"),
@@ -69,8 +104,11 @@ pub fn pairing_text(payload: &str) -> Option<String> {
     Some(text)
 }
 
+/// Standard input as text; bytes that are not UTF-8 (a Latin-1 comment) do not fail the read.
 fn standard_input() -> Result<String, String> {
-    std::io::read_to_string(std::io::stdin()).map_err(|_| "Kunde inte läsa standard in.".to_owned())
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut std::io::stdin(), &mut bytes).map_err(|_| "Kunde inte läsa standard in.".to_owned())?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 fn write_config(path: &str, model: &str, port: &str) -> Result<(), String> {
@@ -79,11 +117,11 @@ fn write_config(path: &str, model: &str, port: &str) -> Result<(), String> {
     getrandom::fill(&mut random).map_err(|_| "Kunde inte skapa en slumpad token.".to_owned())?;
     let fresh = base64url(&random);
     debug_assert!(is_gateway_token(&fresh));
-    let contents = gateway_env(&key, std::fs::read_to_string(path).ok().as_deref(), model, port, &fresh);
+    let contents = gateway_env(&key, std::fs::read(path).ok().as_deref(), model, port, &fresh);
     let temporary = format!("{path}.tmp");
     let failed = |_| "Kunde inte skriva konfigurationen.".to_owned();
     let mut file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&temporary).map_err(failed)?;
-    file.write_all(contents.as_bytes()).map_err(failed)?;
+    file.write_all(&contents).map_err(failed)?;
     drop(file);
     std::fs::rename(&temporary, path).map_err(failed)
 }
