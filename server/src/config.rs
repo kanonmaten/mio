@@ -23,8 +23,11 @@ pub struct Config {
     pub model: String,
     pub port: u16,
     pub requests_per_minute: u64,
-    /// `None` means no per-minute sizing (paid plan).
+    /// `None` means no per-minute sizing (paid plan). Applies to Groq, whose free tier counts
+    /// prompt plus reserved answer per minute.
     pub tokens_per_minute: Option<u64>,
+    /// The same budget for other providers (`MIO_TOKENS_PER_MINUTE_<PROVIDER>`); absent means none.
+    pub provider_tokens_per_minute: BTreeMap<String, u64>,
     /// `None` means no local daily cap. The per-minute cap, the concurrency limit and the
     /// provider's own limits still apply (user decision 2026-10-05).
     pub requests_per_day: Option<u64>,
@@ -36,12 +39,19 @@ pub struct Config {
     pub global_configuration_invalid: bool,
 }
 
+impl Config {
+    /// The per-minute token budget for requests to `provider`.
+    pub fn minute_budget(&self, provider: &str) -> Option<u64> {
+        if provider == "groq" { self.tokens_per_minute } else { self.provider_tokens_per_minute.get(provider).copied() }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self { provider: "groq".to_owned(), api_key: String::new(), provider_secrets: BTreeMap::new(),
             task_profiles: None, adapter_options: None, lesson_interval_seconds: None,
             gateway_token: String::new(), model: String::new(), port: 8_787, requests_per_minute: 10,
-            tokens_per_minute: None, requests_per_day: None, tokens_per_day: None,
+            tokens_per_minute: None, provider_tokens_per_minute: BTreeMap::new(), requests_per_day: None, tokens_per_day: None,
             upstream_timeout_ms: 40_000, body_timeout_ms: 5_000, retry_delay_ms: None,
             global_configuration_invalid: false }
     }
@@ -121,6 +131,10 @@ pub fn load_config(env: &dyn Fn(&str) -> Option<String>) -> Result<Config, Confi
             None => Some(8_000),
             Some(value) => optional_limit(Some(&value), MAX_TOKENS_PER_DAY)?,
         },
+        provider_tokens_per_minute: PROVIDERS.iter().filter(|entry| entry.id != "groq")
+            .map(|entry| Ok((entry.id.to_owned(), optional_limit(env(&format!("MIO_TOKENS_PER_MINUTE_{}", entry.id.to_uppercase())).as_deref(), MAX_TOKENS_PER_DAY)?)))
+            .collect::<Result<Vec<_>, ConfigError>>()?.into_iter()
+            .filter_map(|(id, limit)| limit.map(|limit| (id, limit))).collect(),
         requests_per_day: optional_limit(env("MIO_REQUESTS_PER_DAY").as_deref(), MAX_REQUESTS_PER_DAY)?,
         tokens_per_day: optional_limit(env("MIO_TOKENS_PER_DAY").as_deref(), MAX_TOKENS_PER_DAY)?,
         upstream_timeout_ms: 40_000,
@@ -150,7 +164,8 @@ pub fn validate_config(config: &Config) -> Result<(), ConfigError> {
     if config.tokens_per_day.is_some_and(|limit| !(1..=MAX_TOKENS_PER_DAY).contains(&limit)) {
         return Err(ConfigError("Ogiltig tokengräns."));
     }
-    if config.tokens_per_minute.is_some_and(|limit| !(2_000..=MAX_TOKENS_PER_DAY).contains(&limit)) {
+    if config.tokens_per_minute.into_iter().chain(config.provider_tokens_per_minute.values().copied())
+        .any(|limit| !(2_000..=MAX_TOKENS_PER_DAY).contains(&limit)) {
         return Err(ConfigError("Ogiltig tokengräns per minut."));
     }
     if config.retry_delay_ms.is_some_and(|delay| delay > 5_000) {

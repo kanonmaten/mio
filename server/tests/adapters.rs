@@ -89,7 +89,7 @@ fn groq_adapter_preserves_explicit_native_generation_contract_without_task_infor
     assert_eq!(request.body["stream"], false);
     assert_eq!(request.body["reasoning_effort"], "none");
     assert!(request.body.get("tools").is_none());
-    assert_eq!(request.authorization, "Bearer synthetic-secret");
+    assert_eq!(request.header("Authorization").unwrap(), "Bearer synthetic-secret");
     assert_eq!(request.body["messages"], json!([{ "role": "system", "content": "Extract one label." }, { "role": "user", "content": "Synthetic example." }]));
     assert_eq!(normalize(&response(), None).unwrap().text.as_deref(), Some("{\"label\":\"a\"}"));
 }

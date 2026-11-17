@@ -5,7 +5,7 @@ use serde_json::{Map, Value, json};
 
 use crate::config::Config;
 use crate::js::{ascii_alphanumeric_or, credential_shaped, exact_keys, get, has_length, is_blank, safe_integer, trim, truthy};
-use crate::model_profiles::{Incompatible, Profile, provider_profile};
+use crate::model_profiles::{Incompatible, Profile, ReasoningOff, provider_profile};
 use crate::time::http_date_ms;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,10 +42,21 @@ pub struct Generation {
 pub struct ProviderRequest {
     pub url: String,
     pub profile: Profile,
-    /// `Authorization: Bearer <provider key>`. Never logged.
-    pub authorization: String,
+    /// Request headers besides `Content-Type`, including the provider key
+    /// (`Authorization: Bearer …` or Anthropic's `x-api-key`). Never logged.
+    pub headers: Vec<(&'static str, String)>,
     pub body: Value,
 }
+
+impl ProviderRequest {
+    /// A header's value by case-insensitive name.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.iter().find(|(known, _)| known.eq_ignore_ascii_case(name)).map(|(_, value)| value.as_str())
+    }
+}
+
+/// The Messages API version Mio's Anthropic adapter was reviewed against (2026-11-17).
+pub const ANTHROPIC_VERSION: &str = "2026-10-21";
 
 /// The provider key never reaches a log or a panic message through `{:?}`.
 impl std::fmt::Debug for ProviderRequest {
@@ -123,24 +134,74 @@ fn validate_generation(generation: &Generation) -> Result<(), Incompatible> {
 
 pub fn build_provider_request(config: &Config, generation: &Generation) -> Result<ProviderRequest, Incompatible> {
     let profile = provider_profile(&config.provider, &config.model, config.adapter_options.as_ref())?;
+    build_for_profile(profile, &config.api_key, generation)
+}
+
+/// The request for an already resolved profile. Production goes through `build_provider_request`,
+/// which only resolves reviewed pairs; tests also use it for candidate profiles.
+pub fn build_for_profile(profile: Profile, api_key: &str, generation: &Generation) -> Result<ProviderRequest, Incompatible> {
     validate_generation(generation)?;
-    ensure(profile.wire == "chat")?;
+    match profile.wire {
+        "chat" => Ok(chat_request(profile, api_key, generation)),
+        "messages" => messages_request(profile, api_key, generation),
+        _ => Err(Incompatible::Model),
+    }
+}
+
+/// OpenAI-style chat completions (Groq, Mistral, NVIDIA NIM). For Groq the body is byte for
+/// byte what the Node gateway sent (tests/parity.rs).
+fn chat_request(profile: Profile, api_key: &str, generation: &Generation) -> ProviderRequest {
     let mut json_schema = generation.structured_output.as_object().cloned().unwrap_or_default();
     let kind = json_schema.shift_remove("type").unwrap_or(Value::Null);
     let mut body = Map::new();
     body.insert("model".to_owned(), json!(profile.requested_model));
-    body.insert("temperature".to_owned(), json!(0));
+    if profile.temperature {
+        body.insert("temperature".to_owned(), json!(0));
+    }
     body.insert("max_tokens".to_owned(), json!(generation.max_output_tokens));
     body.insert("stream".to_owned(), json!(false));
     // Reasoning must be off, not hidden; responses that still carry reasoning are rejected below.
-    if !profile.plain {
-        body.insert("reasoning_effort".to_owned(), json!("none"));
+    match profile.reasoning_off {
+        ReasoningOff::EffortNone if !profile.plain => {
+            body.insert("reasoning_effort".to_owned(), json!("none"));
+        }
+        ReasoningOff::ChatTemplate if !profile.plain => {
+            body.insert("chat_template_kwargs".to_owned(), json!({ "enable_thinking": false }));
+        }
+        _ => {}
     }
     body.insert("response_format".to_owned(), json!({ "type": kind, "json_schema": json_schema }));
     body.insert("messages".to_owned(), generation.messages.iter()
         .map(|message| json!({ "role": message.role, "content": message.content })).collect());
-    Ok(ProviderRequest { url: format!("{}/chat/completions", profile.base),
-        authorization: format!("Bearer {}", config.api_key), profile, body: Value::Object(body) })
+    ProviderRequest { url: format!("{}/chat/completions", profile.base),
+        headers: vec![("Authorization", format!("Bearer {api_key}"))], profile, body: Value::Object(body) }
+}
+
+/// Anthropic's Messages API: system text apart from the turns, thinking disabled at effort
+/// `medium` (Haiku 5.5 refuses disabled above `high`), the schema enforced by
+/// `output_config.format`, and no sampling parameters (refused since API version 2026-10-21).
+fn messages_request(profile: Profile, api_key: &str, generation: &Generation) -> Result<ProviderRequest, Incompatible> {
+    ensure(profile.reasoning_off == ReasoningOff::ThinkingDisabled && !profile.temperature)?;
+    let system: Vec<&str> = generation.messages.iter().filter(|message| message.role == "system")
+        .map(|message| message.content.as_str()).collect();
+    let turns: Vec<Value> = generation.messages.iter().filter(|message| message.role != "system")
+        .map(|message| json!({ "role": message.role, "content": message.content })).collect();
+    // The Messages API requires the first turn to be the user's.
+    ensure(turns.first().is_some_and(|turn| turn["role"] == "user"))?;
+    let schema = generation.structured_output.get("schema").cloned().ok_or(Incompatible::Options)?;
+    let mut body = Map::new();
+    body.insert("model".to_owned(), json!(profile.requested_model));
+    body.insert("max_tokens".to_owned(), json!(generation.max_output_tokens));
+    body.insert("stream".to_owned(), json!(false));
+    body.insert("thinking".to_owned(), json!({ "type": "disabled" }));
+    body.insert("output_config".to_owned(), json!({ "effort": "medium", "format": { "type": "json_schema", "schema": schema } }));
+    if !system.is_empty() {
+        body.insert("system".to_owned(), json!(system.join("\n\n")));
+    }
+    body.insert("messages".to_owned(), Value::Array(turns));
+    Ok(ProviderRequest { url: format!("{}/messages", profile.base),
+        headers: vec![("x-api-key", api_key.to_owned()), ("anthropic-version", ANTHROPIC_VERSION.to_owned())],
+        profile, body: Value::Object(body) })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -209,6 +270,9 @@ pub fn normalize_provider_response(data: &Value, profile: &Profile, headers: Hea
             return Err(REASONING);
         }
     }
+    if profile.wire == "messages" {
+        return normalize_messages_response(envelope, profile, headers);
+    }
     if profile.wire != "chat" {
         return Err(INVALID);
     }
@@ -223,9 +287,16 @@ pub fn normalize_provider_response(data: &Value, profile: &Profile, headers: Hea
         || has_length(message.get("reasoning_details")) {
         return Err(REASONING);
     }
+    // Mistral's reasoning models answer with a list of chunks, one of them the thinking; only a
+    // plain string answer is accepted.
+    if let Some(Value::Array(chunks)) = message.get("content") {
+        let thinking = chunks.iter().any(|chunk| get(chunk, "type").is_some_and(|kind| kind == "thinking"));
+        return Err(if thinking { REASONING } else { INVALID });
+    }
     let reason = get(choice, "finish_reason").and_then(Value::as_str);
     let finish = if message.get("refusal").is_some_and(truthy) || reason == Some("content_filter") { Finish::Refused }
-        else if reason == Some("length") { Finish::Truncated }
+        // Mistral reports a cut at the model's own context limit as `model_length`.
+        else if reason == Some("length") || reason == Some("model_length") { Finish::Truncated }
         else if reason == Some("stop") { Finish::Completed }
         else { return Err(INVALID) };
     let text = if finish == Finish::Completed {
@@ -245,6 +316,57 @@ pub fn normalize_provider_response(data: &Value, profile: &Profile, headers: Hea
         cached_input_tokens: token_count(detail("prompt_tokens_details", "cached_tokens")),
     };
     let request_id = headers("x-request-id").or_else(|| headers("request-id")).map(Value::String);
+    let provenance = Provenance { response_id: safe_id(envelope.get("id"), false), request_id: safe_id(request_id.as_ref(), false) };
+    Ok(Normalized { text, finish, refusal: finish == Finish::Refused, requested_model: profile.requested_model.clone(),
+        returned_model: safe_id(envelope.get("model"), true),
+        usage: (usage != Usage::default()).then_some(usage),
+        provenance: (provenance != Provenance::default()).then_some(provenance) })
+}
+
+/// Anthropic's Messages answer: exactly one text block, no thinking and no tool use.
+fn normalize_messages_response(envelope: &Map<String, Value>, profile: &Profile, headers: HeaderLookup) -> Result<Normalized, ResponseError> {
+    if envelope.get("type").is_none_or(|kind| kind != "message") || envelope.get("role").is_none_or(|role| role != "assistant") {
+        return Err(INVALID);
+    }
+    let content = envelope.get("content").and_then(Value::as_array).ok_or(INVALID)?;
+    let kinds: Vec<&str> = content.iter().map(|block| get(block, "type").and_then(Value::as_str).unwrap_or("")).collect();
+    if kinds.iter().any(|kind| ["thinking", "redacted_thinking"].contains(kind)) {
+        return Err(REASONING);
+    }
+    let finish = match envelope.get("stop_reason").and_then(Value::as_str) {
+        // A classifier or the model declined: content may be empty or partial (refusals-and-fallback).
+        Some("refusal") => Finish::Refused,
+        Some("max_tokens") => Finish::Truncated,
+        Some("end_turn") => Finish::Completed,
+        // tool_use, pause_turn, stop_sequence and anything new are outside Mio's contract.
+        _ => return Err(INVALID),
+    };
+    let text = if finish == Finish::Completed {
+        if kinds != ["text"] {
+            return Err(INVALID);
+        }
+        let text = get(&content[0], "text").and_then(Value::as_str).ok_or(INVALID)?;
+        if is_blank(text) || text.len() > 24_000 {
+            return Err(INVALID);
+        }
+        Some(text.to_owned())
+    } else {
+        if kinds.iter().any(|kind| *kind != "text") {
+            return Err(INVALID);
+        }
+        None
+    };
+    let usage = envelope.get("usage");
+    let count = |name: &str| token_count(usage.and_then(|usage| get(usage, name)));
+    let (input, output) = (count("input_tokens"), count("output_tokens"));
+    let usage = Usage {
+        input_tokens: input,
+        output_tokens: output,
+        total_tokens: input.zip(output).map(|(input, output)| input + output),
+        reasoning_tokens: None,
+        cached_input_tokens: count("cache_read_input_tokens"),
+    };
+    let request_id = headers("request-id").or_else(|| headers("x-request-id")).map(Value::String);
     let provenance = Provenance { response_id: safe_id(envelope.get("id"), false), request_id: safe_id(request_id.as_ref(), false) };
     Ok(Normalized { text, finish, refusal: finish == Finish::Refused, requested_model: profile.requested_model.clone(),
         returned_model: safe_id(envelope.get("model"), true),

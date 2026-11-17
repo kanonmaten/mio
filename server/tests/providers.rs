@@ -45,7 +45,7 @@ fn groq_correct_secret_endpoint_strict_schema_temperature_and_reasoning_policy()
         assert_eq!(request.body["model"], MODEL);
         assert_eq!(request.body["reasoning_effort"], "none");
         assert_eq!(request.body["stream"], false);
-        assert_eq!(request.authorization, "Bearer fixture-key");
+        assert_eq!(request.header("Authorization").unwrap(), "Bearer fixture-key");
         let serialized = format!("{request:?} {config:?}");
         for private in [TOKEN, "must-not-use-other-vendor-key", "fixture-key"] {
             assert!(!serialized.contains(private) && !request.body.to_string().contains(private));

@@ -39,8 +39,11 @@ impl UpstreamResponse for HttpsResponse {
 impl Transport for HttpsTransport {
     fn send(&self, request: UpstreamRequest) -> BoxFuture<'_, Result<Box<dyn UpstreamResponse>, TransportError>> {
         Box::pin(async move {
-            let response = self.client.post(&request.url).header("Authorization", &request.authorization)
-                .header("Content-Type", "application/json").body(request.body).send().await.map_err(|_| TransportError)?;
+            let mut builder = self.client.post(&request.url);
+            for (name, value) in &request.headers {
+                builder = builder.header(*name, value);
+            }
+            let response = builder.header("Content-Type", "application/json").body(request.body).send().await.map_err(|_| TransportError)?;
             Ok(Box::new(HttpsResponse(response)) as Box<dyn UpstreamResponse>)
         })
     }

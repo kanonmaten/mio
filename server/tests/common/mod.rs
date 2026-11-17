@@ -45,7 +45,9 @@ impl Upstream {
 
 pub struct Call {
     pub url: String,
+    /// The `Authorization` header, or Anthropic's `x-api-key`.
     pub authorization: String,
+    pub headers: Vec<(&'static str, String)>,
     pub body: String,
 }
 
@@ -124,7 +126,9 @@ pub struct Link(pub Arc<Provider>);
 impl Transport for Link {
     fn send(&self, request: UpstreamRequest) -> BoxFuture<'_, Result<Box<dyn UpstreamResponse>, TransportError>> {
         Box::pin(async move {
-            let call = Call { url: request.url, authorization: request.authorization, body: request.body };
+            let key = request.headers.iter().find(|(name, _)| ["authorization", "x-api-key"].contains(&name.to_ascii_lowercase().as_str()))
+                .map(|(_, value)| value.clone()).unwrap_or_default();
+            let call = Call { url: request.url, authorization: key, headers: request.headers, body: request.body };
             let provider = &self.0;
             let index = provider.count();
             let action = (provider.script.lock().unwrap().as_ref().unwrap())(index, &call);

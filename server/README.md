@@ -1,8 +1,8 @@
 # Mios privata AI-gateway
 
-Gatewayen tar emot frågor, vardagsutdrag och lektionsdelar från appen och skickar dem till Groq. Den är ett enda Rust-program (`mio-gateway`) utan Node eller annan körmiljö. Den kör på din CachyOS-dator bredvid [Pianissimo](../transcription-server/README.md) och nås bara via Tailscale. Ljud skickas aldrig hit och ingen text sparas: den enda filen gatewayen skriver är en räknare med heltal.
+Gatewayen tar emot frågor, vardagsutdrag och lektionsdelar från appen och skickar dem till en granskad AI-modell, som standard Groq. Den är ett enda Rust-program (`mio-gateway`) utan Node eller annan körmiljö. Den kör på din CachyOS-dator bredvid [Pianissimo](../transcription-server/README.md) och nås bara via Tailscale. Ljud skickas aldrig hit och ingen text sparas: den enda filen gatewayen skriver är en räknare med heltal.
 
-Beslut 2026-10-11: gatewayen flyttade från Cloudflare till datorn, och Groq är enda leverantör. Beslut 2026-11-16: gatewayen skrevs om från Node till Rust med samma beteende mot appen. Den gamla Cloudflare- och Node-koden finns kvar i Git-historiken.
+Beslut 2026-10-11: gatewayen flyttade från Cloudflare till datorn. Beslut 2026-11-17: fler leverantörer kan väljas per uppgift i [Mio Kontroll](../control/README.md), men bara granskade par av leverantör och modell (se [Leverantörer](#leverantörer)). Beslut 2026-11-16: gatewayen skrevs om från Node till Rust med samma beteende mot appen. Den gamla Cloudflare- och Node-koden finns kvar i Git-historiken.
 
 ## Installera på datorn (cirka 10 minuter)
 
@@ -65,13 +65,28 @@ Räknarna sparas i `counters.json` efter varje reservation, så en omstart nolls
 
 **Ett nytt försök (2026-11-15).** Gatewayen gör ett enda nytt försök med exakt samma anrop när Groq svarar 429 med en väntetid på högst 20 sekunder, eller vid ett tillfälligt serverfel eller nätfel hos leverantören, och bara om det ryms i anropets 40 sekunder. Längre väntetider skickas vidare till appen med Groqs `Retry-After`. Modell och parametrar ändras aldrig mellan försöken.
 
-Varje anrop kräver temperatur 0, `reasoning_effort: "none"`, strikt JSON-schema och inga verktyg. Svar med resonemang, verktygsanrop, refusal eller avkortning avvisas, och varje svar valideras innan appen får det. Ingen tyst reserv-modell eller reserv-leverantör finns.
+Varje anrop kräver resonemang av (hos Groq `reasoning_effort: "none"`), strikt JSON-schema och inga verktyg, och temperatur 0 för varje modell som tar emot parametern. Svar med resonemang, verktygsanrop, refusal eller avkortning avvisas, och varje svar valideras innan appen får det. Ingen tyst reserv-modell eller reserv-leverantör finns.
 
 **Validering per förslag (2026-11-15).** Svarets form är allt eller inget. Innehållet granskas däremot per förslag: saknar ett förslag ett citat som finns i källtexten, har ett ogiltigt datum eller bryter mot reglerna för ersättning av ett tidigare beslut tas just det förslaget bort och resten av svaret behålls. Ett citat som bara skiljer sig i skiftläge, blanksteg eller skiljetecken ersätts med den exakta källtexten, och ett klockslag utan tidszon tolkas i anropets tidszon. En lektionssektion utan giltigt citat avvisar fortfarande hela delen, eftersom sektionerna är själva anteckningen.
 
-### Lägga till en leverantör senare
+## Leverantörer
 
-`src/model_profiles.rs` har en leverantörssöm. En ny leverantör (till exempel Anthropic) kräver en post i `PROVIDERS`, en granskad modell i `reviewed_model` med dokumentationskällor, en adapter i `src/adapters.rs` om API-formatet skiljer sig, och en nyckel i `gateway.env`. Ett leverantörsprefix eller en OpenAI-kompatibel adress räcker aldrig som bevis.
+Varje uppgift (`ask`, `everyday`, `lesson`) kör ett granskat par av leverantör och modell, valt på datorn: `MIO_AI_PROVIDER` och `MIO_AI_MODEL` för alla, och `MIO_AI_TASK_PROFILES` för en enskild uppgift, till exempel `{"lesson":{"provider":"anthropic","model":"claude-haiku-5-5"}}`. Ingen automatisk reserv: en uppgift utan granskad modell eller nyckel svarar `task_configuration_invalid`. `mio-gateway granskade-modeller` listar paren.
+
+| Leverantör | Modell | Nyckel i `gateway.env` | Läge |
+|---|---|---|---|
+| Groq | `qwen/qwen3.8-27b` | `GROQ_API_KEY` | Granskad. Gratisnivå, se nedan |
+| Anthropic | `claude-haiku-5-5` | `ANTHROPIC_API_KEY` | Granskad 2026-11-17. Tänkandet av, schemat via `output_config.format`, **utan temperatur** (Anthropic vägrar parametern; `/v2/status` visar `"temperature": "provider-default"`). Ingen gratisnivå: 0,10 USD per miljon token in, 0,50 ut |
+| Mistral | `mistral-small-2603`, `mistral-medium-3-5` | `MISTRAL_API_KEY` | Kandidat, inte valbar: strikt schema är inte bekräftat. Kräver ett godkänt syntetiskt prov |
+| NVIDIA NIM | `qwen/qwen3.8-27b` | `NVIDIA_API_KEY` | Kandidat, inte valbar, av samma skäl |
+
+Cloudflare Workers AI är avböjt: dess JSON-läge garanterar inte schemat. Detaljer och källor i [besluten](../docs/DECISIONS.md).
+
+Tokenbudgeten per minut gäller per leverantör: `MIO_TOKENS_PER_MINUTE` för Groq (8 000 om den saknas) och `MIO_TOKENS_PER_MINUTE_ANTHROPIC`, `_MISTRAL` och `_NVIDIA` för de andra (ingen gräns om den saknas; 2 000–1 000 000).
+
+### Lägga till en leverantör
+
+`src/model_profiles.rs` har leverantörssömmen. En ny leverantör kräver en post i `PROVIDERS`, en modell i `REVIEWED_MODELS` (eller `CANDIDATE_MODELS` tills den är provad) med dokumentationskällor och hur resonemanget stängs av, en adapter i `src/adapters.rs` om API-formatet skiljer sig, syntetiska tester utan nät (svar, avvisning, avkortning, för stort anrop, fel) och en nyckel i `gateway.env`. Panelens lista över tillåtna nycklar (`control/core/src/settings.rs`) följer `PROVIDERS`; ett test håller dem i takt. Ett leverantörsprefix eller en OpenAI-kompatibel adress räcker aldrig som bevis.
 
 ### Kommandon för Mio Kontroll
 

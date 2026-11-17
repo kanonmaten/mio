@@ -43,6 +43,9 @@ impl SettingsFile {
                 "MIO_AI_TASK_PROFILES",
                 "MIO_REQUESTS_PER_MINUTE",
                 "MIO_TOKENS_PER_MINUTE",
+                "MIO_TOKENS_PER_MINUTE_ANTHROPIC",
+                "MIO_TOKENS_PER_MINUTE_MISTRAL",
+                "MIO_TOKENS_PER_MINUTE_NVIDIA",
                 "MIO_TOKENS_PER_DAY",
                 "MIO_REQUESTS_PER_DAY",
                 "MIO_LESSON_INTERVAL_SECONDS",
@@ -74,7 +77,7 @@ pub fn is_secret_key(key: &str) -> bool {
 
 /// Provider key variables the helper may set. Must match `PROVIDERS` in
 /// `server/src/model_profiles.rs`; a test keeps them in step.
-pub const PROVIDER_SECRET_KEYS: &[&str] = &["GROQ_API_KEY"];
+pub const PROVIDER_SECRET_KEYS: &[&str] = &["GROQ_API_KEY", "ANTHROPIC_API_KEY", "MISTRAL_API_KEY", "NVIDIA_API_KEY"];
 
 /// The vocabulary file below the system root (`root:mio-transcription 0640`).
 pub const VOCABULARY_PATH: &str = "etc/mio-transcription-vocabulary.txt";

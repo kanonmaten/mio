@@ -77,7 +77,7 @@ fn evaluate(kind: &str, input: &Value) -> Value {
             let config = Config { model: common::MODEL.to_owned(), api_key: "fixture-key".to_owned(), ..Config::default() };
             let sized = fit_to_minute_budget(create_task_request(mode, &input["payload"]), mode.task_id(), input["tokensPerMinute"].as_u64());
             match sized.map(|generation| build_provider_request(&config, &generation).unwrap()) {
-                Ok(request) => json!({ "url": request.url, "authorization": request.authorization,
+                Ok(request) => json!({ "url": request.url, "authorization": request.header("Authorization"),
                     "maxTokens": request.body["max_tokens"], "body": digest(&request.body.to_string()) }),
                 Err(_) => Value::Null,
             }

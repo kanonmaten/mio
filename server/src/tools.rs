@@ -8,7 +8,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use serde_json::{Value, json};
 
 use crate::config::{is_gateway_token, load_config, looks_like_provider_key};
-use crate::model_profiles::{PROVIDERS, REVIEWED_MODELS, provider};
+use crate::model_profiles::{CANDIDATE_MODELS, PROVIDERS, REVIEWED_MODELS, Reviewed, provider};
 use crate::task_profiles::{TASK_IDS, resolve_task_profile, task_configuration_identifiers};
 
 /// The value of `NAME=value` on its own line, when it has the shape of a Mio token. A file
@@ -150,16 +150,19 @@ pub fn check_configuration(text: &str) -> Result<String, String> {
     if complete { Ok(answer) } else { Err(answer) }
 }
 
-/// The reviewed provider and model pairs as JSON, with the variable that holds each key.
+/// The reviewed provider and model pairs as JSON, with the variable that holds each key, and
+/// the candidates the panel shows greyed out with why they cannot be chosen yet.
 pub fn reviewed_models() -> String {
-    let models: Vec<Value> = REVIEWED_MODELS.iter().map(|reviewed| {
+    let describe = |reviewed: &Reviewed| {
         let secret = provider(reviewed.provider).map(|provider| provider.secret_variable);
         json!({ "provider": reviewed.provider, "model": reviewed.model, "secretVariable": secret,
             "plain": reviewed.plain, "schemaDialect": reviewed.schema_dialect, "sources": reviewed.sources,
-            "liveTested": false })
-    }).collect();
+            "temperature": if reviewed.temperature { "0" } else { "provider-default" },
+            "reviewedAt": reviewed.reviewed_at, "liveTested": false, "blocked": reviewed.blocked })
+    };
     let providers: Vec<&str> = PROVIDERS.iter().map(|provider| provider.id).collect();
-    json!({ "providers": providers, "models": models }).to_string()
+    json!({ "providers": providers, "models": REVIEWED_MODELS.iter().map(describe).collect::<Vec<_>>(),
+        "candidates": CANDIDATE_MODELS.iter().map(describe).collect::<Vec<_>>() }).to_string()
 }
 
 /// Standard input as text; bytes that are not UTF-8 (a Latin-1 comment) do not fail the read.

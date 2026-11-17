@@ -175,6 +175,8 @@ Granska varje leverantör i officiell dokumentation (Context7 eller leverantöre
 
 **Stannar för godkännande:** ändringen av reglerna i `CLAUDE.md`, varje första riktiga anrop mot en leverantör (syntetisk svensk text) och allt som rör Cloudflare-kontot.
 
+*Vid bygget (2026-11-17):* användaren godkände regeländringarna. Anthropic Haiku 5.5 är granskad, Mistral och NVIDIA NIM har adaptrar men är inte valbara förrän ett syntetiskt anrop är godkänt, och Cloudflare Workers AI ströks eftersom dess dokumentation säger att JSON-schemat inte kan garanteras (se [besluten](DECISIONS.md)).
+
 ### Fas 4. AI-sidan
 
 Rullistor, uppgiftsprofiler, gränser, nyckelbyte, förhandsvisning av ändringen och omstart. Interaktionstest: välj modell, se ändringen, spara mot en falsk hjälpare.

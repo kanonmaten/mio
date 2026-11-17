@@ -26,7 +26,8 @@ pub struct TransportError;
 
 pub struct UpstreamRequest {
     pub url: String,
-    pub authorization: String,
+    /// Headers besides `Content-Type`, the provider key among them. Never logged.
+    pub headers: Vec<(&'static str, String)>,
     pub body: String,
 }
 
@@ -114,6 +115,7 @@ async fn read_upstream(mut response: Box<dyn UpstreamResponse>, profile: &Profil
     let ok = (200..300).contains(&status);
     let has_json = response.header("content-type").is_some_and(|kind| kind.to_lowercase().starts_with("application/json"));
     let retry_after = response.header("retry-after");
+    // Groq and the chat providers send x-request-id; Anthropic sends request-id.
     let request_id = response.header("x-request-id").or_else(|| response.header("request-id"));
     // Error envelopes have the same limits and deadline as successful envelopes. Only
     // normalized fixed codes leave this boundary; arbitrary error bodies never do.
@@ -184,7 +186,7 @@ async fn run(config: &Config, mode: Mode, payload: &Value, transport: &dyn Trans
     let task_id = mode.task_id();
     let invalid_task = RequestError::new(422, "task_configuration_invalid");
     let Some(selected) = resolve_task_profile(config, task_id).config else { return Err(invalid_task.into()) };
-    let generation = fit_to_minute_budget(create_task_request(mode, payload), task_id, config.tokens_per_minute)?;
+    let generation = fit_to_minute_budget(create_task_request(mode, payload), task_id, config.minute_budget(&selected.provider))?;
     // Options and immutable policy must be checked before consuming shared quota.
     let provider = build_provider_request(&selected, &generation).map_err(|_| invalid_task)?;
     let body = provider.body.to_string();
@@ -192,7 +194,7 @@ async fn run(config: &Config, mode: Mode, payload: &Value, transport: &dyn Trans
     reserve()?;
     ensure_current()?;
     let attempt = async || -> Result<Normalized, Failure> {
-        let request = UpstreamRequest { url: provider.url.clone(), authorization: provider.authorization.clone(), body: body.clone() };
+        let request = UpstreamRequest { url: provider.url.clone(), headers: provider.headers.clone(), body: body.clone() };
         let response = transport.send(request).await.map_err(|_| RequestError::new(502, "provider_transport"))?;
         read_upstream(response, &provider.profile, now(), spent).await
     };

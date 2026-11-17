@@ -172,9 +172,18 @@ pub fn gateway_status_v2(config: &Config, quota: Option<&QuotaObservation>) -> V
     for task in TASK_IDS {
         let selected = resolve_task_profile(config, task);
         let (provider, model) = task_configuration_identifiers(config, task);
-        tasks.insert(task.to_owned(), json!({ "configured": selected.configured, "provider": provider, "model": model,
+        let mut entry = json!({ "configured": selected.configured, "provider": provider, "model": model,
             "promptVersion": task_prompt_version(task), "capabilities": task_capabilities(task, config),
-            "configurationError": selected.configuration_error }));
+            "configurationError": selected.configuration_error });
+        // A reviewed model whose provider refuses temperature runs without it; that is never silent
+        // (rule approved 2026-11-17). Absent for every model that gets temperature 0.
+        let omitted = selected.config.as_ref()
+            .and_then(|config| provider_profile(&config.provider, &config.model, config.adapter_options.as_ref()).ok())
+            .is_some_and(|profile| !profile.temperature);
+        if omitted {
+            entry["temperature"] = json!("provider-default");
+        }
+        tasks.insert(task.to_owned(), entry);
     }
     // null means no daily cap; status then reports quota as null instead of an invented limit.
     // A token cap (the binding Groq free-tier limit) takes precedence over a request cap.
