@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 
 use crate::config::{Config, ConfigError, is_gateway_token};
 use crate::js::ascii_alphanumeric_or;
-use crate::model_profiles::{provider, provider_profile};
+use crate::model_profiles::provider;
 use crate::prompts::{ANALYSIS_V2_PROMPT_VERSION, PROMPT_VERSION};
 use crate::task_profiles::{TASK_IDS, resolve_task_profile, safe_model_identifier, safe_provider_identifier, task_configuration_identifiers};
 use crate::time::is_utc_midnight;
@@ -146,7 +146,7 @@ pub fn configuration_revision(config: &Config) -> String {
         // The endpoint identity affects review even though neither it nor credentials
         // are published. Only the profile's validated credential-free base is used.
         let endpoint = selected.config.as_ref()
-            .and_then(|config| provider_profile(&config.provider, &config.model, config.adapter_options.as_ref()).ok())
+            .and_then(|config| crate::config::profile(config).ok())
             .map(|profile| profile.base);
         tasks.insert(task.to_owned(), json!({ "provider": provider, "model": model, "configured": selected.configured,
             "configurationError": selected.configuration_error, "promptVersion": task_prompt_version(task),
@@ -178,7 +178,7 @@ pub fn gateway_status_v2(config: &Config, quota: Option<&QuotaObservation>) -> V
         // A reviewed model whose provider refuses temperature runs without it; that is never silent
         // (rule approved 2026-11-17). Absent for every model that gets temperature 0.
         let omitted = selected.config.as_ref()
-            .and_then(|config| provider_profile(&config.provider, &config.model, config.adapter_options.as_ref()).ok())
+            .and_then(|config| crate::config::profile(config).ok())
             .is_some_and(|profile| !profile.temperature);
         if omitted {
             entry["temperature"] = json!("provider-default");

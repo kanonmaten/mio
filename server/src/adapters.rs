@@ -5,7 +5,7 @@ use serde_json::{Map, Value, json};
 
 use crate::config::Config;
 use crate::js::{ascii_alphanumeric_or, credential_shaped, exact_keys, get, has_length, is_blank, safe_integer, trim, truthy};
-use crate::model_profiles::{Incompatible, Profile, ReasoningOff, provider_profile};
+use crate::model_profiles::{Incompatible, Profile, ReasoningOff};
 use crate::time::http_date_ms;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -133,7 +133,7 @@ fn validate_generation(generation: &Generation) -> Result<(), Incompatible> {
 }
 
 pub fn build_provider_request(config: &Config, generation: &Generation) -> Result<ProviderRequest, Incompatible> {
-    let profile = provider_profile(&config.provider, &config.model, config.adapter_options.as_ref())?;
+    let profile = crate::config::profile(config)?;
     build_for_profile(profile, &config.api_key, generation)
 }
 

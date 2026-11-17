@@ -219,3 +219,54 @@ async fn an_ask_through_the_gateway_with_anthropic() {
     // A refusal is not retried: the same text at temperature 0 would be refused again.
     assert_eq!(provider.count(), 2);
 }
+
+fn trial_answers(index: usize) -> Value {
+    const OLD: &str = "00000000-0000-0000-0000-000000000001:0";
+    const NEW: &str = "00000000-0000-0000-0000-000000000002:0";
+    match index {
+        0 => json!({ "answer": "Lånekortet och boken om fotosyntes." }),
+        1 => json!({ "candidates": [{ "kind": "task", "title": "Lämna in labbrapporten", "body": "Kemi, senast fredag klockan 16.",
+            "scheduledAt": null, "sourceIDs": [NEW], "evidence": "Jag måste lämna in labbrapporten i kemi senast fredag klockan 16.",
+            "replacesID": null }], "highlights": [], "uncertainties": [] }),
+        _ => json!({ "candidates": [{ "kind": "task", "title": "Gör uppgift 7", "body": "Till fredag.", "scheduledAt": null,
+                "sourceIDs": [OLD], "evidence": "Gör uppgift 7 till fredag." }],
+            "sections": [{ "heading": "Procent", "body": "Procent betyder hundradelar.\n1. 20 % är 0,20.\n2. 0,20 · 50 = 10.",
+                "sourceIDs": [OLD], "evidence": "20 procent av 50 är 0,20 gånger 50 = 10." }],
+            "uncertainties": [] }),
+    }
+}
+
+#[test]
+fn a_trial_sends_one_synthetic_call_per_task_and_reports_each() {
+    use common::{Link, Provider, Upstream};
+    use mio_gateway::tools::trial;
+    let env_file = format!("GROQ_API_KEY=gsk_fixture\nMIO_GATEWAY_TOKEN={TOKEN}\nMIO_AI_MODEL=qwen/qwen3.8-27b\n");
+    let provider = Provider::new(|index, _| Upstream::completion(&trial_answers(index)));
+    let answer: Value = serde_json::from_str(&trial(&env_file, "groq", "qwen/qwen3.8-27b", &Link(provider.clone())).unwrap()).unwrap();
+    assert_eq!(answer["passed"], true, "{answer}");
+    let tasks: Vec<(Value, Value)> = answer["tasks"].as_array().unwrap().iter().map(|task| (task["task"].clone(), task["ok"].clone())).collect();
+    assert_eq!(tasks, [(json!("ask"), json!(true)), (json!("everyday"), json!(true)), (json!("lesson"), json!(true))]);
+    assert_eq!(provider.count(), 3);
+    // A refused or invalid answer fails the trial, and no task is retried.
+    let failing = Provider::new(|index, _| if index == 1 { Upstream::completion(&json!({ "nonsense": true })) } else { Upstream::completion(&trial_answers(index)) });
+    let answer: Value = serde_json::from_str(&trial(&env_file, "groq", "qwen/qwen3.8-27b", &Link(failing.clone())).unwrap_err()).unwrap();
+    assert_eq!((answer["passed"].clone(), answer["tasks"][1]["ok"].clone()), (json!(false), json!(false)));
+    assert_eq!(failing.count(), 3);
+    // A candidate can be tried; an unknown pair or a missing key cannot.
+    assert!(trial(&env_file, "groq", "invented", &Link(Provider::new(|_, _| Upstream::Fail))).unwrap_err().contains("varken granskat"));
+    assert!(trial(&env_file, "mistral", "mistral-small-2603", &Link(Provider::new(|_, _| Upstream::Fail))).unwrap_err().contains("MISTRAL_API_KEY"));
+}
+
+#[test]
+fn an_approved_candidate_runs_and_an_unknown_approval_is_refused() {
+    let base = [("MIO_AI_PROVIDER", "mistral"), ("MIO_AI_MODEL", "mistral-small-2603"), ("MISTRAL_API_KEY", "fixture-mistral"), ("MIO_GATEWAY_TOKEN", TOKEN)];
+    let approved = load_config(&env(&[&base[..], &[("MIO_APPROVED_CANDIDATES", "mistral=mistral-small-2603")]].concat())).unwrap();
+    let resolved = resolve_task_profile(&approved, "everyday");
+    assert!(resolved.configured, "{:?}", resolved.configuration_error);
+    let profile = mio_gateway::config::profile(resolved.config.as_ref().unwrap()).unwrap();
+    assert_eq!((profile.contract_review.status, profile.contract_review.live_tested), ("approved-after-test", true));
+    // Another candidate stays locked; a made-up approval stops the configuration.
+    let other = load_config(&env(&[&base[..], &[("MIO_APPROVED_CANDIDATES", "nvidia=qwen/qwen3.8-27b")]].concat())).unwrap();
+    assert!(!resolve_task_profile(&other, "ask").configured);
+    assert!(load_config(&env(&[&base[..], &[("MIO_APPROVED_CANDIDATES", "groq=invented")]].concat())).is_err());
+}

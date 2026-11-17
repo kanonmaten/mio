@@ -215,6 +215,7 @@ pub fn execute(system: &System, command: &Command, stdin: &[u8]) -> Answer {
         }
         Command::UpdateModel => run_checked(system, UPDATE_MODEL, &[]),
         Command::SetupServe => setup_serve(system),
+        Command::TrialModel { provider, model } => trial_model(system, provider, model),
         Command::PairingData => pairing_data(system),
     }
 }
@@ -344,6 +345,39 @@ fn setup_serve(system: &System) -> Answer {
         output.extend(run_checked(system, TAILSCALE, &["serve", "--bg", "--https=8443", &target])?);
     }
     Ok(output)
+}
+
+/// Runs the gateway's trial with the root-only `gateway.env` on stdin. When all three tasks pass
+/// and the pair is a candidate, it is added to `MIO_APPROVED_CANDIDATES`, the only way that
+/// setting is written (user's choice 2026-11-17: a passed test is the approval).
+fn trial_model(system: &System, provider: &str, model: &str) -> Answer {
+    let path = system.path(SettingsFile::Gateway.path());
+    let contents = std::fs::read(&path).map_err(|_| not_installed(SettingsFile::Gateway).to_owned())?;
+    let output = system.run(GATEWAY, &["prova", provider, model], Some(&contents))?;
+    if !output.stdout.starts_with(b"{") {
+        return Err(gateway_message(&output.stderr));
+    }
+    if output.success {
+        let catalog = system.run(GATEWAY, &["granskade-modeller"], None)?;
+        let catalog: Value = serde_json::from_slice(&catalog.stdout).unwrap_or(Value::Null);
+        let candidate = catalog.get("candidates").and_then(Value::as_array).is_some_and(|candidates| {
+            candidates.iter().any(|entry| entry["provider"] == provider && entry["model"] == model)
+        });
+        if candidate {
+            let mut env = EnvFile::parse(&contents);
+            let entry = format!("{provider}={model}");
+            let mut approved: Vec<String> = env.get("MIO_APPROVED_CANDIDATES").unwrap_or_default()
+                .split(',').map(str::trim).filter(|item| !item.is_empty()).map(str::to_owned).collect();
+            if !approved.contains(&entry) {
+                approved.push(entry);
+                env.set("MIO_APPROVED_CANDIDATES", &approved.join(",")).map_err(|error| error.to_string())?;
+                system.check_gateway(&env.to_bytes(), false)?;
+                system.write_env(SettingsFile::Gateway, &env)?;
+            }
+        }
+    }
+    // The trial's own answer, passed or not: synthetic text only, no key.
+    Ok(output.stdout)
 }
 
 /// What `tailscale serve status` proxies the root path of HTTPS `port` to, if anything:

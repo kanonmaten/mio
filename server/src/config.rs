@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde_json::Value;
 
 use crate::js::{ascii_alphanumeric_or, trim};
-use crate::model_profiles::PROVIDERS;
+use crate::model_profiles::{CANDIDATE_MODELS, Incompatible, PROVIDERS, Profile, approved_profile};
 
 pub const MAX_REQUESTS_PER_DAY: u64 = 1_000_000;
 pub const MAX_TOKENS_PER_DAY: u64 = 1_000_000;
@@ -28,6 +28,8 @@ pub struct Config {
     pub tokens_per_minute: Option<u64>,
     /// The same budget for other providers (`MIO_TOKENS_PER_MINUTE_<PROVIDER>`); absent means none.
     pub provider_tokens_per_minute: BTreeMap<String, u64>,
+    /// Candidates the user approved after a passed `mio-gateway prova`, as `provider=model`.
+    pub approved_candidates: Vec<String>,
     /// `None` means no local daily cap. The per-minute cap, the concurrency limit and the
     /// provider's own limits still apply (user decision 2026-10-05).
     pub requests_per_day: Option<u64>,
@@ -37,6 +39,18 @@ pub struct Config {
     pub retry_delay_ms: Option<u64>,
     /// Set when the environment could not be parsed; every task then reports the same fixed error.
     pub global_configuration_invalid: bool,
+}
+
+/// `provider=model,provider=model`; every entry must name a known candidate.
+fn approved_candidates(value: Option<&str>) -> Result<Vec<String>, ConfigError> {
+    let entries: Vec<String> = value.unwrap_or("").split(',').map(|entry| trim(entry).to_owned()).filter(|entry| !entry.is_empty()).collect();
+    let known = |entry: &String| CANDIDATE_MODELS.iter().any(|candidate| *entry == format!("{}={}", candidate.provider, candidate.model));
+    if entries.iter().all(known) { Ok(entries) } else { Err(ConfigError("Ogiltig godkänd kandidatmodell.")) }
+}
+
+/// The profile for a config's provider and model, honouring approved candidates.
+pub fn profile(config: &Config) -> Result<Profile, Incompatible> {
+    approved_profile(&config.provider, &config.model, config.adapter_options.as_ref(), &config.approved_candidates)
 }
 
 impl Config {
@@ -51,7 +65,7 @@ impl Default for Config {
         Self { provider: "groq".to_owned(), api_key: String::new(), provider_secrets: BTreeMap::new(),
             task_profiles: None, adapter_options: None, lesson_interval_seconds: None,
             gateway_token: String::new(), model: String::new(), port: 8_787, requests_per_minute: 10,
-            tokens_per_minute: None, provider_tokens_per_minute: BTreeMap::new(), requests_per_day: None, tokens_per_day: None,
+            tokens_per_minute: None, provider_tokens_per_minute: BTreeMap::new(), approved_candidates: Vec::new(), requests_per_day: None, tokens_per_day: None,
             upstream_timeout_ms: 40_000, body_timeout_ms: 5_000, retry_delay_ms: None,
             global_configuration_invalid: false }
     }
@@ -135,6 +149,7 @@ pub fn load_config(env: &dyn Fn(&str) -> Option<String>) -> Result<Config, Confi
             .map(|entry| Ok((entry.id.to_owned(), optional_limit(env(&format!("MIO_TOKENS_PER_MINUTE_{}", entry.id.to_uppercase())).as_deref(), MAX_TOKENS_PER_DAY)?)))
             .collect::<Result<Vec<_>, ConfigError>>()?.into_iter()
             .filter_map(|(id, limit)| limit.map(|limit| (id, limit))).collect(),
+        approved_candidates: approved_candidates(env("MIO_APPROVED_CANDIDATES").as_deref())?,
         requests_per_day: optional_limit(env("MIO_REQUESTS_PER_DAY").as_deref(), MAX_REQUESTS_PER_DAY)?,
         tokens_per_day: optional_limit(env("MIO_TOKENS_PER_DAY").as_deref(), MAX_TOKENS_PER_DAY)?,
         upstream_timeout_ms: 40_000,

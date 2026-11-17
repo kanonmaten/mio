@@ -36,6 +36,9 @@ impl Runner for FakePrograms {
                 Ok(Output { success, stdout: stdout.as_bytes().to_vec(), stderr: stderr.as_bytes().to_vec() })
             }
             (GATEWAY, ["tailscale-host"]) => ok("dator.tail1234.ts.net"),
+            (GATEWAY, ["prova", _, "fails"]) => Ok(Output { success: false, stdout: b"{\"passed\":false}".to_vec(), stderr: b"FEL: Provet godk\xc3\xa4ndes inte.".to_vec() }),
+            (GATEWAY, ["prova", provider, model]) => ok(&format!("{{\"provider\":\"{provider}\",\"model\":\"{model}\",\"passed\":true}}")),
+            (GATEWAY, ["granskade-modeller"]) => ok("{\"models\":[{\"provider\":\"groq\",\"model\":\"qwen/qwen3.8-27b\"}],\"candidates\":[{\"provider\":\"mistral\",\"model\":\"mistral-small-2603\"}]}"),
             (GATEWAY, ["pairing-payload", host]) => ok(&format!("{{\"mio\":1,\"host\":\"{host}\"}}")),
             (TAILSCALE, ["status", "--json"]) => ok("{\"Self\":{\"DNSName\":\"dator.tail1234.ts.net.\"}}"),
             (TAILSCALE, ["serve", "status"]) => ok(self.serve_status),
@@ -263,4 +266,23 @@ fn pianissimos_health_is_fetched_with_its_token_and_returned_without_it() {
     let answer = fixture.run(Command::ReadPianissimoHealth, b"").unwrap();
     assert!(!String::from_utf8(answer.clone()).unwrap().contains("fixture_transcription_token"));
     assert_eq!(json(answer), json!({ "httpStatus": 503, "body": { "status": "loading" } }));
+}
+
+#[test]
+fn a_passed_trial_approves_a_candidate_and_nothing_else() {
+    let fixture = Fixture::new();
+    let trial = |provider: &'static str, model: &str| Command::TrialModel { provider, model: model.to_owned() };
+    // A reviewed pair passes without touching the file.
+    fixture.run(trial("groq", "qwen/qwen3.8-27b"), b"").unwrap();
+    assert_eq!(fixture.file(SettingsFile::Gateway.path()), GATEWAY_ENV);
+    // A failed trial is reported and approves nothing.
+    let answer = json(fixture.run(trial("mistral", "fails"), b"").unwrap());
+    assert_eq!(answer["passed"], false);
+    assert_eq!(fixture.file(SettingsFile::Gateway.path()), GATEWAY_ENV);
+    // A passed candidate is added once, and the gateway saw the file before it was written.
+    fixture.run(trial("mistral", "mistral-small-2603"), b"").unwrap();
+    fixture.run(trial("mistral", "mistral-small-2603"), b"").unwrap();
+    assert_eq!(fixture.file(SettingsFile::Gateway.path()), format!("{GATEWAY_ENV}MIO_APPROVED_CANDIDATES=mistral=mistral-small-2603\n"));
+    // The panel can never write the approval list as a plain setting.
+    assert!(fixture.run(Command::WriteSettings(SettingsFile::Gateway), br#"{"set":{"MIO_APPROVED_CANDIDATES":"nvidia=qwen/qwen3.8-27b"}}"#).is_err());
 }

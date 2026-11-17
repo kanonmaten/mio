@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 
 use crate::config::Config;
 use crate::js::{ascii_alphanumeric_or, credential_shaped, is_blank};
-use crate::model_profiles::{Incompatible, provider_profile};
+use crate::model_profiles::Incompatible;
 
 pub const TASK_IDS: [&str; 3] = ["ask", "everyday", "lesson"];
 const PROFILE_FIELDS: [&str; 3] = ["provider", "model", "adapterOptions"];
@@ -104,7 +104,7 @@ pub fn resolve_task_profile(config: &Config, task: &str) -> Resolved {
     if selected.adapter_options.as_ref().is_some_and(|options| !options.is_object()) {
         return Resolved::failed("provider_options_incompatible");
     }
-    match provider_profile(&selected.provider, &selected.model, selected.adapter_options.as_ref()) {
+    match crate::config::profile(&selected) {
         Err(Incompatible::Options) => return Resolved::failed("provider_options_incompatible"),
         Err(Incompatible::Model) => return Resolved::failed("provider_model_incompatible"),
         Ok(_) => {}

@@ -1,5 +1,6 @@
 //! Mio Kontroll: lives in the tray and opens one window on request.
 
+pub mod ai;
 pub mod desktop;
 pub mod model;
 pub mod operation;

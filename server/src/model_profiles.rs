@@ -156,6 +156,24 @@ fn profile_for(provider: &'static Provider, reviewed: &'static Reviewed, model: 
             sources: reviewed.sources, live_tested: false } }
 }
 
+/// `provider_profile`, but a candidate the user has approved after a passed test
+/// (`MIO_APPROVED_CANDIDATES`, written only by the panel's helper after `mio-gateway prova`)
+/// also resolves, marked as live tested.
+pub fn approved_profile(provider_id: &str, model: &str, adapter_options: Option<&Value>, approved: &[String]) -> Result<Profile, Incompatible> {
+    match provider_profile(provider_id, model, adapter_options) {
+        Err(Incompatible::Model) if approved.iter().any(|entry| *entry == format!("{provider_id}={model}")) => {
+            if adapter_options.is_some_and(|options| !options.as_object().is_some_and(serde_json::Map::is_empty)) {
+                return Err(Incompatible::Options);
+            }
+            let mut profile = candidate_profile(provider_id, model).ok_or(Incompatible::Model)?;
+            profile.contract_review.status = "approved-after-test";
+            profile.contract_review.live_tested = true;
+            Ok(profile)
+        }
+        other => other,
+    }
+}
+
 pub fn provider_profile(provider_id: &str, model: &str, adapter_options: Option<&Value>) -> Result<Profile, Incompatible> {
     let provider = provider(provider_id).ok_or(Incompatible::Model)?;
     let mut characters = model.chars();

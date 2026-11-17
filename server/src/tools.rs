@@ -8,6 +8,8 @@ use std::os::unix::fs::OpenOptionsExt;
 use serde_json::{Value, json};
 
 use crate::config::{is_gateway_token, load_config, looks_like_provider_key};
+use crate::generation::{Transport, trial_call};
+use crate::tasks::Mode;
 use crate::model_profiles::{CANDIDATE_MODELS, PROVIDERS, REVIEWED_MODELS, Reviewed, provider};
 use crate::task_profiles::{TASK_IDS, resolve_task_profile, task_configuration_identifiers};
 
@@ -165,6 +167,57 @@ pub fn reviewed_models() -> String {
         "candidates": CANDIDATE_MODELS.iter().map(describe).collect::<Vec<_>>() }).to_string()
 }
 
+/// The synthetic Swedish requests `prova` sends, one per task. No user's text is ever used.
+fn trial_payloads() -> [(&'static str, Mode, Value); 3] {
+    const OLD: &str = "00000000-0000-0000-0000-000000000001:0";
+    const NEW: &str = "00000000-0000-0000-0000-000000000002:0";
+    [
+        ("ask", Mode::Ask, json!({ "question": "Vad ska jag ta med till biblioteket?",
+            "context": [{ "label": "Anteckning", "text": "Ta med lånekortet och boken om fotosyntes till biblioteket på torsdag." }] })),
+        ("everyday", Mode::AnalyzeV2, json!({ "mode": "everyday", "timeZone": "Europe/Stockholm",
+            "fragments": [{ "id": NEW, "text": "Jag måste lämna in labbrapporten i kemi senast fredag klockan 16.", "occurredAt": "2026-09-30T12:01:00Z" }],
+            "contextFragments": [{ "id": OLD, "text": "Vi hade laboration om syror och baser i dag.", "occurredAt": "2026-09-30T12:00:00Z" }],
+            "priorDecisions": [], "contextLimited": false })),
+        ("lesson", Mode::Lesson, json!({ "mode": "lesson", "timeZone": "Europe/Stockholm", "fragments": [{ "id": OLD,
+            "occurredAt": "2026-09-28T08:00:00Z",
+            "text": "Procent betyder hundradelar. 20 procent av 50 är 0,20 gånger 50 = 10. Gör uppgift 7 till fredag." }] })),
+    ]
+}
+
+/// `mio-gateway prova <provider> <model>`: one synthetic call per task against a reviewed pair
+/// or a candidate, with the key from the environment file on stdin. Prints JSON per task;
+/// `Err` unless all three answers passed validation. Only run when the user asks for it.
+pub fn trial(text: &str, provider_id: &str, model: &str, transport: &dyn Transport) -> Result<String, String> {
+    let variables = environment_file(text);
+    let config = load_config(&|name| variables.get(name).cloned()).map_err(|error| error.0.to_owned())?;
+    let profile = crate::model_profiles::provider_profile(provider_id, model, None)
+        .ok().or_else(|| crate::model_profiles::candidate_profile(provider_id, model))
+        .ok_or_else(|| "Paret är varken granskat eller kandidat.".to_owned())?;
+    let key = config.provider_secrets.get(provider_id).cloned().unwrap_or_default();
+    if key.trim().is_empty() {
+        return Err(format!("Nyckel saknas: {}.", provider(provider_id).map_or("", |entry| entry.secret_variable)));
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|_| "Kunde inte starta.".to_owned())?;
+    let now = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis() as i64);
+    let mut passed = true;
+    let tasks: Vec<Value> = trial_payloads().into_iter().map(|(task, mode, payload)| {
+        let started = std::time::Instant::now();
+        let outcome = runtime.block_on(trial_call(profile.clone(), &key, mode, &payload, transport, &now, config.minute_budget(provider_id)));
+        let milliseconds = started.elapsed().as_millis() as u64;
+        passed &= outcome.is_ok();
+        match outcome {
+            Ok((answer, normalized)) => {
+                let usage = normalized.usage.unwrap_or_default();
+                json!({ "task": task, "ok": true, "error": null, "milliseconds": milliseconds, "answer": answer,
+                    "inputTokens": usage.input_tokens, "outputTokens": usage.output_tokens })
+            }
+            Err(error) => json!({ "task": task, "ok": false, "error": error.code, "milliseconds": milliseconds, "answer": null }),
+        }
+    }).collect();
+    let answer = json!({ "provider": provider_id, "model": model, "passed": passed, "tasks": tasks }).to_string();
+    if passed { Ok(answer) } else { Err(answer) }
+}
+
 /// Standard input as text; bytes that are not UTF-8 (a Latin-1 comment) do not fail the read.
 fn standard_input() -> Result<String, String> {
     let mut bytes = Vec::new();
@@ -217,6 +270,18 @@ pub fn run(arguments: &[String]) -> Option<Result<(), String>> {
             Err(message) => Err(message),
         }),
         ["granskade-modeller"] => print(reviewed_models() + "\n"),
+        // Real provider traffic: only from the panel's "Prova modellen", which the user presses.
+        ["prova", provider_id, model] => standard_input().and_then(|text| {
+            let transport = crate::transport::HttpsTransport::new().map_err(|_| "Kunde inte starta HTTPS.".to_owned())?;
+            match trial(&text, provider_id, model, &transport) {
+                Ok(answer) => print(answer + "\n"),
+                Err(answer) if answer.starts_with('{') => {
+                    println!("{answer}");
+                    Err("Provet godkändes inte.".to_owned())
+                }
+                Err(message) => Err(message),
+            }
+        }),
         ["pairing-text"] => standard_input().and_then(|payload| pairing_text(&payload)
             .ok_or_else(|| "Ogiltig parningskod.".to_owned()).and_then(print)),
         _ => return None,

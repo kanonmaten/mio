@@ -77,8 +77,8 @@ Varje uppgift (`ask`, `everyday`, `lesson`) kör ett granskat par av leverantör
 |---|---|---|---|
 | Groq | `qwen/qwen3.8-27b` | `GROQ_API_KEY` | Granskad. Gratisnivå, se nedan |
 | Anthropic | `claude-haiku-5-5` | `ANTHROPIC_API_KEY` | Granskad 2026-11-17. Tänkandet av, schemat via `output_config.format`, **utan temperatur** (Anthropic vägrar parametern; `/v2/status` visar `"temperature": "provider-default"`). Ingen gratisnivå: 0,10 USD per miljon token in, 0,50 ut |
-| Mistral | `mistral-small-2603`, `mistral-medium-3-5` | `MISTRAL_API_KEY` | Kandidat, inte valbar: strikt schema är inte bekräftat. Kräver ett godkänt syntetiskt prov |
-| NVIDIA NIM | `qwen/qwen3.8-27b` | `NVIDIA_API_KEY` | Kandidat, inte valbar, av samma skäl |
+| Mistral | `mistral-small-2603`, `mistral-medium-3-5` | `MISTRAL_API_KEY` | Kandidat: strikt schema är inte bekräftat. Valbar efter ett godkänt prov (Prova i panelen) |
+| NVIDIA NIM | `qwen/qwen3.8-27b` | `NVIDIA_API_KEY` | Kandidat av samma skäl, valbar efter ett godkänt prov |
 
 Cloudflare Workers AI är avböjt: dess JSON-läge garanterar inte schemat. Detaljer och källor i [besluten](../docs/DECISIONS.md).
 
@@ -90,11 +90,12 @@ Tokenbudgeten per minut gäller per leverantör: `MIO_TOKENS_PER_MINUTE` för Gr
 
 ### Kommandon för Mio Kontroll
 
-Kontrollpanelen ([`control/`](../control/README.md)) använder två kommandon i samma program. Inget av dem skriver något eller skickar något till en leverantör.
+Kontrollpanelen ([`control/`](../control/README.md)) använder tre kommandon i samma program. `kontrollera-konfiguration` och `granskade-modeller` skriver ingenting och skickar inget till en leverantör.
 
 | Kommando | Gör |
 |---|---|
 | `mio-gateway kontrollera-konfiguration` | Läser en `gateway.env` på stdin på samma sätt som systemd och tjänsten och svarar med JSON: om filen går att starta med, och leverantör, modell och eventuellt felkod per uppgift. Svaret innehåller aldrig nyckel eller token. Avslutar med fel om gatewayen skulle vägra starta eller om en uppgift saknar granskad modell eller nyckel |
+| `mio-gateway prova <leverantör> <modell>` | Riktig trafik, bara när du trycker Prova i panelen: ett påhittat svenskt anrop per uppgift med nyckeln i `gateway.env` på stdin, och JSON med resultatet per uppgift. En kandidat som klarar alla tre blir valbar (`MIO_APPROVED_CANDIDATES`, skrivs av panelens hjälpare) |
 | `mio-gateway granskade-modeller` | Leverantörerna och de granskade paren av leverantör och modell som JSON, med variabeln för varje nyckel och källorna för granskningen |
 
 ## API

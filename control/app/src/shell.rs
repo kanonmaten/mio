@@ -9,6 +9,7 @@ use gpui_kit::{
     ParentElement as _, Render, Styled as _, Window, px,
 };
 
+use crate::ai::AiPage;
 use crate::model::StatusModel;
 use crate::overview::OverviewPage;
 use crate::window::{CloseWindow, ToggleFullscreen};
@@ -17,20 +18,23 @@ use crate::window::{CloseWindow, ToggleFullscreen};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Page {
     Overview,
+    Ai,
 }
 
 impl Page {
-    pub const ALL: [Page; 1] = [Page::Overview];
+    pub const ALL: [Page; 2] = [Page::Overview, Page::Ai];
 
     pub fn title(self) -> &'static str {
         match self {
             Page::Overview => "Översikt",
+            Page::Ai => "AI",
         }
     }
 
     pub fn icon(self) -> IconName {
         match self {
             Page::Overview => IconName::LayoutDashboard,
+            Page::Ai => IconName::Bot,
         }
     }
 }
@@ -42,14 +46,16 @@ pub struct Shell {
     focus: FocusHandle,
     page: Page,
     overview: Entity<OverviewPage>,
+    ai: Entity<AiPage>,
 }
 
 impl Shell {
     pub fn new(status: Entity<StatusModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus = cx.focus_handle();
         focus.focus(window, cx);
-        let overview = cx.new(|cx| OverviewPage::new(status, cx));
-        Self { focus, page: Page::Overview, overview }
+        let overview = cx.new(|cx| OverviewPage::new(status.clone(), cx));
+        let ai = cx.new(|cx| AiPage::new(status, cx));
+        Self { focus, page: Page::Overview, overview, ai }
     }
 
     pub fn page(&self) -> Page {
@@ -66,6 +72,7 @@ impl Shell {
     fn page_view(&self) -> AnyView {
         match self.page {
             Page::Overview => self.overview.clone().into(),
+            Page::Ai => self.ai.clone().into(),
         }
     }
 

@@ -50,6 +50,18 @@ impl UnitAction {
     }
 }
 
+/// The gateway's providers (`PROVIDERS` in `server/src/model_profiles.rs`).
+pub const PROVIDER_IDS: [&str; 4] = ["groq", "anthropic", "mistral", "nvidia"];
+
+/// A model name the gateway could accept: what `provider_profile` checks before its catalog.
+pub fn is_model_name(model: &str) -> bool {
+    let mut characters = model.chars();
+    model.len() <= 128
+        && characters.next().is_some_and(|first| first.is_ascii_alphanumeric())
+        && characters.all(|character| character.is_ascii_alphanumeric() || "._:/-".contains(character))
+        && !model.contains("://")
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Command {
     /// A settings file as JSON, secrets replaced by whether they are set.
@@ -73,6 +85,9 @@ pub enum Command {
     UpdateTimer(bool),
     /// Runs Pianissimo's `update-model.sh` now.
     UpdateModel,
+    /// One synthetic call per task against a provider and model (`mio-gateway prova`); a passed
+    /// candidate becomes selectable. Real provider traffic: only when the user presses the button.
+    TrialModel { provider: &'static str, model: String },
     /// `tailscale serve` for 443 → 8765 and 8443 → 8787, as the installers do.
     SetupServe,
     /// The pairing payload with both tokens.
@@ -86,7 +101,7 @@ impl Command {
             Command::ReadGatewayStatus | Command::ReadPianissimoHealth => "status",
             Command::ReadSettings(_) | Command::ReadVocabulary => "read",
             Command::WriteSettings(_) | Command::WriteSecret(_) | Command::RotateToken(_) | Command::WriteVocabulary => "write",
-            Command::Unit(..) | Command::UpdateTimer(_) | Command::UpdateModel | Command::SetupServe => "service",
+            Command::Unit(..) | Command::UpdateTimer(_) | Command::UpdateModel | Command::SetupServe | Command::TrialModel { .. } => "service",
             Command::PairingData => "pair",
         }
     }
@@ -110,6 +125,7 @@ impl Command {
             Command::UpdateTimer(on) => vec!["nattuppdatering", if *on { "pa" } else { "av" }],
             Command::UpdateModel => vec!["uppdatera-modell"],
             Command::SetupServe => vec!["serve"],
+            Command::TrialModel { provider, model } => vec!["prova", provider, model],
             Command::PairingData => vec!["parningsdata"],
         };
         std::iter::once(self.group()).chain(words).map(str::to_owned).collect()
@@ -138,6 +154,10 @@ impl Command {
             ["service", "nattuppdatering", "av"] => Command::UpdateTimer(false),
             ["service", "uppdatera-modell"] => Command::UpdateModel,
             ["service", "serve"] => Command::SetupServe,
+            ["service", "prova", provider, model] if is_model_name(model) => Command::TrialModel {
+                provider: PROVIDER_IDS.iter().find(|known| *known == provider).copied().ok_or(REFUSED)?,
+                model: (*model).to_owned(),
+            },
             ["pair", "parningsdata"] => Command::PairingData,
             _ => return Err(REFUSED),
         };
@@ -166,6 +186,7 @@ mod tests {
             Command::UpdateModel,
             Command::SetupServe,
             Command::PairingData,
+            Command::TrialModel { provider: "anthropic", model: "claude-haiku-5-5".into() },
         ];
         for file in SettingsFile::ALL {
             commands.extend([Command::ReadSettings(file), Command::WriteSettings(file), Command::RotateToken(file)]);
@@ -210,6 +231,10 @@ mod tests {
             &["status", "installningar", "gateway"],
             &["read", "parningsdata"],
             &["service", "token", "gateway"],
+            &["service", "prova", "openai", "gpt"],
+            &["service", "prova", "groq", "-rf"],
+            &["service", "prova", "groq", "http://evil"],
+            &["read", "prova", "groq", "qwen/qwen3.8-27b"],
         ] {
             assert_eq!(Command::parse(&args(words)), Err(REFUSED), "{words:?}");
         }

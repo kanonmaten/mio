@@ -23,7 +23,7 @@ ksni = { version = "0.3.7", default-features = false, features = ["async-io", "b
 async-channel = "2.5.0"
 # Desktop notifications when a service goes down; the version GPUI already builds.
 notify-rust = "4.19.0"
+serde_json = "1.0.154"
 
 [dev-dependencies]
-serde_json = "1.0.154"
 gpui-kit = { workspace = true, features = ["test-support"] }

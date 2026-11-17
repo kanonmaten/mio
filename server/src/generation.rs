@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
-use crate::adapters::{Finish, Generation, Normalized, Usage, build_provider_request, normalize_provider_error, normalize_provider_response};
+use crate::adapters::{Finish, Generation, Normalized, Usage, build_for_profile, build_provider_request, normalize_provider_error, normalize_provider_response};
 use crate::config::Config;
 use crate::error::RequestError;
 use crate::js::{ascii_alphanumeric_or, credential_shaped};
@@ -148,6 +148,27 @@ async fn read_upstream(mut response: Box<dyn UpstreamResponse>, profile: &Profil
         Finish::Truncated => Err(RequestError::new(502, "provider_truncated").into()),
         Finish::Completed => Ok(normalized),
     }
+}
+
+/// One synthetic call for `mio-gateway prova`, started by the user in Mio Kontroll: the same
+/// request, reading and validation as a real call, without the service's quota counters (they
+/// live in its own process) and without the retry, so a failure shows as it is.
+pub async fn trial_call(profile: Profile, api_key: &str, mode: Mode, payload: &Value, transport: &dyn Transport,
+    now: Clock<'_>, minute_budget: Option<u64>) -> Result<(Value, Normalized), RequestError> {
+    let generation = fit_to_minute_budget(create_task_request(mode, payload), mode.task_id(), minute_budget)?;
+    let provider = build_for_profile(profile, api_key, &generation).map_err(|_| RequestError::new(422, "task_configuration_invalid"))?;
+    let request = UpstreamRequest { url: provider.url.clone(), headers: provider.headers.clone(), body: provider.body.to_string() };
+    let spent = AtomicI64::new(0);
+    let call = async {
+        let response = transport.send(request).await.map_err(|_| RequestError::new(502, "provider_transport"))?;
+        read_upstream(response, &provider.profile, now(), &spent).await.map_err(|failure| match failure {
+            Failure::Request(error) => error,
+            Failure::Unclassified => RequestError::new(502, "provider_infrastructure"),
+        })
+    };
+    let normalized = tokio::time::timeout(Duration::from_secs(40), call).await.map_err(|_| RequestError::new(504, "upstream_timeout"))??;
+    let result = validate_task_result(mode, normalized.text.as_deref().unwrap_or(""), payload).map_err(|code| RequestError::new(502, code))?;
+    Ok((result, normalized))
 }
 
 pub struct Generated {
