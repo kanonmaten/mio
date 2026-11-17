@@ -14,70 +14,69 @@ struct TimelineTabView: View {
     @State private var searchTask: Task<Void, Never>?
 
     var body: some View {
-        NavigationStack {
-            List {
-                if timelineElementsSnapshot.isEmpty {
-                    ContentUnavailableView(
-                        searchText.isEmpty ? "Tidslinjen är tom" : "Inga träffar",
-                        systemImage: searchText.isEmpty ? "clock" : "magnifyingglass",
-                        description: Text(
-                            searchText.isEmpty
-                                ? "Starta en Mio-session. Det du skickar till Apples appar syns också här."
-                                : "Prova ett annat sökord. Sökningen omfattar både manuellt innehåll och transkript."
-                        )
+        // Pushed from Lektioner's stack; a stack of its own here nested two (ultrareview E2).
+        List {
+            if timelineElementsSnapshot.isEmpty {
+                ContentUnavailableView(
+                    searchText.isEmpty ? "Tidslinjen är tom" : "Inga träffar",
+                    systemImage: searchText.isEmpty ? "clock" : "magnifyingglass",
+                    description: Text(
+                        searchText.isEmpty
+                            ? "Starta en Mio-session. Det du skickar till Apples appar syns också här."
+                            : "Prova ett annat sökord. Sökningen omfattar både manuellt innehåll och transkript."
                     )
-                    .listRowBackground(Color.clear)
-                } else {
-                    ForEach(timelineElementsSnapshot) { element in
-                        switch element {
-                        case let .content(item):
-                            // A handed-over item lives in Apple's app; Mio shows only its record.
-                            ContentItemRow(
-                                item: item,
-                                linkedSessionTitle: linkedSessionTitle(for: item)
-                            )
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    pendingDeletion = item
-                                } label: {
-                                    Label("Radera", systemImage: "trash")
-                                }
-                            }
-
-                        case let .session(session):
-                            NavigationLink {
-                                SessionEditorView(
-                                    sessionID: session.id,
-                                    contentModel: contentModel,
-                                    sessionModel: sessionModel
-                                )
+                )
+                .listRowBackground(Color.clear)
+            } else {
+                ForEach(timelineElementsSnapshot) { element in
+                    switch element {
+                    case let .content(item):
+                        // A handed-over item lives in Apple's app; Mio shows only its record.
+                        ContentItemRow(
+                            item: item,
+                            linkedSessionTitle: linkedSessionTitle(for: item)
+                        )
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                pendingDeletion = item
                             } label: {
-                                SessionTimelineRow(session: session)
+                                Label("Radera", systemImage: "trash")
                             }
+                        }
+
+                    case let .session(session):
+                        NavigationLink {
+                            SessionEditorView(
+                                sessionID: session.id,
+                                contentModel: contentModel,
+                                sessionModel: sessionModel
+                            )
+                        } label: {
+                            SessionTimelineRow(session: session)
                         }
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .mioListGround()
-            .navigationTitle("Tidslinje")
-            .searchable(text: $searchText, prompt: "Sök i sessioner och skickat")
-            .task {
-                debouncedSearchText = searchText
-                rebuildTimeline(using: searchText)
-            }
-            .onChange(of: searchText) { _, text in
-                scheduleSearchRefresh(for: text)
-            }
-            .onChange(of: contentModel.stateRevision) { _, _ in
-                rebuildTimeline(using: debouncedSearchText)
-            }
-            .onChange(of: sessionModel.stateRevision) { _, _ in
-                rebuildTimeline(using: debouncedSearchText)
-            }
-            .onDisappear {
-                searchTask?.cancel()
-            }
+        }
+        .listStyle(.insetGrouped)
+        .mioListGround()
+        .navigationTitle("Tidslinje")
+        .searchable(text: $searchText, prompt: "Sök i sessioner och skickat")
+        .task {
+            debouncedSearchText = searchText
+            rebuildTimeline(using: searchText)
+        }
+        .onChange(of: searchText) { _, text in
+            scheduleSearchRefresh(for: text)
+        }
+        .onChange(of: contentModel.stateRevision) { _, _ in
+            rebuildTimeline(using: debouncedSearchText)
+        }
+        .onChange(of: sessionModel.stateRevision) { _, _ in
+            rebuildTimeline(using: debouncedSearchText)
+        }
+        .onDisappear {
+            searchTask?.cancel()
         }
         .alert("Kunde inte slutföra raderingen", isPresented: Binding(
             get: { deletionOutcome?.message != nil },
