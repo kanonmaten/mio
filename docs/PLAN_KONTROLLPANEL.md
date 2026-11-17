@@ -161,7 +161,7 @@ Varje fas slutar med att fasens tester och `mio-verify verify` är gröna, ändr
 - Env-läsare och -skrivare med test för att kommentarer och okända rader överlever.
 - `mio-gateway kontrollera-konfiguration` och `mio-gateway granskade-modeller`, som kommandon bredvid `pairing-payload`. HTTP-beteendet och paritetstesterna rörs inte.
 - `mio-control-helper` med kommandolistan, polkit-policyn och tester mot en tillfällig rotmapp (bara i testerna).
-- Läge utan frågor i `server/install.sh` och `transcription-server/install.sh` (nyckel på stdin), med samma beteende som i dag när flaggan saknas.
+- Läge utan frågor i `server/install.sh` och `transcription-server/install.sh` (nyckel på stdin), med samma beteende som i dag när flaggan saknas. *Vid bygget:* `transcription-server/install.sh` frågar ingenting utom `sudo`, så bara gatewayens skript fick ett läge (`--nyckel-pa-stdin`). Hjälparen fick också en femte polkit-grupp, `status`, utan lösenord för den återkommande statusfrågan (se [besluten](DECISIONS.md)).
 - Statusläsare: systemd via D-Bus, `/health`, `/v2/status` via hjälparen, Tailscale, `nvidia-smi`.
 - `control/install.sh`: bygger, installerar program, policy och `.desktop`-fil.
 

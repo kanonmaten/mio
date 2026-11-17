@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mio Kontroll
+Comment=Ikon i systemfältet för Mio
+Exec=/usr/local/bin/mio-control
+Icon=app.mio.control
+Terminal=false
+NoDisplay=true
+X-KDE-autostart-phase=2

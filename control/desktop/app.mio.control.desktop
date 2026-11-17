@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mio Kontroll
+Comment=Styr Mios gateway, Pianissimo och parning på datorn
+Exec=/usr/local/bin/mio-control --visa
+Icon=app.mio.control
+Terminal=false
+Categories=Settings;
+StartupWMClass=app.mio.control

@@ -8,3 +8,9 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+serde_json = "1.0.154"
+# Blocking D-Bus for systemd's unit states; the same version GPUI already builds.
+zbus = "5.19.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"

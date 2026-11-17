@@ -24,7 +24,7 @@ Installera [Pianissimo](../transcription-server/README.md) först. Hela ordninge
 
    Skanna QR-koden i Mio under Inställningar → Parning. `mio-pair --text` visar samma värden som text om kameran inte fungerar. Är Pianissimo inte installerat säger `mio-pair` det, och koden innehåller då bara AI. Kör den igen när Pianissimo är installerat och tryck **Para om med QR-kod** i Mio.
 
-Kör `./server/install.sh` igen för att uppdatera; nyckel, token och räknare behålls. `./server/install.sh --ny-groq-nyckel` byter Groq-nyckeln utan att telefonen behöver paras om; bara nyckelraden i `gateway.env` ändras, så gränser, port och uppgiftsprofiler du ställt in finns kvar.
+Kör `./server/install.sh` igen för att uppdatera; nyckel, token och räknare behålls. `./server/install.sh --ny-groq-nyckel` byter Groq-nyckeln utan att telefonen behöver paras om; bara nyckelraden i `gateway.env` ändras, så gränser, port och uppgiftsprofiler du ställt in finns kvar. Med `--nyckel-pa-stdin` läser skriptet nyckeln från stdin i stället för att fråga (det är så [Mio Kontroll](../control/README.md) kör det); utan valet beter det sig som förut.
 
 ### Var saker ligger
 
@@ -72,6 +72,15 @@ Varje anrop kräver temperatur 0, `reasoning_effort: "none"`, strikt JSON-schema
 ### Lägga till en leverantör senare
 
 `src/model_profiles.rs` har en leverantörssöm. En ny leverantör (till exempel Anthropic) kräver en post i `PROVIDERS`, en granskad modell i `reviewed_model` med dokumentationskällor, en adapter i `src/adapters.rs` om API-formatet skiljer sig, och en nyckel i `gateway.env`. Ett leverantörsprefix eller en OpenAI-kompatibel adress räcker aldrig som bevis.
+
+### Kommandon för Mio Kontroll
+
+Kontrollpanelen ([`control/`](../control/README.md)) använder två kommandon i samma program. Inget av dem skriver något eller skickar något till en leverantör.
+
+| Kommando | Gör |
+|---|---|
+| `mio-gateway kontrollera-konfiguration` | Läser en `gateway.env` på stdin på samma sätt som systemd och tjänsten och svarar med JSON: om filen går att starta med, och leverantör, modell och eventuellt felkod per uppgift. Svaret innehåller aldrig nyckel eller token. Avslutar med fel om gatewayen skulle vägra starta eller om en uppgift saknar granskad modell eller nyckel |
+| `mio-gateway granskade-modeller` | Leverantörerna och de granskade paren av leverantör och modell som JSON, med variabeln för varje nyckel och källorna för granskningen |
 
 ## API
 

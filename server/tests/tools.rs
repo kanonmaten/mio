@@ -1,5 +1,7 @@
 use mio_gateway::config::load_config;
-use mio_gateway::tools::{gateway_env, pairing_payload, pairing_text, tailscale_host};
+use mio_gateway::tools::{
+    check_configuration, environment_file, gateway_env, pairing_payload, pairing_text, reviewed_models, tailscale_host,
+};
 use serde_json::{Value, json};
 
 const TOKEN: &str = "fixture_gateway_token_01234567890123456789";
@@ -103,4 +105,56 @@ fn tokens_shaped_like_provider_keys_are_refused_and_replaced() {
     let existing = format!("GROQ_API_KEY=gsk_old\nMIO_GATEWAY_TOKEN={shaped}\nPORT=9999\n");
     assert_eq!(text(gateway_env(KEY, Some(existing.as_bytes()), "m", "1", FRESH)),
         format!("GROQ_API_KEY={KEY}\nMIO_GATEWAY_TOKEN={FRESH}\nPORT=9999\n"));
+}
+
+/// The control panel validates a file before it writes it; the answer never carries a secret.
+#[test]
+fn the_configuration_check_accepts_what_the_gateway_runs_and_names_no_secret() {
+    let written = text(gateway_env(KEY, None, "qwen/qwen3.8-27b", "8787", FRESH));
+    let answer: Value = serde_json::from_str(&check_configuration(&written).unwrap()).unwrap();
+    assert_eq!(answer["valid"], json!(true));
+    assert_eq!(answer["port"], json!(8_787));
+    assert_eq!(answer["tasks"].as_array().unwrap().len(), 3);
+    assert!(answer["tasks"].as_array().unwrap().iter().all(|task| task["model"] == "qwen/qwen3.8-27b" && task["configured"] == true));
+    let printed = answer.to_string();
+    assert!(!printed.contains(KEY) && !printed.contains(FRESH));
+}
+
+#[test]
+fn the_configuration_check_refuses_what_the_gateway_would_refuse() {
+    let written = text(gateway_env(KEY, None, "qwen/qwen3.8-27b", "8787", FRESH));
+    // The gateway would not start: the message is the gateway's own and has no value in it.
+    for (from, to) in [("MIO_REQUESTS_PER_MINUTE=10", "MIO_REQUESTS_PER_MINUTE=61"), ("PORT=8787", "PORT=abc"),
+        (&format!("MIO_GATEWAY_TOKEN={FRESH}") as &str, "MIO_GATEWAY_TOKEN=kort")] {
+        let error = check_configuration(&written.replace(from, to)).unwrap_err();
+        assert!(!error.starts_with('{') && !error.contains(KEY), "{to}: {error}");
+    }
+    // It starts, but a task has no reviewed model or no key: the answer says which, still without secrets.
+    let unreviewed = written.replace("MIO_AI_MODEL=qwen/qwen3.8-27b", "MIO_AI_MODEL=llama-3.3-70b-versatile");
+    let answer: Value = serde_json::from_str(&check_configuration(&unreviewed).unwrap_err()).unwrap();
+    assert_eq!(answer["valid"], json!(false));
+    assert_eq!(answer["tasks"][0]["error"], json!("provider_model_incompatible"));
+    let keyless = written.replace(&format!("GROQ_API_KEY={KEY}"), "GROQ_API_KEY=");
+    let answer: Value = serde_json::from_str(&check_configuration(&keyless).unwrap_err()).unwrap();
+    assert_eq!(answer["tasks"][1]["error"], json!("provider_secret_missing"));
+    let per_task = written.replace("PORT=8787", "PORT=8787\nMIO_AI_TASK_PROFILES={\"lesson\":{\"model\":\"other/model\"}}");
+    let answer: Value = serde_json::from_str(&check_configuration(&per_task).unwrap_err()).unwrap();
+    assert_eq!((answer["tasks"][0]["configured"].clone(), answer["tasks"][2]["model"].clone()), (json!(true), json!("other/model")));
+}
+
+#[test]
+fn environment_files_are_read_like_systemd_reads_them() {
+    let variables = environment_file("# kommentar\n; också\n\nA=1\r\n B = två \nC=\"citerad\"\nD='enkel'\nE=\"\nA=sist\nutan likhetstecken\n");
+    let pairs: Vec<(&str, &str)> = variables.iter().map(|(key, value)| (key.as_str(), value.as_str())).collect();
+    assert_eq!(pairs, [("A", "sist"), ("B", "två"), ("C", "citerad"), ("D", "enkel"), ("E", "\"")]);
+}
+
+#[test]
+fn the_reviewed_models_list_the_pairs_the_gateway_accepts() {
+    let listed: Value = serde_json::from_str(&reviewed_models()).unwrap();
+    assert_eq!(listed["providers"], json!(["groq"]));
+    let model = &listed["models"][0];
+    assert_eq!((model["provider"].clone(), model["model"].clone(), model["secretVariable"].clone()),
+        (json!("groq"), json!("qwen/qwen3.8-27b"), json!("GROQ_API_KEY")));
+    assert_eq!(model["liveTested"], json!(false));
 }

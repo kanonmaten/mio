@@ -4275,10 +4275,20 @@ dependencies = [
 [[package]]
 name = "mio-control-core"
 version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
+ "zbus 5.19.0",
+]
 
 [[package]]
 name = "mio-control-helper"
 version = "0.1.0"
+dependencies = [
+ "mio-control-core",
+ "serde_json",
+ "tempfile",
+]
 
 [[package]]
 name = "moxcms"

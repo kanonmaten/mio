@@ -7,7 +7,9 @@ use std::os::unix::fs::OpenOptionsExt;
 
 use serde_json::{Value, json};
 
-use crate::config::{is_gateway_token, looks_like_provider_key};
+use crate::config::{is_gateway_token, load_config, looks_like_provider_key};
+use crate::model_profiles::{PROVIDERS, REVIEWED_MODELS, provider};
+use crate::task_profiles::{TASK_IDS, resolve_task_profile, task_configuration_identifiers};
 
 /// The value of `NAME=value` on its own line, when it has the shape of a Mio token. A file
 /// saved with Windows line ends still yields its token (ultrareview C3).
@@ -111,6 +113,55 @@ pub fn pairing_text(payload: &str) -> Option<String> {
     Some(text)
 }
 
+/// The variables of an environment file, read the way systemd's `EnvironmentFile=` reads them:
+/// `#` and `;` start comment lines, the key and value are trimmed, and one pair of matching
+/// quotes around the value is removed. A later line overrides an earlier one.
+pub fn environment_file(text: &str) -> std::collections::BTreeMap<String, String> {
+    let mut variables = std::collections::BTreeMap::new();
+    for line in text.split('\n').map(|line| line.strip_suffix('\r').unwrap_or(line).trim()) {
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else { continue };
+        let value = value.trim();
+        let unquoted = ['"', '\''].iter().find_map(|quote| {
+            value.strip_prefix(*quote)?.strip_suffix(*quote).filter(|_| value.len() >= 2)
+        });
+        variables.insert(key.trim().to_owned(), unquoted.unwrap_or(value).to_owned());
+    }
+    variables
+}
+
+/// Checks an environment file the way the service would load it, for the control panel. The
+/// answer names providers, models and error codes only, never a key or token. `Err` when the
+/// gateway would refuse to start or any task lacks a reviewed model and its provider's key.
+pub fn check_configuration(text: &str) -> Result<String, String> {
+    let variables = environment_file(text);
+    let config = load_config(&|name| variables.get(name).cloned()).map_err(|error| error.0.to_owned())?;
+    let mut complete = true;
+    let tasks: Vec<Value> = TASK_IDS.iter().map(|task| {
+        let (provider, model) = task_configuration_identifiers(&config, task);
+        let resolved = resolve_task_profile(&config, task);
+        complete &= resolved.configured;
+        json!({ "task": task, "provider": provider, "model": model, "configured": resolved.configured,
+            "error": resolved.configuration_error })
+    }).collect();
+    let answer = json!({ "valid": complete, "port": config.port, "tasks": tasks }).to_string();
+    if complete { Ok(answer) } else { Err(answer) }
+}
+
+/// The reviewed provider and model pairs as JSON, with the variable that holds each key.
+pub fn reviewed_models() -> String {
+    let models: Vec<Value> = REVIEWED_MODELS.iter().map(|reviewed| {
+        let secret = provider(reviewed.provider).map(|provider| provider.secret_variable);
+        json!({ "provider": reviewed.provider, "model": reviewed.model, "secretVariable": secret,
+            "plain": reviewed.plain, "schemaDialect": reviewed.schema_dialect, "sources": reviewed.sources,
+            "liveTested": false })
+    }).collect();
+    let providers: Vec<&str> = PROVIDERS.iter().map(|provider| provider.id).collect();
+    json!({ "providers": providers, "models": models }).to_string()
+}
+
 /// Standard input as text; bytes that are not UTF-8 (a Latin-1 comment) do not fail the read.
 fn standard_input() -> Result<String, String> {
     let mut bytes = Vec::new();
@@ -153,6 +204,16 @@ pub fn run(arguments: &[String]) -> Option<Result<(), String>> {
         ["tailscale-host"] => standard_input().and_then(|status| print(tailscale_host(&status))),
         ["pairing-payload", host] => standard_input().and_then(|text| pairing_payload(&text, host)
             .ok_or_else(|| "Hittar ingen gatewaytoken. Kör server/install.sh först.".to_owned()).and_then(print)),
+        // For the control panel: never writes anything and never prints a secret.
+        ["kontrollera-konfiguration"] => standard_input().and_then(|text| match check_configuration(&text) {
+            Ok(answer) => print(answer + "\n"),
+            Err(answer) if answer.starts_with('{') => {
+                println!("{answer}");
+                Err("En uppgift saknar en granskad modell eller leverantörens nyckel.".to_owned())
+            }
+            Err(message) => Err(message),
+        }),
+        ["granskade-modeller"] => print(reviewed_models() + "\n"),
         ["pairing-text"] => standard_input().and_then(|payload| pairing_text(&payload)
             .ok_or_else(|| "Ogiltig parningskod.".to_owned()).and_then(print)),
         _ => return None,

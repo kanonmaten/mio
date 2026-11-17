@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  Mio Kontroll's root helper. pkexec picks the action from the helper's first argument
+  (exec.argv1), so each group of commands has its own rule. The helper itself only accepts
+  its fixed command list; this file only decides who may ask and how often.
+-->
+<policyconfig>
+  <vendor>Mio</vendor>
+
+  <action id="app.mio.control.status">
+    <description>Read the status of Mio's services</description>
+    <description xml:lang="sv">Läs status för Mios tjänster</description>
+    <message>Mio Kontroll wants to read the status of Mio's services.</message>
+    <message xml:lang="sv">Mio Kontroll vill läsa status för Mios tjänster.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <!-- Polled every few seconds; the answers hold no key, token or word, so no password. -->
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/mio-control/mio-control-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">status</annotate>
+  </action>
+
+  <action id="app.mio.control.read">
+    <description>Read Mio's settings on this computer</description>
+    <description xml:lang="sv">Läs Mios inställningar på datorn</description>
+    <message>Mio Kontroll needs your password to read Mio's settings.</message>
+    <message xml:lang="sv">Mio Kontroll behöver ditt lösenord för att läsa Mios inställningar.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/mio-control/mio-control-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">read</annotate>
+  </action>
+
+  <action id="app.mio.control.write">
+    <description>Change Mio's settings on this computer</description>
+    <description xml:lang="sv">Ändra Mios inställningar på datorn</description>
+    <message>Mio Kontroll needs your password to change Mio's settings.</message>
+    <message xml:lang="sv">Mio Kontroll behöver ditt lösenord för att ändra Mios inställningar.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/mio-control/mio-control-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">write</annotate>
+  </action>
+
+  <action id="app.mio.control.service">
+    <description>Start, stop and update Mio's services</description>
+    <description xml:lang="sv">Starta, stoppa och uppdatera Mios tjänster</description>
+    <message>Mio Kontroll needs your password to control Mio's services.</message>
+    <message xml:lang="sv">Mio Kontroll behöver ditt lösenord för att styra Mios tjänster.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/mio-control/mio-control-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">service</annotate>
+  </action>
+
+  <action id="app.mio.control.pair">
+    <description>Show the pairing code for the phone</description>
+    <description xml:lang="sv">Visa parningskoden för telefonen</description>
+    <message>Mio Kontroll needs your password to show the pairing code.</message>
+    <message xml:lang="sv">Mio Kontroll behöver ditt lösenord för att visa parningskoden.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <!-- The code holds both tokens: ask every time. -->
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/mio-control/mio-control-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">pair</annotate>
+  </action>
+</policyconfig>

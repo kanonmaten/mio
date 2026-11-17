@@ -4,6 +4,8 @@
 # It builds the Rust gateway with cargo, so the PC needs no Node or other runtime.
 # Re-running is the update path: code and the systemd unit are refreshed; the Groq key,
 # gateway token and daily counters are kept. ./install.sh --ny-groq-nyckel replaces the key.
+# --nyckel-pa-stdin reads the key from stdin instead of asking (for Mio Kontroll); without it
+# the script behaves exactly as before.
 set -euo pipefail
 
 source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,11 +21,20 @@ step() { printf '\n==> %s\n' "$1"; }
 fail() { printf 'FEL: %s\n' "$1" >&2; exit 1; }
 
 replace_key=false
-case "${1:-}" in
-    "") ;;
-    --ny-groq-nyckel) replace_key=true ;;
-    *) fail "Okänt val: $1. Använd inget val, eller --ny-groq-nyckel." ;;
-esac
+key_on_stdin=false
+for argument in "$@"; do
+    case "$argument" in
+        --ny-groq-nyckel) replace_key=true ;;
+        --nyckel-pa-stdin) key_on_stdin=true ;;
+        *) fail "Okänt val: $argument. Använd inget val, --ny-groq-nyckel eller --nyckel-pa-stdin." ;;
+    esac
+done
+groq_key=""
+if $key_on_stdin; then
+    # Read before anything else can consume stdin. The last line may lack a line break.
+    IFS= read -r groq_key || [[ -n $groq_key ]] || fail "Ingen nyckel på stdin."
+    groq_key="${groq_key%$'\r'}"
+fi
 
 [[ $EUID -ne 0 ]] || fail "Kör som din vanliga användare, inte root. Skriptet använder sudo själv."
 for file in Cargo.toml Cargo.lock src/main.rs systemd/mio-gateway.service mio-pair README.md; do
@@ -74,9 +85,11 @@ if sudo test -f "$config" && ! $replace_key; then
     sudo grep -q '^MIO_TOKENS_PER_MINUTE=' "$config" \
         || printf 'MIO_TOKENS_PER_MINUTE=8000\n' | sudo tee -a "$config" >/dev/null
 else
-    echo "Skapa en nyckel på https://console.groq.com/keys (gratisnivån räcker)."
-    # Hidden prompt: the key never appears on screen, in argv, shell history or logs.
-    IFS= read -rsp "Klistra in Groq-nyckeln (syns inte) och tryck Enter: " groq_key; echo
+    if ! $key_on_stdin; then
+        echo "Skapa en nyckel på https://console.groq.com/keys (gratisnivån räcker)."
+        # Hidden prompt: the key never appears on screen, in argv, shell history or logs.
+        IFS= read -rsp "Klistra in Groq-nyckeln (syns inte) och tryck Enter: " groq_key; echo
+    fi
     [[ $groq_key =~ ^gsk_[A-Za-z0-9]{20,200}$ ]] || fail "Det ser inte ut som en Groq-nyckel (börjar med gsk_)."
     # The key travels only on stdin; the gateway binary writes the root-only file (0600). With an
     # existing file only the GROQ_API_KEY line changes: the token (no re-pairing), limits, port
@@ -85,6 +98,8 @@ else
     unset groq_key
     echo "Sparad (endast root kan läsa den)."
 fi
+
+unset groq_key
 
 step "systemd-tjänst"
 sudo install -m 644 "$source_dir/systemd/mio-gateway.service" "$unit"

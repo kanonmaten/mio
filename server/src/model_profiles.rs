@@ -64,19 +64,24 @@ pub struct Profile {
     pub contract_review: ContractReview,
 }
 
-struct Reviewed {
-    schema_dialect: &'static str,
-    sources: &'static [&'static str],
-    plain: bool,
+/// A provider and model pair whose documentation was reviewed for Mio's contract.
+pub struct Reviewed {
+    pub provider: &'static str,
+    pub model: &'static str,
+    pub schema_dialect: &'static str,
+    pub sources: &'static [&'static str],
+    pub plain: bool,
 }
 
-fn reviewed_model(provider: &str, model: &str) -> Option<Reviewed> {
-    match (provider, model) {
-        // Qwen 3.8 accepts reasoning_effort "none"; models that always think stay absent.
-        ("groq", "qwen/qwen3.8-27b") => Some(Reviewed { schema_dialect: "strict-json-schema", plain: false,
-            sources: &["https://console.groq.com/docs/structured-outputs", "https://console.groq.com/docs/reasoning"] }),
-        _ => None,
-    }
+/// Every reviewed pair. The control panel lists exactly these (`mio-gateway granskade-modeller`).
+pub const REVIEWED_MODELS: [Reviewed; 1] = [
+    // Qwen 3.8 accepts reasoning_effort "none"; models that always think stay absent.
+    Reviewed { provider: "groq", model: "qwen/qwen3.8-27b", schema_dialect: "strict-json-schema", plain: false,
+        sources: &["https://console.groq.com/docs/structured-outputs", "https://console.groq.com/docs/reasoning"] },
+];
+
+fn reviewed_model(provider: &str, model: &str) -> Option<&'static Reviewed> {
+    REVIEWED_MODELS.iter().find(|reviewed| reviewed.provider == provider && reviewed.model == model)
 }
 
 pub fn provider(id: &str) -> Option<&'static Provider> {
