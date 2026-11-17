@@ -498,8 +498,10 @@ final class MioWorkflowCoordinator {
     private func installCaptureRouting() {
         capture.onFinalizedTranscript = { [weak self] session in
             guard let self, !maintenance.recoveryBlocked else { return }
+            // While interrupted, a finalized transcript is audio captured before the interruption
+            // (ultrareview A7); the coordinator files it under the window that ended there.
             if !session.isLesson, capture.currentSession?.id == session.id || endingEverydaySessionID == session.id,
-               capture.runState == .listening || capture.runState == .stopping || endingEverydaySessionID == session.id {
+               [.listening, .stopping, .interrupted].contains(capture.runState) || endingEverydaySessionID == session.id {
                 analysis.observe(session, assistant: assistant)
             }
             automatically { [weak self] in

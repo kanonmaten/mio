@@ -41,6 +41,57 @@ final class MioWorkflowTests: XCTestCase {
         XCTAssertTrue(analysis.enabled)
     }
 
+    /// Ultrareview A7: speech right before a call is transcribed after the interruption began.
+    /// It was neither observed while interrupted nor accepted after the restart.
+    @MainActor
+    func testSpeechTranscribedAfterAnInterruptionStillReachesAI() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var clock = Date.now
+        var sent: [[String]] = []
+        let analysis = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { request, _ in
+                sent.append(request.fragments.map(\.text))
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            }, wait: { clock.addTimeInterval($0) }, now: { clock }, consentLog: { MioAIConsentLog() }, recordConsent: { _, _, _ in })
+        let capture = MioViewModel(repository: SessionRepository(storageURL: root.appendingPathComponent("sessions.json")))
+        let assistant = MioAssistantViewModel(repository: MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json")))
+        let workflow = MioWorkflowCoordinator(capture: capture,
+            content: MioContentViewModel(repository: MioContentRepository(storageURL: root.appendingPathComponent("content.json"))),
+            assistant: assistant, analysis: analysis,
+            journal: MioDeletionJournal(storageURL: root.appendingPathComponent("operations.json")))
+        await workflow.bootstrap()
+        try await analysis.enable(existingSessions: [])
+        defer { analysis.disable() }
+        clock.addTimeInterval(10)
+        var session = MioSession(transcripts: [TranscriptSegment(createdAt: clock, text: "Före samtalet", containsMio: false)])
+        capture.currentSession = session
+        capture.runState = .listening
+        capture.onFinalizedTranscript?(session)
+        clock.addTimeInterval(5)
+        let spokenBeforeCall = clock
+        clock.addTimeInterval(1)
+        capture.runState = .interrupted
+        for _ in 0..<20_000 { if sent.count == 1 && !analysis.isWorking { break }; await Task.yield() }
+        XCTAssertEqual(sent, [["Före samtalet"]])
+        // The last words before the call arrive from the transcriber during the interruption.
+        session.transcripts.append(TranscriptSegment(createdAt: spokenBeforeCall, text: "Precis innan samtalet", containsMio: false))
+        capture.currentSession = session
+        capture.onFinalizedTranscript?(session)
+        for _ in 0..<20_000 { if sent.count == 2 && !analysis.isWorking { break }; await Task.yield() }
+        XCTAssertEqual(sent.last, ["Precis innan samtalet"])
+        // After the automatic restart new speech is sent on its own, without the earlier window.
+        clock.addTimeInterval(30)
+        capture.runState = .listening
+        session.transcripts.append(TranscriptSegment(createdAt: clock, text: "Efter samtalet", containsMio: false))
+        capture.currentSession = session
+        capture.onFinalizedTranscript?(session)
+        for _ in 0..<20_000 { if sent.count == 3 && !analysis.isWorking { break }; await Task.yield() }
+        XCTAssertEqual(sent.last, ["Efter samtalet"])
+        XCTAssertEqual(sent.count, 3, "Nothing is sent twice")
+        XCTAssertTrue(analysis.enabled)
+    }
+
     @MainActor
     func testFinalizedLocalDetectionReportsItsStorageFailureExplicitly() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

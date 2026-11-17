@@ -19,6 +19,9 @@ final class MioAnalysisCoordinator {
     @ObservationIgnored private var eligible: [UUID: Set<UUID>] = [:]
     @ObservationIgnored private var latestSessions: [UUID: MioSession] = [:]
     @ObservationIgnored private var continuityStarts: [UUID: Date] = [:]
+    /// The continuity window that the last pause, stop or interruption closed, per session.
+    /// Audio captured inside it can be transcribed after the boundary; it still belongs there.
+    @ObservationIgnored private var endedContinuity: [UUID: (start: Date, end: Date)] = [:]
     @ObservationIgnored private var endingSessionIDs: Set<UUID> = []
     @ObservationIgnored private var queue: [Work] = [] {
         didSet { refreshPendingEveryday() }
@@ -219,7 +222,7 @@ final class MioAnalysisCoordinator {
         generation = UUID()
         worker?.cancel(); worker = nil; workerMode = nil; isWaiting = false
         queue.removeAll(); observed.removeAll(); eligible.removeAll(); latestSessions.removeAll()
-        continuityStarts.removeAll(); endingSessionIDs.removeAll()
+        continuityStarts.removeAll(); endingSessionIDs.removeAll(); endedContinuity.removeAll()
         connection = nil; activeSessionID = nil
         // A server-imposed wait and the batch window survive disable/re-enable;
         // pausing or re-pairing must not bypass them.
@@ -243,7 +246,10 @@ final class MioAnalysisCoordinator {
         for index in queue.indices where queue[index].request.mode == .everyday && finished.contains(queue[index].session.id) {
             queue[index].isFinal = true
         }
-        for id in finished { continuityStarts[id] = now(); eligible[id] = [] }
+        for id in finished {
+            endedContinuity[id] = (continuityStarts[id] ?? consentStartedAt, now())
+            continuityStarts[id] = now(); eligible[id] = []
+        }
         endingSessionIDs.subtract(finished)
         // Wake aggregation/rate waits without interrupting a model request already sent.
         if workerMode == .everyday, isWaiting {
@@ -257,7 +263,7 @@ final class MioAnalysisCoordinator {
         deletedSessionIDs.insert(sessionID)
         queue.removeAll { $0.session.id == sessionID }
         latestSessions[sessionID] = nil; eligible[sessionID] = nil; observed[sessionID] = nil
-        continuityStarts[sessionID] = nil; endingSessionIDs.remove(sessionID)
+        continuityStarts[sessionID] = nil; endingSessionIDs.remove(sessionID); endedContinuity[sessionID] = nil
         if activeSessionID == sessionID || (activeSessionID == nil && queue.isEmpty) {
             generation = UUID(); worker?.cancel(); worker = nil; workerMode = nil; isWaiting = false; isWorking = false; activeSessionID = nil
             startWorker(assistant: assistant)
@@ -270,7 +276,17 @@ final class MioAnalysisCoordinator {
         let boundary = continuityStarts[session.id] ?? consentStartedAt
         continuityStarts[session.id] = boundary
         let known = observed[session.id] ?? []
-        let fresh = session.transcripts.filter { !known.contains($0.id) && Self.captured($0, after: max(consentStartedAt, boundary)) }
+        let unseen = session.transcripts.filter { !known.contains($0.id) }
+        let fresh = unseen.filter { Self.captured($0, after: max(consentStartedAt, boundary)) }
+        // Audio captured before an interruption is often transcribed after it (ultrareview A7).
+        // It is sent with the window it was captured in, never as context for later speech.
+        let ended = endedContinuity[session.id]
+        let late = ended.map { window in
+            unseen.filter { segment in
+                !fresh.contains { $0.id == segment.id } && segment.audioStartedAt < window.end
+                    && Self.captured(segment, after: max(consentStartedAt, window.start))
+            }
+        } ?? []
         observed[session.id, default: []].formUnion(session.transcripts.map(\.id))
         if let pausedUntil, MioAnalysisSchedule.dropsEverydayWork(pausedUntil: pausedUntil, now: now()) {
             // A long quota pause skips this text; it stays local and is not later used as context.
@@ -278,9 +294,14 @@ final class MioAnalysisCoordinator {
             recordConsent(.skipped, now(), pausedUntil)
             return
         }
+        let processed = assistant.analyzedFragmentIDs(for: session.id)
+        if let ended, !late.isEmpty {
+            let fragments = late.flatMap(MioAnalysisFragment.make).filter { !processed.contains($0.id) && !skippedFragmentIDs.contains($0.id) }
+            enqueueEveryday(session: session, fragments: fragments, boundary: ended.start, assistant: assistant,
+                            final: true, allowed: Set(late.map(\.id)))
+        }
         eligible[session.id, default: []].formUnion(fresh.map(\.id))
         guard !fresh.isEmpty else { return }
-        let processed = assistant.analyzedFragmentIDs(for: session.id)
         let fragments = fresh.flatMap(MioAnalysisFragment.make).filter { !processed.contains($0.id) && !skippedFragmentIDs.contains($0.id) }
         enqueueEveryday(session: session, fragments: fragments, boundary: boundary, assistant: assistant)
     }
@@ -321,8 +342,9 @@ final class MioAnalysisCoordinator {
         }
     }
 
+    /// `allowed` overrides the session's eligible context segments for these fragments.
     private func enqueueEveryday(session: MioSession, fragments: [MioAnalysisFragment], boundary: Date,
-                                 assistant: MioAssistantViewModel, final: Bool = false) {
+                                 assistant: MioAssistantViewModel, final: Bool = false, allowed: Set<UUID>? = nil) {
         let waiting = queue.filter { $0.session.id == session.id && $0.request.mode == .everyday }
         queue.removeAll { $0.session.id == session.id && $0.request.mode == .everyday }
         // The live session is not repository-validated; keep the first copy instead of trapping.
@@ -351,7 +373,7 @@ final class MioAnalysisCoordinator {
             append(work.request.fragments, base: work.continuityStartedAt, enqueuedAt: work.enqueuedAt,
                    waited: work.waited, allowed: work.eligibleSegmentIDs, final: work.isFinal)
         }
-        append(fragments, base: boundary, enqueuedAt: now(), waited: 0, allowed: eligible[session.id] ?? [], final: final)
+        append(fragments, base: boundary, enqueuedAt: now(), waited: 0, allowed: allowed ?? eligible[session.id] ?? [], final: final)
         for start in groups.keys.sorted() {
             guard let group = groups[start] else { continue }
             // More than one normal batch waiting means AI is behind: send larger batches.
