@@ -18,18 +18,11 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 | Hem | Veckonummer, veckans dagar, Nästa, antal att granska, morgon-/kvällsöversikt (kväll från kl. 17) och tolv veckors aktivitet; morgon-/kvällsnotiser öppnar Hem | Härlett från lokala data; notiser har opaka ID:n utan privata rubriker; ingen molnsammanfattning |
 | AI | Gateway på datorn med Groq; löpande tolkning samlad högst var femte minut, enskilda frågor utan förhandsgranskning; anslutning/kvot; explicit spara ett svar som anteckning | På när datorn är parad och kan pausas; modellfri status bevisar inte leverantörsåtkomst eller kvalitet |
 
-## Planerat: kontrollpanel för datorn (önskemål 2026-11-16, inte påbörjat)
+## Byggt: Mio Kontroll på datorn (2026-11-17, inte provat på datorn)
 
-Arbetsplanen finns i [PLAN_KONTROLLPANEL.md](PLAN_KONTROLLPANEL.md) (2026-11-17): gpui-kit 0.10, fem AI-leverantörer i gatewayen, glödorange tema och ikon i systemfältet. Sammanfattningen nedan gäller fortfarande.
+Kontrollpanelen är byggd i `control/` enligt [planen](PLAN_KONTROLLPANEL.md), fas 0 till 10, med gpui-kit 0.10.0. Den ligger i systemfältet och har sidorna Översikt, Kom igång, AI, Transkription, Egna ord, Tailscale och parning, Uppdateringar, Verifiering, Loggar och Datorn. Gatewayen kan nu köra fler leverantörer än Groq (Anthropic Haiku 5.5 granskad; Mistral och NVIDIA efter ett godkänt Prova). Se [Mio Kontroll](../control/README.md) och [besluten](DECISIONS.md#kontrollpanelen-på-datorn-mio-kontroll-2026-11-17).
 
-Ett skrivbordsprogram i Rust byggt med [GPUI](https://www.gpui.rs/) som styr och kontrollerar allt Mio kör på datorn:
-
-- Visar om gatewayen, Pianissimo och Tailscale kör och svarar, med gatewayens modellfria status (`/v2/status`), dagens kvot och Pianissimos hälsa.
-- Kör verifieringen (`mio-verify` i `tools/`, som också kör gatewayens tester) och visar resultatet per steg.
-- Sätter upp allt från början: Groq-nyckel, gatewayen, Pianissimo med transkriptionsmodellen och nattlig uppdatering, egna ord, Tailscale och parningskoden för telefonen.
-- Använd GPUI-skills och ett färdigt komponentbibliotek för GPUI (till exempel `gpui-component`) om det visar sig lämpligt när arbetet börjar; kontrollera aktuell dokumentation då.
-
-Claude Code påminner om detta när arbete på Mio börjar (se `CLAUDE.md`), tills det är byggt eller användaren stryker det.
+Nästa steg är provet på `cachyos-pc` med KDE Plasma och NVIDIA, listan står i [Mio Kontroll](../control/README.md#prov-på-datorn). Fönstret, systemfältet, lösenordsrutan, Konsole och viloläget är bara provade i tester utan skärm eller på den bärbara datorn.
 
 ## Gateway på datorn och veckoplaneraren, 2026-10-11
 

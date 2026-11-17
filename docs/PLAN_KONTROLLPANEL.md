@@ -1,5 +1,7 @@
 # Plan: kontrollpanelen för datorn
 
+**Läge 2026-11-17:** fas 0 till 10 är byggda och godkända i grinden och på GitHub; provet på datorn (längst ned) återstår. Se [Mio Kontroll](../control/README.md) och [status](STATUS.md).
+
 Användarens önskemål 2026-11-16 och 2026-11-17. Planen är skriven för att köras som ett mål i Claude Code, fas för fas. Den ersätter avsnittet "Planerat: kontrollpanel för datorn" i [ROADMAP](ROADMAP.md) som arbetsbeskrivning; ROADMAP länkar hit.
 
 Kontrollpanelen är ett skrivbordsprogram i Rust med GPUI som visar och styr allt Mio kör på datorn: AI-gatewayen, Pianissimo, egna ord, Tailscale, parningen, uppdateringar och verifieringen. Datorn kör CachyOS med KDE Plasma 6.8 (Wayland) och en NVIDIA-GPU. Utvecklingen sker på en MacBook Air med Omarchy (Hyprland), så allt som bara går att se på datorn märks **ej verifierat** tills det är provat där.

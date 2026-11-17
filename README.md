@@ -33,6 +33,8 @@ Gör stegen i den här ordningen. Skripten på datorn körs som din vanliga anv�
 4. Installera Mio på telefonen enligt [installationen](docs/INSTALLATION.md).
 5. Kör `mio-pair` på datorn och skanna QR-koden i Mio under Inställningar → Parning.
 
+På datorn kan [Mio Kontroll](control/README.md) göra steg 1, 2 och 5 åt dig och sedan visa och styra allt som kör där: välj AI-modell, ändra egna ord, uppdatera, verifiera och läs loggarna. Installera den med `./control/install.sh`. Den är inte provad på datorn än.
+
 `mio-pair` hämtar tokens från båda installationerna, så kör den först när steg 1 och 2 är klara. Kör du den utan Pianissimo får koden bara med AI. Installera då Pianissimo, kör `mio-pair` igen och tryck Para om med QR-kod i Mio.
 
 Fortsätt sedan med [användarguiden](docs/ANVANDNING.md) och [helhetstestet](docs/TESTPLAN_HELHET.md). Anteckningar och planer fungerar utan dator, men inte transkription och AI.

@@ -22,7 +22,7 @@ Before changing something, read the docs that cover it: [README](README.md), [de
 - Update `CHANGELOG.md` for user-visible changes. Edit `docs/STATUS.md` only with checks you actually ran. Never touch the measurements in `docs/TESTRESULTAT_V0_1.md`.
 - Git: commit finished, verified work and push to `main` without asking. No branches or pull requests, even if the session assigns one; never force-push. Tags, running the IPA workflow, real model traffic and anything on Cloudflare (the old Worker, D1 and Access are still deployed) need the user's approval.
 - Ask when a decision is the user's to make.
-- Reminder (user's request 2026-11-16): at the start of work on Mio, remind the user in one line of the planned GPUI control app for the PC in `docs/ROADMAP.md`. Keep doing so until it is built or the user drops it.
+- Reminder (user's request 2026-11-16, updated 2026-11-17): the GPUI control app for the PC, Mio Kontroll in `control/`, is built but not tested on the PC. At the start of work on Mio, remind the user in one line of the PC test list in `control/README.md#prov-på-datorn`. Keep doing so until the user reports it done or drops it.
 
 ## Verifying
 

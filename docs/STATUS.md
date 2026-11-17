@@ -2,6 +2,19 @@
 
 Senast uppdaterad **2026-11-17**. Version **0.9.1, ej släppt** (0.9.0 är revisionen `8f90ddc`, ej taggad). Den här filen innehåller bara vad som faktiskt är kontrollerat. Äldre poster finns i Git-historiken (`git log -- docs/STATUS.md`). [Ändringsloggen](../CHANGELOG.md) beskriver vad koden gör; [helhetstestet](TESTPLAN_HELHET.md) beskriver acceptansproven.
 
+## Mio Kontroll och fler AI-leverantörer 2026-11-17 (`b55fd38`–fas 10)
+
+Kontrollpanelen i `control/` enligt [planen](PLAN_KONTROLLPANEL.md), fas 0 till 10, och fler leverantörer i gatewayen. Se [Mio Kontroll](../control/README.md), [ändringsloggen](../CHANGELOG.md) och [besluten](DECISIONS.md).
+
+| Kontroll | Resultat |
+|---|---|
+| Hela grinden, lokalt (Rust 1.100, Swift 6.4.2, uv 0.13.9) | `mio-verify verify` godkänd efter varje fas innan den committades, senast på arbetskopian som blev `d2ee211` (fas 9): 286 strukturkontroller, clippy utan varningar för verifieraren, gatewayen och `control/`, 10 tester för verifieraren, 119 gatewaytester (pariteten mot Node oförändrad), 94 tester i `control/` (kärnan, hjälparen och 18 gränssnittstester med låtsade hjälpare i ett fönster utan skärm), 99 pytest, 357 portabla XCTest, 13 återhämtningsprov och portabel concurrency utan varningar. I fas 7 överskred steget `control-tests` grindens tio minuter medan det byggde (inget test underkänt); gränssnittstesterna lades då i ett testprogram och omkörningen godkändes. |
+| Linux-grinden på GitHub | Godkänd för varje fas: `b55fd38` (fas 0, körning 44092058162), `1759bf5` (1, 44095535441), `6a019c5` (2, 44114176175), `fce4477` (3, 44125918662), `191ce01` (44142122637), `6fce695` (4, 44145802115), `af86fd3` (5, 44149620116), `580ffcb` (6, 44152473826), `1b924cf` (7, 44158268946) och `58810b8` (8, 44161094020) och `d2ee211` (9, 44163069294). Fas 10 ändrade bara dokument; dess körning står i överlämningen. |
+| Den bärbara datorn (Omarchy, Hyprland, Intel HD 6000) | I fas 0: fönstret ritas med det mörka temat och ikonen registreras hos `StatusNotifierWatcher`. Senare sidor är bara provade i gränssnittstesterna. |
+| `cachyos-pc` med KDE Plasma 6.8 och NVIDIA | **Inte provat.** Fönstret, rundade hörn, ljust läge, ikonen i Plasmas systemfält, polkit-rutan, Konsole, journalen, viloläget och installationsskriptens nya `commit`-fil är overifierade. Listan står i [Mio Kontroll](../control/README.md#prov-på-datorn). |
+| Riktig modelltrafik | **Inte körd.** Anthropic, Mistral och NVIDIA är bara provade mot en syntetisk transport; Prova är aldrig kört mot en leverantör. |
+| Telefon | Ingen ändring i appen. Att telefonen fortsätter utan ny parning efter ett modellbyte är **inte provat**. |
+
 ## Rättelser efter kodgranskningen 2026-11-17 (`0c6fd84` och framåt)
 
 De 25 fynden från tre ultrareview-körningar på `1d089a0`, ett i taget; se [ändringsloggen](../CHANGELOG.md) och [besluten](DECISIONS.md).
