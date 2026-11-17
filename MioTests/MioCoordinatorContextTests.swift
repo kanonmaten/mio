@@ -678,4 +678,62 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
             coordinator.disable()
         }
     }
+    /// Ultrareview A4: the shrink only went up, so after three cut-off answers every later
+    /// batch held one excerpt and sustained speech could fill the queue until AI stopped.
+    @MainActor
+    func testBatchSizeRecoversAfterTruncationsAndSingleExcerptsDoNotShrinkIt() async throws {
+        let assistant = assistant(self)
+        var clock = Date.now
+        var sent: [Int] = []
+        var truncations = 0
+        let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) },
+            send: { request, _ in
+                sent.append(request.fragments.count)
+                if truncations < 3, request.fragments.count > 1 { truncations += 1; throw MioCloudError.gateway(502, .providerTruncated) }
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            },
+            wait: { clock.addTimeInterval($0) }, now: { clock })
+        defer { coordinator.disable() }
+        try await coordinator.enable(existingSessions: [])
+        var session = MioSession(transcripts: [])
+        func speak(_ count: Int) async {
+            let before = coordinator.sentBatches
+            for _ in 0..<count {
+                clock.addTimeInterval(1)
+                session.transcripts.append(TranscriptSegment(createdAt: clock, text: "Tal \(session.transcripts.count).", containsMio: false))
+            }
+            coordinator.observe(session, assistant: assistant)
+            for _ in 0..<40_000 { if (coordinator.sentBatches > before && !coordinator.isWorking) || !coordinator.enabled { break }; await Task.yield() }
+        }
+        await speak(8)
+        XCTAssertEqual(truncations, 3)
+        XCTAssertTrue(coordinator.enabled)
+        // Sustained speech afterwards: every batch succeeds and the size steps back up.
+        for _ in 0..<(3 * MioAnalysisCoordinator.shrinkRelaxCalls + 2) { await speak(5) }
+        XCTAssertTrue(coordinator.enabled, "Sustained speech must never fill the queue and stop AI")
+        XCTAssertNil(coordinator.errorMessage)
+        XCTAssertEqual(sent.last, 5, "Batches are back to five excerpts")
+
+        // A single excerpt that is still too large is skipped and does not shrink later batches.
+        var refusedSingle = false
+        let single = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) },
+            send: { request, _ in
+                sent.append(request.fragments.count)
+                if !refusedSingle { refusedSingle = true; throw MioCloudError.gateway(413, .providerRequestTooLarge) }
+                return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+            },
+            wait: { clock.addTimeInterval($0) }, now: { clock })
+        defer { single.disable() }
+        try await single.enable(existingSessions: [])
+        sent = []
+        var other = MioSession(transcripts: [TranscriptSegment(createdAt: clock, text: "Ensamt utdrag.", containsMio: false)])
+        single.observe(other, assistant: assistant)
+        for _ in 0..<20_000 { if (sent.count == 1 && !single.isWorking) || !single.enabled { break }; await Task.yield() }
+        for _ in 0..<5 { clock.addTimeInterval(1); other.transcripts.append(TranscriptSegment(createdAt: clock, text: "Mer \(other.transcripts.count).", containsMio: false)) }
+        single.observe(other, assistant: assistant)
+        for _ in 0..<20_000 { if single.sentBatches == 1 || !single.enabled { break }; await Task.yield() }
+        XCTAssertEqual(sent, [1, 5], "The skipped excerpt is not resent and the next batch is full size")
+    }
 }

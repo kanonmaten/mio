@@ -38,9 +38,13 @@ final class MioAnalysisCoordinator {
     /// Rejected answers per lesson part (see `MioLessonRetry`). Kept across pause and re-pairing
     /// so a part cannot be retried forever; a restart of the app starts the count again.
     @ObservationIgnored private var lessonRejections: [String: Int] = [:]
-    /// Halvings of the everyday batch size after the provider refused a batch as too large.
-    /// Kept for the rest of this run, like `lessonRejections`, so the same size is not tried again.
+    /// Halvings of the everyday batch size after the provider refused a batch of several excerpts
+    /// as too large. It relaxes one step per `shrinkRelaxCalls` successful everyday calls, so a
+    /// single refusal does not leave one-excerpt batches (and a growing queue) for the rest of the run.
     @ObservationIgnored private var everydayShrink = 0
+    /// Successful everyday calls since `everydayShrink` last changed.
+    @ObservationIgnored private var everydaySuccesses = 0
+    static let shrinkRelaxCalls = 4
     /// Everyday text whose answer was rejected or that cannot be made small enough. It stays
     /// on the phone and is not queued again during this run.
     @ObservationIgnored private var skippedFragmentIDs: Set<String> = []
@@ -474,6 +478,7 @@ final class MioAnalysisCoordinator {
                         guard try await self.connectionStillMatches(connection, token: token) else { throw MioCloudError.changedConfiguration }
                         if let metadata = result.metadata { self.lessonInterval = TimeInterval(metadata.lessonIntervalSeconds) }
                         let count = try await assistant.applyAnalysis(result, request: request, session: session)
+                        if request.mode == .everyday { self.relaxEverydayShrink() }
                         self.activeSessionID = nil; self.sentBatches += 1
                         self.consecutivePauses = 0
                         self.status = "Senast analyserat \(self.now().formatted(date: .omitted, time: .shortened)). \(count) nya förslag."
@@ -568,8 +573,11 @@ final class MioAnalysisCoordinator {
     private func handleRejectedEverydayWork(_ work: Work, needsSmaller: Bool) {
         isWorking = false; activeSessionID = nil
         let fragments = work.request.fragments
-        if needsSmaller, everydayShrink < MioWorkSplit.maximumShrink || fragments.count > 1 {
+        // One excerpt cannot be split further; raising the shrink for it would only make every
+        // later batch smaller (ultrareview A4). It is skipped like a rejected answer.
+        if needsSmaller, fragments.count > 1 {
             everydayShrink = min(MioWorkSplit.maximumShrink, everydayShrink + 1)
+            everydaySuccesses = 0
             let parts = MioEverydayContext.batches(fragments, shrink: everydayShrink).map {
                 Work(session: work.session,
                      request: MioAnalysisRequest(mode: .everyday, timeZone: work.request.timeZone, fragments: $0),
@@ -582,6 +590,12 @@ final class MioAnalysisCoordinator {
             skippedFragmentIDs.formUnion(fragments.map(\.id))
             status = "AI kunde inte tolka ett textutdrag. Det hoppades över; texten finns kvar lokalt."
         }
+    }
+
+    private func relaxEverydayShrink() {
+        guard everydayShrink > 0 else { everydaySuccesses = 0; return }
+        everydaySuccesses += 1
+        if everydaySuccesses >= Self.shrinkRelaxCalls { everydayShrink -= 1; everydaySuccesses = 0 }
     }
 
     nonisolated static func acceptsBacklog(_ status: MioGatewayStatusV2) -> Bool {
