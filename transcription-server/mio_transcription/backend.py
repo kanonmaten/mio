@@ -7,6 +7,16 @@ from .core import normalize_words, parse_vocabulary
 
 log = logging.getLogger("mio_transcription")
 
+PRECISIONS = ("fp32", "fp16")
+
+
+def parse_precision(value):
+    """MIO_PRECISION: fp32 (default) or fp16. Anything else stops the service instead of guessing."""
+    value = (value or "").strip() or "fp32"
+    if value not in PRECISIONS:
+        raise ValueError("MIO_PRECISION must be fp32 or fp16")
+    return value
+
 
 def read_vocabulary(path):
     """Phrases from the vocabulary file; a missing or unreadable file means none."""
@@ -67,6 +77,7 @@ class Pianissimo:
             raise ValueError("MIO_VOCABULARY_BOOST must be 0-2")
         self.vocabulary_boost = float(boost)
         self.vocabulary = 0
+        self.precision = parse_precision(os.getenv("MIO_PRECISION"))
 
     def load(self):
         # Import lazily so /health remains responsive while the GPU model loads.
@@ -84,6 +95,7 @@ class Pianissimo:
         logging.getLogger("nemo_logger").setLevel(logging.ERROR)
         self.model = ASRModel.restore_from(str(files[0]), map_location="cuda").eval()
         self.model.freeze()
+        # The warm-up below runs in the chosen precision, so readiness covers it.
         self._load_vocabulary()
         self.ready = True
 
@@ -123,7 +135,12 @@ class Pianissimo:
         # Right padding here preserves the API's original zero-time anchor.
         if len(audio) < 16_000:
             audio = np.pad(audio, (0, 16_000 - len(audio)))
-        with torch.inference_mode():
+        # fp16 is NeMo's AMP inference path (transcribe_speech.py amp=True): weights stay fp32 and
+        # matrix math runs in fp16 on the tensor cores. NeMo's mel preprocessor disables autocast
+        # for its STFT and filterbank, so audio features stay fp32. Casting the whole model to
+        # fp16 instead would also round the filterbank buffers.
+        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16,
+                                                    enabled=self.precision == "fp16"):
             hypotheses = self.model.transcribe(audio=[audio], batch_size=1,
                                               return_hypotheses=True, timestamps=True,
                                               verbose=False, num_workers=0)

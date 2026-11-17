@@ -131,6 +131,11 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
             return 0
         return size if isinstance(size, int) and not isinstance(size, bool) and 0 <= size <= 500 else 0
 
+    def precision():
+        # Additive and optional: a backend without a precision setting computes in fp32.
+        value = getattr(backend, "precision", "fp32")
+        return value if value in ("fp32", "fp16") else "fp32"
+
     def json_response(body):
         return Response(body, media_type="application/json", headers={"Cache-Control": "no-store"})
 
@@ -141,7 +146,7 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
                              "metadata": metadata(), "sampleRate": RATE, "channels": 1,
                              "encoding": "pcm_s16le_wav", "maxSeconds": 24, "maxBytes": MAX_BYTES,
                              "preprocessing": preprocessing, "vocabulary": vocabulary_size(),
-                             "speakerLabels": labeler.status if labeler else "off"},
+                             "precision": precision(), "speakerLabels": labeler.status if labeler else "off"},
                             status_code=200 if ready() else 503,
                             headers={"Cache-Control": "no-store"})
 

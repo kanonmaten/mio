@@ -2,6 +2,19 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Pianissimo i FP16 med NeMos blandade precision, 2026-11-17
+
+Användaren vill att Pianissimo räknar i FP16 i stället för FP32, utan att nattuppdateringen slutar fungera eller att transkriptionen blir sämre.
+
+- **Valt:** `MIO_PRECISION=fp16` i `/etc/mio-transcription.conf` kör modellen under `torch.autocast("cuda", dtype=torch.float16)`. Det är NeMos egen väg för inferens med blandad precision (`amp=True`, `amp_dtype=float16` i `examples/asr/transcribe_speech.py`). Vikterna stannar i FP32, och NeMos mel-förbehandling stänger själv av autocast för STFT och filterbank. Standard är `fp32` tills `measure_wer.py --precision fp32 fp16` på datorn visar att FP16 inte ger fler fel. Ett okänt värde stoppar tjänsten. `/health` får det additiva fältet `precision`; metadata har som förut exakt tre fält. Talarmodellen räknar i FP32.
+- **Avböjt: ONNX FP16** (`KlangAI/pianissimo-sv-onnx`). Talarmärkningen behöver ändå NeMo och PyTorch i samma process, så två körmiljöer skulle dela GPU:ns 8 GB. Nattuppdateringen skulle behöva följa ett annat repo, och ordtider skulle byggas från token. KlangAI har egen phrase boosting för ONNX, så det är reservvägen om NeMo i FP16 mäts sämre.
+- **Avböjt: GGUF F16** (`KlangAI/pianissimo-sv-gguf` för transcribe.cpp, C++). Modellkortet nämner varken phrase boosting eller ordtider, och servern skulle behöva anropa ett separat program.
+- **Avböjt: hela modellen i FP16** (`model.to(torch.float16)`, NeMos `compute_dtype`). Det sparar GPU-minne men avrundar också förbehandlingens filterbank och fönster, som NeMo bara räknar upp igen efteråt, och spektrogrammets loggskydd (`2**-24`) ligger vid FP16:s nedre gräns. BF16 valdes bort eftersom användaren bad om FP16 och NeMo varnar för att BF16 har för få mantissabitar för ljudsignalen.
+
+Källor: NeMo `examples/asr/transcribe_speech.py`, `nemo/collections/asr/parts/preprocessing/features.py` och `nemo/collections/asr/modules/audio_preprocessing.py` (main), modellkorten för [ONNX](https://huggingface.co/KlangAI/pianissimo-sv-onnx) och [GGUF](https://huggingface.co/KlangAI/pianissimo-sv-gguf).
+
+Ej verifierat: hastighet, ordfel, ordtider och egna ord i FP16 på GPU:n.
+
 ## Rättelser efter kodgranskningen, 2026-11-17
 
 Tre ultrareview-körningar på `1d089a0` gav 25 fynd; användaren vill att alla rättas. Val som inte är givna av koden:

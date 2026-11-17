@@ -77,6 +77,10 @@ def test_health_reports_contract_without_audio(service):
     for size, shown in [(12, 12), (500, 500), (501, 0), (-1, 0), (True, 0), ("12", 0)]:
         backend.vocabulary_size = lambda size=size: size
         assert client.get("/health", headers=headers()).json()["vocabulary"] == shown
+    assert response.json()["precision"] == "fp32"
+    for value, shown in [("fp16", "fp16"), ("fp32", "fp32"), ("bf16", "fp32"), (16, "fp32")]:
+        backend.precision = value
+        assert client.get("/health", headers=headers()).json()["precision"] == shown
 
 
 @pytest.mark.parametrize("route,method", [("/health", "get"), ("/v1/transcribe", "post")])
