@@ -137,8 +137,10 @@ enum MioWorkSplit {
 
     static func needsSmallerRequest(_ error: Error) -> Bool {
         switch error as? MioCloudError {
-        case .gateway(_, let code)?: [.providerRequestTooLarge, .providerTruncated, .upstreamResponseTooLarge].contains(code)
-        case .serverStatus(413)?, .oversizedResponse?: true
+        case .gateway(_, let code)?:
+            [.providerRequestTooLarge, .providerTruncated, .upstreamResponseTooLarge, .requestTooLarge].contains(code)
+        // `invalidContext` here is the phone's own size check refusing to build the request.
+        case .serverStatus(413)?, .oversizedResponse?, .invalidContext?: true
         default: false
         }
     }

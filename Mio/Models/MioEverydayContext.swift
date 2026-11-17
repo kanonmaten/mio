@@ -15,8 +15,11 @@ enum MioEverydayContext {
         let step = min(max(shrink, 0), MioWorkSplit.maximumShrink)
         let count = max(1, (backlog && step == 0 ? 12 : 5) >> step), limit = (backlog && step == 0 ? 12_000 : 6_000) >> step
         for fragment in fragments {
-            // Reserve three source slots and 4,000 bytes for continuity.
-            if !batch.isEmpty && (batch.count == count || bytes + fragment.text.utf8.count > limit) {
+            // Reserve three source slots and 4,000 bytes for continuity. Up to eight sources the
+            // request validator allows 10,000 bytes in all, whatever the batch limit (ultrareview A3).
+            let grown = bytes + fragment.text.utf8.count
+            let allowed = batch.count + 1 > 8 ? limit : min(limit, 10_000)
+            if !batch.isEmpty && (batch.count == count || grown > allowed) {
                 result.append(batch); batch = []; bytes = 0
             }
             batch.append(fragment); bytes += fragment.text.utf8.count

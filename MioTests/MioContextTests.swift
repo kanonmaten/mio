@@ -103,6 +103,30 @@ final class MioContextTests: XCTestCase {
         XCTAssertThrowsError(try tooMany.validatedData(), "The phone checks the gateway's 1...8 rule itself")
     }
 
+    /// Ultrareview A3: a backlog batch may hold 12,000 bytes, but up to eight sources the
+    /// validator allows only 10,000, so three long excerpts failed on the phone itself.
+    func testBacklogBatchesOfFewLongExcerptsPassThePhonesOwnSizeCheck() throws {
+        let origin = Date(timeIntervalSince1970: 1_900_000_000)
+        let segments = (0..<3).map {
+            TranscriptSegment(audioStartedAt: origin.addingTimeInterval(Double($0) * 30), text: String(repeating: "a", count: 3_400), containsMio: false)
+        }
+        let session = MioSession(transcripts: segments)
+        let fragments = segments.flatMap(MioAnalysisFragment.make)
+        XCTAssertEqual(fragments.count, 3)
+        let batches = MioEverydayContext.batches(fragments, backlog: true)
+        XCTAssertEqual(batches.flatMap { $0 }, fragments)
+        for batch in batches {
+            let request = try MioEverydayContext.request(fragments: batch, session: session,
+                eligibleSegmentIDs: Set(segments.map(\.id)), continuityStartedAt: origin, decisions: [])
+            _ = try request.validatedData()
+        }
+        // Nine or more sources still use the larger backlog budget.
+        let many = (0..<12).map { MioAnalysisFragment(id: "\(UUID().uuidString):\($0)", text: String(repeating: "b", count: 1_000), occurredAt: "2026-11-15T10:00:00Z") }
+        XCTAssertEqual(MioEverydayContext.batches(many, backlog: true).map(\.count), [12])
+        XCTAssertTrue(MioWorkSplit.needsSmallerRequest(MioCloudError.invalidContext), "A request the phone cannot build is split, not fatal")
+        XCTAssertTrue(MioWorkSplit.needsSmallerRequest(MioCloudError.gateway(413, .requestTooLarge)))
+    }
+
     func testContextTrimsOldestFragmentsUntilDecisionHintsFitLimit() throws {
         let origin = Date(timeIntervalSince1970: 1_900_000_000)
         func segment(_ index: Int) -> TranscriptSegment {
