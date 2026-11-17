@@ -217,10 +217,40 @@ final class MioStoreMigrationTests: XCTestCase {
 
         let outcome = await MioStoreMigrator(files: files, target: target).run()
 
-        XCTAssertEqual(outcome, .useLegacyFiles(message: MioStoreMigrator.markerMessage))
+        XCTAssertEqual(outcome, .useTemporaryStore(message: MioStoreMigrator.markerMessage))
         XCTAssertEqual(try Data(contentsOf: files.markerURL), marker)
         XCTAssertEqual(files.presentLegacyURLs.count, 3)
     }
+
+    /// Ultrareview B2: an unreadable marker or one from a newer schema started the legacy JSON
+    /// files beside a store that already held the data.
+    func testUnreadableOrNewerMarkerNeverStartsLegacyFilesBesideTheStore() async throws {
+        for bytes in [Data("{ trasig".utf8), Data(#"{"schemaVersion":2,"state":"backedUp"}"#.utf8)] {
+            let (files, root) = try makeFiles()
+            defer { try? FileManager.default.removeItem(at: root) }
+            try await writeLegacyFiles(files, session: session())
+            try bytes.write(to: files.markerURL)
+            let filled = FakeMigrationTarget()
+            let snapshot = try await XCTUnwrapAsync(await MioLegacyStoreReader.read(files))
+            try await filled.replaceAll(with: snapshot)
+            let calls = await filled.replaceCalls
+
+            let outcome = await MioStoreMigrator(files: files, target: filled).run()
+
+            XCTAssertEqual(outcome, .useStore(message: MioStoreMigrator.markerStoreMessage))
+            XCTAssertEqual(try Data(contentsOf: files.markerURL), bytes, "A marker of unknown schema is never rewritten")
+            let after = await filled.replaceCalls
+            XCTAssertEqual(after, calls, "Nothing is migrated again over the store")
+            XCTAssertEqual(files.presentLegacyURLs.count, 3)
+
+            let empty = await MioStoreMigrator(files: files, target: FakeMigrationTarget()).run()
+            XCTAssertEqual(empty, .useTemporaryStore(message: MioStoreMigrator.markerMessage))
+        }
+        let temporary = MioResolvedStores.temporaryFiles(message: MioStoreMigrator.markerMessage)
+        XCTAssertTrue(temporary.isTemporary)
+    }
+
+    private func XCTUnwrapAsync<T>(_ value: T?) async throws -> T { try XCTUnwrap(value) }
 
     func testBackupMoveNeverOverwritesAnExistingBackup() async throws {
         let (files, root) = try makeFiles()

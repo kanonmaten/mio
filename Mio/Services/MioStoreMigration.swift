@@ -72,6 +72,9 @@ enum MioStoreMigrationOutcome: Equatable, Sendable {
     case useStore(message: String?)
     /// Nothing was migrated or changed; the legacy JSON repositories stay in use.
     case useLegacyFiles(message: String)
+    /// Where the data lives is unknown: nothing is opened for writing, and this launch runs on
+    /// a temporary copy that is never saved (ultrareview B2).
+    case useTemporaryStore(message: String)
 }
 
 /// File layout of the app-owned `Mio/` directory around the migration.
@@ -211,8 +214,12 @@ struct MioStoreMigrator: Sendable {
     func run() async -> MioStoreMigrationOutcome {
         let marker: MioStoreMigrationMarker?
         do { marker = try files.readMarker() } catch {
+            // An unreadable marker, or one from a newer schema, is never rewritten, and legacy
+            // files are never started beside a store that may hold the data (ultrareview B2).
             MioLog.error(.storage, "migration marker unreadable")
-            return .useLegacyFiles(message: Self.markerMessage)
+            guard let counts = try? await target.counts() else { return .useTemporaryStore(message: Self.markerMessage) }
+            return counts == MioStoreCounts() ? .useTemporaryStore(message: Self.markerMessage)
+                : .useStore(message: Self.markerStoreMessage)
         }
         if var marker {
             if marker.state == .verified {
@@ -292,6 +299,8 @@ struct MioStoreMigrator: Sendable {
         + "De gamla filerna är orörda och används tills vidare. Flytten försöks igen vid nästa start."
     static let saveMessage = "Mio kunde inte spara dina data i den nya databasen. De gamla filerna är orörda och används tills vidare. "
         + "Flytten försöks igen vid nästa start."
-    static let markerMessage = "Mio kunde inte läsa markeringen för datalagringen. Ingenting har flyttats eller raderats, "
-        + "och Mio använder de gamla filerna tills vidare."
+    static let markerMessage = "Mio kunde inte läsa markeringen för datalagringen och vet inte var dina data finns. "
+        + "Ingenting har flyttats eller raderats, men ändringar under den här körningen sparas inte. Uppdatera Mio eller starta om appen."
+    static let markerStoreMessage = "Mio kunde inte läsa markeringen för datalagringen. Mio använder databasen som den är; "
+        + "ingenting har flyttats eller raderats."
 }

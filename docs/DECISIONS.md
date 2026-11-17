@@ -7,6 +7,7 @@ Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett s
 Tre ultrareview-körningar på `1d089a0` gav 25 fynd; användaren vill att alla rättas. Val som inte är givna av koden:
 
 - **Radering på den tillfälliga databasen (B1).** Kan databasen inte öppnas kör Mio på en tom kopia i minnet. Radering vägras då innan något skrivs i raderingsjournalen, med beskedet att starta om Mio först. En radering som redan står i journalen från en tidigare start ligger kvar och slutförs vid första start där databasen går att öppna. Avböjt: att radera i minneskopian och rapportera klart (den riktiga datan blev kvar och journalen tömdes), och att skriva en ny avsikt i journalen och vänta (den skulle radera något användaren inte ser och kanske ångrat efter omstarten). Uppstädningen av gamla poster väntar också på den riktiga databasen.
+- **Oläslig flyttmarkering (B2).** Går markeringen `swiftdata-migration-v1.json` inte att läsa, eller har den ett okänt `schemaVersion`, skrivs den aldrig över och de gamla JSON-filerna startas aldrig bredvid databasen. Har databasen innehåll används den som den är, med ett besked. Är den tom vet Mio inte var datan finns, och körningen går på en tillfällig kopia (i minnet, annars tomma filer i en temporär mapp) som inte sparas och där radering vägras enligt B1. Avböjt: att som förut fortsätta med de gamla filerna (ändringar hamnade då i filer som en senare start inte läser), och att flytta om från de gamla filerna (det kunde skriva över nyare data i databasen).
 
 ## Verifieraren i Rust, 2026-11-17
 

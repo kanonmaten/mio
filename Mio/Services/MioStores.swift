@@ -77,6 +77,16 @@ struct MioResolvedStores: Sendable {
         MioResolvedStores(sessions: SessionRepository(), content: MioContentRepository(),
                           assistant: MioAssistantRepository(), message: message)
     }
+
+    /// Empty JSON repositories in a fresh temporary directory: the last resort when the real
+    /// data must not be written and no in-memory store can be made (ultrareview B2).
+    static func temporaryFiles(message: String) -> MioResolvedStores {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("Mio-temporary-\(UUID().uuidString)", isDirectory: true)
+        return MioResolvedStores(sessions: SessionRepository(storageURL: directory.appendingPathComponent("sessions.json")),
+                                 content: MioContentRepository(storageURL: directory.appendingPathComponent("content-v1.json")),
+                                 assistant: MioAssistantRepository(storageURL: directory.appendingPathComponent("assistant-v1.json")),
+                                 message: message, isTemporary: true)
+    }
 }
 
 /// Lets the view models be created synchronously at launch while the migration runs off

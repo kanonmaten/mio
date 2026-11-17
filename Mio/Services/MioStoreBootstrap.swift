@@ -33,10 +33,7 @@ final class MioStoreResolver: Sendable {
             // Data already lives in the store; never start parallel legacy files beside it.
             let message = "Mio kunde inte öppna databasen. Dina sparade data är orörda men visas inte, "
                 + "och ändringar under den här körningen sparas inte. Starta om Mio."
-            if let memory = try? MioPersistentStore.makeInMemoryContainer() {
-                return stores(container: memory, message: message, temporary: true)
-            }
-            return .legacyFiles(message: message)
+            return temporaryStores(message: message)
         }
         let outcome = await MioStoreMigrator(files: files, target: MioSwiftDataMigrationTarget(modelContainer: container)).run()
         switch outcome {
@@ -44,7 +41,17 @@ final class MioStoreResolver: Sendable {
             return stores(container: container, message: message)
         case let .useLegacyFiles(message):
             return .legacyFiles(message: message)
+        case let .useTemporaryStore(message):
+            return temporaryStores(message: message)
         }
+    }
+
+    /// Never the real legacy files: data may already live in the store (ultrareview B2).
+    private static func temporaryStores(message: String) -> MioResolvedStores {
+        if let memory = try? MioPersistentStore.makeInMemoryContainer() {
+            return stores(container: memory, message: message, temporary: true)
+        }
+        return .temporaryFiles(message: message)
     }
 
     private static func stores(container: ModelContainer, message: String?, temporary: Bool = false) -> MioResolvedStores {
