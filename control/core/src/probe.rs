@@ -108,14 +108,15 @@ pub fn gateway_health(port: u16) -> Option<bool> {
     }
 }
 
-/// `{"httpStatus": …, "body": …}` from the helper's status commands.
-fn helper_body(command: &Command) -> Option<Value> {
-    let answer: Value = serde_json::from_slice(&run_helper(command, None).ok()?).ok()?;
-    answer.get("httpStatus").and_then(Value::as_u64)?;
-    answer.get("body").cloned()
+/// `(HTTP status, body)` from the helper's status commands; `Ok(None)` when the service did
+/// not answer, `Err` when the helper itself could not run (not installed yet).
+fn helper_answer(command: &Command) -> Result<Option<(u64, Value)>, crate::helper_client::HelperError> {
+    let answer: Value = serde_json::from_slice(&run_helper(command, None)?).unwrap_or(Value::Null);
+    Ok(answer.get("httpStatus").and_then(Value::as_u64).map(|status| (status, answer.get("body").cloned().unwrap_or(Value::Null))))
 }
 
 /// Reads everything once. `previous` supplies what a failed read leaves as it was.
+/// `gateway_port` is only used when the helper is missing; the helper knows the configured port.
 pub fn overview(gateway_port: u16, previous: &Overview) -> Overview {
     let connection = Connection::system().ok();
     let units = |unit: Unit| connection.as_ref().map_or(UnitState::Unknown, |connection| unit_state(connection, unit.name()));
@@ -123,13 +124,29 @@ pub fn overview(gateway_port: u16, previous: &Overview) -> Overview {
     let transcription_unit = units(Unit::Transcription);
     let gateway_running = gateway_unit == UnitState::Running;
     let transcription_running = transcription_unit == UnitState::Running;
+    let (gateway_health, gateway) = if gateway_running {
+        match helper_answer(&Command::ReadGatewayStatus) {
+            Ok(Some((status, body))) => (Some(status == 200), (status == 200).then(|| GatewayStatus::parse(&body))),
+            Ok(None) => (Some(false), None),
+            // Without the helper the token-free /health still says whether it answers.
+            Err(_) => (gateway_health(gateway_port), previous.gateway.clone()),
+        }
+    } else {
+        (None, None)
+    };
+    let pianissimo = if transcription_running {
+        match helper_answer(&Command::ReadPianissimoHealth) {
+            Ok(Some((_, body))) => PianissimoHealth::parse(&body),
+            Ok(None) => Some(PianissimoHealth { status: "loading".into(), ..PianissimoHealth::default() }),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
     Overview {
-        gateway_health: if gateway_running { gateway_health(gateway_port) } else { None },
-        gateway: gateway_running
-            .then(|| helper_body(&Command::ReadGatewayStatus).map(|body| GatewayStatus::parse(&body)))
-            .flatten()
-            .or_else(|| previous.gateway.clone().filter(|_| gateway_running)),
-        pianissimo: transcription_running.then(|| helper_body(&Command::ReadPianissimoHealth).and_then(|body| PianissimoHealth::parse(&body))).flatten(),
+        gateway_health,
+        gateway,
+        pianissimo,
         tailscale: Some(tailscale()),
         gpu: gpu(),
         update_timer: connection.as_ref().and_then(timer_status),

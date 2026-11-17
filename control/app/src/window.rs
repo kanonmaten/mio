@@ -37,7 +37,8 @@ pub fn show(cx: &mut App) {
         window
             .observe_window_appearance(|window, cx| Theme::sync_system_appearance(Some(window), cx))
             .detach();
-        cx.new(|cx| Shell::new(window, cx))
+        let status = crate::model::status(cx);
+        cx.new(|cx| Shell::new(status, window, cx))
     });
     if let Err(error) = opened {
         eprintln!("mio-control: fönstret gick inte att öppna: {error}");

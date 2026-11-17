@@ -4269,6 +4269,7 @@ dependencies = [
  "gpui-kit",
  "ksni",
  "mio-control-core",
+ "notify-rust",
  "serde_json",
 ]
 

@@ -272,6 +272,45 @@ impl Overview {
     }
 }
 
+/// A desktop notification for a change the user should hear about even with the window closed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Alert {
+    pub title: String,
+    pub body: String,
+}
+
+/// What changed for the worse between two reads: a service went down, Pianissimo failed, the
+/// nightly update failed or the day's AI quota ran out. Nothing on the first read.
+pub fn alerts(before: &Overview, after: &Overview) -> Vec<Alert> {
+    let mut alerts = Vec::new();
+    let alert = |title: &str, body: &str| Alert { title: title.to_owned(), body: body.to_owned() };
+    let went_down = |before: &UnitState, after: &UnitState| {
+        matches!(before, UnitState::Running | UnitState::Starting) && matches!(after, UnitState::Stopped | UnitState::Failed)
+    };
+    if went_down(&before.gateway_unit, &after.gateway_unit) {
+        alerts.push(alert("AI-gatewayen har stannat", "Telefonen får inga AI-svar. Öppna Mio Kontroll för att starta den igen."));
+    }
+    if went_down(&before.transcription_unit, &after.transcription_unit) {
+        alerts.push(alert("Pianissimo har stannat", "Telefonen får ingen text. Öppna Mio Kontroll för att starta den igen."));
+    }
+    let failed = |overview: &Overview| overview.pianissimo.as_ref().is_some_and(|health| health.status == "failed");
+    if !failed(before) && failed(after) && after.transcription_unit == UnitState::Running {
+        alerts.push(alert("Pianissimo fungerar inte", "Modellen kunde inte laddas. Se loggen i Mio Kontroll."));
+    }
+    if let (Some(earlier), Some(later)) = (&before.update_timer, &after.update_timer)
+        && later.last_run_usec.is_some()
+        && later.last_run_usec != earlier.last_run_usec
+        && later.last_result.as_deref().is_some_and(|result| result != "success")
+    {
+        alerts.push(alert("Nattuppdateringen misslyckades", "Pianissimo kör vidare med den förra versionen."));
+    }
+    let remaining = |overview: &Overview| overview.gateway.as_ref().and_then(|gateway| gateway.quota.as_ref()).map(|quota| quota.1);
+    if remaining(before).is_some_and(|left| left > 0) && remaining(after) == Some(0) {
+        alerts.push(alert("Dagens AI-kvot är slut", "AI fungerar igen när kvoten nollställs vid midnatt (UTC)."));
+    }
+    alerts
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,5 +392,29 @@ mod tests {
         overview.transcription_unit = UnitState::Stopped;
         assert_eq!(overview.tray_status(), Some(TrayStatus::Error));
         assert_eq!(overview.summary(), "Gateway kör · Pianissimo stoppad · Tailscale ok");
+    }
+
+    #[test]
+    fn alerts_only_for_changes_for_the_worse() {
+        let before = healthy();
+        assert!(alerts(&Overview::default(), &before).is_empty(), "the first read never alerts");
+        assert!(alerts(&before, &before).is_empty());
+        let mut after = before.clone();
+        after.transcription_unit = UnitState::Failed;
+        let titles: Vec<String> = alerts(&before, &after).into_iter().map(|alert| alert.title).collect();
+        assert_eq!(titles, ["Pianissimo har stannat"]);
+        // Back up again is no alert; neither is a service that was already down.
+        assert!(alerts(&after, &before).is_empty());
+        assert!(alerts(&after, &after).is_empty());
+        let mut quota = before.clone();
+        quota.gateway = Some(GatewayStatus { quota: Some((100, 5, "tokens".into())), ..Default::default() });
+        let mut spent = quota.clone();
+        spent.gateway = Some(GatewayStatus { quota: Some((100, 0, "tokens".into())), ..Default::default() });
+        assert_eq!(alerts(&quota, &spent)[0].title, "Dagens AI-kvot är slut");
+        let mut night = before.clone();
+        night.update_timer = Some(TimerStatus { enabled: true, last_run_usec: Some(1), last_result: Some("success".into()) });
+        let mut failed_night = night.clone();
+        failed_night.update_timer = Some(TimerStatus { enabled: true, last_run_usec: Some(2), last_result: Some("exit-code".into()) });
+        assert_eq!(alerts(&night, &failed_night)[0].title, "Nattuppdateringen misslyckades");
     }
 }

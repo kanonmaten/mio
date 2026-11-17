@@ -42,7 +42,7 @@
         "danger.background": "#E5484D",
         "danger.hover.background": "#EA6266",
         "danger.active.background": "#CC3A3F",
-        "danger.foreground": "#FFFFFF",
+        "danger.foreground": "#1C1B1A",
         "info.background": "#4A4542",
         "info.hover.background": "#55504C",
         "info.active.background": "#403B38",

@@ -39,7 +39,8 @@ Ett tema i gpui-kits format, [`app/themes/mio-glod.json`](app/themes/mio-glod.js
 Två saker följer av siffrorna:
 
 - **Vit text på orange når bara 3,0**, så knappar och markeringar har grafit text i båda lägena.
-- **Felrött `#E5484D` når inte 4,5 mot ytan i mörkt läge.** Det används därför till ikoner, prickar och fyllningar. En felmening skrivs i vanlig textfärg med en röd ikon framför.
+- **Felrött `#E5484D` når inte 4,5 mot ytan i mörkt läge.** Det används därför till ikoner, prickar och fyllningar. En felmening skrivs i vanlig textfärg med en röd ikon framför. Statusetiketter (`Tag`) på röd fyllning har grafit text (4,4) i stället för vit (3,9).
+- **Statusetiketterna** på översikten har alltid ikon och ord: bock för "Kör" och "Redo", varningstriangel för det som laddar eller närmar sig en gräns, kryss för fel, och ett neutralt i för "Inte installerad".
 - Orange som text på ljus grund (2,7) används inte; länkar i ljust läge har den mörkare `#A8420F` (5,6).
 
 ### Form
