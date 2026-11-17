@@ -101,6 +101,19 @@ final class MioNavigationTests: XCTestCase {
         XCTAssertFalse(day.followsToday)
     }
 
+    /// Ultrareview E3: Hem rebuilds its overview when `revision` changes, and choosing another
+    /// day or week did not change it, so Hem kept showing the previous day.
+    @MainActor
+    func testSelectingAnotherDayChangesTheRevisionHemObserves() async {
+        let day = MioDayContext(now: date("2026-10-03T12:00:00Z"), calendar: calendar("Europe/Stockholm"))
+        let before = day.revision
+        day.select(date("2026-09-28T12:00:00Z"))
+        XCTAssertGreaterThan(day.revision, before)
+        let after = day.revision
+        day.select(date("2026-09-28T12:00:00Z"))
+        XCTAssertEqual(day.revision, after, "Choosing the same date again changes nothing")
+    }
+
     @MainActor
     func testFollowingTodayRefreshesAfterMidnightAndAfterSeveralDaysAsleep() async {
         let day = MioDayContext(now: date("2026-10-02T21:50:00Z"), calendar: calendar("Europe/Stockholm"))

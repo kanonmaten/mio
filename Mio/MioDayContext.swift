@@ -25,9 +25,12 @@ final class MioDayContext {
         return selectedDate
     }
 
+    /// A new date bumps `revision`, which Hem observes to rebuild its overview (ultrareview E3).
     func select(_ date: Date) {
+        let changed = date != selectedDate
         selectedDate = date
         followsToday = calendar.isDate(date, inSameDayAs: referenceDate)
+        if changed { revision &+= 1 }
     }
 
     func refresh(now: Date = .now, calendar: Calendar = .autoupdatingCurrent) {
