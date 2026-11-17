@@ -42,7 +42,7 @@ Fortsätt sedan med [användarguiden](docs/ANVANDNING.md) och [helhetstestet](do
 Öppna `Mio.xcodeproj`, välj schemat **Mio**. Appkod finns i `Mio/`, XCTest i `MioTests/`, tre native UI-smokeprov i `MioUITests/`, ljudservern i `transcription-server/` och text-AI-gatewayen i `server/`. Den gemensamma säkra Linuxgrinden körs från repots rot:
 
 ```sh
-python3 scripts/verify.py
+cargo run --locked --manifest-path tools/Cargo.toml -- verify
 ```
 
 Samma grind körs automatiskt i GitHub-workflowen **Verifiera Mio på Linux** vid varje push. [Verifieringsavsnittet](docs/INSTALLATION.md#verifiera-före-bygge) beskriver beroenden, grindar och begränsningar. Linux ersätter inte native mikrofon/konvertering, Keychain, URLSession, SwiftUI eller Xcode. Xcode/SDK-/IPA-grinden finns i `.github/workflows/build-unsigned-ipa.yml`; varje körning behöver faktisk runner- och revisionskontroll.

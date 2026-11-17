@@ -2,6 +2,27 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Verifieraren i Rust, 2026-11-17
+
+Användaren vill att allt på datorsidan som kan vara Rust ska vara det. Valt:
+
+- **De sex utvecklarskripten i `scripts/` (cirka 1 180 rader Python) är ersatta av Rustprogrammet `mio-verify` i `tools/`.** Delkommandona heter `verify`, `project`, `swift-core`, `capture-recovery`, `concurrency` (`--native` på macOS) och `session-store`. Grinden körs med `cargo run --locked --manifest-path tools/Cargo.toml -- verify`. Utskrifterna och de svenska meddelandena är desamma som förut, eftersom CI-loggar och [status](STATUS.md) citerar dem. Swiftkoden som ersätter plattformsgränserna ligger nu i egna filer i `tools/swift/`, och `SessionStoreMeasurement.swift` har flyttat till `tools/fixtures/`.
+- **En egen crate, inte en Cargo-arbetsyta ihop med gatewayen.** En arbetsyta hade flyttat gatewayens `Cargo.lock` och `target/` till repots rot, men `server/install.sh` bygger i `server/` på datorn. De två låsfilerna delar bara `serde_json` och `sha2`, i samma versioner.
+- **Bibliotek:** `yaml-rust2` för de två workflowfilerna (YAML 1.2; inget av fälten som kontrolleras tolkas annorlunda än i PyYAML:s YAML 1.1), `plist` för XML- och binära plistar som `plistlib`, `roxmltree` för den strikta XML-kontrollen av scheman, samt `regex`, `sha2`, `serde_json` och `tempfile`. Argumenten tolkas utan bibliotek.
+- **Samma beteende, visat före raderingen:** de 35 Swiftfiler som testharnessen genererar (den portabla modulen, 32 testfiler, XCTMain-registreringen och capture-programmet) är identiska byte för byte med Pythonversionens. Strukturkontrollen gav samma exitkod, samma antal kontroller och exakt samma felrader som Python, både på arbetskopian och på tio avsiktligt trasiga kopior. Kopiorna hade bland annat dubbla objekt-id, en fil utanför Sources, fel version, en Info.plist utan kameratext, blanksteg i radslut (med U+2028, NBSP, `\x1f` och CR), trasiga länkar, fel runner och bash-syntaxfel i en workflow, ogiltig YAML och en PrivacyInfo utan nyckel. Provenansen (`worktreeSHA256` och `codeConfigurationSHA256`) blev identisk på samma träd. Hela grinden gav samma resultat i varje steg: 264 strukturkontroller, 341 XCTest, 13 återhämtningsprov och ingen concurrencyvarning.
+- **Medvetna skillnader:**
+  - En avkortad appikon kraschade Pythonversionen med ett ofångat undantag. Rust räknar det som en underkänd kontroll; exitkoden är 1 i båda.
+  - Fel i YAML och XML visas med respektive parsers egen text.
+  - Kontrollen av blanksteg i radslut går nu igenom `tools/` i stället för `scripts/`. Rader delas som Pythons `str.splitlines` (alltså även vid U+2028, U+0085 och liknande), och blanksteg avgörs som i `str.isspace`.
+  - Workflowkontraktet kräver nu `tools/Cargo.toml` och `-- verify` i Linuxgrinden och `concurrency --native` i IPA-workflowen.
+  - Grinden har fått steget `verification-tools-lint` (clippy för verifieraren), och `verification-tools` kör `cargo test` i stället för unittest. Strukturkontrollen går inte längre via `uv`, eftersom PyYAML inte behövs.
+  - Långhistoriemätningen har inte gått att kompilera sedan 2026-10-11, varken i Python eller nu. `SpeechPauseDetector.swift` saknades i källistan och är tillagd. Rapporten har `schemaVersion` 2, där `platform.harness` ersätter `platform.pythonVersion`.
+- **IPA-workflowen** installerar en fäst Rust 1.100.0 under `RUNNER_TEMP` före native-steget för concurrency, så steget fungerar oavsett om runnerns avbild har Rust.
+
+Avböjt: att **behålla Python för skripten**, eftersom det kräver en extra körmiljö för utvecklarverktygen när resten av datorsidan är Rust. **`clap`** behövs inte för sex kommandon med få flaggor. **`serde_yaml` och dess forkar**: originalet underhålls inte längre, och forkarna ger inget utöver det dynamiska värde som `yaml-rust2` redan ger. **En Cargo-arbetsyta**: se ovan. Pianissimo och dess `measure_wer.py` stannar i Python av samma skäl som 2026-11-16.
+
+Inte provat: native-steget för concurrency i "Bygg Mio IPA" med Rustversionen. Det kräver en körning av IPA-workflowen, som användaren måste godkänna.
+
 ## Gatewayen i Rust, 2026-11-16
 
 Användaren frågade varför repot har JavaScript och Python, ville hellre ha Rust och bad sedan om att skriva om det som går. Valt:

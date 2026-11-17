@@ -43,3 +43,6 @@ __pycache__/
 .claude/worktrees/
 .impeccable/questions/
 .impeccable/config.local.json
+
+# The verifier crate (tools/)
+tools/target/

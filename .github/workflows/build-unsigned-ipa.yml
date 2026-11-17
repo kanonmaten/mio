@@ -418,12 +418,17 @@ jobs:
         # Diagnostic gate: warnings are recorded and uploaded, but do not block the IPA
         # until the existing warnings have been fixed (PLAN.md, Developer experience).
         # Runs last in the test job so that it delays neither the IPA nor the test results.
+        # The verifier is Rust: a toolchain pinned like the Linux gate goes under RUNNER_TEMP, so
+        # this works whether or not the runner image ships Rust and leaves nothing on the runner.
         if: ${{ !cancelled() }}
         continue-on-error: true
         run: |
           set -euo pipefail
-          python3 "$GITHUB_WORKSPACE/scripts/verify_concurrency.py" \
-            --native --log "$RUNNER_TEMP/Mio-concurrency.log"
+          export RUSTUP_HOME="$RUNNER_TEMP/rustup" CARGO_HOME="$RUNNER_TEMP/cargo"
+          curl --proto '=https' --tlsv1.2 -sSf -o "$RUNNER_TEMP/rustup-init.sh" https://sh.rustup.rs
+          sh "$RUNNER_TEMP/rustup-init.sh" -y --no-modify-path --profile minimal --default-toolchain 1.100.0
+          "$CARGO_HOME/bin/cargo" run --locked --manifest-path "$GITHUB_WORKSPACE/tools/Cargo.toml" -- \
+            concurrency --native --log "$RUNNER_TEMP/Mio-concurrency.log"
 
       - name: Spara native diagnostik även vid fel
         if: always()

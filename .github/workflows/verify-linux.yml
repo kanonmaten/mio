@@ -19,8 +19,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Installera Python och byggverktyg för verifieraren
-        # The Swift image has no python3 or curl; the verifier needs the system interpreter,
-        # rustup needs curl, and the gateway's TLS library compiles C code with gcc.
+        # The Swift image has no python3 or curl; uv and the Pianissimo tests use the system
+        # interpreter, rustup needs curl, and the gateway's TLS library compiles C code with gcc.
         run: |
           apt-get update
           apt-get install -y --no-install-recommends python3 ca-certificates curl gcc libc6-dev
@@ -29,9 +29,9 @@ jobs:
           persist-credentials: false
       - name: Tillåt arbetskopian för git i containern
         # The checkout is owned by the runner user, the container runs as root;
-        # verify.py records git provenance and must not hit dubious-ownership errors.
+        # the verifier records git provenance and must not hit dubious-ownership errors.
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Installera Rust för gatewayen
+      - name: Installera Rust för gatewayen och verifieraren
         # Pinned to the toolchain the gateway was verified with; rustup checks the download.
         # Downloaded to a file first: a failed download must fail the step, not pipe nothing into sh.
         run: |
@@ -45,7 +45,7 @@ jobs:
           version: '0.12.22'
           enable-cache: false
       - name: Kör samma lokala verifiering
-        run: python3 "$GITHUB_WORKSPACE/scripts/verify.py" --logs-dir "$GITHUB_WORKSPACE/.mio-verification"
+        run: cargo run --locked --manifest-path "$GITHUB_WORKSPACE/tools/Cargo.toml" -- verify --logs-dir "$GITHUB_WORKSPACE/.mio-verification"
       - name: Spara syntetiska kontrollresultat
         if: always()
         uses: actions/upload-artifact@v7

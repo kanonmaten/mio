@@ -23,7 +23,7 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 Ett skrivbordsprogram i Rust byggt med [GPUI](https://www.gpui.rs/) som styr och kontrollerar allt Mio kör på datorn:
 
 - Visar om gatewayen, Pianissimo och Tailscale kör och svarar, med gatewayens modellfria status (`/v2/status`), dagens kvot och Pianissimos hälsa.
-- Kör verifieringen (`scripts/verify.py` och gatewayens tester) och visar resultatet per steg.
+- Kör verifieringen (`mio-verify` i `tools/`, som också kör gatewayens tester) och visar resultatet per steg.
 - Sätter upp allt från början: Groq-nyckel, gatewayen, Pianissimo med transkriptionsmodellen och nattlig uppdatering, egna ord, Tailscale och parningskoden för telefonen.
 - Använd GPUI-skills och ett färdigt komponentbibliotek för GPUI (till exempel `gpui-component`) om det visar sig lämpligt när arbetet börjar; kontrollera aktuell dokumentation då.
 

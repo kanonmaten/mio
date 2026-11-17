@@ -62,13 +62,15 @@ Kräver en Mac som stöder vald Xcode-version och telefonens iOS. Kontrollera [A
 
 Linuxgrinden kör lokala kontroller med syntetiska data. Den publicerar ingenting och gör inga riktiga modellanrop. GitHub kör samma grind vid varje push (workflowen Verifiera Mio på Linux, i containern `swift:6.3.3-noble`).
 
-Lokalt behövs Linux, `python3`, `git`, Rust 1.88 eller senare (`cargo`, med clippy), `uv` och `swiftc` (eller `SWIFT_EXECUTABLE`). Kommandot kontrollerar arbetskopian där skriptet ligger:
+Lokalt behövs Linux, `git`, Rust 1.88 eller senare (`cargo`, med clippy), `uv` (som hämtar Python 3.12 till Pianissimos tester om det saknas) och `swiftc` (eller `SWIFT_EXECUTABLE`). Verifieraren är ett Rustprogram i `tools/` och kontrollerar arbetskopian den ligger i:
 
 ```bash
 mio_repo_directory="$(git rev-parse --show-toplevel)"
-python3 "$mio_repo_directory/scripts/verify.py"
+cargo run --locked --manifest-path "$mio_repo_directory/tools/Cargo.toml" -- verify
 # valfritt: --logs-dir /tmp/mio-verification-<revision> --measure-session-store
 ```
+
+Delstegen går att köra var för sig: `project`, `swift-core`, `capture-recovery`, `concurrency` och `session-store` i stället för `verify` (`--help` visar flaggorna).
 
 | Grind | Täcker | Täcker inte |
 |---|---|---|
@@ -80,6 +82,6 @@ python3 "$mio_repo_directory/scripts/verify.py"
 
 Resultatet är `PASS (Linux synthetic gates)`, `FAIL` (exitkod 1) eller `UNAVAILABLE` (exitkod 2). Med `--skip-swift` blir det `PARTIAL`, och då är Swift inte kontrollerat. `verification.json` i loggkatalogen anger commit, verktygsversioner och vilka grindar som körts; iOS och riktig modelltrafik står alltid som `NOT RUN`.
 
-iOS-koden kontrolleras bara av workflowen Bygg Mio IPA: concurrencydiagnostik, Release-bygge, XCTest med tre UI-prov och kontroll av IPA:n. På en Mac går concurrencydiagnostiken att köra direkt med `python3 scripts/verify_concurrency.py --native --log /tmp/mio-native-concurrency.log`.
+iOS-koden kontrolleras bara av workflowen Bygg Mio IPA: concurrencydiagnostik, Release-bygge, XCTest med tre UI-prov och kontroll av IPA:n. På en Mac med Rust går concurrencydiagnostiken att köra direkt med `cargo run --locked --manifest-path tools/Cargo.toml -- concurrency --native --log /tmp/mio-native-concurrency.log`.
 
 Loggar får bara innehålla textfri diagnostik: aldrig källtext, frågor, svar, ljud, tokens, fulla adresser eller exporter.

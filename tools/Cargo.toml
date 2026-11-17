@@ -1,0 +1,26 @@
+[package]
+name = "mio-verify"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+description = "Mio's Linux verification gate and portable Swift harnesses"
+
+[lib]
+name = "mio_verify"
+
+[[bin]]
+name = "mio-verify"
+path = "src/main.rs"
+
+[dependencies]
+# Binary and XML property lists, as plistlib reads them.
+plist = { version = "1.10.4", default-features = false }
+regex = "1.13.1"
+# Strict well-formedness check, like xml.etree's parser.
+roxmltree = "0.21.2"
+# preserve_order: verification.json keeps the key order of the earlier Python receipt.
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+sha2 = "0.11.1"
+tempfile = "3.27.0"
+yaml-rust2 = { version = "0.13.0", default-features = false }

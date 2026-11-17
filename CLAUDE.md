@@ -29,12 +29,15 @@ Before changing something, read the docs that cover it: [README](README.md), [de
 Linux can't build the iOS app. On the user's PC (Rust 1.88+, `swiftc`, `uv`) run the full gate; in a cloud session run what the toolchain allows:
 
 ```sh
-python3 scripts/verify.py                  # everything below plus Swift XCTest and concurrency
-python3 scripts/verify_swift_core.py       # portable Swift XCTest only
+cargo run --locked --manifest-path tools/Cargo.toml -- verify       # everything below plus Swift XCTest and concurrency
+cargo run --locked --manifest-path tools/Cargo.toml -- swift-core   # portable Swift XCTest only
+cargo run --locked --manifest-path tools/Cargo.toml -- project      # structure checks only
+cd tools && cargo test --locked && cargo clippy --locked --all-targets -- -D warnings
 cd server && cargo test --locked && cargo clippy --locked --all-targets -- -D warnings
 cd transcription-server && uv sync --locked --extra test --python 3.12 && uv run pytest tests
-python3 scripts/verify_project.py && python3 -m unittest discover -s scripts/tests
 ```
+
+The verifier (`tools/`, binary `mio-verify`) is Rust since 2026-11-17. Pianissimo and its tests stay Python (NeMo). Keep the verifier's Swedish messages unchanged: CI logs and `docs/STATUS.md` quote them. Its Swift rewrites must stay byte-identical to what they replace; the substituted Swift lives in `tools/swift/`.
 
 GitHub runs "Verifiera Mio på Linux" on every push; check it for the exact commit. "Bygg Mio IPA" (manual) builds the iOS app, runs simulator tests and makes the unsigned IPA; it is the only check of iOS-only code such as Keychain, UIKit and SwiftUI views.
 

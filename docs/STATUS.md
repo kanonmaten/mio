@@ -1,6 +1,6 @@
 # Bygg- och teststatus
 
-Senast uppdaterad **2026-11-16**. Version **0.9.1, ej släppt** (0.9.0 är revisionen `8f90ddc`, ej taggad). Den här filen innehåller bara vad som faktiskt är kontrollerat. Äldre poster finns i Git-historiken (`git log -- docs/STATUS.md`). [Ändringsloggen](../CHANGELOG.md) beskriver vad koden gör; [helhetstestet](TESTPLAN_HELHET.md) beskriver acceptansproven.
+Senast uppdaterad **2026-11-17**. Version **0.9.1, ej släppt** (0.9.0 är revisionen `8f90ddc`, ej taggad). Den här filen innehåller bara vad som faktiskt är kontrollerat. Äldre poster finns i Git-historiken (`git log -- docs/STATUS.md`). [Ändringsloggen](../CHANGELOG.md) beskriver vad koden gör; [helhetstestet](TESTPLAN_HELHET.md) beskriver acceptansproven.
 
 ## Aktuellt bygge: helhetsbygget 2026-10-11
 
@@ -8,6 +8,7 @@ Klart på `main`: gateway på datorn med Groq, Pianissimo med förbehandling och
 
 | Kontroll | Resultat |
 |---|---|
+| Verifieraren i Rust (Rust 1.100, Swift 6.4.2, uv 0.13.8, lokalt, 2026-11-17) | Hela grinden godkänd genom `mio-verify verify --measure-session-store` på den rena commiten med bytet: 266 strukturkontroller, clippy utan varningar och 10 tester för verifieraren, 98 gatewaytester, 95 pytest, 341 portabla XCTest, 13 återhämtningsprov, portabel concurrency utan varningar och långhistoriemätningen. Före raderingen av Pythonskripten jämförda mot dem: identiska genererade Swiftfiler (35), identisk provenans och samma strukturresultat på arbetskopian och tio trasiga kopior (se [besluten](DECISIONS.md)). Python-grinden godkänd som utgångsläge på `2c8d547`. Native concurrency i "Bygg Mio IPA" med Rustversionen är **inte körd**. |
 | Gateway i Rust (Rust 1.100, lokalt, 2026-11-16) | Hela `verify.py` godkänd på arbetskopian med Rust-bytet: 264 strukturkontroller, 5 verifierarprov, clippy utan varningar, 98 gatewaytester (varav parität mot cirka 2 600 inspelade fall och 86 HTTP-utbyten från Node-versionen), 95 pytest, 341 portabla XCTest, återhämtningskontrollen och den portabla concurrency-kontrollen. Live mot Node- och Rust-servern sida vid sida: 16 av 16 modellfria anrop gav samma status, rubriker och kropp. `install.sh` och `mio-pair` är **inte körda** på datorn; hjälpkommandona är provade mot en tillfällig fil. Ingen riktig Groq-trafik. |
 | Gateway (Node 22.22, lokalt, ersatt 2026-11-16) | 97 av 97 godkända för `ef6b57a` (prompter och release `2026-10-13.2`, sexton källor per anrop); 96 av 96 för `5ba9228`. Tidigare: 95 av 95 för `39e6d02` och `01e98bb`. Syntetisk Groq-transport, ingen riktig modelltrafik. Projektets fästa Node 26.10 fanns inte i molnmiljön. |
 | Pianissimo (pytest, lokalt) | 82 av 82 godkända med falska modeller, senast efter säkerhetsuppdateringen 2026-10-12 (NeMo 3.0.0). `pip-audit` på låsfilen: bara två Lightning-råd kvar. NeMo 3.0.0 importerar modellklasserna med de nya versionerna, men riktig modellladdning, Sortformer, svensk talarkvalitet, GPU-minne och effekten av förbehandling är **inte provade**. |
