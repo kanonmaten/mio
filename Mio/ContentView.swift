@@ -293,7 +293,9 @@ private struct StatusHeader: View {
         case .paused: "Pausad, fortsätt manuellt"
         case .preparing: "Startar"
         case .stopping: "Stoppar"
-        case .interrupted, .failed: "Stoppad, fortsätt manuellt"
+        // The microphone restarts itself after an interruption, never after a failure.
+        case .interrupted: "Avbruten, fortsätter snart"
+        case .failed: "Stoppad, fortsätt manuellt"
         case .unavailable: "Inte tillgänglig"
         case .off: "Avstängd"
         }
