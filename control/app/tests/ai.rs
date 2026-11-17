@@ -69,7 +69,7 @@ fn choose_a_model_and_a_limit_see_the_changes_and_save(cx: &mut TestAppContext) 
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
         // Nothing is read (no password) until the user asks to change something.
-        assert!(window.try_find("ai-changes").is_none());
+        assert!(window.try_find("changes").is_none());
         window.click("edit-ai", cx);
     })
     .unwrap();
@@ -77,7 +77,7 @@ fn choose_a_model_and_a_limit_see_the_changes_and_save(cx: &mut TestAppContext) 
     assert!(matches!(calls.lock().unwrap()[0].0, Command::ReadSettings(SettingsFile::Gateway)));
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
-        assert_eq!(window.find("ai-changes").label(), Some("Inga ändringar."));
+        assert_eq!(window.find("changes").label(), Some("Inga ändringar."));
         // Lesson notes on Anthropic, chosen with the keyboard in the menu: same, Groq, Anthropic.
         window.click("ai-task-lesson", cx);
         window.press("down", cx);
@@ -88,7 +88,7 @@ fn choose_a_model_and_a_limit_see_the_changes_and_save(cx: &mut TestAppContext) 
     cx.run_until_parked();
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
-        assert_eq!(window.find("ai-changes").label(), Some("1 ändringar"), "the lesson model");
+        assert_eq!(window.find("changes").label(), Some("1 ändringar"), "the lesson model");
         // Twenty requests per minute instead of ten.
         window.click("limit-MIO_REQUESTS_PER_MINUTE", cx);
         window.press("ctrl-a", cx);
@@ -98,7 +98,7 @@ fn choose_a_model_and_a_limit_see_the_changes_and_save(cx: &mut TestAppContext) 
     cx.run_until_parked();
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
-        assert_eq!(window.find("ai-changes").label(), Some("2 ändringar"));
+        assert_eq!(window.find("changes").label(), Some("2 ändringar"));
         window.click("save-ai", cx);
     })
     .unwrap();

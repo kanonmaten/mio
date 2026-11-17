@@ -5,10 +5,13 @@ pub mod desktop;
 pub mod model;
 pub mod operation;
 pub mod overview;
+pub mod parts;
 pub mod shell;
 pub mod theme;
+pub mod transcription;
 pub mod tray;
 pub mod window;
+pub mod words;
 
 use gpui_kit::QuitMode;
 

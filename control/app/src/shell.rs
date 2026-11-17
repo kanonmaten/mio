@@ -10,6 +10,8 @@ use gpui_kit::{
 };
 
 use crate::ai::AiPage;
+use crate::transcription::TranscriptionPage;
+use crate::words::WordsPage;
 use crate::model::StatusModel;
 use crate::overview::OverviewPage;
 use crate::window::{CloseWindow, ToggleFullscreen};
@@ -19,15 +21,19 @@ use crate::window::{CloseWindow, ToggleFullscreen};
 pub enum Page {
     Overview,
     Ai,
+    Transcription,
+    Words,
 }
 
 impl Page {
-    pub const ALL: [Page; 2] = [Page::Overview, Page::Ai];
+    pub const ALL: [Page; 4] = [Page::Overview, Page::Ai, Page::Transcription, Page::Words];
 
     pub fn title(self) -> &'static str {
         match self {
             Page::Overview => "Översikt",
             Page::Ai => "AI",
+            Page::Transcription => "Transkription",
+            Page::Words => "Egna ord",
         }
     }
 
@@ -35,6 +41,8 @@ impl Page {
         match self {
             Page::Overview => IconName::LayoutDashboard,
             Page::Ai => IconName::Bot,
+            Page::Transcription => IconName::Mic,
+            Page::Words => IconName::FileText,
         }
     }
 }
@@ -47,6 +55,8 @@ pub struct Shell {
     page: Page,
     overview: Entity<OverviewPage>,
     ai: Entity<AiPage>,
+    transcription: Entity<TranscriptionPage>,
+    words: Entity<WordsPage>,
 }
 
 impl Shell {
@@ -54,8 +64,10 @@ impl Shell {
         let focus = cx.focus_handle();
         focus.focus(window, cx);
         let overview = cx.new(|cx| OverviewPage::new(status.clone(), cx));
-        let ai = cx.new(|cx| AiPage::new(status, cx));
-        Self { focus, page: Page::Overview, overview, ai }
+        let ai = cx.new(|cx| AiPage::new(status.clone(), cx));
+        let transcription = cx.new(|cx| TranscriptionPage::new(status.clone(), cx));
+        let words = cx.new(|cx| WordsPage::new(status, cx));
+        Self { focus, page: Page::Overview, overview, ai, transcription, words }
     }
 
     pub fn page(&self) -> Page {
@@ -73,6 +85,8 @@ impl Shell {
         match self.page {
             Page::Overview => self.overview.clone().into(),
             Page::Ai => self.ai.clone().into(),
+            Page::Transcription => self.transcription.clone().into(),
+            Page::Words => self.words.clone().into(),
         }
     }
 

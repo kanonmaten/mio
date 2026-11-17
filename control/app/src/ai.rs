@@ -13,13 +13,14 @@ use gpui_kit::{
     AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _, Window, div, prelude::FluentBuilder as _,
 };
-use mio_control_core::ai_settings::{AiForm, Catalog, Change, GatewayFile, LIMITS, Pair, TASKS, provider_name};
+use mio_control_core::ai_settings::{AiForm, Catalog, GatewayFile, LIMITS, Pair, TASKS, provider_name};
 use mio_control_core::command::{Command, PROVIDER_IDS, Unit, UnitAction};
 use mio_control_core::settings::{PROVIDER_SECRET_KEYS, SettingsFile};
 use serde_json::Value;
 
 use crate::model::StatusModel;
 use crate::operation;
+use crate::parts::render_changes;
 
 type Choice = SelectState<Vec<SharedString>>;
 
@@ -355,21 +356,6 @@ impl AiPage {
                 )
             })
     }
-}
-
-fn render_changes(changes: &[Change], theme: &gpui_kit::component::Theme) -> impl IntoElement {
-    let show = |value: &Option<String>| value.clone().unwrap_or_else(|| "(tomt)".to_owned());
-    let summary: SharedString = if changes.is_empty() { "Inga ändringar.".into() } else { format!("{} ändringar", changes.len()).into() };
-    v_flex()
-        .id("ai-changes")
-        .test_support()
-        .aria_label(summary.clone())
-        .gap_1()
-        .text_sm()
-        .when(changes.is_empty(), |list| list.child(div().text_color(theme.muted_foreground).child(summary)))
-        .children(changes.iter().map(|change| {
-            h_flex().gap_2().child(div().font_semibold().child(change.key.clone())).child(show(&change.before)).child("→").child(show(&change.after))
-        }))
 }
 
 fn trial_report(label: &str, output: &[u8]) -> TrialReport {

@@ -12,5 +12,6 @@ pub mod settings;
 pub mod socket_owner;
 pub mod status;
 pub mod token;
+pub mod transcription_settings;
 pub mod tray_icon;
 pub mod verification;
