@@ -56,7 +56,9 @@ final class MioConnectionDiscovery {
             let age = now().timeIntervalSince(cache.checkedAt)
             if (0..<30).contains(age) { return cache.status }
         }
-        if let pending, pending.connection != connection { invalidate() }
+        // Callers with the same endpoint and token join the check in flight even when their
+        // observed revision differs; `prepare` compares the revision afterwards (ultrareview A5).
+        if let pending, !pending.connection.hasSameCredentials(as: connection) { invalidate() }
         let waiterID = UUID()
         let cancellation = CancellationMarker()
         let status: MioGatewayStatusV2 = try await withTaskCancellationHandler {

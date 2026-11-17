@@ -49,6 +49,29 @@ final class MioConnectionDiscoveryTests: XCTestCase {
         XCTAssertEqual(calls, 5)
     }
 
+    /// Ultrareview A5: a check for the same endpoint and token that differed only in the
+    /// observed revision cancelled the one in flight, so concurrent callers failed each other.
+    @MainActor func testConcurrentChecksWithTheSameCredentialsShareOneRequest() async throws {
+        var continuation: CheckedContinuation<MioGatewayStatusV2, Never>?
+        var calls = 0
+        let discovery = MioConnectionDiscovery(fetchStatus: { _ in
+            calls += 1
+            return await withCheckedContinuation { continuation = $0 }
+        })
+        let plain = syntheticCloudConnection()
+        var observed = plain
+        observed.observedConfigurationRevision = String(repeating: "a", count: 64)
+        let first = Task { try await discovery.prepare(connection: plain, task: .ask) }
+        for _ in 0..<1_000 { if continuation != nil { break }; await Task.yield() }
+        let second = Task { try await discovery.prepare(connection: observed, task: .everyday) }
+        for _ in 0..<1_000 { await Task.yield() }
+        continuation?.resume(returning: syntheticGatewayStatus())
+        let results = try await (first.value, second.value)
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(results.0.status.configurationRevision, results.1.status.configurationRevision)
+        XCTAssertEqual(results.1.connection.observedConfigurationRevision, observed.observedConfigurationRevision)
+    }
+
     @MainActor func testInvalidationRejectsLateUncancellableDiscoveryResult() async throws {
         var continuation: CheckedContinuation<MioGatewayStatusV2, Never>?
         let discovery = MioConnectionDiscovery(fetchStatus: { _ in await withCheckedContinuation { continuation = $0 } })
