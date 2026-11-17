@@ -11,6 +11,7 @@ use gpui_kit::{
 
 use crate::ai::AiPage;
 use crate::network::NetworkPage;
+use crate::updates::UpdatesPage;
 use crate::transcription::TranscriptionPage;
 use crate::words::WordsPage;
 use crate::model::StatusModel;
@@ -25,10 +26,11 @@ pub enum Page {
     Transcription,
     Words,
     Network,
+    Updates,
 }
 
 impl Page {
-    pub const ALL: [Page; 5] = [Page::Overview, Page::Ai, Page::Transcription, Page::Words, Page::Network];
+    pub const ALL: [Page; 6] = [Page::Overview, Page::Ai, Page::Transcription, Page::Words, Page::Network, Page::Updates];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -37,6 +39,7 @@ impl Page {
             Page::Transcription => "Transkription",
             Page::Words => "Egna ord",
             Page::Network => "Tailscale och parning",
+            Page::Updates => "Uppdateringar",
         }
     }
 
@@ -47,6 +50,7 @@ impl Page {
             Page::Transcription => IconName::Mic,
             Page::Words => IconName::FileText,
             Page::Network => IconName::Network,
+            Page::Updates => IconName::RefreshCw,
         }
     }
 }
@@ -62,6 +66,7 @@ pub struct Shell {
     transcription: Entity<TranscriptionPage>,
     words: Entity<WordsPage>,
     network: Entity<NetworkPage>,
+    updates: Entity<UpdatesPage>,
 }
 
 impl Shell {
@@ -73,7 +78,8 @@ impl Shell {
         let transcription = cx.new(|cx| TranscriptionPage::new(status.clone(), cx));
         let words = cx.new(|cx| WordsPage::new(status.clone(), cx));
         let network = cx.new(|cx| NetworkPage::new(status, window, cx));
-        Self { focus, page: Page::Overview, overview, ai, transcription, words, network }
+        let updates = cx.new(|_| UpdatesPage::new());
+        Self { focus, page: Page::Overview, overview, ai, transcription, words, network, updates }
     }
 
     pub fn page(&self) -> Page {
@@ -81,6 +87,10 @@ impl Shell {
     }
 
     pub fn show(&mut self, page: Page, cx: &mut Context<Self>) {
+        if page == Page::Updates {
+            // git fetch and checkupdates touch the network, so only when the page is opened.
+            self.updates.update(cx, |updates, cx| updates.check_once(cx));
+        }
         if self.page != page {
             self.page = page;
             cx.notify();
@@ -94,6 +104,7 @@ impl Shell {
             Page::Transcription => self.transcription.clone().into(),
             Page::Words => self.words.clone().into(),
             Page::Network => self.network.clone().into(),
+            Page::Updates => self.updates.clone().into(),
         }
     }
 

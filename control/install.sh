@@ -57,6 +57,11 @@ sudo install -D -m 644 "$source_dir/desktop/app.mio.control.svg" "$icon"
 command -v update-desktop-database >/dev/null && sudo update-desktop-database "$applications" || true
 command -v gtk-update-icon-cache >/dev/null && sudo gtk-update-icon-cache -q /usr/local/share/icons/hicolor || true
 
+# The commit this was installed from; Mio Kontroll compares it with the repo to show updates.
+if commit="$(git -C "$source_dir" rev-parse HEAD 2>/dev/null)"; then
+    printf '%s\n' "$commit" | sudo tee "$helper_dir/commit" >/dev/null
+fi
+
 if $with_autostart; then
     step "Startar vid inloggning (bara ikonen i systemfältet)"
     install -D -m 644 "$source_dir/desktop/app.mio.control-autostart.desktop" "$autostart"

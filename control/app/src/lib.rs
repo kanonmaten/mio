@@ -11,6 +11,7 @@ pub mod shell;
 pub mod theme;
 pub mod transcription;
 pub mod tray;
+pub mod updates;
 pub mod window;
 pub mod words;
 

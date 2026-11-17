@@ -124,5 +124,10 @@ fi
 sudo tailscale serve --bg --https="$https_port" "http://127.0.0.1:$port"
 sudo tailscale serve status 2>/dev/null || true
 
+# The commit this was installed from; Mio Kontroll compares it with the repo to show updates.
+if commit="$(git -C "$source_dir" rev-parse HEAD 2>/dev/null)"; then
+    printf '%s\n' "$commit" | sudo tee "$app_dir/commit" >/dev/null
+fi
+
 step "Klart"
 echo "Para telefonen: kör  mio-pair  och skanna QR-koden i Mio (Inställningar → Parning)."

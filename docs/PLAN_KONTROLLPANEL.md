@@ -193,6 +193,8 @@ Kontroll av `serve`, varning för `funnel`, QR-koden i fönstret, tokenbyte.
 
 Raderna per del, "Uppdatera allt", Konsole för systempaketen, och stopp vid första fel.
 
+*Byggnot (2026-11-17):* installationsskripten vägrar köras som root och frågar själva efter `sudo`, så hela uppdateringen (inte bara systempaketen) körs som ett skript i Konsole som stannar vid första fel. Rothjälparen kör aldrig skript ur repot, eftersom användaren kan ändra dem. Varje installation skriver vilken commit den kom från (`commit` bredvid programmet), och panelen jämför den med repot efter `git fetch`.
+
 ### Fas 8. Verifiering och loggar
 
 Kvittot från `mio-verify`, journalen med följ-läge.

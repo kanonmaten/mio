@@ -150,6 +150,11 @@ step "Väntar på att modellen laddas (högst 5 min)"
 step "Senaste Pianissimo-version"
 sudo "$app_dir/update-model.sh"
 
+# The commit this was installed from; Mio Kontroll compares it with the repo to show updates.
+if commit="$(git -C "$source_dir" rev-parse HEAD 2>/dev/null)"; then
+    printf '%s\n' "$commit" | sudo tee "$app_dir/commit" >/dev/null
+fi
+
 step "Tailscale"
 if ! tailscale status >/dev/null 2>&1; then
     echo "Tailscale är inte inloggat. Kör: sudo systemctl enable --now tailscaled && sudo tailscale up"

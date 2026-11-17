@@ -11,3 +11,12 @@ pub fn notify(alert: &Alert) {
         .body(&alert.body)
         .show();
 }
+
+/// The login entry `control/install.sh` writes, `$XDG_CONFIG_HOME/autostart/app.mio.control.desktop`.
+pub fn autostart_path() -> Option<std::path::PathBuf> {
+    let config = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|path| !path.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".config")))?;
+    Some(config.join("autostart/app.mio.control.desktop"))
+}
