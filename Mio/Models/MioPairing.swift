@@ -222,3 +222,42 @@ struct MioAIConsentLog: Codable, Equatable, Sendable {
         return start
     }
 }
+
+/// Everyday text the provider refused or that could not be made small enough, so catch-up
+/// after a restart does not send it again (ultrareview A1). Only fragment identifiers
+/// (`segment UUID:index`) and times are stored, never text. Entries leave with the catch-up window.
+struct MioSkippedFragmentLog: Codable, Equatable, Sendable {
+    static let key = "mio.ai.skippedFragments.v1"
+    static let limit = 2_000
+    var entries: [String: Date] = [:]
+
+    var ids: Set<String> { Set(entries.keys) }
+
+    static func load(from defaults: UserDefaults) -> MioSkippedFragmentLog {
+        guard let data = defaults.data(forKey: key),
+              let log = try? JSONDecoder().decode(MioSkippedFragmentLog.self, from: data) else { return MioSkippedFragmentLog() }
+        return log
+    }
+
+    func save(to defaults: UserDefaults) {
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        defaults.set(data, forKey: Self.key)
+    }
+
+    static func record(_ ids: Set<String>, at date: Date, in defaults: UserDefaults) {
+        var log = load(from: defaults)
+        log.record(ids, at: date)
+        log.save(to: defaults)
+    }
+
+    mutating func record(_ ids: Set<String>, at date: Date) {
+        for id in ids { entries[id] = date }
+        let cutoff = date.addingTimeInterval(-MioAIConsentLog.catchUpWindow)
+        entries = entries.filter { $0.value >= cutoff }
+        if entries.count > Self.limit {
+            let newest = entries.sorted { $0.value > $1.value }.prefix(Self.limit)
+            entries = Dictionary(uniqueKeysWithValues: newest.map { ($0.key, $0.value) })
+        }
+    }
+}
+

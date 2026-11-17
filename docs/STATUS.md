@@ -2,13 +2,13 @@
 
 Senast uppdaterad **2026-11-17**. Version **0.9.1, ej släppt** (0.9.0 är revisionen `8f90ddc`, ej taggad). Den här filen innehåller bara vad som faktiskt är kontrollerat. Äldre poster finns i Git-historiken (`git log -- docs/STATUS.md`). [Ändringsloggen](../CHANGELOG.md) beskriver vad koden gör; [helhetstestet](TESTPLAN_HELHET.md) beskriver acceptansproven.
 
-## Rättelser efter kodgranskningen 2026-11-17 (`0c6fd84`–`2dacf41`)
+## Rättelser efter kodgranskningen 2026-11-17 (`0c6fd84` och framåt)
 
 De 25 fynden från tre ultrareview-körningar på `1d089a0`, ett i taget; se [ändringsloggen](../CHANGELOG.md) och [besluten](DECISIONS.md).
 
 | Kontroll | Resultat |
 |---|---|
-| Hela grinden, lokalt (Rust 1.100, Swift 6.4.2, uv 0.13.8) | `mio-verify verify` godkänd på den rena commiten `2dacf41`: 266 strukturkontroller, clippy utan varningar för verifieraren och gatewayen, verifierarens tester, 103 gatewaytester (pariteten mot Node oförändrad), 95 pytest, 356 portabla XCTest, 13 återhämtningsprov och portabel concurrency utan varningar. Efter varje ändring av appens kärna kördes `swift-core`, efter varje gatewayändring `cargo test` och clippy. Testet för A4 (batchstorleken) och testet för B3 (godkännandet) underkändes utan sin rättelse. |
+| Hela grinden, lokalt (Rust 1.100, Swift 6.4.2, uv 0.13.8) | `mio-verify verify` godkänd på den rena commiten `2dacf41`: 266 strukturkontroller, clippy utan varningar för verifieraren och gatewayen, verifierarens tester, 103 gatewaytester (pariteten mot Node oförändrad), 95 pytest, 356 portabla XCTest, 13 återhämtningsprov och portabel concurrency utan varningar. Efter varje ändring av appens kärna kördes `swift-core`, efter varje gatewayändring `cargo test` och clippy. Testet för A4 (batchstorleken) och testet för B3 (godkännandet) underkändes utan sin rättelse. Efteråt sparas överhoppad text över omstart (A1); den commiten är kontrollerad med `swift-core` (357 XCTest) och hela grinden, se överlämningen. |
 | Bara för iOS, **inte byggt** | D2 (Parning), E1 (Fråga Mio), E2 (Historik), E4 (förslagets datum), E5 (texten på Fånga), F1 (`TranscriptionClient` och ett nytt test i `TranscriptionTests`), F2 (`MioSystemServices`) och resolvern i B1/B2 (`MioStoreBootstrap`). De kompileras först i "Bygg Mio IPA", som inte är körd. |
 | Datorn, Groq och telefonen | **Inte körda.** Ingen riktig modelltrafik och inga anrop till servrarna; `install.sh`, `mio-pair` och Pianissimos installation är inte körda. |
 

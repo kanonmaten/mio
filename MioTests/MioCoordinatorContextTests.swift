@@ -601,6 +601,46 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
         XCTAssertFalse(coordinator.isWorking)
     }
 
+    /// The skipped text is remembered across a restart of Mio, so catch-up on the next launch
+    /// does not send it again either.
+    @MainActor
+    func testRefusedEverydayTextIsNotCaughtUpAgainAfterARestart() async throws {
+        let assistant = assistant(self)
+        var clock = Date.now
+        let base = clock
+        var log = MioAIConsentLog()
+        log.record(.on, at: base.addingTimeInterval(-3_600))
+        var stored = MioSkippedFragmentLog()
+        let session = MioSession(startedAt: base.addingTimeInterval(-2_000), endedAt: base.addingTimeInterval(-600), transcripts: [
+            TranscriptSegment(createdAt: base.addingTimeInterval(-1_800), text: "Avböjt underlag.", containsMio: false)])
+        var sends = 0
+        func launch() -> MioAnalysisCoordinator {
+            MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+                prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { _, _ in
+                    sends += 1
+                    throw MioCloudError.gateway(502, .providerRefusal)
+                }, wait: { clock.addTimeInterval($0) }, now: { clock },
+                consentLog: { log }, recordConsent: { log.record($0, at: $1, until: $2) },
+                skippedFragments: { stored.ids }, recordSkipped: { stored.record($0, at: $1) })
+        }
+        let first = launch()
+        try await first.enable(existingSessions: [session], assistant: assistant)
+        for _ in 0..<20_000 { if (sends == 1 && !first.isWorking) || !first.enabled { break }; await Task.yield() }
+        first.disable()
+        XCTAssertEqual(sends, 1)
+        XCTAssertEqual(stored.ids, Set(MioAnalysisFragment.make(from: session.transcripts[0]).map(\.id)), "Only identifiers are stored")
+
+        let restarted = launch()
+        defer { restarted.disable() }
+        try await restarted.enable(existingSessions: [session], assistant: assistant)
+        for _ in 0..<2_000 { await Task.yield() }
+        XCTAssertEqual(sends, 1, "A new launch must not catch up refused text")
+
+        // Entries leave with the twelve-hour catch-up window.
+        stored.record([], at: base.addingTimeInterval(MioAIConsentLog.catchUpWindow + 1))
+        XCTAssertTrue(stored.ids.isEmpty)
+    }
+
     @MainActor
     func testTooLargeAnswerSplitsTheBatchInsteadOfStoppingAI() async throws {
         for failure in [MioCloudError.gateway(502, .upstreamResponseTooLarge), .oversizedResponse] {

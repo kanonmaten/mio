@@ -49,8 +49,8 @@ final class MioAnalysisCoordinator {
     @ObservationIgnored private var everydaySuccesses = 0
     static let shrinkRelaxCalls = 4
     /// Everyday text whose answer was rejected or that cannot be made small enough. It stays
-    /// on the phone and is not queued again during this run.
-    @ObservationIgnored private var skippedFragmentIDs: Set<String> = []
+    /// on the phone and is not queued again, also not by catch-up after a restart.
+    @ObservationIgnored private var skippedFragmentIDs: Set<String>
     /// Pauses in a row without a successful call; see `MioAnalysisSchedule.backoff`.
     @ObservationIgnored private var consecutivePauses = 0
     @ObservationIgnored private var deletedSessionIDs: Set<UUID> = []
@@ -65,6 +65,7 @@ final class MioAnalysisCoordinator {
     @ObservationIgnored private let waitForUnlock: @MainActor () async throws -> Void
     @ObservationIgnored private let consentLog: @MainActor () -> MioAIConsentLog
     @ObservationIgnored private let recordConsent: @MainActor (MioAIConsentLog.Kind, Date, Date?) -> Void
+    @ObservationIgnored private let recordSkipped: @MainActor (Set<String>, Date) -> Void
 
     init(
         loadConnection: @escaping @MainActor () throws -> MioCloudConnection = { try MioCloudSettings.connection() },
@@ -88,8 +89,14 @@ final class MioAnalysisCoordinator {
         consentLog: @escaping @MainActor () -> MioAIConsentLog = { .load(from: .standard) },
         recordConsent: @escaping @MainActor (MioAIConsentLog.Kind, Date, Date?) -> Void = {
             MioAIConsentLog.record($0, at: $1, until: $2, in: .standard)
+        },
+        skippedFragments: @escaping @MainActor () -> Set<String> = { MioSkippedFragmentLog.load(from: .standard).ids },
+        recordSkipped: @escaping @MainActor (Set<String>, Date) -> Void = {
+            MioSkippedFragmentLog.record($0, at: $1, in: .standard)
         }
     ) {
+        self.skippedFragmentIDs = skippedFragments()
+        self.recordSkipped = recordSkipped
         self.loadConnection = loadConnection
         self.configurationMatches = configurationMatches
         self.prepareConnection = prepareConnection
@@ -610,6 +617,7 @@ final class MioAnalysisCoordinator {
             status = "Textutdraget var för stort för AI-tjänsten. Skickar det i mindre delar."
         } else {
             skippedFragmentIDs.formUnion(fragments.map(\.id))
+            recordSkipped(Set(fragments.map(\.id)), now())
             status = "AI kunde inte tolka ett textutdrag. Det hoppades över; texten finns kvar lokalt."
         }
     }
