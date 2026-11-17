@@ -112,7 +112,7 @@ pub fn load_config(env: &dyn Fn(&str) -> Option<String>) -> Result<Config, Confi
         requests_per_minute: positive_integer(env("MIO_REQUESTS_PER_MINUTE").as_deref(), 10, 60)?,
         tokens_per_minute: match tokens_per_minute {
             None => Some(8_000),
-            Some(value) => optional_limit(Some(&value), MAX_REQUESTS_PER_DAY)?,
+            Some(value) => optional_limit(Some(&value), MAX_TOKENS_PER_DAY)?,
         },
         requests_per_day: optional_limit(env("MIO_REQUESTS_PER_DAY").as_deref(), MAX_REQUESTS_PER_DAY)?,
         tokens_per_day: optional_limit(env("MIO_TOKENS_PER_DAY").as_deref(), MAX_TOKENS_PER_DAY)?,

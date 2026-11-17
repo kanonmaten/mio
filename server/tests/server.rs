@@ -68,6 +68,10 @@ fn transport_settings_stay_bounded_while_invalid_generation_configuration_remain
         assert_eq!(load(&[("MIO_TOKENS_PER_MINUTE", off)]).unwrap().tokens_per_minute, None);
     }
     assert!(load(&[("MIO_TOKENS_PER_MINUTE", "500")]).is_err());
+    // A token budget is bounded by the token maximum, not the request one (ultrareview C5).
+    let most = mio_gateway::config::MAX_TOKENS_PER_DAY.to_string();
+    assert_eq!(load(&[("MIO_TOKENS_PER_MINUTE", &most)]).unwrap().tokens_per_minute, Some(mio_gateway::config::MAX_TOKENS_PER_DAY));
+    assert!(load(&[("MIO_TOKENS_PER_MINUTE", &(mio_gateway::config::MAX_TOKENS_PER_DAY + 1).to_string())]).is_err());
 }
 
 #[test]
