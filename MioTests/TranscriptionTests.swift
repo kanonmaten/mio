@@ -215,3 +215,26 @@ extension TranscriptionTests {
         catch { XCTAssertTrue(error is TranscriptionError) }
     }
 }
+
+private final class EndedSessionTranscriptionProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let known = request.httpMethod == "DELETE" && request.url?.path.hasPrefix("/v1/sessions/") == true
+        let response = HTTPURLResponse(url: request.url!, statusCode: known ? 204 : 400, httpVersion: "HTTP/1.1", headerFields: [:])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+extension TranscriptionTests {
+    /// Ultrareview F1: the documented 204 for ending a session was handled as an HTTP error.
+    func testEndingASessionAccepts204WithoutABody() async {
+        let client = TranscriptionClient(connection: .init(origin: URL(string: "https://test.tail.ts.net")!, token: "test-token"),
+                                         protocolClasses: [EndedSessionTranscriptionProtocol.self])
+        defer { client.cancel() }
+        if case .failure(let error) = await client.endSessionResult(UUID()) { XCTFail("204 is success: \(error)") }
+    }
+}
+

@@ -96,7 +96,14 @@ private final class TranscriptionOperation: @unchecked Sendable {
         task?.cancel(); finish(CancellationError())
     }
     func decoded<T: Decodable>(_ type: T.Type) async throws -> T {
-        let bytes = try await withTaskCancellationHandler {
+        let bytes = try await body()
+        guard let reply = try? JSONDecoder().decode(type, from: bytes) else {
+            throw TranscriptionError.invalidResponse
+        }
+        return reply
+    }
+    func body() async throws -> Data {
+        try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
                 let result: Result<Data, Error>? = lock.withLock {
                     if let completed { return completed }
@@ -105,10 +112,6 @@ private final class TranscriptionOperation: @unchecked Sendable {
                 if let result { continuation.resume(with: result) }
             }
         } onCancel: { self.cancel() }
-        guard let reply = try? JSONDecoder().decode(type, from: bytes) else {
-            throw TranscriptionError.invalidResponse
-        }
-        return reply
     }
 }
 
@@ -128,6 +131,10 @@ private final class TranscriptionRedirectGuard: NSObject, URLSessionDataDelegate
         }
         guard let response = response as? HTTPURLResponse else {
             operation.finish(TranscriptionError.invalidResponse); completionHandler(.cancel); return
+        }
+        // Ending a session answers 204 without a body (API.md); that is success, not an error.
+        if response.statusCode == 204, dataTask.originalRequest?.httpMethod == "DELETE" {
+            completionHandler(.allow); return
         }
         guard response.statusCode == 200 else {
             MioLog.error(.transcription, "transcription http status", value: response.statusCode)
@@ -149,8 +156,6 @@ private final class TranscriptionRedirectGuard: NSObject, URLSessionDataDelegate
         lock.withLock { operations.removeValue(forKey: task.taskIdentifier) }?.finish(error)
     }
 }
-
-private struct TranscriptionSessionEnded: Decodable {}
 
 /// Credentials belong to one immutable origin. Neither cookies, disk cache nor redirects are used.
 final class TranscriptionClient: TranscriptionTransport, @unchecked Sendable {
@@ -182,10 +187,11 @@ final class TranscriptionClient: TranscriptionTransport, @unchecked Sendable {
         // URLSession owns transport bytes; no suspended application task captures the chunk/request.
         return Task { try await operation.decoded(TranscriptionReply.self) }
     }
-    func endSession(_ sessionID: UUID) async {
-        // 204 surfaces as a non-200 error from the response guard; any outcome is fine here.
+    func endSession(_ sessionID: UUID) async { _ = await endSessionResult(sessionID) }
+    /// Optional cleanup: the server drops the cache after 10 minutes anyway, so a failure is ignored.
+    func endSessionResult(_ sessionID: UUID) async -> Result<Void, Error> {
         let operation = start(path: "v1/sessions/\(sessionID.uuidString)", chunk: nil, method: "DELETE")
-        _ = try? await operation.decoded(TranscriptionSessionEnded.self)
+        do { _ = try await operation.body(); return .success(()) } catch { return .failure(error) }
     }
     private func start(path: String, chunk: AudioChunk?, method: String? = nil) -> TranscriptionOperation {
         var request = URLRequest(url: connection.origin.appendingPathComponent(path))
