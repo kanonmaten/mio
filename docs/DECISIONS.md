@@ -2,6 +2,12 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Rättelser efter kodgranskningen, 2026-11-17
+
+Tre ultrareview-körningar på `1d089a0` gav 25 fynd; användaren vill att alla rättas. Val som inte är givna av koden:
+
+- **Radering på den tillfälliga databasen (B1).** Kan databasen inte öppnas kör Mio på en tom kopia i minnet. Radering vägras då innan något skrivs i raderingsjournalen, med beskedet att starta om Mio först. En radering som redan står i journalen från en tidigare start ligger kvar och slutförs vid första start där databasen går att öppna. Avböjt: att radera i minneskopian och rapportera klart (den riktiga datan blev kvar och journalen tömdes), och att skriva en ny avsikt i journalen och vänta (den skulle radera något användaren inte ser och kanske ångrat efter omstarten). Uppstädningen av gamla poster väntar också på den riktiga databasen.
+
 ## Verifieraren i Rust, 2026-11-17
 
 Användaren vill att allt på datorsidan som kan vara Rust ska vara det. Valt:

@@ -69,6 +69,9 @@ struct MioResolvedStores: Sendable {
     let assistant: any MioAssistantStore
     /// Swedish message for the person, shown once; nil when nothing needs attention.
     let message: String?
+    /// True for the in-memory fallback when the real store could not be opened: nothing
+    /// written or deleted in this launch reaches the saved data (ultrareview B1).
+    var isTemporary = false
 
     static func legacyFiles(message: String?) -> MioResolvedStores {
         MioResolvedStores(sessions: SessionRepository(), content: MioContentRepository(),

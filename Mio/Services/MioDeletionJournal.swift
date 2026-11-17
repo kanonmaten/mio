@@ -160,19 +160,28 @@ final class MioDeletionRecovery {
     @ObservationIgnored private let journal: MioDeletionJournal
     @ObservationIgnored private let cancelWork: @MainActor (MioDeletionOperation) async -> Void
     @ObservationIgnored private let performStep: @MainActor (MioDeletionStep, MioDeletionOperation) async -> MioOperationOutcome
+    /// False while this launch runs on the temporary in-memory store (ultrareview B1). Deleting
+    /// there would only empty the temporary copy and clear the journal, while the real data stays.
+    @ObservationIgnored private let storesAreDurable: @MainActor () async -> Bool
     @ObservationIgnored private var isRunning = false
 
+    static let temporaryStoreMessage = "Mio kunde inte öppna databasen, så ingenting kan raderas just nu. Starta om Mio först."
+    static let deferredDeletionMessage = "En radering väntar, men databasen gick inte att öppna. Starta om Mio; raderingen slutförs när databasen går att öppna."
+
     init(journal: MioDeletionJournal, cancelWork: @escaping @MainActor (MioDeletionOperation) async -> Void,
-         performStep: @escaping @MainActor (MioDeletionStep, MioDeletionOperation) async -> MioOperationOutcome) {
+         performStep: @escaping @MainActor (MioDeletionStep, MioDeletionOperation) async -> MioOperationOutcome,
+         storesAreDurable: @escaping @MainActor () async -> Bool = { true }) {
         self.journal = journal
         self.cancelWork = cancelWork
         self.performStep = performStep
+        self.storesAreDurable = storesAreDurable
     }
 
     func begin(scope: MioDeletionScope, targetID: UUID? = nil) async -> MioOperationOutcome {
         guard !isRunning else { return runningConflict() }
         isRunning = true
         defer { isRunning = false }
+        guard await storesAreDurable() else { return retain(.conflict(Self.temporaryStoreMessage)) }
         do {
             // The durable intent precedes cancellation as well as destructive effects.
             let operation = try await journal.begin(scope: scope, targetID: targetID)
@@ -186,6 +195,11 @@ final class MioDeletionRecovery {
         defer { isRunning = false }
         do {
             let operations = try await journal.pendingOperations()
+            // The journal entry stays until a launch with the real store can complete it.
+            if !operations.isEmpty, !(await storesAreDurable()) {
+                pendingOperationID = operations.first?.id
+                return retain(.conflict(Self.deferredDeletionMessage))
+            }
             for operation in operations {
                 let outcome = await run(operationID: operation.id)
                 guard outcome.isSuccess else { return outcome }

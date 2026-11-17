@@ -93,6 +93,23 @@ final class MioWorkflowTests: XCTestCase {
     }
 
     @MainActor
+    func testDeleteAllOnTheTemporaryStoreIsRefusedWithoutBlockingTheApp() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let capture = MioViewModel(repository: SessionRepository(storageURL: root.appendingPathComponent("sessions.json")))
+        let workflow = MioWorkflowCoordinator(capture: capture,
+            content: MioContentViewModel(repository: MioContentRepository(storageURL: root.appendingPathComponent("content.json"))),
+            assistant: MioAssistantViewModel(repository: MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json"))),
+            analysis: MioAnalysisCoordinator(), journal: MioDeletionJournal(storageURL: root.appendingPathComponent("operations.json")),
+            clearCredentials: { XCTFail("Nothing may be deleted on the temporary store") }, storesAreDurable: { false })
+        await workflow.bootstrap()
+        let outcome = await workflow.deleteAll()
+        XCTAssertEqual(outcome, .conflict(MioDeletionRecovery.temporaryStoreMessage))
+        XCTAssertFalse(MioMaintenanceState.shared.recoveryBlocked)
+        XCTAssertNil(workflow.deletion.pendingOperationID)
+    }
+
+    @MainActor
     func testFinalizedLocalDetectionReportsItsStorageFailureExplicitly() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

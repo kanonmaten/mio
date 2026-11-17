@@ -252,6 +252,41 @@ final class MioDeletionRecoveryTests: XCTestCase {
         XCTAssertEqual(cancellationCount, 1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: f.file.path))
     }
+
+    /// Ultrareview B1: on the in-memory fallback, "Radera all data" emptied only the temporary
+    /// copy, reported success and cleared the journal while the saved data stayed.
+    @MainActor
+    func testTemporaryStoreRefusesDeletionAndKeepsAPendingIntentForTheNextLaunch() async throws {
+        let f = try fixture()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        var steps: [MioDeletionStep] = []
+        var cancelled = 0
+        let temporary = MioDeletionRecovery(journal: f.journal, cancelWork: { _ in cancelled += 1 },
+            performStep: { step, _ in steps.append(step); return .success }, storesAreDurable: { false })
+        let refused = await temporary.begin(scope: .all)
+        XCTAssertEqual(refused, .conflict(MioDeletionRecovery.temporaryStoreMessage))
+        XCTAssertEqual(steps, []); XCTAssertEqual(cancelled, 0)
+        let none = try await f.journal.pendingOperations()
+        XCTAssertTrue(none.isEmpty, "No intent is written that this launch cannot complete")
+
+        // An intent from an earlier launch stays until the real store can be opened.
+        let earlier = try await f.journal.begin(scope: .all, targetID: nil)
+        let deferring = MioDeletionRecovery(journal: MioDeletionJournal(storageURL: f.file), cancelWork: { _ in cancelled += 1 },
+            performStep: { step, _ in steps.append(step); return .success }, storesAreDurable: { false })
+        let deferred: MioOperationOutcome = await deferring.resumePending()
+        XCTAssertEqual(deferred, .conflict(MioDeletionRecovery.deferredDeletionMessage))
+        XCTAssertEqual(steps, [])
+        let kept: [MioDeletionOperation] = try await f.journal.pendingOperations()
+        XCTAssertEqual(kept.map(\.id), [earlier.id])
+
+        let recovering = MioDeletionRecovery(journal: MioDeletionJournal(storageURL: f.file), cancelWork: { _ in },
+            performStep: { step, _ in steps.append(step); return .success })
+        let good: MioOperationOutcome = await recovering.resumePending()
+        XCTAssertEqual(good, .success)
+        XCTAssertEqual(steps.first, .systemActions)
+        let done = try await f.journal.pendingOperations()
+        XCTAssertTrue(done.isEmpty)
+    }
 }
 
 @MainActor

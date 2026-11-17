@@ -28,7 +28,8 @@ struct MioApp: App {
             day.select(day.referenceDate)
         })
         let workflow = MioWorkflowCoordinator(capture: capture, content: content,
-                                              assistant: assistant, analysis: analysis, removesLegacyItems: true)
+                                              assistant: assistant, analysis: analysis, removesLegacyItems: true,
+                                              storesAreDurable: { await !MioStoreResolver.shared.stores().isTemporary })
         _model = State(initialValue: capture)
         _contentModel = State(initialValue: content)
         _assistantModel = State(initialValue: assistant)

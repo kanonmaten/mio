@@ -34,7 +34,7 @@ final class MioStoreResolver: Sendable {
             let message = "Mio kunde inte öppna databasen. Dina sparade data är orörda men visas inte, "
                 + "och ändringar under den här körningen sparas inte. Starta om Mio."
             if let memory = try? MioPersistentStore.makeInMemoryContainer() {
-                return stores(container: memory, message: message)
+                return stores(container: memory, message: message, temporary: true)
             }
             return .legacyFiles(message: message)
         }
@@ -47,10 +47,10 @@ final class MioStoreResolver: Sendable {
         }
     }
 
-    private static func stores(container: ModelContainer, message: String?) -> MioResolvedStores {
+    private static func stores(container: ModelContainer, message: String?, temporary: Bool = false) -> MioResolvedStores {
         MioResolvedStores(sessions: MioSwiftDataSessionRepository(modelContainer: container),
                           content: MioSwiftDataContentRepository(modelContainer: container),
                           assistant: MioSwiftDataAssistantRepository(modelContainer: container),
-                          message: message)
+                          message: message, isTemporary: temporary)
     }
 }

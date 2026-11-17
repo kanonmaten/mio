@@ -14,6 +14,8 @@ final class MioWorkflowCoordinator {
     @ObservationIgnored private let systemActions: MioSystemActionPort
     /// Only the app itself opts in; tests construct workflows without touching real data.
     @ObservationIgnored private let removesLegacyItems: Bool
+    /// False on the temporary in-memory store; see `MioDeletionRecovery`.
+    @ObservationIgnored private let storesAreDurable: @MainActor () async -> Bool
     /// Set once the 0.9.1 upgrade removed the items and alarms from before Apple's apps took over.
     static let legacyCleanupKey = "mio.upgrade.0.9.1.legacyItemsRemoved"
     private(set) var lastOutcome: MioOperationOutcome?
@@ -57,7 +59,9 @@ final class MioWorkflowCoordinator {
          systemActions: MioSystemActionPort? = nil, questions: MioQuestionWorkflow? = nil,
          reminders: MioReminderPort? = nil, removesLegacyItems: Bool = false,
          clearCredentials: (@MainActor () throws -> Void)? = nil,
-         pendingLessonDefaults: UserDefaults = .standard, metrics: MioMetricArchive = .shared) {
+         pendingLessonDefaults: UserDefaults = .standard, metrics: MioMetricArchive = .shared,
+         storesAreDurable: @escaping @MainActor () async -> Bool = { true }) {
+        self.storesAreDurable = storesAreDurable
         self.pendingLessonDefaults = pendingLessonDefaults
         self.reminders = reminders ?? .native
         let systemActions = systemActions ?? .native
@@ -112,7 +116,7 @@ final class MioWorkflowCoordinator {
                 do { try await diagnostics.deleteAll(); try await metrics.deleteAll(); return .success }
                 catch { return .failure("Kunde inte radera diagnostikjournalen. Försök igen.") }
             }
-        })
+        }, storesAreDurable: storesAreDurable)
     }
 
     func bootstrap() async {
@@ -131,7 +135,7 @@ final class MioWorkflowCoordinator {
     /// handoff to Apple's apps are deleted once, then Mio's alarms and post reminders. Handoff
     /// records are kept. A failure leaves the marker unset, so the next launch tries again.
     func removeLegacyItemsOnce() async {
-        guard !pendingLessonDefaults.bool(forKey: Self.legacyCleanupKey) else { return }
+        guard !pendingLessonDefaults.bool(forKey: Self.legacyCleanupKey), await storesAreDurable() else { return }
         guard let items = try? await content.latestItems() else { return }
         for item in items where item.handoff == nil {
             guard await content.deleteOutcome(id: item.id, cancelSystem: false).isSuccess else { return }
@@ -440,6 +444,8 @@ final class MioWorkflowCoordinator {
         if scope == .session, let id = targetID, capture.session(id: id)?.endedAt == nil, capture.session(id: id) != nil {
             return .conflict("Stoppa sessionen innan du raderar den.")
         }
+        // Refused before any intent is written, so nothing is blocked or cancelled (ultrareview B1).
+        guard await storesAreDurable() else { return .conflict(MioDeletionRecovery.temporaryStoreMessage) }
         invalidateCommands()
         return await enqueue(isDeletion: true) { [self] in
             guard !maintenance.recoveryBlocked else { return .conflict("Slutför den väntande raderingen med Försök igen innan du gör andra ändringar.") }
