@@ -480,11 +480,15 @@ final class MioAnalysisCoordinator {
                         if request.mode == .lesson { self.status = MioLessonDocument(session: session, records: assistant.analyses).progress }
                         self.isWorking = false
                     } catch {
+                        // Failures that depend on the batch's content (too large, cut off, refused,
+                        // invalid answer) shrink, split or skip that work; they never stop AI and
+                        // the same request is never resent unchanged in a loop.
                         let needsSmaller = MioWorkSplit.needsSmallerRequest(error)
+                        let refused = MioLessonRetry.isRefusal(error)
                         if work.request.mode == .lesson, needsSmaller || MioLessonRetry.isRejectedAnswer(error),
                            self.generation == token, self.enabled {
-                            // The same part can never fit: go straight to splitting it.
-                            if needsSmaller {
+                            // The same part can never fit or is refused again: go straight to splitting it.
+                            if needsSmaller || refused {
                                 let key = MioLessonRetry.key(work.request.fragments)
                                 self.lessonRejections[key] = max(self.lessonRejections[key] ?? 0, MioLessonRetry.attemptsPerPart - 1)
                             }

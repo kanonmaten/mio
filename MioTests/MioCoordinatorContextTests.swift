@@ -568,4 +568,84 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
         XCTAssertEqual(sends.count, 2)
         XCTAssertFalse(coordinator.isWorking)
     }
+    /// Ultrareview A1: a provider refusal depends on the batch's content, so it used to reach
+    /// fail(), switch AI off and come back with every catch-up for 12 hours.
+    @MainActor
+    func testRefusedEverydayBatchIsSkippedKeepsAIOnAndIsNotCaughtUpAgain() async throws {
+        let assistant = assistant(self)
+        var clock = Date.now
+        let base = clock
+        var log = MioAIConsentLog()
+        log.record(.on, at: base.addingTimeInterval(-3_600))
+        let session = MioSession(startedAt: base.addingTimeInterval(-2_000), endedAt: base.addingTimeInterval(-600), transcripts: [
+            TranscriptSegment(createdAt: base.addingTimeInterval(-1_800), text: "Avböjt underlag.", containsMio: false)])
+        var sends: [[String]] = []
+        let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) }, send: { request, _ in
+                sends.append(request.fragments.map(\.text))
+                throw MioCloudError.gateway(502, .providerRefusal)
+            }, wait: { clock.addTimeInterval($0) }, now: { clock },
+            consentLog: { log }, recordConsent: { log.record($0, at: $1, until: $2) })
+        defer { coordinator.disable() }
+        try await coordinator.enable(existingSessions: [session], assistant: assistant)
+        for _ in 0..<20_000 { if (sends.count == 1 && !coordinator.isWorking) || !coordinator.enabled { break }; await Task.yield() }
+        XCTAssertTrue(coordinator.enabled, "A refused batch must not switch AI off")
+        XCTAssertNil(coordinator.errorMessage)
+        XCTAssertNil(coordinator.pausedUntil, "A refusal is not a wait")
+        XCTAssertEqual(sends, [["Avböjt underlag."]])
+
+        coordinator.disable()
+        try await coordinator.enable(existingSessions: [session], assistant: assistant)
+        for _ in 0..<2_000 { await Task.yield() }
+        XCTAssertEqual(sends.count, 1, "Catch-up must not queue refused text again")
+        XCTAssertFalse(coordinator.isWorking)
+    }
+
+    @MainActor
+    func testTooLargeAnswerSplitsTheBatchInsteadOfStoppingAI() async throws {
+        for failure in [MioCloudError.gateway(502, .upstreamResponseTooLarge), .oversizedResponse] {
+            let assistant = assistant(self)
+            var clock = Date.now
+            var sent: [[String]] = []
+            let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+                prepareConnection: { try await syntheticPreparedConnection($0, task: $1) },
+                send: { request, _ in
+                    sent.append(request.fragments.map(\.text))
+                    if sent.count == 1 { throw failure }
+                    return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+                },
+                wait: { clock.addTimeInterval($0) }, now: { clock })
+            try await coordinator.enable(existingSessions: [])
+            let texts = (1...4).map { "Syntetiskt underlag \($0)." }
+            coordinator.observe(MioSession(transcripts: texts.map { TranscriptSegment(createdAt: clock, text: $0, containsMio: false) }), assistant: assistant)
+            for _ in 0..<40_000 { if coordinator.sentBatches == 2 || !coordinator.enabled { break }; await Task.yield() }
+            XCTAssertTrue(coordinator.enabled, "\(failure)")
+            XCTAssertNil(coordinator.errorMessage, "\(failure)")
+            XCTAssertEqual(sent.map(\.count), [4, 2, 2], "\(failure)")
+            coordinator.disable()
+        }
+    }
+
+    @MainActor
+    func testRefusedLessonPartIsSplitWithoutAnUnchangedRetryAndAIStaysOn() async throws {
+        let assistant = assistant(self)
+        var clock = Date.now
+        var sent: [[String]] = []
+        let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+            prepareConnection: { try await syntheticPreparedConnection($0, task: $1) },
+            send: { request, _ in
+                sent.append(request.fragments.map(\.text))
+                throw MioCloudError.gateway(502, .providerRefusal)
+            },
+            wait: { clock.addTimeInterval($0) }, now: { clock })
+        defer { coordinator.disable() }
+        try await coordinator.enable(existingSessions: [])
+        let lesson = MioSession(startedAt: clock, endedAt: clock.addingTimeInterval(60),
+            transcripts: ["Del ett.", "Del två."].map { TranscriptSegment(createdAt: clock, text: $0, containsMio: false) }, captureMode: .lesson)
+        coordinator.summarizeLesson(lesson, assistant: assistant)
+        for _ in 0..<40_000 { if !coordinator.hasPendingLessonNotes(sessionID: lesson.id) || !coordinator.enabled { break }; await Task.yield() }
+        XCTAssertTrue(coordinator.enabled, "A refused lesson part must not switch AI off")
+        XCTAssertEqual(sent, [["Del ett.", "Del två."], ["Del ett."], ["Del två."]],
+                       "A refusal is never resent unchanged: split at once, then each half marked")
+    }
 }

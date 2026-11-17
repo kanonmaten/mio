@@ -130,15 +130,15 @@ enum MioCloudRetry {
 }
 
 /// A request the provider cannot take in one piece: too large for its per-minute token budget,
-/// or an answer cut off at the output limit. Sending the same text again can never work; a
-/// smaller part can (2026-11-15).
+/// or an answer cut off at the output limit or too large for the gateway or the app to accept.
+/// Sending the same text again can never work; a smaller part can (2026-11-15).
 enum MioWorkSplit {
     static let maximumShrink = 3
 
     static func needsSmallerRequest(_ error: Error) -> Bool {
         switch error as? MioCloudError {
-        case .gateway(_, let code)?: [.providerRequestTooLarge, .providerTruncated].contains(code)
-        case .serverStatus(413)?: true
+        case .gateway(_, let code)?: [.providerRequestTooLarge, .providerTruncated, .upstreamResponseTooLarge].contains(code)
+        case .serverStatus(413)?, .oversizedResponse?: true
         default: false
         }
     }
@@ -162,10 +162,17 @@ enum MioLessonRetry {
         switch error as? MioCloudError {
         case .gateway(_, let code)?:
             [.invalidLessonResult, .invalidAnalysisResult, .invalidUpstreamResponse, .invalidUpstreamAnswer,
-             .incompleteUpstreamResponse, .providerInvalidResponse, .providerTruncated].contains(code)
+             .incompleteUpstreamResponse, .providerInvalidResponse, .providerTruncated, .providerRefusal].contains(code)
         case .invalidResponse?: true
         default: false
         }
+    }
+
+    /// The provider declined to answer this content. With temperature 0 the same text is
+    /// refused again, so a refused part is never retried unchanged (ultrareview A1).
+    static func isRefusal(_ error: Error) -> Bool {
+        if case .gateway(_, .providerRefusal)? = error as? MioCloudError { return true }
+        return false
     }
 
     /// `failures` counts rejections of exactly these fragments, including the latest one.

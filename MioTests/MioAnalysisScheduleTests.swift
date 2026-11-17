@@ -135,8 +135,15 @@ final class MioAnalysisScheduleTests: XCTestCase {
         XCTAssertTrue(MioWorkSplit.needsSmallerRequest(MioCloudError.gateway(413, .providerRequestTooLarge)))
         XCTAssertTrue(MioWorkSplit.needsSmallerRequest(MioCloudError.gateway(502, .providerTruncated)))
         XCTAssertTrue(MioWorkSplit.needsSmallerRequest(MioCloudError.serverStatus(413)))
+        // An answer too large to accept also needs a smaller request (ultrareview A1).
+        XCTAssertTrue(MioWorkSplit.needsSmallerRequest(MioCloudError.gateway(502, .upstreamResponseTooLarge)))
+        XCTAssertTrue(MioWorkSplit.needsSmallerRequest(MioCloudError.oversizedResponse))
+        // A refusal is about the content: rejected, never resent unchanged.
+        XCTAssertTrue(MioLessonRetry.isRefusal(MioCloudError.gateway(502, .providerRefusal)))
+        XCTAssertTrue(MioLessonRetry.isRejectedAnswer(MioCloudError.gateway(502, .providerRefusal)))
+        XCTAssertFalse(MioLessonRetry.isRefusal(MioCloudError.gateway(502, .invalidAnalysisResult)))
         for error in [MioCloudError.gatewayRateLimited(.providerQuota, 60), .rateLimited(60), .network, .invalidResponse,
-                      .gateway(502, .invalidAnalysisResult)] {
+                      .gateway(502, .invalidAnalysisResult), .gateway(502, .providerRefusal)] {
             XCTAssertFalse(MioWorkSplit.needsSmallerRequest(error), "\(error)")
         }
         let fragments = (0..<12).map { MioAnalysisFragment(id: "\(UUID().uuidString):\($0)", text: String(repeating: "a", count: 1_000), occurredAt: "2026-11-15T10:00:00Z") }
