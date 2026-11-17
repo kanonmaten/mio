@@ -17,6 +17,8 @@ pub enum TrayCommand {
     /// Stops the gateway: the phone gets no AI until it is started again.
     PauseAi,
     ResumeAi,
+    /// Opens the window on Tailscale och parning and asks for the code.
+    ShowPairing,
     Quit,
 }
 
@@ -81,6 +83,7 @@ impl ksni::Tray for MioTray {
             } else {
                 item("Pausa AI på datorn", TrayCommand::PauseAi, gateway_runs)
             },
+            item("Visa parningskod …", TrayCommand::ShowPairing, true),
             ksni::MenuItem::Separator,
             item("Avsluta", TrayCommand::Quit, true),
         ]
@@ -128,6 +131,13 @@ pub fn listen(commands: Receiver<TrayCommand>, cx: &mut App) {
             let helper = match command {
                 TrayCommand::Show => {
                     cx.update(window::show);
+                    continue;
+                }
+                TrayCommand::ShowPairing => {
+                    cx.update(|cx| {
+                        window::show(cx);
+                        crate::shell::show_pairing(cx);
+                    });
                     continue;
                 }
                 TrayCommand::Quit => {

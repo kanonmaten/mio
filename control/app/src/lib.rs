@@ -3,6 +3,7 @@
 pub mod ai;
 pub mod desktop;
 pub mod model;
+pub mod network;
 pub mod operation;
 pub mod overview;
 pub mod parts;

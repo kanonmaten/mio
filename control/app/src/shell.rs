@@ -10,6 +10,7 @@ use gpui_kit::{
 };
 
 use crate::ai::AiPage;
+use crate::network::NetworkPage;
 use crate::transcription::TranscriptionPage;
 use crate::words::WordsPage;
 use crate::model::StatusModel;
@@ -23,10 +24,11 @@ pub enum Page {
     Ai,
     Transcription,
     Words,
+    Network,
 }
 
 impl Page {
-    pub const ALL: [Page; 4] = [Page::Overview, Page::Ai, Page::Transcription, Page::Words];
+    pub const ALL: [Page; 5] = [Page::Overview, Page::Ai, Page::Transcription, Page::Words, Page::Network];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -34,6 +36,7 @@ impl Page {
             Page::Ai => "AI",
             Page::Transcription => "Transkription",
             Page::Words => "Egna ord",
+            Page::Network => "Tailscale och parning",
         }
     }
 
@@ -43,6 +46,7 @@ impl Page {
             Page::Ai => IconName::Bot,
             Page::Transcription => IconName::Mic,
             Page::Words => IconName::FileText,
+            Page::Network => IconName::Network,
         }
     }
 }
@@ -57,6 +61,7 @@ pub struct Shell {
     ai: Entity<AiPage>,
     transcription: Entity<TranscriptionPage>,
     words: Entity<WordsPage>,
+    network: Entity<NetworkPage>,
 }
 
 impl Shell {
@@ -66,8 +71,9 @@ impl Shell {
         let overview = cx.new(|cx| OverviewPage::new(status.clone(), cx));
         let ai = cx.new(|cx| AiPage::new(status.clone(), cx));
         let transcription = cx.new(|cx| TranscriptionPage::new(status.clone(), cx));
-        let words = cx.new(|cx| WordsPage::new(status, cx));
-        Self { focus, page: Page::Overview, overview, ai, transcription, words }
+        let words = cx.new(|cx| WordsPage::new(status.clone(), cx));
+        let network = cx.new(|cx| NetworkPage::new(status, window, cx));
+        Self { focus, page: Page::Overview, overview, ai, transcription, words, network }
     }
 
     pub fn page(&self) -> Page {
@@ -87,6 +93,7 @@ impl Shell {
             Page::Ai => self.ai.clone().into(),
             Page::Transcription => self.transcription.clone().into(),
             Page::Words => self.words.clone().into(),
+            Page::Network => self.network.clone().into(),
         }
     }
 
@@ -156,16 +163,29 @@ impl Render for Shell {
     }
 }
 
-/// Opens `page` in the window, if the window is open.
-pub fn show_page(page: Page, cx: &mut App) {
+/// Runs `f` on the open window's shell and brings the window forward.
+fn with_shell(cx: &mut App, f: impl Fn(&mut Shell, &mut Window, &mut Context<Shell>)) {
     for window in cx.windows() {
         let _ = window.update(cx, |root, window, cx| {
             if let Ok(root) = root.downcast::<gpui_kit::base::Root>()
                 && let Ok(shell) = root.read(cx).view().clone().downcast::<Shell>()
             {
-                shell.update(cx, |shell, cx| shell.show(page, cx));
+                shell.update(cx, |shell, cx| f(shell, window, cx));
                 window.activate_window();
             }
         });
     }
+}
+
+/// Opens `page` in the window, if the window is open.
+pub fn show_page(page: Page, cx: &mut App) {
+    with_shell(cx, |shell, _, cx| shell.show(page, cx));
+}
+
+/// Opens Tailscale och parning and asks for the pairing code (the tray's "Visa parningskod").
+pub fn show_pairing(cx: &mut App) {
+    with_shell(cx, |shell, window, cx| {
+        shell.show(Page::Network, cx);
+        shell.network.update(cx, |network, cx| network.show_pairing(window, cx));
+    });
 }
