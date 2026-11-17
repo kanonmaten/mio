@@ -8,6 +8,7 @@ pub mod helper_client;
 pub mod http;
 pub mod probe;
 pub mod settings;
+pub mod socket_owner;
 pub mod status;
 pub mod token;
 pub mod tray_icon;

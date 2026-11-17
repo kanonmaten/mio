@@ -39,8 +39,9 @@ pub trait Runner {
     fn run(&self, program: &str, arguments: &[&str], stdin: Option<&[u8]>) -> std::io::Result<Output>;
 }
 
-/// Loopback HTTP GET: `(port, path, bearer)`.
-pub type HttpGet<'a> = &'a dyn Fn(u16, &str, Option<&str>) -> Result<Response, HttpError>;
+/// Loopback HTTP GET: `(port, path, bearer, account)`. The bearer token goes only to a port that
+/// `account` alone listens on.
+pub type HttpGet<'a> = &'a dyn Fn(u16, &str, Option<&str>, &str) -> Result<Response, HttpError>;
 
 pub struct System<'a> {
     /// `/` in production; a temporary directory in tests.
@@ -73,7 +74,12 @@ impl Runner for SystemRunner {
     }
 }
 
-pub fn real_http(port: u16, path: &str, bearer: Option<&str>) -> Result<Response, HttpError> {
+pub fn real_http(port: u16, path: &str, bearer: Option<&str>, account: &str) -> Result<Response, HttpError> {
+    // The status group needs no password: without this check, a program running as the user
+    // could listen on a stopped service's port and receive its token.
+    if bearer.is_some() && !mio_control_core::socket_owner::port_owned_by(port, account) {
+        return Err(HttpError::Untrusted);
+    }
     mio_control_core::http::get(port, path, bearer, Duration::from_secs(5))
 }
 
@@ -247,7 +253,7 @@ fn gateway_status(system: &System) -> Answer {
     let env = system.read_env(SettingsFile::Gateway)?;
     let port = env.get("PORT").and_then(|port| port.parse::<u16>().ok()).unwrap_or(8_787);
     let token = env.get(SettingsFile::Gateway.token_key()).unwrap_or_default();
-    Ok(http_answer((system.http)(port, "/v2/status", Some(&token))))
+    Ok(http_answer((system.http)(port, "/v2/status", Some(&token), "mio-gateway")))
 }
 
 fn http_answer(result: Result<Response, HttpError>) -> Vec<u8> {
@@ -264,7 +270,7 @@ fn http_answer(result: Result<Response, HttpError>) -> Vec<u8> {
 fn pianissimo_health(system: &System) -> Answer {
     let env = system.read_env(SettingsFile::Transcription)?;
     let token = env.get(SettingsFile::Transcription.token_key()).unwrap_or_default();
-    Ok(http_answer((system.http)(8_765, "/health", Some(&token))))
+    Ok(http_answer((system.http)(8_765, "/health", Some(&token), "mio-transcription")))
 }
 
 /// `{"set": {KEY: value}, "remove": [KEY]}` with keys from the file's writable list only.

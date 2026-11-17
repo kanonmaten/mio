@@ -22,6 +22,8 @@ pub enum HttpError {
     TimedOut,
     /// An answer that is not HTTP or is too large.
     Invalid,
+    /// Something other than the service listens on its port; the token is not sent.
+    Untrusted,
 }
 
 impl std::fmt::Display for HttpError {
@@ -30,6 +32,7 @@ impl std::fmt::Display for HttpError {
             HttpError::Refused => "Ingen kontakt.",
             HttpError::TimedOut => "Svarar inte.",
             HttpError::Invalid => "Ogiltigt svar.",
+            HttpError::Untrusted => "Porten används av ett annat program.",
         })
     }
 }

@@ -60,13 +60,15 @@ impl Fixture {
     }
 
     fn run(&self, command: Command, stdin: &[u8]) -> Result<Vec<u8>, String> {
-        let http = |port: u16, path: &str, bearer: Option<&str>| -> Result<Response, HttpError> {
+        let http = |port: u16, path: &str, bearer: Option<&str>, account: &str| -> Result<Response, HttpError> {
             match (port, path) {
                 (8787, "/v2/status") => {
+                    assert_eq!(account, "mio-gateway");
                     assert_eq!(bearer, Some(TOKEN));
                     Ok(Response { status: 200, body: b"{\"configurationRevision\":\"abc\"}".to_vec() })
                 }
                 (8765, "/health") => {
+                    assert_eq!(account, "mio-transcription");
                     assert_eq!(bearer, Some("fixture_transcription_token_0123456789012"));
                     Ok(Response { status: 503, body: b"{\"status\":\"loading\"}".to_vec() })
                 }
