@@ -168,6 +168,13 @@ enum MioLessonRetry {
         }
     }
 
+    /// The gateway refused the request body itself (400). It depends on this batch, so the
+    /// batch is skipped and logged instead of stopping AI or being resent (ultrareview A2).
+    static func isRefusedRequest(_ error: Error) -> Bool {
+        guard case .gateway(400, let code)? = error as? MioCloudError else { return false }
+        return [.invalidJSON, .invalidRequest, .invalidContext].contains(code)
+    }
+
     /// The provider declined to answer this content. With temperature 0 the same text is
     /// refused again, so a refused part is never retried unchanged (ultrareview A1).
     static func isRefusal(_ error: Error) -> Bool {

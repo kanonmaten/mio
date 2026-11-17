@@ -69,9 +69,12 @@ enum MioEverydayContext {
         var sourcesByDecision: [[String]] = []
         sourcesByDecision.reserveCapacity(sessionDecisions.count)
         var fragmentToDecisions: [String: [Int]] = [:]
-        let contextIDs = Set(context.map(\.id))
+        let contextOrder = Dictionary(context.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
         for (index, decision) in sessionDecisions.enumerated() {
-            let sources = decision.sourceIDs.filter { contextIDs.contains($0) }
+            // Merged lineages can name more sources than the gateway takes (1...8 per hint,
+            // ultrareview A2): keep the eight newest that are in context, in source order.
+            let sources = Array(Set(decision.sourceIDs).filter { contextOrder[$0] != nil }
+                .sorted { contextOrder[$0]! < contextOrder[$1]! }.suffix(MioAnalysisRequest.maximumHintSources))
             sourcesByDecision.append(sources)
             for source in sources {
                 fragmentToDecisions[source, default: []].append(index)

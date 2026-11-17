@@ -76,6 +76,33 @@ final class MioContextTests: XCTestCase {
         }
     }
 
+    /// Ultrareview A2: merges grow a decision's lineage past the gateway's eight sources, and
+    /// the whole batch came back as a 400 that switched AI off.
+    func testDecisionHintKeepsAtMostTheEightNewestSourcesInContext() throws {
+        let origin = Date(timeIntervalSince1970: 1_900_000_000)
+        func segment(_ index: Int) -> TranscriptSegment {
+            TranscriptSegment(audioStartedAt: origin.addingTimeInterval(Double(index) * 3),
+                              audioEndedAt: origin.addingTimeInterval(Double(index) * 3 + 2),
+                              text: "Del \(index)", containsMio: false)
+        }
+        let old = (0..<11).map(segment)
+        let newSegment = segment(11)
+        let session = MioSession(transcripts: old + [newSegment])
+        let oldFragments = old.flatMap(MioAnalysisFragment.make)
+        let lineage = Array(oldFragments[1...10].map(\.id).reversed())
+        let decision = MioAnalysisDecision(id: UUID(), sessionID: session.id, kind: .plan, sourceIDs: lineage, isClosed: false)
+        let request = try MioEverydayContext.request(fragments: MioAnalysisFragment.make(from: newSegment), session: session,
+            eligibleSegmentIDs: Set(session.transcripts.map(\.id)), continuityStartedAt: origin, decisions: [decision])
+        XCTAssertEqual(request.contextFragments.count, 11, "The cap trims the hint, not the context")
+        XCTAssertEqual(request.priorDecisions.map(\.sourceIDs), [oldFragments[3...10].map(\.id)])
+        _ = try request.validatedData()
+
+        var tooMany = request
+        tooMany.priorDecisions = [MioAnalysisDecisionHint(id: decision.id, kind: .plan,
+            sourceIDs: oldFragments[1...9].map(\.id), isOpen: true)]
+        XCTAssertThrowsError(try tooMany.validatedData(), "The phone checks the gateway's 1...8 rule itself")
+    }
+
     func testContextTrimsOldestFragmentsUntilDecisionHintsFitLimit() throws {
         let origin = Date(timeIntervalSince1970: 1_900_000_000)
         func segment(_ index: Int) -> TranscriptSegment {

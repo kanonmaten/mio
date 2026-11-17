@@ -484,8 +484,12 @@ final class MioAnalysisCoordinator {
                         // invalid answer) shrink, split or skip that work; they never stop AI and
                         // the same request is never resent unchanged in a loop.
                         let needsSmaller = MioWorkSplit.needsSmallerRequest(error)
-                        let refused = MioLessonRetry.isRefusal(error)
-                        if work.request.mode == .lesson, needsSmaller || MioLessonRetry.isRejectedAnswer(error),
+                        let refused = MioLessonRetry.isRefusal(error) || MioLessonRetry.isRefusedRequest(error)
+                        if MioLessonRetry.isRefusedRequest(error) {
+                            MioLog.error(.ai, "Gateway refused an analysis request body; the batch is skipped", value: work.request.fragments.count)
+                        }
+                        let rejected = refused || MioLessonRetry.isRejectedAnswer(error)
+                        if work.request.mode == .lesson, needsSmaller || rejected,
                            self.generation == token, self.enabled {
                             // The same part can never fit or is refused again: go straight to splitting it.
                             if needsSmaller || refused {
@@ -495,7 +499,7 @@ final class MioAnalysisCoordinator {
                             try await self.handleRejectedLessonPart(work, assistant: assistant)
                             continue
                         }
-                        if work.request.mode == .everyday, needsSmaller || MioLessonRetry.isRejectedAnswer(error),
+                        if work.request.mode == .everyday, needsSmaller || rejected,
                            self.generation == token, self.enabled {
                             self.handleRejectedEverydayWork(work, needsSmaller: needsSmaller)
                             continue

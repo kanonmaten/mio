@@ -122,6 +122,9 @@ struct MioAnalysisRequest: Codable, Sendable {
         contextLimited = try values.decodeIfPresent(Bool.self, forKey: .contextLimited) ?? false
     }
 
+    /// The gateway's limit on sources per prior-decision hint (`server/src/analysis.rs`).
+    static let maximumHintSources = 8
+
     func validatedData() throws -> Data {
         let all = allFragments
         let contextIDs = Set(contextFragments.map(\.id))
@@ -134,7 +137,7 @@ struct MioAnalysisRequest: Codable, Sendable {
               contextFragments.reduce(0, { $0 + $1.text.utf8.count }) <= 4_000,
               priorDecisions.count <= 12, Set(priorDecisions.map(\.id)).count == priorDecisions.count,
               priorDecisions.allSatisfy({ [.plan, .task, .note].contains($0.kind)
-                  && !$0.sourceIDs.isEmpty && Set($0.sourceIDs).count == $0.sourceIDs.count
+                  && (1...Self.maximumHintSources).contains($0.sourceIDs.count) && Set($0.sourceIDs).count == $0.sourceIDs.count
                   && Set($0.sourceIDs).isSubset(of: contextIDs) }),
               usesContextContract ? mode == .everyday : (contextFragments.isEmpty && priorDecisions.isEmpty && !contextLimited)
         else { throw MioCloudError.invalidContext }

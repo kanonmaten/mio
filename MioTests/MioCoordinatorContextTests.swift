@@ -648,4 +648,34 @@ final class MioAnalysisCoordinatorContextTests: XCTestCase {
         XCTAssertEqual(sent, [["Del ett.", "Del två."], ["Del ett."], ["Del två."]],
                        "A refusal is never resent unchanged: split at once, then each half marked")
     }
+    /// Ultrareview A2: a request body the gateway refuses (400) depends on the batch; it is
+    /// logged and skipped, never a silent AI stop and never resent.
+    @MainActor
+    func testRequestRefusedByTheGatewayIsSkippedAndAIStaysOn() async throws {
+        for failure in [MioCloudError.gateway(400, .invalidJSON), .gateway(400, .invalidRequest), .gateway(400, .invalidContext)] {
+            let assistant = assistant(self)
+            var clock = Date.now
+            var sent: [[String]] = []
+            let coordinator = MioAnalysisCoordinator(loadConnection: { syntheticCloudConnection() }, configurationMatches: { _ in true },
+                prepareConnection: { try await syntheticPreparedConnection($0, task: $1) },
+                send: { request, _ in
+                    sent.append(request.fragments.map(\.text))
+                    if sent.count == 1 { throw failure }
+                    return MioAnalysisResult(candidates: [], highlights: [], uncertainties: [])
+                },
+                wait: { clock.addTimeInterval($0) }, now: { clock })
+            try await coordinator.enable(existingSessions: [])
+            var session = MioSession(transcripts: [TranscriptSegment(createdAt: clock, text: "Avvisat underlag.", containsMio: false)])
+            coordinator.observe(session, assistant: assistant)
+            for _ in 0..<20_000 { if (sent.count == 1 && !coordinator.isWorking) || !coordinator.enabled { break }; await Task.yield() }
+            XCTAssertTrue(coordinator.enabled, "\(failure)")
+            XCTAssertNil(coordinator.errorMessage, "\(failure)")
+            clock.addTimeInterval(1)
+            session.transcripts.append(TranscriptSegment(createdAt: clock, text: "Nytt underlag.", containsMio: false))
+            coordinator.observe(session, assistant: assistant)
+            for _ in 0..<20_000 { if coordinator.sentBatches == 1 || !coordinator.enabled { break }; await Task.yield() }
+            XCTAssertEqual(sent, [["Avvisat underlag."], ["Nytt underlag."]], "\(failure)")
+            coordinator.disable()
+        }
+    }
 }
