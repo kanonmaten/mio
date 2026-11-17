@@ -6,3 +6,4 @@ mod network;
 mod transcription;
 mod ui;
 mod updates;
+mod verify_logs;

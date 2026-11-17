@@ -12,6 +12,8 @@ use gpui_kit::{
 use crate::ai::AiPage;
 use crate::network::NetworkPage;
 use crate::updates::UpdatesPage;
+use crate::verify::VerifyPage;
+use crate::logs::LogsPage;
 use crate::transcription::TranscriptionPage;
 use crate::words::WordsPage;
 use crate::model::StatusModel;
@@ -27,10 +29,21 @@ pub enum Page {
     Words,
     Network,
     Updates,
+    Verify,
+    Logs,
 }
 
 impl Page {
-    pub const ALL: [Page; 6] = [Page::Overview, Page::Ai, Page::Transcription, Page::Words, Page::Network, Page::Updates];
+    pub const ALL: [Page; 8] = [
+        Page::Overview,
+        Page::Ai,
+        Page::Transcription,
+        Page::Words,
+        Page::Network,
+        Page::Updates,
+        Page::Verify,
+        Page::Logs,
+    ];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -40,6 +53,8 @@ impl Page {
             Page::Words => "Egna ord",
             Page::Network => "Tailscale och parning",
             Page::Updates => "Uppdateringar",
+            Page::Verify => "Verifiering",
+            Page::Logs => "Loggar",
         }
     }
 
@@ -51,6 +66,8 @@ impl Page {
             Page::Words => IconName::FileText,
             Page::Network => IconName::Network,
             Page::Updates => IconName::RefreshCw,
+            Page::Verify => IconName::CircleCheck,
+            Page::Logs => IconName::SquareTerminal,
         }
     }
 }
@@ -67,6 +84,8 @@ pub struct Shell {
     words: Entity<WordsPage>,
     network: Entity<NetworkPage>,
     updates: Entity<UpdatesPage>,
+    verify: Entity<VerifyPage>,
+    logs: Entity<LogsPage>,
 }
 
 impl Shell {
@@ -79,7 +98,9 @@ impl Shell {
         let words = cx.new(|cx| WordsPage::new(status.clone(), cx));
         let network = cx.new(|cx| NetworkPage::new(status, window, cx));
         let updates = cx.new(|_| UpdatesPage::new());
-        Self { focus, page: Page::Overview, overview, ai, transcription, words, network, updates }
+        let verify = cx.new(VerifyPage::new);
+        let logs = cx.new(|_| LogsPage::new());
+        Self { focus, page: Page::Overview, overview, ai, transcription, words, network, updates, verify, logs }
     }
 
     pub fn page(&self) -> Page {
@@ -90,6 +111,9 @@ impl Shell {
         if page == Page::Updates {
             // git fetch and checkupdates touch the network, so only when the page is opened.
             self.updates.update(cx, |updates, cx| updates.check_once(cx));
+        }
+        if page == Page::Logs {
+            self.logs.update(cx, |logs, cx| logs.load_once(cx));
         }
         if self.page != page {
             self.page = page;
@@ -105,6 +129,8 @@ impl Shell {
             Page::Words => self.words.clone().into(),
             Page::Network => self.network.clone().into(),
             Page::Updates => self.updates.clone().into(),
+            Page::Verify => self.verify.clone().into(),
+            Page::Logs => self.logs.clone().into(),
         }
     }
 

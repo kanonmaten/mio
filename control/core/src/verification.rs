@@ -1,6 +1,8 @@
 //! The latest `mio-verify verify` receipt, which the panel's verification page writes.
 
-use std::path::PathBuf;
+use std::io::{BufRead as _, BufReader, Read};
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
 
 use serde_json::Value;
 
@@ -68,6 +70,44 @@ impl Receipt {
     }
 }
 
+/// The command the verification page runs, as the user, in the repo the panel was built from.
+pub fn verify_command(repo: &Path, logs: &Path) -> std::process::Command {
+    let mut command = std::process::Command::new("cargo");
+    command
+        .current_dir(repo)
+        .args(["run", "--locked", "--manifest-path", "tools/Cargo.toml", "--", "verify", "--logs-dir"])
+        .arg(logs)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    command
+}
+
+/// Runs `command`, handing each line of stdout and stderr to `line` as it comes, and returns
+/// whether it succeeded.
+pub fn run_streaming(mut command: std::process::Command, line: &mut dyn FnMut(String)) -> Result<bool, String> {
+    let mut child = command.spawn().map_err(|_| "cargo saknas. Installera Rust för att köra verifieringen.".to_owned())?;
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let readers: Vec<_> = [child.stdout.take().map(|out| Box::new(out) as Box<dyn Read + Send>), child.stderr.take().map(|err| Box::new(err) as Box<dyn Read + Send>)]
+        .into_iter()
+        .flatten()
+        .map(|stream| {
+            let sender = sender.clone();
+            std::thread::spawn(move || {
+                for text in BufReader::new(stream).lines().map_while(Result::ok) {
+                    let _ = sender.send(text);
+                }
+            })
+        })
+        .collect();
+    drop(sender);
+    for text in receiver {
+        line(text);
+    }
+    readers.into_iter().for_each(|reader| drop(reader.join()));
+    child.wait().map(|status| status.success()).map_err(|error| error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,5 +125,18 @@ mod tests {
         assert_eq!(receipt.gates[1].seconds, None);
         assert!(!Receipt::parse(&json!({"result": "FAIL"})).unwrap().passed());
         assert_eq!(Receipt::parse(&json!({})), None);
+    }
+
+    #[test]
+    fn output_is_streamed_line_by_line_from_both_streams() {
+        let mut command = std::process::Command::new("sh");
+        command.args(["-c", "echo RUN structure; echo varning >&2; echo PASS structure; exit 3"]).stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut lines = Vec::new();
+        assert_eq!(run_streaming(command, &mut |line| lines.push(line)), Ok(false));
+        lines.sort();
+        assert_eq!(lines, ["PASS structure", "RUN structure", "varning"]);
+        let command = verify_command(Path::new("/repo"), Path::new("/logs"));
+        let arguments: Vec<_> = command.get_args().map(|argument| argument.to_string_lossy().into_owned()).collect();
+        assert_eq!(arguments.join(" "), "run --locked --manifest-path tools/Cargo.toml -- verify --logs-dir /logs");
     }
 }

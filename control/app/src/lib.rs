@@ -2,6 +2,7 @@
 
 pub mod ai;
 pub mod desktop;
+pub mod logs;
 pub mod model;
 pub mod network;
 pub mod operation;
@@ -12,6 +13,7 @@ pub mod theme;
 pub mod transcription;
 pub mod tray;
 pub mod updates;
+pub mod verify;
 pub mod window;
 pub mod words;
 

@@ -7,6 +7,7 @@ pub mod env_file;
 pub mod format;
 pub mod helper_client;
 pub mod http;
+pub mod journal;
 pub mod pairing;
 pub mod probe;
 pub mod settings;
