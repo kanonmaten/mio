@@ -124,6 +124,8 @@ Sidomeny till vänster, en sida per del, svensk text. I det lilla fönstret fäl
 
 ## Uppbyggnad
 
+**Ändrat vid bygget (2026-11-17, fas 0):** koden är en Cargo-arbetsyta med tre crates i stället för ett paket med två program: `control/core` (ingen GPUI), `control/helper` (`mio-control-helper`, länkar aldrig GPUI eftersom den körs som root) och `control/app` (`mio-control`). Temat ligger i `control/app/themes/mio-glod.json`. Strukturen nedan var planens utgångspunkt.
+
 ```text
 control/
 ├── Cargo.toml          paketet mio-control, två program

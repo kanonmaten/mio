@@ -532,6 +532,12 @@ fn structure(root: &Path, report: &mut Report) -> Result<(), Fatal> {
             }
         }
     }
+    // gpui-kit breaks its API weekly; the control panel must pin one exact version.
+    let control = read_text(&root.join("control/Cargo.toml"))?;
+    report.check(
+        pattern(r#"(?m)^gpui-kit = \{ version = "=\d+\.\d+\.\d+" \}"#).is_match(&control),
+        "control/Cargo.toml: gpui-kit låst till en exakt version",
+    );
     let diff = Command::new("git")
         .args(["diff", "--check"])
         .current_dir(root)
@@ -540,7 +546,7 @@ fn structure(root: &Path, report: &mut Report) -> Result<(), Fatal> {
     report.check(diff.status.success(), "git diff --check");
     let skip = ["node_modules", ".wrangler", "dist", "target", ".venv", "__pycache__", ".pytest_cache", ".git"];
     let root_has_git = root.components().any(|part| part.as_os_str() == ".git");
-    for folder in ["Mio", "MioTests", "MioUITests", "MioWidgets", "server", "transcription-server", "tools", "docs"] {
+    for folder in ["Mio", "MioTests", "MioUITests", "MioWidgets", "server", "transcription-server", "tools", "control", "docs"] {
         let mut files = Vec::new();
         walk(&root.join(folder), &skip, &mut files);
         for path in files {

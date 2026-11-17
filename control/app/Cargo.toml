@@ -1,0 +1,24 @@
+[package]
+name = "mio-control"
+description = "Mio Kontroll: the tray app and window that run Mio on the PC"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "mio-control"
+path = "src/main.rs"
+
+[dependencies]
+mio-control-core.workspace = true
+gpui-kit.workspace = true
+# Tray via StatusNotifierItem (KDE's protocol); async-io instead of a tokio runtime.
+ksni = { version = "0.3.7", default-features = false, features = ["async-io", "blocking"] }
+# Hands tray clicks from ksni's thread to GPUI's foreground executor.
+async-channel = "2.5.0"
+
+[dev-dependencies]
+serde_json = "1.0.154"
+gpui-kit = { workspace = true, features = ["test-support"] }

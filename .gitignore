@@ -46,3 +46,6 @@ __pycache__/
 
 # The verifier crate (tools/)
 tools/target/
+
+# The control panel workspace (control/)
+control/target/

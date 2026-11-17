@@ -1,0 +1,10 @@
+[package]
+name = "mio-control-core"
+description = "Mio Kontroll without graphics: env files, validation, status and commands"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]

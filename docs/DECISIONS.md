@@ -2,6 +2,22 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Kontrollpanelen på datorn (Mio Kontroll), 2026-11-17
+
+Användaren vill ha ett skrivbordsprogram som visar och styr allt Mio kör på datorn ([plan](PLAN_KONTROLLPANEL.md)). Valen nedan är planens och användarens; de bortvalda alternativen står bredvid.
+
+- **Koden ligger i `control/` i Mio-repot**, visningsnamn "Mio Kontroll", program `mio-control` och `mio-control-helper`. Avböjt: eget repo, eftersom panelen läser samma konfigurationsfiler och skript som `server/` och `transcription-server/`.
+- **Tre crates i en egen Cargo-arbetsyta** (`control/core`, `control/helper`, `control/app`) i stället för planens ett paket med två program. Hjälparen körs som root och ska inte länka GPUI eller dess cirka 700 beroenden, och kärnan ska gå att testa utan grafik. Avböjt: en arbetsyta ihop med `server/` och `tools/` (samma skäl som för verifieraren: `server/install.sh` bygger i `server/`).
+- **Gränssnitt: [`gpui-kit`](https://gpui-kit.com) 0.10.0, låst exakt (`=0.10.0`)**, med gpui-kits egna skills för Claude Code i `.claude/skills/` från taggen `v0.10.0`. Strukturkontrollen kräver en exakt låst version. Avböjt: `gpui` 0.2.2 från crates.io (långt efter Zeds GPUI), `gpui-component` direkt (gpui-kit låser rätt GPUI-version) och Qt/QML. Tredjepartsskills för GPUI är inte granskade och skrivna för andra GPUI-versioner.
+- **Rust 1.92 eller senare för `control/`.** `server/` och `tools/` behåller 1.88. Grinden säger "UNAVAILABLE" med eget meddelande om Rust är äldre än 1.92; de befintliga meddelandena är oförändrade.
+- **Behörighet:** panelen kör som användaren. Allt som skriver i `/etc`, styr systemtjänster eller läser hemligheter går genom `mio-control-helper` via `pkexec` med en egen polkit-policy och en fast kommandolista. `auth_admin_keep` (KDE frågar en gång och minns det några minuter); parningskoden kräver alltid lösenord. Avböjt: panelen som root, `sudo` i en terminal, systemd:s egen polkit-åtgärd per start/stopp (frågar varje gång och täcker inte filerna), och en regel som släpper igenom gruppen `wheel` utan fråga.
+- **Hemligheter** sparas aldrig av panelen. De går via stdin till hjälparen, visas maskerade och skrivs aldrig i logg eller argv. Avböjt: KWallet eller Secret Service.
+- **Utseende (användarens val):** temat "Mio glöd" med glödorange `#F0702E` på grafit, i en mörk och en ljus variant som följer skrivbordets färgschema via XDG-portalen, rundade hörn genom egna fönsterdekorationer. Text på orange är grafit, eftersom vit text bara når kontrasten 3,0; felrött används bara till ikoner och fyllningar i mörkt läge (4,0 mot ytan). Detaljer och kontrastvärden i [control/DESIGN.md](../control/DESIGN.md). Avböjt: Mios blå accent, röd-orange `#E5533A` (för nära felrött), att följa KDE:s accentfärg, bara mörkt tema, en gradient i titelraden.
+- **Fönster och systemfält (användarens val):** panelen startar som en ikon i systemfältet utan fönster (StatusNotifierItem via `ksni`, som KDE Plasma visar). Ett klick öppnar ett fönster på cirka 720 × 520 som går att ändra storlek på, maximera och visa i helskärm (F11). Att stänga fönstret avslutar inte panelen (GPUI:s `QuitMode::Explicit`); Avsluta finns i ikonens meny. Ikonen ritas i kod (ett grafit M på orange med en grön, bärnstensfärgad eller röd prick) och verktygstipset säger samma sak i ord. Avböjt: `tray-icon` (drar in GTK), ett vanligt program som avslutas med fönstret, en statusruta vid ikonen (osäker placering på KDE Wayland).
+- **CI:** grinden fick stegen `control-lint` och `control-tests`. "Verifiera Mio på Linux" installerar gpui-kits Ubuntu-paket, sparar `control/target` i Actions-cachen och har 45 minuter i stället för 20, eftersom GPUI tar flera minuter att bygga från början.
+
+Provat på den bärbara datorn (Hyprland, Intel HD 6000, Vulkan): fönstret ritas med det mörka temat, och ikonen registreras hos `StatusNotifierWatcher` utan att något fönster öppnas. **Ej verifierat:** KDE Plasma 6.8 Wayland med NVIDIA, rundade hörn under KWin, ljust läge och ikonen i Plasmas systemfält.
+
 ## Pianissimo i FP16 med NeMos blandade precision, 2026-11-17
 
 Användaren vill att Pianissimo räknar i FP16 i stället för FP32, utan att nattuppdateringen slutar fungera eller att transkriptionen blir sämre, och att FP16 är standard direkt.

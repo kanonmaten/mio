@@ -1,0 +1,22 @@
+[workspace]
+# Three crates so the root helper and the tested core never link GPUI:
+# core (no GUI), helper (runs as root via pkexec) and app (the GPUI window and tray).
+members = ["core", "helper", "app"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# gpui-kit 0.10 needs Rust 1.92; server/ and tools/ keep their own floor.
+rust-version = "1.92"
+publish = false
+license = "Apache-2.0"
+
+[workspace.dependencies]
+mio-control-core = { path = "core" }
+# Pinned exactly: gpui-kit ships weekly with breaking changes. Upgrade as its own change,
+# together with the skills in .claude/skills from the same tag.
+gpui-kit = { version = "=0.10.0" }
+
+[profile.release]
+strip = true

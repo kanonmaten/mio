@@ -16,14 +16,18 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     container: swift:6.3.3-noble
-    timeout-minutes: 20
+    # The control panel compiles GPUI (gpui-kit); a cold cache needs most of this.
+    timeout-minutes: 45
     steps:
       - name: Installera Python och byggverktyg för verifieraren
         # The Swift image has no python3 or curl; uv and the Pianissimo tests use the system
         # interpreter, rustup needs curl, and the gateway's TLS library compiles C code with gcc.
+        # The rest is what gpui-kit lists for Ubuntu 24.04, for the control panel in control/.
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends python3 ca-certificates curl gcc libc6-dev
+          apt-get install -y --no-install-recommends python3 ca-certificates curl gcc libc6-dev \
+            g++ cmake pkg-config libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev \
+            libssl-dev libzstd-dev libvulkan1
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -40,6 +44,13 @@ jobs:
           sh "$RUNNER_TEMP/rustup-init.sh" -y --profile minimal --component clippy --default-toolchain 1.100.0
           "$HOME/.cargo/bin/cargo" --version
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Återanvänd kontrollpanelens bygge
+        # GPUI takes minutes to compile from scratch; the cache only holds build output.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: control/target
+          key: control-target-${{ runner.os }}-rust-1.100.0-${{ hashFiles('control/Cargo.lock') }}
+          restore-keys: control-target-${{ runner.os }}-rust-1.100.0-
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: '0.12.22'

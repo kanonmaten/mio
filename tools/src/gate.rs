@@ -201,6 +201,10 @@ fn gate(skip_swift: bool, logs_dir: Option<PathBuf>, measure_session_store: bool
         println!("UNAVAILABLE: {rust_version}; the gateway needs Rust 1.88 or later (edition 2024, let chains).");
         return Ok(2);
     }
+    if cargo_version(&rust_version).is_none_or(|version| version < (1, 92, 0)) {
+        println!("UNAVAILABLE: {rust_version}; the control panel (control/) needs Rust 1.92 or later (gpui-kit 0.10).");
+        return Ok(2);
+    }
     let mut receipt = Map::new();
     receipt.insert("startedAt".into(), Value::from(utc_now_iso()));
     receipt.extend(provenance(&root)?);
@@ -214,6 +218,7 @@ fn gate(skip_swift: bool, logs_dir: Option<PathBuf>, measure_session_store: bool
     let transcription = root.join("transcription-server");
     let server = root.join("server/Cargo.toml");
     let tools = root.join("tools/Cargo.toml");
+    let control = root.join("control/Cargo.toml");
     let concurrency_log = logs.join("concurrency-diagnostics.log");
     let session_store = logs.join("session-store.json");
     let os = |text: &'static str| std::ffi::OsStr::new(text);
@@ -224,6 +229,9 @@ fn gate(skip_swift: bool, logs_dir: Option<PathBuf>, measure_session_store: bool
         step("verification-tools", "cargo", &[os("test"), os("--locked"), os("--manifest-path"), tools.as_os_str()]),
         step("gateway-lint", "cargo", &[os("clippy"), os("--locked"), os("--manifest-path"), server.as_os_str(), os("--all-targets"), os("--"), os("-D"), os("warnings")]),
         step("gateway-tests", "cargo", &[os("test"), os("--locked"), os("--manifest-path"), server.as_os_str()]),
+        // The control panel's core, root helper and GPUI app; GPUI tests run headless.
+        step("control-lint", "cargo", &[os("clippy"), os("--locked"), os("--manifest-path"), control.as_os_str(), os("--workspace"), os("--all-targets"), os("--"), os("-D"), os("warnings")]),
+        step("control-tests", "cargo", &[os("test"), os("--locked"), os("--manifest-path"), control.as_os_str(), os("--workspace")]),
         step("transcription-fake", "uv", &[os("--directory"), transcription.as_os_str(), os("run"), os("--no-sync"), os("python"), os("-m"), os("pytest"), os("tests")]),
     ];
     if !skip_swift {
@@ -301,5 +309,6 @@ mod tests {
         assert_eq!(cargo_version("cargo 1.100.0 (3acc79c0c 2026-11-05)"), Some((1, 100, 0)));
         assert!(cargo_version("cargo 1.87.2").is_some_and(|version| version < (1, 88, 0)));
         assert_eq!(cargo_version("rustup 1.0"), None);
+        assert!(cargo_version("cargo 1.91.1").is_some_and(|version| version < (1, 92, 0)));
     }
 }
