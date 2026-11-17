@@ -1,6 +1,11 @@
 //! Replays inputs recorded from the JavaScript gateway this crate replaced and requires the
 //! same answers: validation, grounding, the exact bytes sent to the model, status, and whole
 //! HTTP exchanges with a scripted provider.
+//!
+//! Deliberate differences from Node (ultrareview 2026-11-17, see docs/DECISIONS.md) are tested
+//! in their own files and not recorded here: tokens of failed generations count against the
+//! day (C1), key rotation keeps `gateway.env` (C2), the v2 rule filter runs before the six-item
+//! cap (C4) and generated tokens never start like a provider key (D1).
 
 mod common;
 

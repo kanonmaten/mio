@@ -3,6 +3,7 @@
 //! nothing about a request is logged.
 
 use std::convert::Infallible;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -14,7 +15,6 @@ use hyper_util::rt::{TokioIo, TokioTimer};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 
-use crate::adapters::Normalized;
 use crate::analysis::{validate_analysis_payload, validate_analysis_v2_payload, validate_ask_payload, validate_lesson_payload};
 use crate::config::{Config, ConfigError, validate_config};
 use crate::error::RequestError;
@@ -116,9 +116,7 @@ impl Inner {
         Ok(Slot(self.clone()))
     }
 
-    fn record_usage(&self, normalized: &Normalized) {
-        let usage = normalized.usage.clone().unwrap_or_default();
-        let tokens = usage.total_tokens.unwrap_or(usage.input_tokens.unwrap_or(0) + usage.output_tokens.unwrap_or(0));
+    fn record_usage(&self, tokens: i64) {
         let mut state = self.state();
         roll_buckets(&mut state.counters, (self.clock)());
         state.counters.day_tokens = state.counters.day_tokens.saturating_add(tokens.max(0)).min(crate::js::MAX_SAFE_INTEGER);
@@ -317,11 +315,20 @@ impl Gateway {
         };
         let mut slot = None;
         let mut reserve = || inner.reserve(&config).map(|reserved| slot = Some(reserved));
-        let generated = match execute_generation(&config, mode, &payload, inner.transport.as_ref(), &mut reserve, inner.clock.as_ref()).await {
+        let spent = AtomicI64::new(0);
+        let generated = match execute_generation(&config, mode, &payload, inner.transport.as_ref(), &mut reserve,
+            inner.clock.as_ref(), &spent).await {
             Ok(generated) => generated,
-            Err(error) => return failure(&headers, &error),
+            Err(error) => {
+                // A failed call can still have used tokens; they count against the day (ultrareview C1).
+                let tokens = spent.load(Ordering::Relaxed);
+                if tokens > 0 {
+                    inner.record_usage(tokens);
+                }
+                return failure(&headers, &error);
+            }
         };
-        inner.record_usage(&generated.normalized);
+        inner.record_usage(spent.load(Ordering::Relaxed));
         headers.set("X-Mio-Provider", generated.config.provider.clone());
         headers.set("X-Mio-Model", generated.config.model.clone());
         headers.set("X-Mio-Prompt-Version", generated.prompt_version.to_owned());

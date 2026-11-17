@@ -317,6 +317,26 @@ async fn status_reports_the_token_quota_with_its_unit_and_never_a_request_count_
     assert_eq!(server.status_v2().await["quota"], json!({ "limit": 1000, "remaining": 750, "resetAt": "2026-10-12T00:00:00.000Z", "unit": "tokens" }));
 }
 
+/// Ultrareview C1: Groq charges a cut-off, refused or rejected answer too, but only successful
+/// generations reached `day_tokens`, so the phone saw more quota than was left.
+#[tokio::test]
+async fn failed_generations_that_reached_the_provider_still_count_against_the_day() {
+    let truncated = Upstream::json(&json!({ "usage": { "prompt_tokens": 280, "completion_tokens": 20, "total_tokens": 300 },
+        "choices": [{ "finish_reason": "length", "message": { "role": "assistant", "content": "{\"answer\":" } }] }));
+    let refused = Upstream::json(&json!({ "usage": { "prompt_tokens": 90, "completion_tokens": 10, "total_tokens": 100 },
+        "choices": [{ "finish_reason": "content_filter", "message": { "role": "assistant", "content": "" } }] }));
+    let rejected = Upstream::json(&json!({ "usage": { "prompt_tokens": 40, "completion_tokens": 10, "total_tokens": 50 },
+        "choices": [{ "finish_reason": "stop", "message": { "role": "assistant", "content": "{\"fel\":true}" } }] }));
+    for (upstream, code, remaining) in [(truncated, "provider_truncated", 700), (refused, "provider_refusal", 900),
+        (rejected, "invalid_upstream_answer", 950)] {
+        let (provider, clock) = (Provider::fixed(upstream), Clock::at(NOON));
+        let server = clock.serve(Config { tokens_per_day: Some(1_000), ..config() }, &provider).await;
+        let failed = server.post("/v1/ask", &payload()).await;
+        assert_eq!((failed.status, failed.error().as_str()), (502, code));
+        assert_eq!(server.status_v2().await["quota"]["remaining"], remaining, "{code}");
+    }
+}
+
 fn temporary_directory(name: &str) -> std::path::PathBuf {
     let directory = std::env::temp_dir().join(format!("mio-counters-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&directory);

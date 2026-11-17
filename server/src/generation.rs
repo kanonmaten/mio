@@ -3,11 +3,12 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
-use crate::adapters::{Finish, Generation, Normalized, build_provider_request, normalize_provider_error, normalize_provider_response};
+use crate::adapters::{Finish, Generation, Normalized, Usage, build_provider_request, normalize_provider_error, normalize_provider_response};
 use crate::config::Config;
 use crate::error::RequestError;
 use crate::js::{ascii_alphanumeric_or, credential_shaped};
@@ -102,7 +103,13 @@ fn retry_delay(failure: &Failure, config: &Config) -> Option<u64> {
     }
 }
 
-async fn read_upstream(mut response: Box<dyn UpstreamResponse>, profile: &Profile, now_ms: i64) -> Result<Normalized, Failure> {
+/// Tokens one provider answer used, as counted against the day's budget.
+pub fn usage_tokens(usage: Option<&Usage>) -> i64 {
+    let usage = usage.cloned().unwrap_or_default();
+    usage.total_tokens.unwrap_or(usage.input_tokens.unwrap_or(0) + usage.output_tokens.unwrap_or(0)).max(0)
+}
+
+async fn read_upstream(mut response: Box<dyn UpstreamResponse>, profile: &Profile, now_ms: i64, spent: &AtomicI64) -> Result<Normalized, Failure> {
     let status = response.status();
     let ok = (200..300).contains(&status);
     let has_json = response.header("content-type").is_some_and(|kind| kind.to_lowercase().starts_with("application/json"));
@@ -131,6 +138,9 @@ async fn read_upstream(mut response: Box<dyn UpstreamResponse>, profile: &Profil
     let Some(data) = data else { return Err(RequestError::new(502, "invalid_upstream_response").into()) };
     let normalized = normalize_provider_response(&data, profile, &|name| if name == "x-request-id" { request_id.clone() } else { None })
         .map_err(|error| RequestError::new(error_status(error.0), error.0))?;
+    // The provider charged this answer whatever happens to it next: cut off, refused, rejected
+    // by the validator or followed by a retry (ultrareview C1; Node counted only successes).
+    spent.fetch_add(usage_tokens(normalized.usage.as_ref()), Ordering::Relaxed);
     match normalized.finish {
         Finish::Refused => Err(RequestError::new(502, "provider_refusal").into()),
         Finish::Truncated => Err(RequestError::new(502, "provider_truncated").into()),
@@ -149,12 +159,14 @@ pub struct Generated {
 pub type Reserve<'a> = &'a mut (dyn FnMut() -> Result<(), RequestError> + Send);
 pub type Clock<'a> = &'a (dyn Fn() -> i64 + Send + Sync);
 
+/// `spent` collects the tokens of every provider answer, including ones that end in an error.
+#[allow(clippy::too_many_arguments)]
 pub async fn execute_generation(config: &Config, mode: Mode, payload: &Value, transport: &dyn Transport,
-    reserve: Reserve<'_>, now: Clock<'_>) -> Result<Generated, RequestError> {
+    reserve: Reserve<'_>, now: Clock<'_>, spent: &AtomicI64) -> Result<Generated, RequestError> {
     let started = Instant::now();
     let limit = Duration::from_millis(config.upstream_timeout_ms);
     let expired = RequestError::new(504, "upstream_timeout");
-    match tokio::time::timeout(limit, run(config, mode, payload, transport, reserve, now, started, limit)).await {
+    match tokio::time::timeout(limit, run(config, mode, payload, transport, reserve, now, started, limit, spent)).await {
         Err(_) => Err(expired),
         Ok(Ok(generated)) => Ok(generated),
         Ok(Err(Failure::Request(error))) if error.code == "budget_store_failed" => Err(error),
@@ -166,7 +178,7 @@ pub async fn execute_generation(config: &Config, mode: Mode, payload: &Value, tr
 
 #[allow(clippy::too_many_arguments)]
 async fn run(config: &Config, mode: Mode, payload: &Value, transport: &dyn Transport, reserve: Reserve<'_>,
-    now: Clock<'_>, started: Instant, limit: Duration) -> Result<Generated, Failure> {
+    now: Clock<'_>, started: Instant, limit: Duration, spent: &AtomicI64) -> Result<Generated, Failure> {
     let ensure_current = || if started.elapsed() >= limit { Err(RequestError::new(504, "upstream_timeout")) } else { Ok(()) };
     ensure_current()?;
     let task_id = mode.task_id();
@@ -182,7 +194,7 @@ async fn run(config: &Config, mode: Mode, payload: &Value, transport: &dyn Trans
     let attempt = async || -> Result<Normalized, Failure> {
         let request = UpstreamRequest { url: provider.url.clone(), authorization: provider.authorization.clone(), body: body.clone() };
         let response = transport.send(request).await.map_err(|_| RequestError::new(502, "provider_transport"))?;
-        read_upstream(response, &provider.profile, now()).await
+        read_upstream(response, &provider.profile, now(), spent).await
     };
     // One retry with the identical request (user decision 2026-11-15): after a short wait the
     // provider named, or a brief pause after a provider/network failure. Never a second retry,
