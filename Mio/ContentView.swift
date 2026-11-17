@@ -231,9 +231,7 @@ private struct MioCaptureView: View {
                 }
                 MioSettingsToolbar()
             }
-            .sheet(isPresented: $showAsk) {
-                MioAskSheet(items: contentModel.items, sessions: model.allSessions)
-            }
+            .modifier(MioAskSheetPresentation(isPresented: $showAsk, items: contentModel.items, sessions: model.allSessions))
             .navigationBarTitleDisplayMode(.large)
         }
     }

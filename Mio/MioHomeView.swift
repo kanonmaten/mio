@@ -54,9 +54,7 @@ struct MioHomeView: View {
                 }
                 MioSettingsToolbar()
             }
-            .sheet(isPresented: $showAsk) {
-                MioAskSheet(items: contentModel.items, sessions: model.allSessions)
-            }
+            .modifier(MioAskSheetPresentation(isPresented: $showAsk, items: contentModel.items, sessions: model.allSessions))
             .task(id: day.overviewDate) { await loadReminders() }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task { await loadReminders() } }
@@ -434,6 +432,27 @@ private struct MioHomeDerivedSnapshot: Sendable {
         reminderDay: MioReminderDay(due: [], overdue: []),
         sentToday: []
     )
+}
+
+/// Presents Fråga Mio. Only one sheet can be up, so "Öppna inställningar" inside it closes this
+/// sheet first and opens the one settings sheet once it is gone (ultrareview E1).
+struct MioAskSheetPresentation: ViewModifier {
+    @Binding var isPresented: Bool
+    let items: [MioContentItem]
+    let sessions: [MioSession]
+    @Environment(\.openMioSettings) private var openSettings
+    @State private var opensSettingsAfterDismiss = false
+
+    func body(content: Content) -> some View {
+        content.sheet(isPresented: $isPresented, onDismiss: {
+            guard opensSettingsAfterDismiss else { return }
+            opensSettingsAfterDismiss = false
+            openSettings()
+        }) {
+            MioAskSheet(items: items, sessions: sessions)
+                .environment(\.openMioSettings, { opensSettingsAfterDismiss = true; isPresented = false })
+        }
+    }
 }
 
 /// Fråga Mio as its own sheet, reachable from Hem and Fånga.
