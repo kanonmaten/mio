@@ -148,4 +148,28 @@ final class MioPairingTests: XCTestCase {
         MioAIConsentLog.record(.off, at: base.addingTimeInterval(MioAIConsentLog.retention + 200), in: defaults)
         XCTAssertFalse(MioAIConsentLog.load(from: defaults).isOn)
     }
+    /// Ultrareview A6: every observe during a long quota pause appended a skipped entry, and
+    /// the 200-entry cap then dropped the switch-on, so catch-up found no consent at all.
+    func testLongPauseNeverTrimsAwayTheSwitchOn() {
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        let until = base.addingTimeInterval(3_600)
+        var log = MioAIConsentLog()
+        log.record(.on, at: base)
+        for second in 0..<500 { log.record(.skipped, at: base.addingTimeInterval(10 + Double(second)), until: until) }
+        XCTAssertEqual(log.entries.map(\.kind), [.on, .skipped], "The same pause is one entry")
+        XCTAssertEqual(log.entries.last?.at, base.addingTimeInterval(10), "It starts when the pause began")
+        XCTAssertEqual(log.consentStart(covering: until.addingTimeInterval(60)), until)
+        XCTAssertNil(log.consentStart(covering: base.addingTimeInterval(300)))
+
+        // Even many distinct pauses keep the switch-on that the remaining entries depend on.
+        var busy = MioAIConsentLog()
+        busy.record(.on, at: base)
+        for index in 0..<(MioAIConsentLog.limit + 50) {
+            let start = base.addingTimeInterval(10 + Double(index) * 20)
+            busy.record(.skipped, at: start, until: start.addingTimeInterval(10))
+        }
+        XCTAssertLessThanOrEqual(busy.entries.count, MioAIConsentLog.limit)
+        XCTAssertEqual(busy.entries.first?.kind, .on)
+        XCTAssertNotNil(busy.consentStart(covering: base.addingTimeInterval(10 + Double(MioAIConsentLog.limit + 50) * 20 + 5)))
+    }
 }

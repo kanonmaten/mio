@@ -181,6 +181,12 @@ struct MioAIConsentLog: Codable, Equatable, Sendable {
 
     mutating func record(_ kind: Kind, at date: Date, until: Date? = nil) {
         if kind != .skipped, isOn == (kind == .on), !entries.isEmpty { return }
+        // Text observed during one pause records the same `until` again and again; one entry
+        // covers it from the earliest start (ultrareview A6).
+        if kind == .skipped, let until, let index = entries.firstIndex(where: { $0.kind == .skipped && $0.until == until }) {
+            if date < entries[index].at { entries[index].at = date; entries.sort { $0.at < $1.at } }
+            return
+        }
         entries.append(Entry(kind: kind, at: date, until: kind == .skipped ? until : nil))
         entries.sort { $0.at < $1.at }
         trim(now: max(date, until ?? date))
@@ -192,7 +198,15 @@ struct MioAIConsentLog: Codable, Equatable, Sendable {
         let state = entries.last { $0.kind != .skipped && $0.at < cutoff }
         entries.removeAll { $0.at < cutoff && ($0.kind != .skipped || ($0.until ?? $0.at) < cutoff) }
         if let state, !entries.contains(state) { entries.insert(state, at: 0) }
-        if entries.count > Self.limit { entries.removeFirst(entries.count - Self.limit) }
+        // The cap drops the oldest entries but carries forward the on/off state they end with,
+        // since every later skipped interval is read against it (ultrareview A6).
+        if entries.count > Self.limit {
+            let excess = entries.count - Self.limit
+            let carried = entries.prefix(excess).last { $0.kind != .skipped }
+            entries.removeFirst(excess)
+            // The oldest remaining skipped interval gives way to the state instead.
+            if let carried, entries.first?.kind == .skipped { entries[0] = carried }
+        }
     }
 
     /// Start of the consent interval covering `date`: the latest switch-on, moved past any
