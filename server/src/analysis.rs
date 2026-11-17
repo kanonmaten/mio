@@ -384,13 +384,17 @@ impl CheckedAnalysis {
 /// Validates the shape strictly and each item on its own: an item without a grounded quote,
 /// with an invalid date or over a limit is removed, and the rest of the answer is kept. One bad
 /// item used to reject the whole answer, which stopped the app's analysis (2026-11-15).
+/// `keep` applies the caller's own rules before the six-candidate cap (ultrareview C4), so
+/// dropped candidates cannot crowd out valid ones further down.
+#[allow(clippy::too_many_arguments)]
 fn check_analysis(candidates: &Value, highlights: &[Value], uncertainties: &Value, sources: &Sources,
-    time_zone: &str, everyday: bool, candidate_keys: &[&str]) -> Checked<CheckedAnalysis> {
+    time_zone: &str, everyday: bool, candidate_keys: &[&str], keep: &mut dyn FnMut(&Map<String, Value>) -> bool) -> Checked<CheckedAnalysis> {
     let (Some(candidates), Some(uncertainties)) = (candidates.as_array(), uncertainties.as_array()) else { return Err(Invalid) };
     let candidates = shaped(candidates, candidate_keys)?;
     let highlights = shaped(highlights, &["text", "sourceIDs", "evidence"])?;
     Ok(CheckedAnalysis {
-        candidates: candidates.into_iter().filter_map(|item| clean_candidate(item, sources, time_zone)).take(6).collect(),
+        candidates: candidates.into_iter().filter_map(|item| clean_candidate(item, sources, time_zone))
+            .filter(|candidate| keep(candidate)).take(6).collect(),
         highlights: if everyday { Vec::new() } else {
             highlights.into_iter().filter_map(|item| {
                 text(item.get("text"), 1_500, false)?;
@@ -414,7 +418,7 @@ pub fn validate_analysis_result(value: &Value, payload: &Value) -> Checked<Value
     let highlights = fields["highlights"].as_array().ok_or(Invalid)?;
     let sources = sources_of(fragments_of(payload, "fragments"));
     Ok(check_analysis(&fields["candidates"], highlights, &fields["uncertainties"], &sources,
-        time_zone_of(payload), payload.get("mode").is_some_and(|mode| mode == "everyday"), &CANDIDATE_KEYS)?.into_value())
+        time_zone_of(payload), payload.get("mode").is_some_and(|mode| mode == "everyday"), &CANDIDATE_KEYS, &mut |_| true)?.into_value())
 }
 
 pub fn validate_ask_result(value: &Value) -> Checked<Value> {
@@ -428,7 +432,7 @@ pub fn validate_lesson_result(value: &Value, payload: &Value) -> Checked<Value> 
     let sections = fields["sections"].as_array().filter(|sections| sections.len() <= 12).ok_or(Invalid)?;
     let sources = sources_of(fragments_of(payload, "fragments"));
     let checked = check_analysis(&fields["candidates"], &[], &fields["uncertainties"], &sources,
-        time_zone_of(payload), true, &CANDIDATE_KEYS)?;
+        time_zone_of(payload), true, &CANDIDATE_KEYS, &mut |_| true)?;
     // Sections are the notes themselves: one that cannot be grounded rejects the part, and the
     // app retries or splits it. Homework candidates are extras and are dropped one by one.
     let sections = sections.iter().map(|section| {
@@ -445,15 +449,13 @@ pub fn validate_analysis_v2_result(value: &Value, payload: &Value) -> Checked<Va
     let fields = exact_keys(value, &["candidates", "highlights", "uncertainties"]).ok_or(Invalid)?;
     let highlights = fields["highlights"].as_array().ok_or(Invalid)?;
     let sources = sources_of(fragments_of(payload, "fragments").chain(fragments_of(payload, "contextFragments")));
-    let mut checked = check_analysis(&fields["candidates"], highlights, &fields["uncertainties"], &sources,
-        time_zone_of(payload), true, &CANDIDATE_V2_KEYS)?;
     let new_ids: HashSet<&str> = fragments_of(payload, "fragments").filter_map(|fragment| fragment["id"].as_str()).collect();
     let decisions: Vec<&Value> = fragments_of(payload, "priorDecisions").collect();
     let is_open = |decision: &Value| decision["isOpen"] == true;
     let mut replaced = HashSet::new();
     // Each rule below protects a decision the user already made. A candidate that breaks one is
     // dropped; the other candidates in the same answer are unaffected.
-    checked.candidates.retain(|candidate| {
+    let mut keep = |candidate: &Map<String, Value>| {
         let source_ids: Vec<&str> = candidate["sourceIDs"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
         let replaces = match &candidate["replacesID"] {
             Value::Null => None,
@@ -479,6 +481,7 @@ pub fn validate_analysis_v2_result(value: &Value, payload: &Value) -> Checked<Va
                 && linked.first() == Some(&index) => replaced.insert(id),
             _ => false,
         }
-    });
-    Ok(checked.into_value())
+    };
+    Ok(check_analysis(&fields["candidates"], highlights, &fields["uncertainties"], &sources,
+        time_zone_of(payload), true, &CANDIDATE_V2_KEYS, &mut keep)?.into_value())
 }

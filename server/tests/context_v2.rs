@@ -144,3 +144,16 @@ async fn v2_invalid_upstream_replacement_cannot_escape_as_a_proposal() {
     assert_eq!(response.status, 200);
     assert_eq!(response.json(), json!({ "candidates": [], "highlights": [], "uncertainties": [] }));
 }
+
+/// Ultrareview C4: the six-candidate cap ran before the v2 rules, so candidates the rules then
+/// dropped took places that valid candidates further down should have had.
+#[test]
+fn v2_rules_run_before_the_six_candidate_cap() {
+    let breaking = with(&candidate(), json!({ "sourceIDs": [OLD], "evidence": "Vi ses", "replacesID": null }));
+    let valid = |index: usize| with(&candidate(), json!({ "title": format!("Förslag {index}"), "sourceIDs": [NEW], "replacesID": null }));
+    let mut items = vec![breaking.clone(), breaking];
+    items.extend((0..6).map(valid));
+    let answer = with(&result(), json!({ "candidates": items }));
+    let kept = validate_analysis_v2_result(&answer, &payload()).unwrap()["candidates"].clone();
+    assert_eq!(kept, json!((0..6).map(valid).collect::<Vec<_>>()));
+}
