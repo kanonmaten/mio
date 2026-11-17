@@ -14,6 +14,7 @@ struct MioComputerSection: View {
     @State private var showManual = false
     @State private var confirmForget = false
     @State private var checkTask: Task<Void, Never>?
+    @State private var checkRequestID: UUID?
     @State private var isChecking = false
     @State private var message: String?
     @State private var error: String?
@@ -140,8 +141,12 @@ struct MioComputerSection: View {
     private func check() {
         checkTask?.cancel()
         isChecking = true
+        // A cancelled earlier check finishes after this one started; only the current check may
+        // end the spinner (ultrareview D2).
+        let requestID = UUID()
+        checkRequestID = requestID
         checkTask = Task {
-            defer { isChecking = false }
+            defer { if checkRequestID == requestID { isChecking = false } }
             var problems: [String] = []
             do {
                 _ = try await discovery.inspect(connection: try MioCloudSettings.connection(), forceRefresh: true)
