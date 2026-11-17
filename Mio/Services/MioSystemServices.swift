@@ -112,59 +112,6 @@ final class MioSystemServices {
     }
 
     @discardableResult
-    func scheduleAlarm(id: UUID = UUID(), date: Date, weekdays: [Locale.Weekday] = []) async -> Bool {
-        guard !isBusy else { return false }
-        isBusy = true
-        errorMessage = nil
-        statusMessage = nil
-        defer { isBusy = false }
-        guard !weekdays.isEmpty || date > .now.addingTimeInterval(5) else {
-            errorMessage = "Välj en alarmtid minst några sekunder framåt."
-            return false
-        }
-        do {
-            alarmStatus = alarmManager.authorizationState
-            if alarmStatus == .notDetermined {
-                alarmStatus = try await Self.requestAlarmAuthorization()
-            }
-            guard alarmStatus == .authorized else {
-                errorMessage = "Alarm är inte tillåtna. Du kan ändra detta i iPhones Inställningar för Mio."
-                return false
-            }
-            // A fixed/weekly alert uses the system stop action. No countdown or
-            // snooze is offered, so no custom Live Activity extension is needed.
-            let presentation = AlarmPresentation(alert: AlarmPresentation.Alert(
-                title: "Mio-alarm",
-                stopButton: AlarmButton(text: "Stoppa", textColor: .white, systemImageName: "stop.circle")
-            ))
-            let attributes = AlarmAttributes<MioAlarmMetadata>(presentation: presentation, tintColor: .indigo)
-            let schedule: Alarm.Schedule
-            if weekdays.isEmpty {
-                schedule = .fixed(date)
-            } else {
-                let components = Calendar.current.dateComponents([.hour, .minute], from: date)
-                schedule = .relative(.init(
-                    time: .init(hour: components.hour ?? 7, minute: components.minute ?? 0),
-                    repeats: .weekly(weekdays)
-                ))
-            }
-            let configuration = AlarmManager.AlarmConfiguration<MioAlarmMetadata>.alarm(
-                schedule: schedule,
-                attributes: attributes
-            )
-            _ = try await Self.scheduleAlarm(id: id, configuration: configuration)
-            rememberAlarmIDs(knownAlarmIDs.union([id]))
-            await refresh()
-            statusMessage = "Alarmet är sparat hos iOS."
-            return true
-        } catch {
-            errorMessage = "Kunde inte spara alarmet: \(error.localizedDescription)"
-            await refresh()
-            return false
-        }
-    }
-
-    @discardableResult
     func cancelAlarm(id: UUID) async -> Bool {
         guard !isBusy else { return false }
         isBusy = true
@@ -181,38 +128,6 @@ final class MioSystemServices {
             errorMessage = "Kunde inte ta bort alarmet: \(error.localizedDescription)"
             return false
         }
-    }
-
-    func stopAlarm(id: UUID) async {
-        guard !isBusy else { return }
-        isBusy = true
-        errorMessage = nil
-        statusMessage = nil
-        defer { isBusy = false }
-        do {
-            try alarmManager.stop(id: id)
-            await refresh()
-            statusMessage = "Alarmet är stoppat. Ett återkommande alarm finns kvar till nästa tillfälle."
-        } catch {
-            errorMessage = "Kunde inte stoppa alarmet: \(error.localizedDescription)"
-        }
-    }
-
-    @discardableResult
-    func scheduleReminder(for itemID: UUID, at date: Date) async -> Bool {
-        guard date > .now.addingTimeInterval(5) else {
-            errorMessage = "Välj en påminnelsetid minst några sekunder framåt."
-            return false
-        }
-        // The fixed timezone preserves the chosen instant if the user travels.
-        var components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-        components.timeZone = .current
-        return await saveReminder(
-            id: Self.reminderID(for: itemID),
-            route: .post(itemID),
-            components: components,
-            repeats: false
-        )
     }
 
     @discardableResult
@@ -275,19 +190,6 @@ final class MioSystemServices {
             errorMessage = "Kunde inte ta bort postens alarm. Posten har inte raderats: \(error.localizedDescription)"
             return false
         }
-    }
-
-    // AlarmManager is not Sendable and its async methods are @concurrent. Calling them on the
-    // main-actor `alarmManager` property would send main-actor state off the actor, so the two
-    // async calls run nonisolated on the shared manager and only Sendable results come back.
-    nonisolated private static func requestAlarmAuthorization() async throws -> AlarmManager.AuthorizationState {
-        try await AlarmManager.shared.requestAuthorization()
-    }
-
-    nonisolated private static func scheduleAlarm(
-        id: UUID, configuration: AlarmManager.AlarmConfiguration<MioAlarmMetadata>
-    ) async throws -> Alarm {
-        try await AlarmManager.shared.schedule(id: id, configuration: configuration)
     }
 
     /// Returns false, without removing anything, when a known Mio alarm cannot be checked
