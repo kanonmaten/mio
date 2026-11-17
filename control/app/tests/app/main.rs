@@ -3,6 +3,7 @@
 
 mod ai;
 mod network;
+mod setup_computer;
 mod transcription;
 mod ui;
 mod updates;

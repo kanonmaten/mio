@@ -3,6 +3,7 @@
 pub mod ai_settings;
 pub mod atomic;
 pub mod command;
+pub mod computer;
 pub mod env_file;
 pub mod format;
 pub mod helper_client;
@@ -11,6 +12,7 @@ pub mod journal;
 pub mod pairing;
 pub mod probe;
 pub mod settings;
+pub mod setup;
 pub mod socket_owner;
 pub mod status;
 pub mod token;

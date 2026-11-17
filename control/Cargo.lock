@@ -4271,6 +4271,7 @@ dependencies = [
  "mio-control-core",
  "notify-rust",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

@@ -14,6 +14,8 @@ use crate::network::NetworkPage;
 use crate::updates::UpdatesPage;
 use crate::verify::VerifyPage;
 use crate::logs::LogsPage;
+use crate::computer::ComputerPage;
+use crate::setup::{OpenPairing, SetupPage};
 use crate::transcription::TranscriptionPage;
 use crate::words::WordsPage;
 use crate::model::StatusModel;
@@ -24,6 +26,7 @@ use crate::window::{CloseWindow, ToggleFullscreen};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Page {
     Overview,
+    Setup,
     Ai,
     Transcription,
     Words,
@@ -31,11 +34,13 @@ pub enum Page {
     Updates,
     Verify,
     Logs,
+    Computer,
 }
 
 impl Page {
-    pub const ALL: [Page; 8] = [
+    pub const ALL: [Page; 10] = [
         Page::Overview,
+        Page::Setup,
         Page::Ai,
         Page::Transcription,
         Page::Words,
@@ -43,11 +48,13 @@ impl Page {
         Page::Updates,
         Page::Verify,
         Page::Logs,
+        Page::Computer,
     ];
 
     pub fn title(self) -> &'static str {
         match self {
             Page::Overview => "Översikt",
+            Page::Setup => "Kom igång",
             Page::Ai => "AI",
             Page::Transcription => "Transkription",
             Page::Words => "Egna ord",
@@ -55,12 +62,14 @@ impl Page {
             Page::Updates => "Uppdateringar",
             Page::Verify => "Verifiering",
             Page::Logs => "Loggar",
+            Page::Computer => "Datorn",
         }
     }
 
     pub fn icon(self) -> IconName {
         match self {
             Page::Overview => IconName::LayoutDashboard,
+            Page::Setup => IconName::Play,
             Page::Ai => IconName::Bot,
             Page::Transcription => IconName::Mic,
             Page::Words => IconName::FileText,
@@ -68,6 +77,7 @@ impl Page {
             Page::Updates => IconName::RefreshCw,
             Page::Verify => IconName::CircleCheck,
             Page::Logs => IconName::SquareTerminal,
+            Page::Computer => IconName::HardDrive,
         }
     }
 }
@@ -86,6 +96,9 @@ pub struct Shell {
     updates: Entity<UpdatesPage>,
     verify: Entity<VerifyPage>,
     logs: Entity<LogsPage>,
+    setup: Entity<SetupPage>,
+    computer: Entity<ComputerPage>,
+    _pairing: gpui_kit::Subscription,
 }
 
 impl Shell {
@@ -96,11 +109,18 @@ impl Shell {
         let ai = cx.new(|cx| AiPage::new(status.clone(), cx));
         let transcription = cx.new(|cx| TranscriptionPage::new(status.clone(), cx));
         let words = cx.new(|cx| WordsPage::new(status.clone(), cx));
+        let status_for_setup = status.clone();
         let network = cx.new(|cx| NetworkPage::new(status, window, cx));
         let updates = cx.new(|_| UpdatesPage::new());
         let verify = cx.new(VerifyPage::new);
         let logs = cx.new(|_| LogsPage::new());
-        Self { focus, page: Page::Overview, overview, ai, transcription, words, network, updates, verify, logs }
+        let setup = cx.new(|cx| SetupPage::new(status_for_setup, cx));
+        let computer = cx.new(|_| ComputerPage);
+        let pairing = cx.subscribe_in(&setup, window, |shell: &mut Self, _, _: &OpenPairing, window, cx| {
+            shell.show(Page::Network, cx);
+            shell.network.update(cx, |network, cx| network.show_pairing(window, cx));
+        });
+        Self { focus, page: Page::Overview, overview, ai, transcription, words, network, updates, verify, logs, setup, computer, _pairing: pairing }
     }
 
     pub fn page(&self) -> Page {
@@ -131,6 +151,8 @@ impl Shell {
             Page::Updates => self.updates.clone().into(),
             Page::Verify => self.verify.clone().into(),
             Page::Logs => self.logs.clone().into(),
+            Page::Setup => self.setup.clone().into(),
+            Page::Computer => self.computer.clone().into(),
         }
     }
 
