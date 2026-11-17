@@ -26,7 +26,7 @@ Before changing something, read the docs that cover it: [README](README.md), [de
 
 ## Verifying
 
-Linux can't build the iOS app. On the user's PC (Rust 1.88+, `swiftc`, `uv`) run the full gate; in a cloud session run what the toolchain allows:
+Linux can't build the iOS app. On the user's PC (Rust 1.92+ since the gate builds `control/`, `swiftc`, `uv`) run the full gate; in a cloud session run what the toolchain allows:
 
 ```sh
 cargo run --locked --manifest-path tools/Cargo.toml -- verify       # everything below plus Swift XCTest and concurrency
