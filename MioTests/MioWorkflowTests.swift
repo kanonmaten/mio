@@ -109,6 +109,34 @@ final class MioWorkflowTests: XCTestCase {
         XCTAssertNil(workflow.deletion.pendingOperationID)
     }
 
+    /// Ultrareview B3: when the content store failed after the claim, the claim was never
+    /// released and the proposal stayed "approval in progress" until the app restarted.
+    @MainActor
+    func testFailingContentStoreReleasesTheApprovalClaim() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = FailingApprovalContentStore()
+        let repository = MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json"))
+        let assistant = MioAssistantViewModel(repository: repository)
+        let workflow = MioWorkflowCoordinator(capture: MioViewModel(repository: SessionRepository(storageURL: root.appendingPathComponent("sessions.json"))),
+            content: MioContentViewModel(repository: store), assistant: assistant, analysis: MioAnalysisCoordinator(),
+            journal: MioDeletionJournal(storageURL: root.appendingPathComponent("operations.json")))
+        await workflow.bootstrap()
+        let suggestion = MioSuggestion(kind: .note, title: "Syntetiskt förslag")
+        try await repository.addSuggestion(suggestion)
+        for failure in [FailingApprovalContentStore.Mode.storageError, .repositoryError] {
+            await store.set(failure)
+            let outcome = await workflow.acceptSuggestion(id: suggestion.id, expectedRevision: 0, kind: .note, title: "Syntetiskt förslag",
+                                                          body: "", scheduledAt: .now, dateConfirmed: true, dateChosen: false)
+            XCTAssertNotEqual(outcome, .success, "\(failure)")
+            let reads = await store.reads
+            XCTAssertGreaterThan(reads, 1, "The failure came after the claim (\(failure))")
+            // A released claim lets the next attempt claim again instead of "already in progress".
+            let again = try await repository.claimSuggestion(id: suggestion.id, expectedRevision: 0)
+            try await repository.releaseApproval(again)
+        }
+    }
+
     @MainActor
     func testFinalizedLocalDetectionReportsItsStorageFailureExplicitly() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -399,4 +427,31 @@ final class MioWorkflowTests: XCTestCase {
         await withCheckedContinuation { continuation = $0; started = true }
     }
     func release() { continuation?.resume(); continuation = nil }
+}
+
+/// Content store whose approval path fails after the claim, as in ultrareview B3.
+private actor FailingApprovalContentStore: MioContentStore {
+    enum Mode: Sendable { case storageError, repositoryError }
+    private var mode = Mode.storageError
+    private(set) var reads = 0
+    func set(_ mode: Mode) { self.mode = mode; reads = 0 }
+    func loadItems() async throws -> [MioContentItem] {
+        reads += 1
+        // The first read is before the claim; the read after the failed save fails too.
+        guard reads > 1 else { return [] }
+        switch mode {
+        case .storageError: throw CocoaError(.fileReadUnknown)
+        case .repositoryError: throw MioAssistantRepositoryError.invalidRelationships
+        }
+    }
+    func upsert(_ item: MioContentItem) async throws -> [MioContentItem] { throw CocoaError(.fileWriteUnknown) }
+    func delete(id: UUID) async throws -> [MioContentItem] { [] }
+    func saveApprovedIfAbsent(_ item: MioContentItem) async throws -> [MioContentItem] { throw CocoaError(.fileWriteUnknown) }
+    func unlinkSession(id: UUID) async throws -> [MioContentItem] { [] }
+    func deleteAll() async throws {}
+    func removeTemporaryExports() async throws {}
+    func makeExportFile(content: [MioContentItem], sessions: [MioSession],
+                        assistant: MioAssistantStoreDocument?, diagnostics: MioDiagnosticsExport?) async throws -> URL {
+        throw CocoaError(.fileWriteUnknown)
+    }
 }

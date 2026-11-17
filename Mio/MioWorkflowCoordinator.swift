@@ -224,11 +224,16 @@ final class MioWorkflowCoordinator {
                 if let claim { _ = await assistant.releaseSuggestionApproval(claim) }
                 return .cancelled
             } catch let error as MioAssistantRepositoryError {
+                // Release like approveHandoff does, or the proposal stays claimed (ultrareview B3).
+                if let claim { _ = await assistant.releaseSuggestionApproval(claim) }
                 switch error {
                 case .suggestionChanged, .approvalInProgress, .invalidApproval: return .conflict(error.localizedDescription)
                 case .unsupportedSchemaVersion, .invalidRelationships: return .failure(error.localizedDescription)
                 }
-            } catch { return .failure("Kunde inte godkänna förslaget: \(error.localizedDescription)") }
+            } catch {
+                if let claim { _ = await assistant.releaseSuggestionApproval(claim) }
+                return .failure("Kunde inte godkänna förslaget: \(error.localizedDescription)")
+            }
         }
     }
 
