@@ -20,6 +20,8 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 
 ## Planerat: kontrollpanel för datorn (önskemål 2026-11-16, inte påbörjat)
 
+Arbetsplanen finns i [PLAN_KONTROLLPANEL.md](PLAN_KONTROLLPANEL.md) (2026-11-17): gpui-kit 0.10, fem AI-leverantörer i gatewayen, glödorange tema och ikon i systemfältet. Sammanfattningen nedan gäller fortfarande.
+
 Ett skrivbordsprogram i Rust byggt med [GPUI](https://www.gpui.rs/) som styr och kontrollerar allt Mio kör på datorn:
 
 - Visar om gatewayen, Pianissimo och Tailscale kör och svarar, med gatewayens modellfria status (`/v2/status`), dagens kvot och Pianissimos hälsa.
