@@ -39,10 +39,10 @@ def service(monkeypatch, value=None):
     return Pianissimo()
 
 
-def test_precision_defaults_to_fp32_and_only_accepts_known_values(monkeypatch):
-    assert service(monkeypatch).precision == "fp32"
-    assert service(monkeypatch, "  ").precision == "fp32"
-    assert service(monkeypatch, "fp16").precision == "fp16"
+def test_precision_defaults_to_fp16_and_only_accepts_known_values(monkeypatch):
+    assert service(monkeypatch).precision == "fp16"
+    assert service(monkeypatch, "  ").precision == "fp16"
+    assert service(monkeypatch, "fp32").precision == "fp32"
     for value in ["FP16", "bf16", "half", "fp8", "16"]:
         with pytest.raises(ValueError):
             parse_precision(value)

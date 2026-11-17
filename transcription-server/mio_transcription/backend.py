@@ -11,8 +11,8 @@ PRECISIONS = ("fp32", "fp16")
 
 
 def parse_precision(value):
-    """MIO_PRECISION: fp32 (default) or fp16. Anything else stops the service instead of guessing."""
-    value = (value or "").strip() or "fp32"
+    """MIO_PRECISION: fp16 (default, user's choice 2026-11-17) or fp32. Anything else stops the service."""
+    value = (value or "").strip() or "fp16"
     if value not in PRECISIONS:
         raise ValueError("MIO_PRECISION must be fp32 or fp16")
     return value

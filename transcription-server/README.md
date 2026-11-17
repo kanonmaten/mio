@@ -148,21 +148,21 @@ När både förbehandling och talarmärkning är avstängda skickas rå PCM dire
 
 **Ej verifierat:** den riktiga talarmodellen och förbehandlingen är bara provade med syntetiska signaler och falska modeller, inte på GPU eller med riktigt tal. Talarmodellen är främst tränad på engelska. Mät gärna med skriptet nedan innan du litar på resultatet.
 
-## Snabbare med FP16
+## FP16
 
-Pianissimo räknar som standard i FP32. Med raden `MIO_PRECISION=fp16` i `/etc/mio-transcription.conf` gör GPU:n modellens matrisberäkningar i FP16 på sina tensorkärnor, vilket bör ge texten snabbare. Det är NeMos blandade precision (samma som `amp=True` i NeMos eget transkriberingsskript): vikterna ligger kvar i FP32 och ljudets spektrogram räknas fortfarande i FP32, så GPU-minnet blir inte mindre. Talarmodellen räknar alltid i FP32.
+Pianissimo räknar som standard i FP16 (ditt val 2026-11-17): GPU:n gör modellens matrisberäkningar i FP16 på sina tensorkärnor, vilket bör ge texten snabbare med samma ordfel. KlangAI:s egna FP16-versioner av modellen (ONNX och GGUF) gav samma resultat som FP32. Det är NeMos blandade precision (samma som `amp=True` i NeMos eget transkriberingsskript): vikterna ligger kvar i FP32 och ljudets spektrogram räknas fortfarande i FP32, så GPU-minnet blir inte mindre. Talarmodellen räknar alltid i FP32.
 
 Nattuppdateringen och egna ord fungerar som förut. Uppvärmningen innan tjänsten svarar "redo" körs i den valda precisionen, så en ny modellversion som inte kan köras i FP16 rullas tillbaka som vanligt. Fler ordfel upptäcks inte automatiskt, varken i FP16 eller FP32; mät gärna igen efter en större modelluppdatering. Ett okänt värde (allt utom `fp32` och `fp16`) gör att tjänsten inte startar.
 
-Mät först att FP16 inte ger fler fel. Kör [mätningen](#mäta-ordfelfrekvens) med `--precision fp32 fp16`; den mäter båda med samma laddade modell och samma ljud och visar hastigheten som `× realtid`. Slå bara på FP16 om ordfelen (WER) med FP16 är högst cirka 0,1 procentenheter högre än med FP32 i varje villkor och hastigheten är högre:
+`check.sh` visar `"precision":"fp16"`. Tillbaka till FP32:
 
 ```bash
-echo 'MIO_PRECISION=fp16' | sudo tee -a /etc/mio-transcription.conf
+echo 'MIO_PRECISION=fp32' | sudo tee -a /etc/mio-transcription.conf
 sudo systemctl restart mio-transcription
 ~/mio/transcription-server/check.sh --wait
 ```
 
-`check.sh` visar `"precision":"fp16"`. Tillbaka till FP32: ta bort raden (`sudo nano /etc/mio-transcription.conf`) och starta om tjänsten.
+Ta bort raden igen (`sudo nano /etc/mio-transcription.conf`) och starta om för att gå tillbaka till FP16. Vill du jämföra kör du [mätningen](#mäta-ordfelfrekvens) med `--precision fp32 fp16`; den mäter båda med samma laddade modell och samma ljud och visar hastigheten som `× realtid`.
 
 **Ej verifierat:** FP16 är bara provat med falska modeller, inte på GPU:n. KlangAI:s mätningar av FP16 gäller deras ONNX- och GGUF-versioner, inte NeMo.
 
@@ -191,7 +191,7 @@ sudo systemctl restart mio-transcription
    sudo systemctl start mio-transcription.service mio-pianissimo-update.timer
    ```
 
-   `--json` ger maskinläsbart resultat, `--seed` ändrar de syntetiska villkoren, `--conditions dämpad` kör ett enskilt villkor och `--precision fp32 fp16` jämför precisionerna (se [Snabbare med FP16](#snabbare-med-fp16)). Utan `--precision` mäts den precision som `MIO_PRECISION` anger, och kommandot ovan skickar inte med den raden, alltså FP32. Samma frö ger samma syntetiska ljud med och utan förbehandling.
+   `--json` ger maskinläsbart resultat, `--seed` ändrar de syntetiska villkoren, `--conditions dämpad` kör ett enskilt villkor och `--precision fp32 fp16` jämför precisionerna (se [FP16](#fp16)). Utan `--precision` mäts den precision som `MIO_PRECISION` anger, och kommandot ovan skickar inte med den raden, alltså FP16. Samma frö ger samma syntetiska ljud med och utan förbehandling.
 
 3. Ta bort testdatat: `rm -rf /var/tmp/mio-wer`.
 
