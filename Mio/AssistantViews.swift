@@ -209,6 +209,9 @@ private struct SuggestionReviewView: View {
     @State private var lists: [MioReminderList] = []
     @State private var reviewedDate = false
     @State private var dateChosen = false
+    /// The date just copied from an updated suggestion. Its onChange is not a user edit, so it
+    /// must not mark the date as chosen (ultrareview E4).
+    @State private var appliedDate: Date?
     @State private var reviewedRevision: Int
     @State private var reviewedSuggestion: MioSuggestion
     @State private var outcome: MioOperationOutcome?
@@ -277,6 +280,7 @@ private struct SuggestionReviewView: View {
                         // user already picked a date themselves.
                         if !dateChosen, current.needsDateConfirmation != true,
                            current.isAllDay != reviewedSuggestion.isAllDay || current.scheduledAt != reviewedSuggestion.scheduledAt {
+                            if date != current.scheduledAt { appliedDate = current.scheduledAt }
                             date = current.scheduledAt; isAllDay = current.isAllDay == true; hasDueDate = true
                         }
                         reviewedSuggestion = current
@@ -336,7 +340,10 @@ private struct SuggestionReviewView: View {
             }
             .presentationDetents([.medium, .large])
         }
-        .onChange(of: date) { _, _ in dateChosen = true; reviewedDate = false }
+        .onChange(of: date) { _, new in
+            if let applied = appliedDate, applied == new { appliedDate = nil } else { appliedDate = nil; dateChosen = true }
+            reviewedDate = false
+        }
         .onChange(of: title) { _, _ in reviewedDate = false }
         .onChange(of: text) { _, _ in reviewedDate = false }
         .onChange(of: kind) { _, _ in reviewedDate = false }
