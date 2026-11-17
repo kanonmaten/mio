@@ -7,7 +7,7 @@ use std::os::unix::fs::OpenOptionsExt;
 
 use serde_json::{Value, json};
 
-use crate::config::is_gateway_token;
+use crate::config::{is_gateway_token, looks_like_provider_key};
 
 /// The value of `NAME=value` on its own line, when it has the shape of a Mio token. A file
 /// saved with Windows line ends still yields its token (ultrareview C3).
@@ -33,21 +33,28 @@ fn base64url(bytes: &[u8]) -> String {
 /// `GROQ_API_KEY` line changes and every other line (limits, port, task profiles, the token) is
 /// kept, so the phone needs no re-pairing (ultrareview C2). Lines are compared as bytes, so
 /// non-UTF-8 text survives; Windows line ends become plain ones. Anything else gets a new file.
+/// A kept token that starts like a provider key (which the phone refuses) is replaced too.
 pub fn gateway_env(key: &str, existing: Option<&[u8]>, model: &str, port: &str, fresh_token: &str) -> Vec<u8> {
-    match existing {
-        Some(existing) if token_in(&String::from_utf8_lossy(existing), "MIO_GATEWAY_TOKEN").is_some() => rotate_key(existing, key),
+    let kept = existing.and_then(|existing| token_in(&String::from_utf8_lossy(existing), "MIO_GATEWAY_TOKEN").map(str::to_owned));
+    match (existing, kept) {
+        (Some(existing), Some(token)) => {
+            let contents = rotate_key(existing, key, "GROQ_API_KEY");
+            if is_gateway_token(&token) { contents } else { rotate_key(&contents, fresh_token, "MIO_GATEWAY_TOKEN") }
+        }
         _ => fresh_env(key, model, port, fresh_token).into_bytes(),
     }
 }
 
-fn rotate_key(existing: &[u8], key: &str) -> Vec<u8> {
-    let assignment = format!("GROQ_API_KEY={key}");
+/// Sets `name` to `value` and keeps every other line.
+fn rotate_key(existing: &[u8], value: &str, name: &str) -> Vec<u8> {
+    let assignment = format!("{name}={value}");
+    let prefix = format!("{name}=");
     let mut contents = Vec::with_capacity(existing.len() + assignment.len());
     let mut replaced = false;
     let body = existing.strip_suffix(b"\n").unwrap_or(existing);
     for line in body.split(|byte| *byte == b'\n') {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
-        if line.starts_with(b"GROQ_API_KEY=") {
+        if line.starts_with(prefix.as_bytes()) {
             if replaced {
                 continue;
             }
@@ -111,11 +118,22 @@ fn standard_input() -> Result<String, String> {
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
+/// A random token the phone accepts: about 1 in 32,000 random tokens starts like a provider
+/// key and is drawn again (ultrareview D1).
+fn fresh_token() -> Result<String, String> {
+    loop {
+        let mut random = [0u8; 32];
+        getrandom::fill(&mut random).map_err(|_| "Kunde inte skapa en slumpad token.".to_owned())?;
+        let token = base64url(&random);
+        if !looks_like_provider_key(&token) {
+            return Ok(token);
+        }
+    }
+}
+
 fn write_config(path: &str, model: &str, port: &str) -> Result<(), String> {
     let key = standard_input()?;
-    let mut random = [0u8; 32];
-    getrandom::fill(&mut random).map_err(|_| "Kunde inte skapa en slumpad token.".to_owned())?;
-    let fresh = base64url(&random);
+    let fresh = fresh_token()?;
     debug_assert!(is_gateway_token(&fresh));
     let contents = gateway_env(&key, std::fs::read(path).ok().as_deref(), model, port, &fresh);
     let temporary = format!("{path}.tmp");

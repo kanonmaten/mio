@@ -61,6 +61,11 @@ sudo install -m 755 "$source_dir/mio-pair" /usr/local/bin/mio-pair
 step "Konfiguration $config"
 sudo install -d -m 700 "$config_dir"
 if sudo test -f "$config" && ! $replace_key; then
+    # The phone refuses a token that starts like a provider key (about 1 in 32,000 older ones).
+    # --ny-groq-nyckel replaces such a token; the phone is then paired again with mio-pair.
+    if sudo grep -qiE '^MIO_GATEWAY_TOKEN=(sk-|sk_|gsk_|aiza)' "$config"; then
+        fail "Gatewaytoken börjar som en leverantörsnyckel och godtas inte av telefonen. Kör ./install.sh --ny-groq-nyckel; då får gatewayen en ny token, och du parar telefonen igen med mio-pair."
+    fi
     echo "Finns redan; Groq-nyckel och gatewaytoken behålls."
     # 2026-11-15: the old installer default of three requests per minute made asking Mio fail
     # while analysis ran. Requests are now sized to the tokens-per-minute budget instead.

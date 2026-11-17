@@ -85,3 +85,22 @@ fn the_tailscale_name_loses_its_trailing_dot_and_a_missing_name_is_empty() {
         assert_eq!(tailscale_host(status), "");
     }
 }
+
+/// Ultrareview D1: the phone refuses tokens that start like a provider key in any case, while
+/// the gateway only refused `sk-`; about 1 in 32,000 generated tokens could never be paired.
+#[test]
+fn tokens_shaped_like_provider_keys_are_refused_and_replaced() {
+    use mio_gateway::config::{is_gateway_token, looks_like_provider_key};
+    for token in ["sk-", "SK_", "Gsk_", "AIza", "aIZA"] {
+        let token = format!("{token}{}", "a".repeat(40));
+        assert!(looks_like_provider_key(&token) && !is_gateway_token(&token), "{token}");
+    }
+    for token in ["skA", "gsk-", "aiz_", "Sk"] {
+        let token = format!("{token}{}", "a".repeat(40));
+        assert!(!looks_like_provider_key(&token) && is_gateway_token(&token), "{token}");
+    }
+    let shaped = format!("Sk_{}", "b".repeat(40));
+    let existing = format!("GROQ_API_KEY=gsk_old\nMIO_GATEWAY_TOKEN={shaped}\nPORT=9999\n");
+    assert_eq!(text(gateway_env(KEY, Some(existing.as_bytes()), "m", "1", FRESH)),
+        format!("GROQ_API_KEY={KEY}\nMIO_GATEWAY_TOKEN={FRESH}\nPORT=9999\n"));
+}

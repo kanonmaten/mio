@@ -69,8 +69,15 @@ impl std::fmt::Display for ConfigError {
 
 impl std::error::Error for ConfigError {}
 
+/// Starts like a provider API key, in any case: the phone refuses such a token so a pasted Groq
+/// or other key never ends up on it (`MioPairingPayload.isValidToken`; ultrareview D1).
+pub fn looks_like_provider_key(token: &str) -> bool {
+    let start = token.get(..4).unwrap_or(token).to_ascii_lowercase();
+    ["sk-", "sk_", "gsk_", "aiza"].iter().any(|prefix| start.starts_with(prefix))
+}
+
 pub fn is_gateway_token(token: &str) -> bool {
-    (32..=256).contains(&token.len()) && ascii_alphanumeric_or(token, "_-") && !token.starts_with("sk-")
+    (32..=256).contains(&token.len()) && ascii_alphanumeric_or(token, "_-") && !looks_like_provider_key(token)
 }
 
 fn positive_integer(value: Option<&str>, fallback: u64, maximum: u64) -> Result<u64, ConfigError> {

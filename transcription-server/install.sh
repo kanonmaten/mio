@@ -73,7 +73,11 @@ import os, secrets, sys
 path, model, revision = sys.argv[1:]
 fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, 'w') as f:
-    f.write(f'MIO_TRANSCRIPTION_TOKEN={secrets.token_urlsafe(32)}\n')
+    # The phone refuses tokens that start like a provider key (about 1 in 32,000); draw again.
+    token = secrets.token_urlsafe(32)
+    while token.lower().startswith(('sk-', 'sk_', 'gsk_', 'aiza')):
+        token = secrets.token_urlsafe(32)
+    f.write(f'MIO_TRANSCRIPTION_TOKEN={token}\n')
     f.write(f'MIO_MODEL_ID={model}\nMIO_MODEL_REVISION={revision}\n')
 PY
     echo "Skapad med ny token och senaste modellversion."
