@@ -16,7 +16,7 @@ Mikrofon, transkriptionsanslutning och text-AI visas separat. En aktiv mikrofon 
 
 ## Fånga och ordna
 
-1. Öppna **Fånga**, tryck **Starta Mio** och tillåt mikrofonen. Paus/stopp stänger mikrofonen. Medan en session pågår visar lyssningsraden ovanför flikfältet en diskret prick och läget (**Lyssnar**, **Lektion** eller **Pausad**) med paus/fortsätt; tryck på raden för att öppna Fånga. Raden kräver iOS 26.1; på 26.0 visar Live Activity läget.
+1. Öppna **Fånga**, tryck **Starta Mio** och tillåt mikrofonen. Paus/stopp stänger mikrofonen. Medan en session pågår visar lyssningsraden ovanför flikfältet en diskret prick och läget (**Lyssnar**, **Lektion** eller **Pausad**) med paus/fortsätt; tryck på raden för att öppna Fånga.
 2. AI är på när datorn är parad. Säg exempelvis ”Vi ses på biblioteket på tisdag klockan 15”; Mio-tilltal behövs inte. Nytt vardagstal samlas och skickas högst var femte minut. Granska förslagen via **N att granska** på Hem.
 3. Tryck **Starta lektion**, ange ämne och starta. Vardags-Mio pausas. Ljudet transkriberas privat på din dator; texten sparas lokalt utan ljudfil.
 4. Välj **Avsluta lektionen**. Med AI aktiverad bearbetas texten i delar till huvudpunkter, exempel och läxförslag. Läs dem i **Lektioner**, öppna Textunderlag för att kontrollera citatet. AI kan missa eller misstolka viktigt innehåll.

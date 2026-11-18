@@ -1,17 +1,13 @@
 import SwiftUI
 
-/// Shows the listening bar above the tab bar while a session runs. The accessory's
-/// show/hide variant needs iOS 26.1; on 26.0 the Live Activity and Fånga still show the state.
+/// Shows the listening bar above the tab bar while a session runs, using the accessory's
+/// show/hide variant (iOS 26.1+, always available since the minimum is iOS 27.0).
 struct MioListeningAccessory: ViewModifier {
     let model: MioViewModel
 
     func body(content: Content) -> some View {
-        if #available(iOS 26.1, *) {
-            content.tabViewBottomAccessory(isEnabled: MioListeningBar.isShown(for: model.runState)) {
-                MioListeningBar(model: model)
-            }
-        } else {
-            content
+        content.tabViewBottomAccessory(isEnabled: MioListeningBar.isShown(for: model.runState)) {
+            MioListeningBar(model: model)
         }
     }
 }

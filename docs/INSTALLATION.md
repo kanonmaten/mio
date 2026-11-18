@@ -2,7 +2,7 @@
 
 Datorn ska vara uppsatt först (Pianissimo, AI-gatewayen och Tailscale); ordningen står i [README](../README.md#kom-igång). [Status](STATUS.md) visar vad som faktiskt har byggts och provats.
 
-Telefonen behöver iOS 26.0 eller senare (först provad på iPhone 16 Pro). GitHub Actions bygger en osignerad IPA med Xcode 27, och SideStore signerar och installerar den på telefonen. Ingen Mac behövs.
+Telefonen behöver iOS 27.0 eller senare (först provad på iPhone 16 Pro). GitHub Actions bygger en osignerad IPA med Xcode 27, och SideStore signerar och installerar den på telefonen. Ingen Mac behövs.
 
 ## Bygg och installera
 

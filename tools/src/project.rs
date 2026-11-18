@@ -449,7 +449,7 @@ fn structure(root: &Path, report: &mut Report) -> Result<(), Fatal> {
         .collect();
     targets.sort_unstable();
     targets.dedup();
-    report.check(targets == ["26.0"], "Minst iOS 26.0");
+    report.check(targets == ["27.0"], "Minst iOS 27.0");
     report.check(
         project.matches("ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;").count() == 2,
         "AppIcon vald i Debug och Release",

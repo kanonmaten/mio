@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 20
     env:
       EXPECTED_IOS_MAJOR: "27"
-      MINIMUM_IOS_VERSION: "26.0"
+      MINIMUM_IOS_VERSION: "27.0"
 
     steps:
       - name: Hämta projektet
@@ -158,7 +158,7 @@ jobs:
     timeout-minutes: 50
     env:
       EXPECTED_IOS_MAJOR: "27"
-      MINIMUM_IOS_VERSION: "26.0"
+      MINIMUM_IOS_VERSION: "27.0"
 
     steps:
       - name: Hämta projektet

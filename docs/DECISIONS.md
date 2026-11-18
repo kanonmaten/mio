@@ -2,6 +2,22 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Lägsta iOS-version 27.0, 2026-11-18
+
+Användaren valde 2026-11-18 att höja lägsta iOS-version från 26.0 till 27.0. Appen byggdes redan med Xcode 27 och iOS 27-SDK (körarna `xcode-27`); det som ändras är `IPHONEOS_DEPLOYMENT_TARGET` i appen och widgettillägget, `MINIMUM_IOS_VERSION` i "Bygg Mio IPA" och strukturkontrollen "Minst iOS 27.0". Båda testtelefonerna kan köra iOS 27: Apple behöll samma enhetslista som för iOS 26, iPhone 11 och senare ([AppleInsider](https://appleinsider.com/articles/26/06/08/ios-27-keeps-iphone-11-and-newer-compatibility)). Reservvägen för iOS 26.0 i lyssningsraden (`#available(iOS 26.1, *)`) är borttagen, eftersom den aldrig kan köras. Beslutet ersätter "iOS 26 minimum" i `PLAN.md`, som inte redigeras. Avvägning: appen går inte längre att installera på en telefon som fortfarande har iOS 26. Bortvalt: behålla 26.0 (inget iOS 27-API används ännu, men användaren vill att projektet följer iOS 27). Overifierat på telefon.
+
+## xtool för att bygga Mio på Linux: utrett, inte infört, 2026-11-18
+
+Användaren bad om en utredning, utan kodändring, av att flytta Mio från `Mio.xcodeproj` till SwiftPM och [xtool](https://github.com/xtool-org/xtool) 1.24.0, som bygger, signerar och installerar iOS-appar från Linux med en iOS-SDK ur `Xcode.xip`. xtool bygger bara SwiftPM-paket med `xtool.yml`, så Xcode-projektet skulle behöva ersättas. Jämfört med vad Mio använder, enligt xtools dokumentation och ärenden:
+
+- **App Intents (två filer): stoppar.** Kräver Apples slutna `appintentsmetadataprocessor`, som xtool saknar ([#145](https://github.com/xtool-org/xtool/issues/145)).
+- **SwiftData `@Model`: stoppar.** Bygget misslyckas; den enda kända vägen är att byta lagring till GRDB ([#149](https://github.com/xtool-org/xtool/issues/149)), vilket river upp beslutet om SwiftData (2026-10-11).
+- **`Assets.xcassets`: stoppar delvis.** `actool` finns bara på macOS ([#123](https://github.com/xtool-org/xtool/issues/123), [#310](https://github.com/xtool-org/xtool/issues/310)); xtool tar bara en PNG som appikon.
+- **Enhets- och UI-tester:** kan byggas men inte köras utan simulator ([#177](https://github.com/xtool-org/xtool/issues/177)); Mac-körarna behövs ändå.
+- **Fungerar:** widgettillägget (`extensions` i `xtool.yml`, [dokumentation](https://github.com/xtool-org/xtool/blob/main/Documentation/xtool.docc/Appex.md)), entitlements (`entitlementsPath`) och `@Observable` med iOS 26-SDK eller senare ([#197](https://github.com/xtool-org/xtool/issues/197)). ActivityKit och AlarmKit är inte prövade.
+
+Förslag, användarens beslut: behåll Xcode-projektet, "Bygg Mio IPA" och SideStore. xtool finns installerat på datorn för senare försök; frågan kan tas upp igen när xtool stöder App Intents och SwiftData. Inget i projektet är ändrat av utredningen.
+
 ## Fler AI-leverantörer i gatewayen, 2026-11-17
 
 Användaren vill kunna välja leverantör på datorn ([planen](PLAN_KONTROLLPANEL.md#leverantörer-och-modeller)) och godkände samma dag de fyra regeländringarna i `CLAUDE.md`: granskade par i stället för "bara Groq", modellväljaren bara i panelen på datorn, en granskad modell får skickas utan temperatur om leverantören vägrar parametern, och resonemang av och strikt JSON-schema är kvar som krav. Varje leverantör granskades i sin officiella dokumentation:

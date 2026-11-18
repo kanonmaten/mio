@@ -1,6 +1,6 @@
 # Mio
 
-Privat SwiftUI-app för iOS 26+ (första testtelefon iPhone 16 Pro, senare även iPhone 13): privat svensk transkription via Pianissimo på egen CachyOS-dator, anteckningar, planering och en diskret vardagsassistent. Ingen App Store-distribution.
+Privat SwiftUI-app för iOS 27+ (första testtelefon iPhone 16 Pro, senare även iPhone 13): privat svensk transkription via Pianissimo på egen CachyOS-dator, anteckningar, planering och en diskret vardagsassistent. Ingen App Store-distribution.
 
 **Aktuell version: 0.9.1 — ej släppt och inte provad på telefonen.** 0.9.0 är revisionen `8f90ddc` med rättningarna efter provet 2026-10-13; 0.9.1 lägger till att Apples appar äger posterna ([plan](docs/PLAN_APPLEAPPAR.md)). Båda är byggda och testade i simulatorn, ingen är installerad eller provad på telefonen. Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
 
@@ -15,7 +15,7 @@ Privat SwiftUI-app för iOS 26+ (första testtelefon iPhone 16 Pro, senare även
 - **Apples appar äger posterna (0.9.1):** efter Ja går en händelse till Kalender via Kalenders egen ruta, en att göra-post till Påminnelser och en anteckning eller ett minne till Anteckningar via dela-arket. Mio sparar bara vart den skickades; Hem läser kommande påminnelser.
 - **Anteckningar:** sökbara anteckningar, uppgifter och synliga uttryckliga minnen.
 - **Snabbare vyhärledning:** Tidslinjens sökning byggs i en debouncerad snapshot (250 ms) och Hems veckodata/översikter räknas om per datarevision i stället för vid varje omritning.
-- **Lyssningsraden:** ovanför flikfältet medan en session pågår (iOS 26.1+), med en diskret prick, kort status och paus/fortsätt; tryck för Fånga. På iOS 26.0 visar Live Activity läget.
+- **Lyssningsraden:** ovanför flikfältet medan en session pågår, med en diskret prick, kort status och paus/fortsätt; tryck för Fånga.
 - **Notiser:** valfri morgon- och kvällsnotis samt "Tryck för att fortsätta lyssna". Mios egna alarm togs bort i 0.9.1.
 - **AI:** på när datorn är parad (beslut 2026-10-11) och kan pausas med ett tryck på Fånga eller under Inställningar → AI. Nya textutdrag analyseras löpande för planer/uppgifter utan Mio-tilltal, samlat högst var femte minut. **Fråga Mio** (knapp på Hem och Fånga) skickar en enskild fråga direkt och visar upp till tre färdiga frågor som bara fyller i textfältet. Ett modellfritt anslutningsprov visar autentisering, protokoll, release, uppgiftsprofiler och kvot; det bevisar inte leverantörsbehörighet eller modellkvalitet. Gatewayen kör på din dator med Groq och Qwen 3.8 27B ([gatewayguiden](server/README.md)), med reasoning av, temperatur 0 och strikt schema. Gatewayen anpassar varje anrop till Groqs gratisnivå (8 000 token per minut, 190 000 per dygn), gör ett nytt försök vid korta väntetider och tillfälliga fel, och appen delar ett för stort textutdrag i mindre delar i stället för att skicka samma igen.
 - **Tillfälligt AI-svar:** granska och redigera svaret innan du uttryckligen sparar det som en vanlig lokal anteckning. Ingen frågehistorik, extra AI-komprimering eller systemåtgärd skapas av svaret.

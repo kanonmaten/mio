@@ -8,7 +8,7 @@ Gäller helhetsbygget 0.9.0. Alla telefonprov nedan är instruktioner, inte kör
 2. Bygg exakt avsedd commit i GitHub Actions: Release, XCTest och IPA-validering ska lyckas. Dokumentera faktisk runner, körnings-URL och commit. En gammal grön körning räcker inte.
 3. Spara IPA:ns SHA-256 och versions-/byggnummer från artifactens `Mio-buildinfo.txt`.
 4. Installera rent med `app.mio.assistant` på iPhone 16 Pro. Ingen gammal prototypdata förväntas. Prova senare också på iPhone 13.
-5. Notera telefonmodell och exakt iOS-version. Prova iOS 26 och 27 separat om båda ska stödjas i praktiken.
+5. Notera telefonmodell och exakt iOS-version. Appen kräver iOS 27.0.
 
 ## Första sammanhängande provet, cirka 20 minuter
 
@@ -30,7 +30,7 @@ Gäller helhetsbygget 0.9.0. Alla telefonprov nedan är instruktioner, inte kör
 | H14 | Radera en post med alarm/notis. Radera en session med lektioner/förslag och kopplad manuell post. | Postens systemåtgärder avbryts. Sessionsdata, dess lektioner och förslag försvinner; manuell post finns kvar utan trasig sessionskoppling. Kalenderkopior finns kvar separat. |
 | H15 | Med enbart testdata: Radera all lokal data och starta om. | Tre domänlager och diagnostik är borta/tomma, egna alarm/notiser borta, båda anslutningarna glömda och AI av. Raderingsjournalen tas bort först när stegen är klara. Ingen sen återkoppling återskapar data. Delade filer/kalenderkopior hanteras där de finns. |
 | H16 | På Hem: tryck på olika dagar i veckoraden, byt vecka med pilarna och tryck I dag. Skapa poster och en kort session och jämför tolvveckorsrutnätet. | Rubriken visar rätt svenskt veckonummer (ISO 8601, även vid årsskifte). Vald dag styr översikten; I dag går tillbaka. Rutnätet och veckoradens streck visar bara aktivitet för rätt dagar, ingen text. Nästa visar högst en sak. Fråga Mio visar högst tre förslag som bara fyller i fältet. |
-| H17 | Starta Mio, lämna Fånga och byt flik. Pausa och fortsätt från raden ovanför flikfältet, tryck på raden, stoppa. Prova iOS 26.1 eller senare och, om möjligt, 26.0. | Raden syns bara medan en session pågår, med prick och kort status (Lyssnar, Lektion, Pausad). Paus/fortsätt fungerar och ett tryck öppnar Fånga. Raden är diskret och läsbar med VoiceOver. På 26.0 finns ingen rad; Live Activity visar läget. |
+| H17 | Starta Mio, lämna Fånga och byt flik. Pausa och fortsätt från raden ovanför flikfältet, tryck på raden, stoppa. | Raden syns bara medan en session pågår, med prick och kort status (Lyssnar, Lektion, Pausad). Paus/fortsätt fungerar och ett tryck öppnar Fånga. Raden är diskret och läsbar med VoiceOver. |
 
 ## Pianissimo, återanslutning och bakgrund
 
@@ -195,7 +195,7 @@ Provenance, nativegränser, svensk referens, ljudavbrott och långprov. Inga res
 
 ### Provenance och ordning
 
-Prova först på **iPhone 16 Pro**, därefter **iPhone 13**. Registrera faktisk iOS 26-/27-version där den kan provas; ett resultat på ena systemversionen överförs inte till den andra. En otillgänglig kombination markeras **ej körd** med orsak.
+Prova först på **iPhone 16 Pro**, därefter **iPhone 13**. Registrera faktisk iOS 27-version. En otillgänglig kombination markeras **ej körd** med orsak.
 
 Fyll i följande före varje körning:
 

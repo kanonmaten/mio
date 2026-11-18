@@ -14,7 +14,7 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 | Lektioner | Separat lektionsläge pausar vardags-Mio; detaljerade delar, manuell fortsättning, kopiering och källrevisioner via godkänd AI | Originaltext/tidsbevis bevaras; äldre/okänt underlag märks, rättningar skickas inte automatiskt |
 | Kalender | Användarbekräftad fristående kalenderkopia | Ingen bakgrundssynk eller läsning av hela kalendern |
 | Alarm/notiser | AlarmKit, engångs-/veckoalarm, postpåminnelse, morgon-/kvällsnotis | Behörighet och leverans måste provas på telefon |
-| Gränssnitt | Veckoplaneraren (2026-10-11): fyra flikar och Fånga, lyssningsrad ovanför flikfältet (iOS 26.1+), Fråga Mio med upp till tre lokala förslag | Läsbarhet, Dynamic Type, mörkt läge, Reduce Motion/Transparency och iPhone 13-layout måste provas på telefon |
+| Gränssnitt | Veckoplaneraren (2026-10-11): fyra flikar och Fånga, lyssningsrad ovanför flikfältet, Fråga Mio med upp till tre lokala förslag | Läsbarhet, Dynamic Type, mörkt läge, Reduce Motion/Transparency och iPhone 13-layout måste provas på telefon |
 | Hem | Veckonummer, veckans dagar, Nästa, antal att granska, morgon-/kvällsöversikt (kväll från kl. 17) och tolv veckors aktivitet; morgon-/kvällsnotiser öppnar Hem | Härlett från lokala data; notiser har opaka ID:n utan privata rubriker; ingen molnsammanfattning |
 | AI | Gateway på datorn med Groq; löpande tolkning samlad högst var femte minut, enskilda frågor utan förhandsgranskning; anslutning/kvot; explicit spara ett svar som anteckning | På när datorn är parad och kan pausas; modellfri status bevisar inte leverantörsåtkomst eller kvalitet |
 

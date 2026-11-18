@@ -23,7 +23,7 @@ Allt tal stannar hos användaren: inget ljud sparas, transkriptionen sker på de
 - Används i klassrum, korridorer, på bussen och hemma. Andra människor ser ofta skärmen; lyssnandet ska därför se diskret ut (svar 2026-10-11: "Diskret").
 - Mikrofonen kan gå länge i bakgrunden med låst skärm; Live Activity visar att den lyssnar och låter användaren pausa.
 - Lektioner blir detaljerade anteckningar med källcitat; läxförslag och andra förslag kräver alltid ett uttryckligt Ja.
-- Installeras med SideStore och ett gratis Apple-konto. Första testtelefon iPhone 16 Pro, målet är även iPhone 13. iOS 26+.
+- Installeras med SideStore och ett gratis Apple-konto. Första testtelefon iPhone 16 Pro, målet är även iPhone 13. iOS 27+.
 
 ## Capabilities and Constraints
 

@@ -2,6 +2,15 @@
 
 Senast uppdaterad **2026-11-17**. Version **0.9.1, ej släppt** (0.9.0 är revisionen `8f90ddc`, ej taggad). Den här filen innehåller bara vad som faktiskt är kontrollerat. Äldre poster finns i Git-historiken (`git log -- docs/STATUS.md`). [Ändringsloggen](../CHANGELOG.md) beskriver vad koden gör; [helhetstestet](TESTPLAN_HELHET.md) beskriver acceptansproven.
 
+## Lägsta iOS-version 27.0, 2026-11-18
+
+Lägsta iOS-version höjd till 27.0 och reservvägen för iOS 26.0 i lyssningsraden borttagen ([beslut](DECISIONS.md#lägsta-ios-version-270-2026-11-18)).
+
+| Kontroll | Resultat |
+|---|---|
+| Hela grinden, lokalt (Rust 1.100, Swift 6.4.2, uv 0.13.8) | `mio-verify verify` godkänd på arbetskopian före commit, alla tolv steg, strukturkontrollen med "Minst iOS 27.0". Samma grind var godkänd på `c9bffb8` före ändringen. |
+| Bygg Mio IPA, simulatortester, telefon | **Ej körda.** iOS-bygget med lägsta version 27.0, lyssningsraden och installation via SideStore är overifierade. |
+
 ## Mio Kontroll och fler AI-leverantörer 2026-11-17 (`b55fd38`–fas 10)
 
 Kontrollpanelen i `control/` enligt [planen](PLAN_KONTROLLPANEL.md), fas 0 till 10, och fler leverantörer i gatewayen. Se [Mio Kontroll](../control/README.md), [ändringsloggen](../CHANGELOG.md) och [besluten](DECISIONS.md).
