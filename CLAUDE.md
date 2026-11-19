@@ -23,6 +23,7 @@ Before changing something, read the docs that cover it: [README](README.md), [de
 - Git: commit finished, verified work and push to `main` without asking. No branches or pull requests, even if the session assigns one; never force-push. Tags, running the IPA workflow, real model traffic and anything on Cloudflare (the old Worker, D1 and Access are still deployed) need the user's approval.
 - Ask when a decision is the user's to make.
 - Reminder (user's request 2026-11-16, updated 2026-11-17): the GPUI control app for the PC, Mio Kontroll in `control/`, is built but not tested on the PC. At the start of work on Mio, remind the user in one line of the PC test list in `control/README.md#prov-på-datorn`. Keep doing so until the user reports it done or drops it.
+- Reminder (user's request 2026-11-19): at the start of work on Mio, also remind the user in one line that the next step is [`docs/PLAN_GRILLNING.md`](docs/PLAN_GRILLNING.md) and which phase is next (the first with unticked boxes). Keep doing so until every phase is ticked or the user drops it.
 
 ## Verifying
 
