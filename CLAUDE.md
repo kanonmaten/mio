@@ -2,7 +2,7 @@
 
 Private SwiftUI app for iOS 27+ (tested on iPhone 16 Pro, still targeting iPhone 13), used and maintained by one person, installed with SideStore. Version 0.9.1 is current and unreleased. This file is in English; everything else in the repo is Swedish.
 
-Before changing something, read the docs that cover it: [README](README.md), [decisions](docs/DECISIONS.md), [status](docs/STATUS.md), the [data model](docs/DATAMODELL.md) for storage, the [gateway](server/README.md) or [Pianissimo](transcription-server/README.md) guide for server work. [`PLAN.md`](PLAN.md) is the 0.9.0 reliability plan; never edit it.
+Before changing something, read the docs that cover it: [README](README.md), [decisions](docs/DECISIONS.md), [status](docs/STATUS.md), the [data model](docs/DATAMODELL.md) for storage, the [gateway](server/README.md) or [Pianissimo](transcription-server/README.md) guide for server work. [`PLAN.md`](PLAN.md) is the 0.9.0 reliability plan; never edit it. The next work is [`docs/PLAN_GRILLNING.md`](docs/PLAN_GRILLNING.md) (the user's decisions from 2026-11-19, not started): take it before other new work, phase by phase, and tick its checkboxes as you go.
 
 ## Rules that must hold
 

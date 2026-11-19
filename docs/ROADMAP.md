@@ -18,6 +18,10 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 | Hem | Veckonummer, veckans dagar, Nästa, antal att granska, morgon-/kvällsöversikt (kväll från kl. 17) och tolv veckors aktivitet; morgon-/kvällsnotiser öppnar Hem | Härlett från lokala data; notiser har opaka ID:n utan privata rubriker; ingen molnsammanfattning |
 | AI | Gateway på datorn med Groq; löpande tolkning samlad högst var femte minut, enskilda frågor utan förhandsgranskning; anslutning/kvot; explicit spara ett svar som anteckning | På när datorn är parad och kan pausas; modellfri status bevisar inte leverantörsåtkomst eller kvalitet |
 
+## Nästa steg: planen efter grillningen (2026-11-19)
+
+Nästa arbete på Mio är [planen efter grillningen](PLAN_GRILLNING.md): Mistral som AI-leverantör med resonemang bara för lektioner, provtips och läxor från lektioner, direkta anteckningar med "Mio, kom ihåg/notera", batteri, lagring, ett enklare gränssnitt för en användare som inte är teknisk, säkerhetskopia, signeringspåminnelse och en ny ikon. Inget av det är byggt. Ta det före annat nytt arbete, efter provet av Mio Kontroll på datorn.
+
 ## Byggt: Mio Kontroll på datorn (2026-11-17, inte provat på datorn)
 
 Kontrollpanelen är byggd i `control/` enligt [planen](PLAN_KONTROLLPANEL.md), fas 0 till 10, med gpui-kit 0.10.0. Den ligger i systemfältet och har sidorna Översikt, Kom igång, AI, Transkription, Egna ord, Tailscale och parning, Uppdateringar, Verifiering, Loggar och Datorn. Gatewayen kan nu köra fler leverantörer än Groq (Anthropic Haiku 5.5 granskad; Mistral och NVIDIA efter ett godkänt Prova). Se [Mio Kontroll](../control/README.md) och [besluten](DECISIONS.md#kontrollpanelen-på-datorn-mio-kontroll-2026-11-17).

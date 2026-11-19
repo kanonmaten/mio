@@ -4,7 +4,7 @@ Privat SwiftUI-app för iOS 27+ (första testtelefon iPhone 16 Pro, senare även
 
 **Aktuell version: 0.9.1 — ej släppt och inte provad på telefonen.** 0.9.0 är revisionen `8f90ddc` med rättningarna efter provet 2026-10-13; 0.9.1 lägger till att Apples appar äger posterna ([plan](docs/PLAN_APPLEAPPAR.md)). Båda är byggda och testade i simulatorn, ingen är installerad eller provad på telefonen. Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
 
-[Planen för tillförlitlighet](PLAN.md) styr 0.9.0 och [planen för Apples appar](docs/PLAN_APPLEAPPAR.md) 0.9.1; [status](docs/STATUS.md) visar verifierat läge och återstående acceptansprov.
+**Nästa steg** är [planen efter grillningen](docs/PLAN_GRILLNING.md) (2026-11-19, inte påbörjad). [Planen för tillförlitlighet](PLAN.md) styr 0.9.0 och [planen för Apples appar](docs/PLAN_APPLEAPPAR.md) 0.9.1; [status](docs/STATUS.md) visar verifierat läge och återstående acceptansprov.
 
 ## Funktioner
 
