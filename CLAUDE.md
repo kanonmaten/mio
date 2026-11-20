@@ -49,6 +49,8 @@ While working, run only the checks for what the change touches; run the full `ve
 | `control/` | `cargo clippy --locked --manifest-path control/Cargo.toml --workspace --all-targets -- -D warnings` and `cargo test --locked --manifest-path control/Cargo.toml --workspace` |
 | `transcription-server/` | `cd transcription-server && uv sync --locked --extra test --python 3.12 && uv run pytest tests` |
 
+On the user's PC, `git config core.hooksPath .githooks` turns on `.githooks/pre-push`: it runs the full `verify` and stops the push on failure, refuses a dirty worktree or a push of anything but HEAD, and skips `verify` when only Markdown changed. The setting is local, so cloud sessions aren't blocked. Run `git push` in the background: `verify` takes minutes, and a step that hits its 600 s limit is often waiting for rust-analyzer's build lock on `control/target`, not compiling.
+
 The verifier (`tools/`, binary `mio-verify`) is Rust since 2026-11-17. Pianissimo and its tests stay Python (NeMo). Keep the verifier's Swedish messages unchanged: CI logs and `docs/STATUS.md` quote them. Its Swift rewrites must stay byte-identical to what they replace; the substituted Swift lives in `tools/swift/`.
 
 GitHub runs "Verifiera Mio på Linux" on every push; check it for the exact commit. "Bygg Mio IPA" (manual) builds the iOS app, runs simulator tests and makes the unsigned IPA; it is the only check of iOS-only code such as Keychain, UIKit and SwiftUI views.

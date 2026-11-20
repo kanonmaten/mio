@@ -1,0 +1,48 @@
+#!/bin/sh
+# Mio pre-push: run the full local gate before anything reaches GitHub.
+# Turn on once per checkout with: git config core.hooksPath .githooks
+# The setting is local, so cloud sessions without Swift are not blocked by it.
+#
+# `verify` checks the working tree, not the commit being pushed. So the hook refuses a dirty
+# worktree (the receipt would say dirty=True) and a push of anything other than HEAD.
+# A push that only changes Markdown skips `verify`; CI still runs on every push.
+# `git push --no-verify` bypasses the hook when you really mean it.
+set -eu
+
+zero=0000000000000000000000000000000000000000
+root=$(git rev-parse --show-toplevel)
+head=$(git rev-parse HEAD)
+needs_verify=no
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+	# A deleted ref pushes nothing to check.
+	[ "$local_sha" = "$zero" ] && continue
+	if [ "$local_sha" != "$head" ]; then
+		echo "pre-push: $local_ref ($local_sha) är inte HEAD; verify kontrollerar arbetskopian, inte den commiten." >&2
+		echo "pre-push: checka ut den först, eller pusha med --no-verify." >&2
+		exit 1
+	fi
+	if [ "$remote_sha" = "$zero" ] || ! git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+		# New ref or unknown remote state: no reliable range, so verify.
+		needs_verify=yes
+		continue
+	fi
+	if git diff --name-only "$remote_sha" "$local_sha" | grep -qv '\.md$'; then
+		needs_verify=yes
+	fi
+done
+
+if [ "$needs_verify" = no ]; then
+	echo "pre-push: bara Markdown ändrat, hoppar över verify (CI kör ändå)."
+	exit 0
+fi
+
+if [ -n "$(git -C "$root" status --porcelain)" ]; then
+	echo "pre-push: arbetskopian har ändringar som inte är committade; verify skulle kontrollera dem och inte commiten." >&2
+	echo "pre-push: committa eller stasha dem först." >&2
+	exit 1
+fi
+
+echo "pre-push: kör verify (några minuter)..."
+cd "$root"
+exec cargo run --locked --manifest-path tools/Cargo.toml -- verify
