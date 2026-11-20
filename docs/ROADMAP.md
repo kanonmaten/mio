@@ -20,7 +20,7 @@ Den 25 september 2026 ändrades arbetssättet: bygg hela vardagsappen sammanhän
 
 ## Nästa steg: planen efter grillningen (2026-11-19)
 
-Nästa arbete på Mio är [planen efter grillningen](PLAN_GRILLNING.md): Mistral som AI-leverantör med resonemang bara för lektioner, provtips och läxor från lektioner, direkta anteckningar med "Mio, kom ihåg/notera", batteri, lagring, ett enklare gränssnitt för en användare som inte är teknisk, säkerhetskopia, signeringspåminnelse och en ny ikon. Inget av det är byggt. Ta det före annat nytt arbete, efter provet av Mio Kontroll på datorn.
+Nästa arbete på Mio är [planen efter grillningen](PLAN_GRILLNING.md): Mistral som AI-leverantör med resonemang bara för lektioner, provtips och läxor från lektioner, direkta anteckningar med "Mio, kom ihåg/notera", batteri, lagring, ett enklare gränssnitt för en användare som inte är teknisk, säkerhetskopia, signeringspåminnelse och en ny ikon. Inget av det är byggt. Ta det före annat nytt arbete. Planen kan köras som ett goal med subagenter (2026-11-20); provet av Mio Kontroll på datorn gör användaren och det stoppar inte körningen.
 
 ## Byggt: Mio Kontroll på datorn (2026-11-17, inte provat på datorn)
 
