@@ -35,6 +35,31 @@ fn native_mode_cannot_claim_ios_checks_on_linux() {
     assert!(String::from_utf8_lossy(&output.stdout).contains("No native check ran"));
 }
 
+#[test]
+fn skipped_control_panel_is_partial_and_relaxes_the_rust_floor() {
+    use mio_verify::gate::{result_label, rust_floor};
+    assert_eq!(result_label(false, false, false), "PASS (Linux synthetic gates)");
+    assert_eq!(result_label(false, false, true), "PARTIAL");
+    assert_eq!(result_label(false, true, true), "PARTIAL");
+    assert_eq!(result_label(true, false, true), "FAIL");
+    assert_eq!(rust_floor(false), (1, 92, 0));
+    assert_eq!(rust_floor(true), (1, 88, 0));
+}
+
+#[test]
+fn verify_accepts_skip_control_as_a_plain_flag() {
+    let run = |arguments: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_mio-verify"))
+            .args(arguments)
+            .output()
+            .expect("mio-verify runs")
+    };
+    let help = run(&["verify", "--skip-control", "--help"]);
+    assert_eq!(help.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&help.stdout).contains("[--skip-control]"));
+    assert_eq!(run(&["verify", "--skip-control=yes"]).status.code(), Some(2));
+}
+
 fn job(commands: &[&str]) -> Value {
     let steps: Vec<Value> = commands.iter().map(|command| json!({"run": command})).collect();
     json!({"runs-on": "xcode-27", "steps": steps})

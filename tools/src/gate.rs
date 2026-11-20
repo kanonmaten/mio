@@ -20,6 +20,7 @@ const SPEC: Spec = Spec {
     about: "One directory-independent Linux entry point; no deployment or real model requests.",
     flags: &[
         ("--skip-swift", "Run other gates; report a PARTIAL result with Swift SKIPPED."),
+        ("--skip-control", "Run other gates; report a PARTIAL result with the control panel SKIPPED."),
         ("--measure-session-store", "Also run the synthetic long-history storage benchmark."),
     ],
     options: &[("--logs-dir", "Output directory; default: a new /tmp/mio-verify-* directory.")],
@@ -103,6 +104,25 @@ fn cargo_version(text: &str) -> Option<(u64, u64, u64)> {
     Some((part(1)?, part(2)?, part(3)?))
 }
 
+/// The receipt entry for skipped control panel checks (CI runs them in a parallel job).
+pub const CONTROL_GATE: &str = "Mio Kontroll (control/)";
+
+/// Lowest Rust the selected gates need: control/ (gpui-kit 0.10) needs 1.92, the gateway 1.88.
+pub fn rust_floor(skip_control: bool) -> (u64, u64, u64) {
+    if skip_control { (1, 88, 0) } else { (1, 92, 0) }
+}
+
+/// The final result line: any skipped gate makes a passing run PARTIAL, never a plain PASS.
+pub fn result_label(failed: bool, skip_swift: bool, skip_control: bool) -> &'static str {
+    if failed {
+        "FAIL"
+    } else if skip_swift || skip_control {
+        "PARTIAL"
+    } else {
+        "PASS (Linux synthetic gates)"
+    }
+}
+
 struct Step {
     name: &'static str,
     command: Command,
@@ -158,6 +178,7 @@ pub fn run(arguments: &[String]) -> u8 {
     };
     match gate(
         parsed.flag("--skip-swift"),
+        parsed.flag("--skip-control"),
         parsed.option("--logs-dir").map(PathBuf::from),
         parsed.flag("--measure-session-store"),
     ) {
@@ -169,7 +190,7 @@ pub fn run(arguments: &[String]) -> u8 {
     }
 }
 
-fn gate(skip_swift: bool, logs_dir: Option<PathBuf>, measure_session_store: bool) -> Result<u8, String> {
+fn gate(skip_swift: bool, skip_control: bool, logs_dir: Option<PathBuf>, measure_session_store: bool) -> Result<u8, String> {
     if !cfg!(target_os = "linux") {
         println!(
             "UNAVAILABLE: this entry point requires Linux. Run native XCTest/Xcode and mio-verify concurrency --native on macOS."
@@ -201,7 +222,7 @@ fn gate(skip_swift: bool, logs_dir: Option<PathBuf>, measure_session_store: bool
         println!("UNAVAILABLE: {rust_version}; the gateway needs Rust 1.88 or later (edition 2024, let chains).");
         return Ok(2);
     }
-    if cargo_version(&rust_version).is_none_or(|version| version < (1, 92, 0)) {
+    if cargo_version(&rust_version).is_none_or(|version| version < rust_floor(skip_control)) {
         println!("UNAVAILABLE: {rust_version}; the control panel (control/) needs Rust 1.92 or later (gpui-kit 0.10).");
         return Ok(2);
     }
@@ -229,11 +250,15 @@ fn gate(skip_swift: bool, logs_dir: Option<PathBuf>, measure_session_store: bool
         step("verification-tools", "cargo", &[os("test"), os("--locked"), os("--manifest-path"), tools.as_os_str()]),
         step("gateway-lint", "cargo", &[os("clippy"), os("--locked"), os("--manifest-path"), server.as_os_str(), os("--all-targets"), os("--"), os("-D"), os("warnings")]),
         step("gateway-tests", "cargo", &[os("test"), os("--locked"), os("--manifest-path"), server.as_os_str()]),
-        // The control panel's core, root helper and GPUI app; GPUI tests run headless.
-        step("control-lint", "cargo", &[os("clippy"), os("--locked"), os("--manifest-path"), control.as_os_str(), os("--workspace"), os("--all-targets"), os("--"), os("-D"), os("warnings")]),
-        step("control-tests", "cargo", &[os("test"), os("--locked"), os("--manifest-path"), control.as_os_str(), os("--workspace")]),
-        step("transcription-fake", "uv", &[os("--directory"), transcription.as_os_str(), os("run"), os("--no-sync"), os("python"), os("-m"), os("pytest"), os("tests")]),
     ];
+    if !skip_control {
+        // The control panel's core, root helper and GPUI app; GPUI tests run headless.
+        steps.push(step("control-lint", "cargo", &[os("clippy"), os("--locked"), os("--manifest-path"), control.as_os_str(), os("--workspace"), os("--all-targets"), os("--"), os("-D"), os("warnings")]));
+        steps.push(step("control-tests", "cargo", &[os("test"), os("--locked"), os("--manifest-path"), control.as_os_str(), os("--workspace")]));
+    } else {
+        gates.push(json!({"gate": CONTROL_GATE, "result": "SKIPPED"}));
+    }
+    steps.push(step("transcription-fake", "uv", &[os("--directory"), transcription.as_os_str(), os("run"), os("--no-sync"), os("python"), os("-m"), os("pytest"), os("tests")]));
     if !skip_swift {
         steps.push(step("swift-core", &me, &[os("swift-core")]));
         steps.push(step("capture-recovery", &me, &[os("capture-recovery")]));
@@ -285,13 +310,7 @@ fn gate(skip_swift: bool, logs_dir: Option<PathBuf>, measure_session_store: bool
     }
     receipt.insert("gates".into(), Value::Array(gates));
     receipt.insert("finishedAt".into(), Value::from(utc_now_iso()));
-    let result = if failed {
-        "FAIL"
-    } else if skip_swift {
-        "PARTIAL"
-    } else {
-        "PASS (Linux synthetic gates)"
-    };
+    let result = result_label(failed, skip_swift, skip_control);
     receipt.insert("result".into(), Value::from(result));
     let receipt_path = logs.join("verification.json");
     let encoded = serde_json::to_string_pretty(&Value::Object(receipt)).map_err(|error| error.to_string())?;
