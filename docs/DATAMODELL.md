@@ -154,6 +154,13 @@ Sessioner, innehåll och assistentdata ligger i en SwiftData-databas, `Mio/store
 
 Skrivna 2026-11-20 i fas 0 av [planen](PLAN_GRILLNING.md), efter [besluten](DECISIONS.md#grillningen-2026-11-19). Gatewayen, Pianissimo, Mio Kontroll och appen byggs mot dem samtidigt. Ett spår som behöver ändra ett kontrakt säger till i stället för att ändra det själv. Alla tillägg är additiva: en äldre app, panel eller server ska fortsätta fungera mot en nyare motpart, och den nyare ska känna igen den äldre på att fältet eller förmågan saknas.
 
+### Direkta anteckningar och fångstregler (våg 2, 2026-11-20)
+
+- `MioSuggestion.direct` och `MioContentItem.direct` är valfria och additiva (ursprung och tidpunkt för en direkt instruktion; äldre data avkodas utan fälten). Ångra finns i 24 timmar från den tidpunkten. SwiftData-schemat är oförändrat, eftersom fälten ligger i radernas JSON.
+- `mio.direct.tally.v1` i UserDefaults räknar sparade, väntande, ångrade och Nej för direkta instruktioner, bara heltal. Nollställs vid fullständig radering.
+- Notisrutten `stillListening` (tystnadsfrågan) läggs till bland de tillåtna `mioRoute`; den öppnar Fånga och startar aldrig mikrofonen.
+- En avslutad vardagssession raderas när den slutade för mer än 30 dagar sedan, vid start och när appen går till bakgrunden. Lektionssessioner, sessioner som delats in i lektioner, anteckningar och godkända poster sparas.
+
 ### `/v2/status`: resonemang, schema och användning
 
 Varje post under `tasks` får två fält:
@@ -207,6 +214,8 @@ Gatewayen får rutten `POST /v2/lesson-notes` och lägger förmågan `lesson-not
 - `examHints`: 0–8 per svar. `text` 1–300 tecken. `sourceIDs` 1–4 ID:n ur begärans fragment. `evidence` är ett exakt citat ur en av källorna och lagas eller kastas på samma sätt som för `sections`. En ogiltig punkt kastas; resten av svaret står kvar. Prompten ber bara om sådant läraren uttryckligen pekar ut ("det här kommer på provet", "kom ihåg", "viktigt" och liknande) och hellre för få än gissningar.
 - `subject`: ämnet som modellen föreslår (1–40 tecken, till exempel "Biologi") eller `null` när det inte går att säga. Bara ett förslag: appen visar det i granskningsarket och sparar det först när hon bekräftar eller ändrar det (antagandet i fas 5).
 - `candidates`, `sections` och `uncertainties` som i v1. Svarets metadata (`provider`, `model`, `promptVersion`, `lessonIntervalSeconds`) och rubriker som i v1, med en egen promptversion för v2.
+
+**Tidsgräns (tillägg efter våg 2):** när `lesson` står på ett par som resonerar (`reasoning` är inte `"off"`) får hela anropet till `/v1/lesson-notes` och `/v2/lesson-notes` ta högst 180 s i gatewayen i stället för 40 s, eftersom tänkandet får upp till 12 000 token. Övriga anrop behåller 40 s. Appens tidsgräns för lektionsanteckningar är 200 s, så att gatewayens fel (`provider_timeout` med mera) hinner fram före appens egen. Förmågan `reasoning-off` i `tasks.lesson.capabilities` finns kvar för äldre appar; appen kräver den inte längre för `lesson` och läser `reasoning` i stället. Ej verifierat: hur lång tid Large 4 tar och om iOS låter anropet gå klart i bakgrunden.
 
 **I appen** får `MioAnalysisRecord` de additiva valfria fälten `examHints` (samma form som ovan) och `subjectSuggestion`; lektionen får det valfria `subject` (det hon bekräftat). Äldre data avkodas utan fälten. En lektion med flera delar visar alla delars provtips i källordning, utan exakta dubbletter, först i anteckningen och i kopieringen ("Viktigt till provet").
 

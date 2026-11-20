@@ -45,6 +45,15 @@ Användaren gick igenom Mio med Claude 2026-11-19 och kompletterade 2026-11-20. 
 | Integritetssida | Ingen ny | "Vad Mio skickar vart" |
 | Ämne per lektion | **Antagande** (öppen fråga 1, användaren valde 2026-11-19 att inte gå igenom den): AI föreslår ämnet efter lektionen och hon bekräftar eller ändrar det i granskningsarket. Nedräkningen och "Inför provet" bygger på det | Eget schema (avböjt); fritt ämne utan förslag |
 
+**Genomfört i våg 2 (2026-11-20).** Gatewayen: Large 4 heter `mistral-large-4-0`, det enda ID som är låst till en version (modellsidan listar också aliasen `mistral-large-4` och `mistral-large-latest`). En lektion på ett resonerande par får 12 000 token utdata (3 000 för anteckningen och resten till tänkandet, som Mistral debiterar som utdata) och 180 s per anrop; övriga uppgifter behåller sina gränser och 40 s. Den inspelade Node-pariteten skrevs inte om, eftersom en ny inspelning ändrar escape-sekvenser i orelaterade fall; de nya statusfälten tas bort före jämförelsen och har egna tester. Appens tolkning av direkta instruktioner, vald av App-spåret och godtagen här:
+
+- Bara "Mio, kom ihåg" och "Mio, notera" i början av en mening räknas. "Mio, påminn mig", "planera", "anteckna" och röstfrågor ger inget längre. Bortvalt: behålla de gamla fraserna bredvid (fler felutlösningar, och grillningen valde två fraser).
+- Klockslag och plats ger en kalenderhändelse under Förslag. Annars går "kom ihåg" till Påminnelser och "notera" blir en Mio-anteckning. Timme 1–6 utan "på morgonen" tolkas som eftermiddag, dagens veckodag betyder nästa vecka, och ett passerat klockslag betyder i morgon.
+- Två korta vibrationer även när en kalenderhändelse lagts under Förslag, eftersom den är sparad där. En lång när inget gick att använda eller sparandet misslyckades; då ligger texten kvar under Förslag.
+- Batteriet: under laddning pausas inget. Har hon själv startat vid låg nivå gäller hennes val tills nivån varit minst 20 % med strömsparläget av, eller laddning börjat.
+- Tystnad: gäller bara vardagsfångst. Utan notiser pausar Mio ändå efter 25 minuter och visar varför.
+- 30 dagar: en avslutad vardagssession raderas hel via den vanliga sessionsraderingen, så godkända poster lossas och finns kvar. SwiftData-schemat ändrades inte; de nya fälten är valfria i radernas JSON.
+
 Reglerna i `CLAUDE.md` ändrades samtidigt: Mistral är standard i `install.sh`, strikt schema gäller där leverantören har det, resonemang är tillåtet bara för `lesson`, och en direkt instruktion räknas som Ja för Påminnelser och Mio-anteckningar. [Produktvisionen](PRODUKTVISION.md) har samma ändringar. Kontrakten mellan gatewayen, Pianissimo, Mio Kontroll och appen står i [datamodellen](DATAMODELL.md#kontrakt-efter-grillningen).
 
 Källor (lästa 2026-11-19 och 2026-11-20): Mistral om [resonemang](https://docs.mistral.ai/inference/conversations/reasoning.md), [strukturerad utdata](https://docs.mistral.ai/inference/conversations/structured-output/custom.md), [Large 4](https://docs.mistral.ai/models/mistral-large-4-0), [Small 4](https://docs.mistral.ai/models/mistral-small-4-0-26-03) och [priser](https://docs.mistral.ai/inference/pricing).

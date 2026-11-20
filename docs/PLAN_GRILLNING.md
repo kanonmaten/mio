@@ -111,33 +111,33 @@ Huvudsessionen gör fasen själv. Den är kort, och vågorna efter den bygger p�
 
 Läs först [gatewayguiden](../server/README.md) och lärdomen om [innehållsberoende fel](../.trail/learnings/2026-11-17-ai-batch-failures-caused-by-the-kanonmaten.md).
 
-- [ ] Kontrollera Mistrals dokumentation igen innan koden skrivs. Modellsidan för Large 4 ger ID:t, så skriv inget ID ur minnet. Den 2026-11-20 gav resonemangssidan både `mistral-large-4-0` och `mistral-large-4`; välj det som är låst till en version och inte ett alias som kan flytta. Large 4 (släppt 2026-11-05) tar `low`, `medium` och `high`, aldrig `none`. Källor: [resonemang](https://docs.mistral.ai/inference/conversations/reasoning.md), [strukturerad utdata](https://docs.mistral.ai/inference/conversations/structured-output/custom.md), [Large 4](https://docs.mistral.ai/models/mistral-large-4-0), [Small 4](https://docs.mistral.ai/models/mistral-small-4-0-26-03), [priser](https://docs.mistral.ai/inference/pricing).
-- [ ] `server/src/model_profiles.rs`:
-  - [ ] Ta bort `mistral-medium-3-5` ur `CANDIDATE_MODELS`.
-  - [ ] Lägg till Large 4 som kandidat med `ReasoningOff` ersatt av en resonemangsinställning, till exempel `Reasoning::Effort("medium")`. Large 4 tar inte `none`, så den får aldrig väljas för `ask` eller `everyday`.
-  - [ ] Bind resonemang till uppgiften: ett par som resonerar går bara att välja för `lesson`. Gatewayen vägrar starta (`provider_options_incompatible`) om ett sådant par står för en annan uppgift.
-  - [ ] Small 4 behåller `reasoning_effort: "none"`. Båda Mistral-modellerna behåller `schema_dialect: "json-schema"`, eftersom dokumentationen 2026-11-20 inte nämner `strict` (se beslutet om schema hos Mistral).
-  - [ ] Om temperaturen avvisas när resonemang är på: använd samma flagga som för Anthropic (`temperature: false`), syns i `/v2/status`.
-- [ ] `server/src/adapters.rs`:
-  - [ ] Behåll `response_format` som `chat_request` bygger det i dag (`json_schema` med namn, schema och `strict` från generationen). Lita inte på att Mistral följer det; valideringen avgör.
-  - [ ] Skicka `reasoning_effort: "medium"` för lektionsprofilen.
-  - [ ] Svarstolkningen: idag avvisas en lista med en `thinking`-del (rad cirka 290). För en profil som får resonera: ta bara textdelen (`type: "text"`), kasta tankedelen utan att logga den och avvisa allt annat (flera textdelar, verktygsanrop, tom text). Profiler med resonemang av fortsätter att avvisa tankedelar.
-  - [ ] Räkna `reasoning_tokens` i användningen men lägg aldrig tanketext i loggar, fel eller tillståndsfilen.
-- [ ] `server/src/config.rs`: `max_tokens` för lektioner måste rymma tänkandet. Sätt en egen gräns för `lesson` med marginal för tänkandet, i stället för att höja alla uppgifter, och välj den utifrån Mistrals dokumentation. Användaren mäter med Prova (överlämningen), och gränsen justeras efter det. Mistral har ingen minutgräns som Groqs gratisnivå, så `MIO_TOKENS_PER_MINUTE_MISTRAL` lämnas tom som standard.
-- [ ] Användningsräknaren för kreditmätaren: `record_usage` i `server/src/server.rs` räknar redan token, men bara som en summa. Adaptrarna måste lämna in, cachad in, ut och resonemang var för sig. Spara per månad, uppgift och modell (in, cachad in, ut, resonemang) i gatewayens tillståndsfil och visa det i `/v2/status`. Lägg priserna i en granskad tabell bredvid modellen, med datum och källa.
-- [ ] `server/install.sh`: i dag kan skriptet bara Groq (det kontrollerar en `gsk_`-nyckel, har valet `--ny-groq-nyckel` och skriver en modell för alla uppgifter). Gör Mistral till standardval (`MISTRAL_API_KEY`) med modellerna ovan per uppgift. En ny installation ber om Mistral-nyckeln och kör sedan `mio-gateway prova` för båda Mistral-paren, eftersom det är användaren som kör skriptet. Paren godkänns bara om provet går igenom; annars stannar skriptet med en tydlig text. En befintlig Groq-installation lämnas orörd med samma token, så att telefonen inte behöver paras om, och byter till Mistral i Mio Kontroll. Claude kör aldrig skriptet.
-- [ ] `server/README.md`: leverantörstabellen, kostnaden, att Vibe Pro-provet tar slut efter tre månader, och att Mistrals admin-konsol bör stängas av för träning på API-data (användaren gör det själv).
-- [ ] Tester med syntetisk transport: att tankedelen kastas, att en tankedel avvisas för `everyday`, att Large 4 inte går att välja för `ask`, användningsräknaren, och att pariteten med Node fortfarande håller (`cargo test --locked`, clippy utan varningar).
+- [x] Kontrollera Mistrals dokumentation igen innan koden skrivs. Modellsidan för Large 4 ger ID:t, så skriv inget ID ur minnet. Den 2026-11-20 gav resonemangssidan både `mistral-large-4-0` och `mistral-large-4`; välj det som är låst till en version och inte ett alias som kan flytta. Large 4 (släppt 2026-11-05) tar `low`, `medium` och `high`, aldrig `none`. Källor: [resonemang](https://docs.mistral.ai/inference/conversations/reasoning.md), [strukturerad utdata](https://docs.mistral.ai/inference/conversations/structured-output/custom.md), [Large 4](https://docs.mistral.ai/models/mistral-large-4-0), [Small 4](https://docs.mistral.ai/models/mistral-small-4-0-26-03), [priser](https://docs.mistral.ai/inference/pricing).
+- [x] `server/src/model_profiles.rs`:
+  - [x] Ta bort `mistral-medium-3-5` ur `CANDIDATE_MODELS`.
+  - [x] Lägg till Large 4 som kandidat med `ReasoningOff` ersatt av en resonemangsinställning, till exempel `Reasoning::Effort("medium")`. Large 4 tar inte `none`, så den får aldrig väljas för `ask` eller `everyday`.
+  - [x] Bind resonemang till uppgiften: ett par som resonerar går bara att välja för `lesson`. Gatewayen vägrar starta (`provider_options_incompatible`) om ett sådant par står för en annan uppgift.
+  - [x] Small 4 behåller `reasoning_effort: "none"`. Båda Mistral-modellerna behåller `schema_dialect: "json-schema"`, eftersom dokumentationen 2026-11-20 inte nämner `strict` (se beslutet om schema hos Mistral).
+  - [x] Om temperaturen avvisas när resonemang är på: använd samma flagga som för Anthropic (`temperature: false`), syns i `/v2/status`.
+- [x] `server/src/adapters.rs`:
+  - [x] Behåll `response_format` som `chat_request` bygger det i dag (`json_schema` med namn, schema och `strict` från generationen). Lita inte på att Mistral följer det; valideringen avgör.
+  - [x] Skicka `reasoning_effort: "medium"` för lektionsprofilen.
+  - [x] Svarstolkningen: idag avvisas en lista med en `thinking`-del (rad cirka 290). För en profil som får resonera: ta bara textdelen (`type: "text"`), kasta tankedelen utan att logga den och avvisa allt annat (flera textdelar, verktygsanrop, tom text). Profiler med resonemang av fortsätter att avvisa tankedelar.
+  - [x] Räkna `reasoning_tokens` i användningen men lägg aldrig tanketext i loggar, fel eller tillståndsfilen.
+- [x] `server/src/config.rs`: `max_tokens` för lektioner måste rymma tänkandet. Sätt en egen gräns för `lesson` med marginal för tänkandet, i stället för att höja alla uppgifter, och välj den utifrån Mistrals dokumentation. Användaren mäter med Prova (överlämningen), och gränsen justeras efter det. Mistral har ingen minutgräns som Groqs gratisnivå, så `MIO_TOKENS_PER_MINUTE_MISTRAL` lämnas tom som standard.
+- [x] Användningsräknaren för kreditmätaren: `record_usage` i `server/src/server.rs` räknar redan token, men bara som en summa. Adaptrarna måste lämna in, cachad in, ut och resonemang var för sig. Spara per månad, uppgift och modell (in, cachad in, ut, resonemang) i gatewayens tillståndsfil och visa det i `/v2/status`. Lägg priserna i en granskad tabell bredvid modellen, med datum och källa.
+- [x] `server/install.sh`: i dag kan skriptet bara Groq (det kontrollerar en `gsk_`-nyckel, har valet `--ny-groq-nyckel` och skriver en modell för alla uppgifter). Gör Mistral till standardval (`MISTRAL_API_KEY`) med modellerna ovan per uppgift. En ny installation ber om Mistral-nyckeln och kör sedan `mio-gateway prova` för båda Mistral-paren, eftersom det är användaren som kör skriptet. Paren godkänns bara om provet går igenom; annars stannar skriptet med en tydlig text. En befintlig Groq-installation lämnas orörd med samma token, så att telefonen inte behöver paras om, och byter till Mistral i Mio Kontroll. Claude kör aldrig skriptet.
+- [x] `server/README.md`: leverantörstabellen, kostnaden, att Vibe Pro-provet tar slut efter tre månader, och att Mistrals admin-konsol bör stängas av för träning på API-data (användaren gör det själv).
+- [x] Tester med syntetisk transport: att tankedelen kastas, att en tankedel avvisas för `everyday`, att Large 4 inte går att välja för `ask`, användningsräknaren, och att pariteten med Node fortfarande håller (`cargo test --locked`, clippy utan varningar).
 
 ## Fas 2: Mio Kontroll
 
 Läs först `control/README.md`, `control/DESIGN.md` och lärdomarna om [gpui-kit 0.10](../.trail/learnings/2026-11-17-gpui-kit-0-10-gaps-to-kanonmaten.md) och [UI-testerna i ett testprogram](../.trail/learnings/2026-11-17-keep-mio-kontroll-s-ui-tests-kanonmaten.md).
 
-- [ ] AI-sidan (`control/app/src/ai.rs`, `control/core/src/ai_settings.rs`): avsnittet "Prova modellerna" finns redan, med en Prova-knapp per par. Bygg ut det: Mistral-kandidaterna överst, och visa vad Prova kostar och att den går till Mistral.
-- [ ] Kreditmätaren: token och uppskattad kostnad den här månaden per uppgift och modell, mot en kreditgräns som användaren skriver in (standard $20). Data från `/v2/status` enligt kontraktet i fas 0; i testerna med påhittade värden. Gul vid 80 %, röd vid 100 %. Data från `/v2/status`.
-- [ ] Visa vilken uppgift som resonerar och på vilken nivå, och att Large 4 bara går att välja för Lektion.
-- [ ] Övervakning: en skrivbordsnotis när gatewayen eller Pianissimo har stannat eller startat om fler än tre gånger på tio minuter (från journalen i `control/core/src/journal.rs` och `status.rs`).
-- [ ] Gränssnittstester i det befintliga testprogrammet, och ett nytt prov i listan [Prov på datorn](../control/README.md#prov-på-datorn) för Prova mot Mistral.
+- [x] AI-sidan (`control/app/src/ai.rs`, `control/core/src/ai_settings.rs`): avsnittet "Prova modellerna" finns redan, med en Prova-knapp per par. Bygg ut det: Mistral-kandidaterna överst, och visa vad Prova kostar och att den går till Mistral.
+- [x] Kreditmätaren: token och uppskattad kostnad den här månaden per uppgift och modell, mot en kreditgräns som användaren skriver in (standard $20). Data från `/v2/status` enligt kontraktet i fas 0; i testerna med påhittade värden. Gul vid 80 %, röd vid 100 %. Data från `/v2/status`.
+- [x] Visa vilken uppgift som resonerar och på vilken nivå, och att Large 4 bara går att välja för Lektion.
+- [x] Övervakning: en skrivbordsnotis när gatewayen eller Pianissimo har stannat eller startat om fler än tre gånger på tio minuter (från journalen i `control/core/src/journal.rs` och `status.rs`).
+- [x] Gränssnittstester i det befintliga testprogrammet, och ett nytt prov i listan [Prov på datorn](../control/README.md#prov-på-datorn) för Prova mot Mistral.
 
 ## Fas 3: lektioner
 
@@ -151,14 +151,14 @@ Läs först `control/README.md`, `control/DESIGN.md` och lärdomarna om [gpui-ki
 
 ## Fas 4: vardagsfångst och "Mio, …"
 
-- [ ] Väckningsfraserna "Mio, kom ihåg" och "Mio, notera" i den lokala detekteringen. Ensamt "Mio" räknas inte längre som direkt tilltal. Uppdatera grammatiken utan AI och testerna för Mio-detektion.
-- [ ] Direkt anteckning: sparas direkt efter typ (Påminnelser eller Mio-anteckning) med Ångra i 24 timmar under Förslag. En kalenderhändelse läggs under Förslag och öppnar Kalenders ruta.
-- [ ] Vibrationer: två korta för sparat och en lång för inte förstått, bara vid direkt tilltal. Förslag som plockats upp i bakgrunden ger ingen vibration.
-- [ ] Batteri: pausa vardagsfångst under 20 % eller i strömsparläge och visa varför. Hon kan starta igen direkt. **Lektioner pausas aldrig av batteriet.** Skriv ett test för just det.
-- [ ] Tystnad: efter 20 minuter utan tal en notis "Lyssnar Mio fortfarande?". Utan svar inom fem minuter pausar Mio. Ingen automatisk omstart (befintlig regel).
-- [ ] Lagring: vardagstranskript äldre än 30 dagar raderas vid start och i bakgrunden. Lektioner, anteckningar och godkända förslag sparas. Om SwiftData-schemat behöver ändras sker det via `VersionedSchema` och migreringsplanen. Kommentera regeln.
+- [x] Väckningsfraserna "Mio, kom ihåg" och "Mio, notera" i den lokala detekteringen. Ensamt "Mio" räknas inte längre som direkt tilltal. Uppdatera grammatiken utan AI och testerna för Mio-detektion.
+- [x] Direkt anteckning: sparas direkt efter typ (Påminnelser eller Mio-anteckning) med Ångra i 24 timmar under Förslag. En kalenderhändelse läggs under Förslag och öppnar Kalenders ruta.
+- [x] Vibrationer: två korta för sparat och en lång för inte förstått, bara vid direkt tilltal. Förslag som plockats upp i bakgrunden ger ingen vibration.
+- [x] Batteri: pausa vardagsfångst under 20 % eller i strömsparläge och visa varför. Hon kan starta igen direkt. **Lektioner pausas aldrig av batteriet.** Skriv ett test för just det.
+- [x] Tystnad: efter 20 minuter utan tal en notis "Lyssnar Mio fortfarande?". Utan svar inom fem minuter pausar Mio. Ingen automatisk omstart (befintlig regel).
+- [x] Lagring: vardagstranskript äldre än 30 dagar raderas vid start och i bakgrunden. Lektioner, anteckningar och godkända förslag sparas. Om SwiftData-schemat behöver ändras sker det via `VersionedSchema` och migreringsplanen. Kommentera regeln.
 - [ ] Egna ord från telefonen: när hon rättar ett ord frågar Mio om det ska bli ett eget ord. Vid Ja skickas det via Tailscale till ordlistan på datorn (ny väg i Pianissimo, autentiserad med parningen). Ordet skickas aldrig vidare till AI-leverantören, och ett fel får aldrig stoppa transkriptionen.
-- [ ] Lokal räkning (utan text) av hur ofta hon trycker Nej eller Ångra på direkta anteckningar, för att se om fraserna löses ut fel.
+- [x] Lokal räkning (utan text) av hur ofta hon trycker Nej eller Ångra på direkta anteckningar, för att se om fraserna löses ut fel.
 
 ## Fas 5: Hem, notiser och prov
 
