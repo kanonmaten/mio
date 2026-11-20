@@ -3,10 +3,24 @@ name: Bygg Mio IPA
 run-name: "Bygg Mio IPA #${{ github.run_number }}"
 
 on:
+  push:
+    tags: ['v*']
+  # Nightly UI tests and strict concurrency diagnostics against main. GitHub turns scheduled
+  # workflows off in public repos after 60 days without activity; re-enable it under Actions.
+  schedule:
+    - cron: '17 2 * * *'
   workflow_dispatch:
     inputs:
       skarmbilder:
         description: "Ta skärmbilder av Hem i simulatorn (cirka 4 min extra)"
+        type: boolean
+        default: false
+      uitester:
+        description: "Kör UI-testerna (cirka 7 min extra)"
+        type: boolean
+        default: false
+      diagnostik:
+        description: "Kör strikt concurrency-diagnostik (cirka 2,5 min extra)"
         type: boolean
         default: false
 
@@ -19,11 +33,63 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decides what the test job runs. UI tests and diagnostics run nightly, on v* tags and when
+  # asked for in a manual run, never on a normal push: a push run does not make a commit UI-tested.
+  plan:
+    name: Välj tester
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.plan.outputs.run }}
+      uitester: ${{ steps.plan.outputs.uitester }}
+      diagnostik: ${{ steps.plan.outputs.diagnostik }}
+    steps:
+      - name: Välj tester för händelsen
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          INPUT_UITESTER: ${{ inputs.uitester }}
+          INPUT_DIAGNOSTIK: ${{ inputs.diagnostik }}
+        run: |
+          set -euo pipefail
+          run=true uitester=false diagnostik=false
+          case "$EVENT" in
+            workflow_dispatch)
+              uitester="${INPUT_UITESTER:-false}"
+              diagnostik="${INPUT_DIAGNOSTIK:-false}"
+              ;;
+            schedule)
+              uitester=true diagnostik=true
+              # Nothing new on main since the last nightly run that passed: end early.
+              last="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/build-unsigned-ipa.yml/runs?event=schedule&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // ""')"
+              if [[ "$last" == "$GITHUB_SHA" ]]; then
+                echo "Ingen ny commit sedan senaste lyckade nattkörning ($last); hoppar över."
+                run=false
+              fi
+              ;;
+            push)
+              if [[ "$REF" == refs/tags/v* ]]; then uitester=true diagnostik=true; fi
+              ;;
+          esac
+          echo "run=$run uitester=$uitester diagnostik=$diagnostik"
+          {
+            echo "run=$run"
+            echo "uitester=$uitester"
+            echo "diagnostik=$diagnostik"
+          } >> "$GITHUB_OUTPUT"
+
   # Two runners in parallel: the IPA is ready after the Release build (about 5 min) while the
   # simulator tests continue. The IPA job does not wait for the tests; check the test job before
   # calling a revision tested.
   ipa:
     name: Xcode 27 – IPA
+    # Does not wait for the plan job, so the IPA is ready as soon as possible. The nightly run
+    # exists for the tests and makes no IPA.
+    if: ${{ github.event_name != 'schedule' }}
     runs-on: xcode-27
     timeout-minutes: 20
     env:
@@ -155,6 +221,8 @@ jobs:
 
   test:
     name: Xcode 27 – tester
+    needs: plan
+    if: ${{ needs.plan.outputs.run == 'true' }}
     runs-on: xcode-27
     timeout-minutes: 50
     env:
@@ -273,7 +341,7 @@ jobs:
         # job limit. The iOS 27 simulator sometimes reports the app busy for 60 s after a tap and
         # then stalls (runs #31 and #33); one retry separates that from a real failure, and a retry
         # that passes is still recorded in the result bundle. Spindumps stay on for real UI hangs.
-        if: ${{ !cancelled() && env.SIMULATOR_UDID != '' }}
+        if: ${{ !cancelled() && env.SIMULATOR_UDID != '' && needs.plan.outputs.uitester == 'true' }}
         timeout-minutes: 16
         run: |
           set -euo pipefail
@@ -423,7 +491,7 @@ jobs:
         # Runs last in the test job so that it delays neither the IPA nor the test results.
         # The verifier is Rust: a toolchain pinned like the Linux gate goes under RUNNER_TEMP, so
         # this works whether or not the runner image ships Rust and leaves nothing on the runner.
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && needs.plan.outputs.diagnostik == 'true' }}
         continue-on-error: true
         run: |
           set -euo pipefail
