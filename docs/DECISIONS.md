@@ -2,6 +2,53 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Grillningen, 2026-11-19
+
+Användaren gick igenom Mio med Claude 2026-11-19 och kompletterade 2026-11-20. Mios egentliga användare är användarens flickvän, en gymnasieelev som inte är särskilt teknisk; lektioner och vardagsfångst betyder mest. Besluten nedan genomförs enligt [planen](PLAN_GRILLNING.md). Där planen skriver **antagande** gäller antagandet tills användaren säger annat.
+
+| Fråga | Val | Bortvalt |
+|---|---|---|
+| AI-leverantör | Mistral blir standard i `server/install.sh` under de tre månaderna med ett gratis prov av Vibe Pro, som ger mer än $20 i API-användning i månaden (användarens uppgift 2026-11-20). Groq `qwen/qwen3.8-27b` och Claude Haiku 5.5 hos Anthropic står kvar som granskade och valbara i Mio Kontroll | Bara Mistral; Groq kvar som standard |
+| Schema hos Mistral | **Regeländring (användarens val 2026-11-20):** Mistral dokumenterar inte `strict` för `json_schema` och lägger schemat i systemprompten. Mistral får ändå köras. Gatewayen skickar schemat som i dag och validerar varje svar, och en ogiltig punkt kastas eller repareras ur källan som förut. `/v2/status` visar `schema_dialect: json-schema` för Mistral | Groq kvar som standard för att behålla strikt schema |
+| Modell per uppgift | `everyday` och `ask`: Mistral Small 4 (`mistral-small-2603`) med `reasoning_effort: "none"`. `lesson`: Mistral Large 4 med `reasoning_effort: "medium"` | Large 4 överallt (kan inte stänga av resonemang, cirka $28/mån bara för vardag); Small 4 överallt; Mistral Medium 3.5 (utfasad 2026-10-31); GLM 5.3 och GLM 5.3 Flash (saknar `none`, den stora kostar dubbelt så mycket som Large 4); DeepSeek V4.1 Flash (Public Preview, ID:t skiljer mellan sidorna) |
+| Resonemang | **Regeländring godkänd:** bara uppgiften `lesson` får resonera, på nivån medium. Tankedelarna kastas i gatewayen och sparas, loggas eller visas aldrig. Strikt schema och validering gäller som förut. `everyday` och `ask` har resonemang av | Resonemang för alla uppgifter; valbar nivå per uppgift |
+| Prova | Användaren trycker Prova i Mio Kontroll själv. Claude kör ingen riktig modelltrafik | Claude kör `mio-gateway prova` |
+| Kostnad | Ungefär $7/mån för vardag och $4/mån för cirka 100 lektioner, alltså $11 av drygt $20. Priser 2026-11-20 per miljon token: Small 4 $0,15 in och $0,60 ut, Large 4 $0,70 in och $2,10 ut, cachad indata en tiondel | |
+| Provtips | Avsnittet "Viktigt till provet" först i lektionsanteckningen, varje punkt med citat | Markering i texten; lista per ämne |
+| Läxdatum | Föreslaget datum (eller tomt) som hon justerar när hon säger Ja | Eget schema i Mio; läsa Kalender |
+| Lektionsstart | Öppna appen och tryck Starta lektion, som nu | Schema, widgets och Action-knappen |
+| Under lektionen | Lugn vy: tid, en diskret lyssnarprick och antal provtips och läxor hittills. Transkriptet finns ett tryck bort | Löpande transkript |
+| Talare | Den som pratar mest visas som "Lärare", övriga som "Elev 1, 2…". Bara ett visningslager som hon kan ändra | Neutrala etiketter |
+| Granska efter lektionen | Ett ark med lektionens förslag direkt när anteckningarna är klara | Bara under Förslag |
+| Egna ord | När hon rättar ett ord frågar Mio om det ska bli ett eget ord. Vid Ja skickas det till ordlistan på datorn | Hela listan i inställningarna |
+| Vardagsfångst | Stora delar av dagen | |
+| Låg batterinivå | Vardagsfångst pausas under 20 % eller i strömsparläge, och hon kan alltid starta igen. **En lektion avbryts aldrig på grund av batteriet** | |
+| Lång tystnad | Efter cirka 20 minuter utan tal frågar en notis om Mio ska fortsätta lyssna. Utan svar pausar Mio. Ingen automatisk omstart | |
+| Lagring | Vardagstranskript raderas efter 30 dagar. Godkända förslag, anteckningar och lektioner sparas | 7 dagar; för alltid; eget val |
+| Andra människors tal | Som i dag | Bara hennes röst till AI; filtrera bort andra |
+| Vibration | Bara vid direkt tilltal ("Mio, …"). Det som plockas upp i bakgrunden väntar tyst under Förslag | Vibration vid varje förslag |
+| Direkt anteckning | **Regeländring godkänd:** "Mio, kom ihåg …" och "Mio, notera …" räknas som Ja. Påminnelser och Mio-anteckningar sparas direkt, med Ångra i 24 timmar. En kalenderhändelse väntar under Förslag och öppnar Kalenders ruta (inga tysta kalenderposter) | Ja på skärmen; Ja med rösten |
+| Vart det hamnar | Efter typ: påminnelse till Påminnelser, tid och plats till Kalender (via rutan), övrigt som Mio-anteckning | Alltid Apple Anteckningar; alltid Mio |
+| Väckningsfras | Två ord: både "Mio, kom ihåg" och "Mio, notera" fungerar | "Mio" ensamt; "Hej Mio" |
+| Återkoppling | Två korta vibrationer: sparat. En lång: inte förstått | Ljud i AirPods |
+| Hem | Nedräkning till prov ("Biologiprov om 3 dagar") från en vecka före | Dagens lektioner; läxor |
+| Inför provet | En knapp som kopierar ämnets provtips och lektionsanteckningar sedan förra provet | Bara provtips |
+| Fråga Mio | Oförändrad (används sällan) | Fråga om en lektion |
+| Morgon och kväll | Morgon: dagens prov och läxor (hon slår på det själv, eftersom texten syns på låsskärmen). Kväll: antal förslag att granska | Neutral text |
+| Inställningar | Det enkla överst, det tekniska under ett ihopfällt Avancerat | Dold utvecklarmeny |
+| Fel | En mening och en åtgärd, plus "Skicka felrapport" med textfri diagnostik | Som i dag |
+| Uppsättning | Användaren sätter upp telefonen. Mio får en sida "Kontrollera allt" | Guidad introduktion |
+| Signering | SideStore med manuell uppdatering, eftersom Tailscale och LocalDevVPN inte kan vara på samtidigt. Notis dagen innan signeringen går ut, med mycket tydliga steg | Betalt utvecklarkonto; automatisk uppdatering |
+| Säkerhetskopia | Varje natt under laddning skickas exporten via Tailscale till datorn, krypterad, 14 kopior, återställning i inställningarna | iCloud Drive; ingen |
+| Övervakning | Mio Kontroll visar en skrivbordsnotis när en tjänst har stannat eller startar om gång på gång | Push till telefonen; hennes app visar vem hon ska fråga |
+| Ikon | Hela ordet "mio" där o:et är en ring med en liten ljudvåg, gjord i Icon Composer med Liquid Glass-lager i Mios blå ton | Bara symbol; stort M |
+| Integritetssida | Ingen ny | "Vad Mio skickar vart" |
+| Ämne per lektion | **Antagande** (öppen fråga 1, användaren valde 2026-11-19 att inte gå igenom den): AI föreslår ämnet efter lektionen och hon bekräftar eller ändrar det i granskningsarket. Nedräkningen och "Inför provet" bygger på det | Eget schema (avböjt); fritt ämne utan förslag |
+
+Reglerna i `CLAUDE.md` ändrades samtidigt: Mistral är standard i `install.sh`, strikt schema gäller där leverantören har det, resonemang är tillåtet bara för `lesson`, och en direkt instruktion räknas som Ja för Påminnelser och Mio-anteckningar. [Produktvisionen](PRODUKTVISION.md) har samma ändringar. Kontrakten mellan gatewayen, Pianissimo, Mio Kontroll och appen står i [datamodellen](DATAMODELL.md#kontrakt-efter-grillningen).
+
+Källor (lästa 2026-11-19 och 2026-11-20): Mistral om [resonemang](https://docs.mistral.ai/inference/conversations/reasoning.md), [strukturerad utdata](https://docs.mistral.ai/inference/conversations/structured-output/custom.md), [Large 4](https://docs.mistral.ai/models/mistral-large-4-0), [Small 4](https://docs.mistral.ai/models/mistral-small-4-0-26-03) och [priser](https://docs.mistral.ai/inference/pricing).
+
 ## Snabbare utvecklingsslinga i CI, 2026-11-20
 
 Användaren ville att IPA:n ska gå att installera så fort som möjligt och att Claude aldrig ska stå och vänta, utan att någon kontroll försvinner. Planen låg utanför repot (`PLAN_SNABBARE_CI_v2.md`) och genomfördes 2026-11-20, `aae9ff8` till `ebbbac2`. Tiderna står i [status](STATUS.md#snabbare-ci-2026-11-20).

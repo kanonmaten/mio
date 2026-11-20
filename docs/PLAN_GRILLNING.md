@@ -93,19 +93,19 @@ Fas 0 skriver in dem i [DECISIONS.md](DECISIONS.md) med de bortvalda alternative
 
 Huvudsessionen gör fasen själv. Den är kort, och vågorna efter den bygger på den.
 
-- [ ] Skriv avsnittet "Grillningen, 2026-11-19" i [DECISIONS.md](DECISIONS.md) med tabellen ovan (val och bortvalt) och källorna längst ned.
-- [ ] Ändra reglerna i `CLAUDE.md` (användaren godkände dem 2026-11-19 och 2026-11-20):
+- [x] Skriv avsnittet "Grillningen, 2026-11-19" i [DECISIONS.md](DECISIONS.md) med tabellen ovan (val och bortvalt) och källorna längst ned.
+- [x] Ändra reglerna i `CLAUDE.md` (användaren godkände dem 2026-11-19 och 2026-11-20):
   - AI-raden: Mistral är det `server/install.sh` sätter upp. Groq och Haiku 5.5 står kvar som granskade.
   - "strict JSON schema" blir: strikt schema där leverantören har det. Hos Mistral ligger schemat i prompten och gatewayen validerar varje svar.
   - "Every call has reasoning off" blir: reasoning är av för `ask` och `everyday`. `lesson` får resonera på den granskade nivån, och tankedelarna kastas i gatewayen och lagras eller visas aldrig.
   - "Suggestions need an explicit Yes" blir: förslag kräver ett uttryckligt Ja. En direkt instruktion ("Mio, kom ihåg/notera") är ett Ja för Påminnelser och Mio-anteckningar och kan ångras i 24 timmar. Kalenderhändelser skapas aldrig tyst.
-- [ ] Uppdatera [PRODUKTVISION.md](PRODUKTVISION.md) med ändringarna om resonemang och direkta anteckningar ("Bekräfta före åtgärd").
-- [ ] Skriv kontrakten som spåren i våg 2 och 3 bygger mot, i ett avsnitt "Kontrakt efter grillningen" i [DATAMODELL.md](DATAMODELL.md). Spåren får inte ändra dem; behövs en ändring säger spåret till huvudsessionen.
+- [x] Uppdatera [PRODUKTVISION.md](PRODUKTVISION.md) med ändringarna om resonemang och direkta anteckningar ("Bekräfta före åtgärd").
+- [x] Skriv kontrakten som spåren i våg 2 och 3 bygger mot, i ett avsnitt "Kontrakt efter grillningen" i [DATAMODELL.md](DATAMODELL.md). Spåren får inte ändra dem; behövs en ändring säger spåret till huvudsessionen.
   - `/v2/status`: användning per månad, uppgift och modell (in, cachad in, ut, resonemang), uppskattad kostnad i USD med prisernas datum, och resonemangsnivån per uppgift.
   - Lektionsresultatet: den nya schemaversionen med `examHints` (text och citat, högst åtta) och hur talarnas roller (Lärare, Elev) skickas med.
   - Egna ord från telefonen: metod, sökväg och svar för den nya vägen i Pianissimo, autentiserad med parningen.
   - Säkerhetskopian: vägen dit telefonen skickar exporten, vem som tar emot den, och vad Mio Kontroll läser för att visa senaste kopian.
-- [ ] Kör `cargo run --locked --manifest-path tools/Cargo.toml -- project`. Om strukturkontrollen letar efter de gamla regeltexterna ändras kontrollen i `tools/` och dess svenska meddelanden lämnas som de är.
+- [x] Kör `cargo run --locked --manifest-path tools/Cargo.toml -- project`. Om strukturkontrollen letar efter de gamla regeltexterna ändras kontrollen i `tools/` och dess svenska meddelanden lämnas som de är.
 
 ## Fas 1: gatewayen för Mistral
 

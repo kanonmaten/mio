@@ -6,7 +6,8 @@ Mio ska hjälpa en användare att fånga och ordna sin dag: lektioner, antecknin
 
 - **Användaren styr:** tydlig lyssningsstatus, På/Av, paus och radering. När Mio är av används inte mikrofonen; manuellt innehåll fungerar fortfarande.
 - **Privat och användarstyrt:** svensk transkription på egen Pianissimo-server via Tailscale; Mio-detektion och lagring på telefonen. Ljudöverföring bara under användarstartad session, högst 60 s ljud i RAM vid avbrott och inga ljudfiler. Text-AI går via användarens egen gateway på datorn, är på när datorn är parad och kan pausas.
-- **Bekräfta före åtgärd:** automatiskt föreslagna planer, uppgifter och minnen är förslag tills användaren godkänner dem. Kalenderposter skapas aldrig tyst.
+- **Bekräfta före åtgärd:** automatiskt föreslagna planer, uppgifter och minnen är förslag tills användaren godkänner dem. En direkt instruktion ("Mio, kom ihåg …" eller "Mio, notera …") räknas som ett Ja: påminnelser och Mio-anteckningar sparas direkt och kan ångras i 24 timmar (beslut 2026-11-19). Kalenderposter skapas aldrig tyst; en kalenderhändelse väntar under Förslag och öppnar Kalenders ruta.
+- **Resonemang bara för lektioner:** lektionsanteckningarna får använda modellens resonemang på den granskade nivån. Tankedelarna kastas i gatewayen och sparas, loggas eller visas aldrig. Vardag och Fråga Mio har resonemang av (beslut 2026-11-19).
 - **Diskret återkoppling:** vibration och kort fråga; inget oombett tal. Ja godkänner, Nej glömmer och Inte nu sparar en väntande fråga lokalt.
 - **Synliga minnen:** användaren kan granska, ändra och glömma. Ingen dold profilering eller påstådd kunskap om hur användaren känner.
 - **Begriplig integritet:** visa vad som sparas, exporteras och eventuellt skickas. Inspelning av andra kräver samtycke och att lokala regler följs.

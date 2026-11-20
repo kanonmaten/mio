@@ -149,3 +149,85 @@ Sessioner, innehåll och assistentdata ligger i en SwiftData-databas, `Mio/store
 `diagnostics-v1.json` ligger kvar som fil. Raderingsjournalen `operations-v1.json` och generationsspärrarna behålls: de skyddar mot sena fångst-callbacks efter radering och täcker steg utanför databasen (alarm, notiser, nycklar). Exporten är oförändrad JSON.
 
 **MetricKit och loggning.** En `MXMetricManagerSubscriber` sparar Apples textfria JSON-rapporter i `Mio/metrickit-v1.json` (högst 40, 3 MB, 30 dagar; okänt schema skrivs inte över). Sidan Inställningar → Om → Diagnostik visar datum, typ och en sifferbaserad sammanfattning med dela/kopiera; rapporterna ingår i exporten och raderas med diagnostiken. `os.Logger` (subsystem `app.mio.assistant`, kategorierna `capture`, `transcription`, `ai`, `storage`) loggar bara fasta meddelanden och heltal, aldrig användartext.
+
+## Kontrakt efter grillningen
+
+Skrivna 2026-11-20 i fas 0 av [planen](PLAN_GRILLNING.md), efter [besluten](DECISIONS.md#grillningen-2026-11-19). Gatewayen, Pianissimo, Mio Kontroll och appen byggs mot dem samtidigt. Ett spår som behöver ändra ett kontrakt säger till i stället för att ändra det själv. Alla tillägg är additiva: en äldre app, panel eller server ska fortsätta fungera mot en nyare motpart, och den nyare ska känna igen den äldre på att fältet eller förmågan saknas.
+
+### `/v2/status`: resonemang, schema och användning
+
+Varje post under `tasks` får två fält:
+
+- `reasoning`: `"off"` eller den granskade nivån (`"low"`, `"medium"`, `"high"`). Bara `lesson` kan ha något annat än `"off"`; gatewayen vägrar starta (`provider_options_incompatible`) om ett resonerande par står för `ask` eller `everyday`.
+- `schemaDialect`: modellprofilens `schema_dialect`, `"strict-json-schema"` eller `"json-schema"` (schemat ligger i prompten och följs inte garanterat; gatewayen validerar svaret). `null` när uppgiften saknar giltig konfiguration.
+
+På toppnivån kommer `usage` (alltid med, även när inget anrop gjorts):
+
+```json
+"usage": {
+  "month": "2026-11",
+  "currency": "USD",
+  "estimatedCost": 3.42,
+  "entries": [
+    { "task": "lesson", "provider": "mistral", "model": "mistral-large-…",
+      "requests": 12, "inputTokens": 40000, "cachedInputTokens": 0, "outputTokens": 21000, "reasoningTokens": 9000,
+      "estimatedCost": 0.0721, "pricesAsOf": "2026-11-20" }
+  ]
+}
+```
+
+- `month` är innevarande kalendermånad i UTC. Räknarna börjar om vid månadsskiftet. En post per kombination av uppgift, leverantör och modell som har använts under månaden, sorterad på uppgift (`ask`, `everyday`, `lesson`) och sedan leverantör och modell.
+- Token är leverantörens egna siffror ur svarets `usage`. `outputTokens` är allt som debiteras som utdata, resonemang inräknat; om en leverantör redovisar resonemanget utanför sin utdatasiffra lägger adaptern ihop dem. `reasoningTokens` är den del av `outputTokens` som var resonemang (0 om leverantören inte redovisar det). `cachedInputTokens` är den del av `inputTokens` som debiterades som cachad.
+- Både lyckade och ogiltiga svar räknas, eftersom leverantören debiterar dem. Ett anrop utan `usage` i svaret räknas i `requests` men inte i token.
+- `estimatedCost` = (in − cachad in) × inpris + cachad in × cachat pris + ut × utpris, med priser per miljon token ur en granskad pristabell bredvid modellen i `server/src/model_profiles.rs` (datum och källa per pris). En modell utan pris i tabellen (till exempel Groqs gratisnivå) får `estimatedCost: null` och `pricesAsOf: null`, och toppnivåns `estimatedCost` räknar bara posterna med pris. Kostnaden avrundas till fyra decimaler.
+- Räknarna sparas i `/var/lib/mio-gateway/usage.json` (0600, `{"schemaVersion":1,"months":{"2026-11":[…]}}`, bara siffror och identifierare, innevarande och förra månaden). En okänd `schemaVersion` skrivs aldrig över; då svarar `/v2/status` med `usage: null` och journalen får en rad. Ingen text, ingen tanketext och inga nycklar.
+
+Mio Kontroll läser `usage` för kreditmätaren och visar `reasoning` per uppgift. Kreditgränsen (standard $20) är panelens egen inställning och skickas inte till gatewayen.
+
+### Lektionsanteckningar version 2: provtips, talarroller och ämne
+
+Gatewayen får rutten `POST /v2/lesson-notes` och lägger förmågan `lesson-notes-v2` i `tasks.lesson.capabilities` (bredvid `lesson-notes-v1`). `POST /v1/lesson-notes` är oförändrad, och paritetstesterna mot Node gäller den. Appen använder v2 när förmågan finns och annars v1.
+
+**Begäran** är som v1 (`mode: "lesson"`, `timeZone`, `fragments`, högst 3 500 byte källtext) med ett valfritt fält per fragment:
+
+- `speakerRole`: `"teacher"` eller `"student"`. Saknas när talaren är okänd. Appen räknar fram rollen per lektion ur originalsegmentens `speaker`: den talare som har flest tecken i lektionen är `teacher`, övriga `student`. Rollen följer inte namnen hon själv ger talarna. Inga talarnamn skickas.
+
+**Svaret** följer JSON-schemat `mio_lesson_notes_v2`:
+
+```json
+{
+  "examHints": [ { "text": "…", "sourceIDs": ["<uuid>:0"], "evidence": "exakt citat" } ],
+  "subject": "Biologi",
+  "candidates": [],
+  "sections": [],
+  "uncertainties": []
+}
+```
+
+- `examHints`: 0–8 per svar. `text` 1–300 tecken. `sourceIDs` 1–4 ID:n ur begärans fragment. `evidence` är ett exakt citat ur en av källorna och lagas eller kastas på samma sätt som för `sections`. En ogiltig punkt kastas; resten av svaret står kvar. Prompten ber bara om sådant läraren uttryckligen pekar ut ("det här kommer på provet", "kom ihåg", "viktigt" och liknande) och hellre för få än gissningar.
+- `subject`: ämnet som modellen föreslår (1–40 tecken, till exempel "Biologi") eller `null` när det inte går att säga. Bara ett förslag: appen visar det i granskningsarket och sparar det först när hon bekräftar eller ändrar det (antagandet i fas 5).
+- `candidates`, `sections` och `uncertainties` som i v1. Svarets metadata (`provider`, `model`, `promptVersion`, `lessonIntervalSeconds`) och rubriker som i v1, med en egen promptversion för v2.
+
+**I appen** får `MioAnalysisRecord` de additiva valfria fälten `examHints` (samma form som ovan) och `subjectSuggestion`; lektionen får det valfria `subject` (det hon bekräftat). Äldre data avkodas utan fälten. En lektion med flera delar visar alla delars provtips i källordning, utan exakta dubbletter, först i anteckningen och i kopieringen ("Viktigt till provet").
+
+### Egna ord från telefonen
+
+Pianissimo får rutten `POST /v1/vocabulary`, med samma Bearer-token som transkriptionen (från parningen).
+
+- Kropp: `{"phrase": "Åsa Lindqvist"}`, JSON, högst 1 024 byte. `phrase` trimmas och måste sedan vara 1–100 byte UTF-8 utan radbrytningar eller andra kontrolltecken och får inte börja med `#`. Okända fält avvisas.
+- Ordet läggs sist i `/var/lib/mio-transcription/vocabulary-phone.txt` (tjänstens egen katalog, 0600), om det inte redan finns där eller i `/etc/mio-transcription-vocabulary.txt` (exakt jämförelse). Pianissimo läser båda filerna, `/etc`-filen först, och använder högst 500 rader sammanlagt. Listan laddas om före nästa transkription utan omstart.
+- Svar 200 `{"added": true, "vocabulary": 37}` (`added: false` om ordet redan fanns; `vocabulary` som i `/health`). 400 `invalid_phrase`, 401 vid fel token, 409 `vocabulary_full` när 500 rader redan används, 413 för stor kropp.
+- `/health` får det additiva fältet `vocabularyUpload: true`. Appen frågar bara om ett eget ord när fältet finns.
+- Ordet skrivs aldrig i loggen och skickas aldrig vidare, varken till gatewayen eller till en AI-leverantör. Ett fel när ordet sparas eller laddas får aldrig stoppa transkriptionen: en rad i journalen och ordlistan som den var.
+- Appen skickar bara ord hon har sagt Ja till, ett anrop per ord, och försöker inte igen i en slinga: vid fel visas en mening och ordet kan skickas igen från rättningen.
+
+### Säkerhetskopian
+
+Gatewayen tar emot kopian, eftersom appen redan når den med en egen token via Tailscale.
+
+- `PUT /v2/backup` med `Authorization: Bearer <gatewaytoken>` och `Content-Type: application/json`. Kroppen är appens versionsmärkta export (`schemaVersion: 2`, se [Export och radering](#export-och-radering)), högst 32 MB, med 120 s deadline. Rutten har egna gränser och räknas inte mot AI-kvoten eller tokenbudgeten, och kroppen skickas aldrig till en leverantör. Gatewayen kontrollerar bara att kroppen är ett JSON-objekt med `schemaVersion` 2 och `exportedAt`; innehållet tolkas inte.
+- Gatewayen krypterar kopian med XChaCha20-Poly1305 under en nyckel i `/var/lib/mio-gateway/backup.key` (32 slumpade byte, 0600, skapas vid första kopian) och skriver den till `/var/lib/mio-gateway/backups/<id>.mio-backup`, där `id` är `ÅÅÅÅMMDDTHHMMSSZ-<8 hex>`. Skrivningen sker till en temporär fil som döps om när den är klar. Bara de 14 senaste sparas; äldre raderas efter en lyckad skrivning. Nyckeln ligger på samma krypterade disk som kopiorna: krypteringen skyddar kopior som flyttas eller säkerhetskopieras vidare från katalogen, inte mot den som redan är root på datorn. Aldrig till molnet.
+- Svar 201 `{"id": "…", "createdAt": "ISO-8601", "bytes": 123456, "kept": 14}`. 400 `invalid_backup`, 401, 413 för stor kropp, 507 `backup_storage_failed` om disken inte går att skriva.
+- `GET /v2/backups` → `{"backups": [{"id": "…", "createdAt": "…", "bytes": 123456}]}`, nyaste först. `GET /v2/backups/<id>` → den dekrypterade exporten som `application/json`; 404 `backup_not_found`.
+- `/v2/status` får `backup: {"latestAt": "ISO-8601" | null, "count": 0–14, "bytes": summa}`. Fältet saknas hos en gateway utan säkerhetskopia; appen visar och schemalägger kopian bara när det finns. Mio Kontroll visar senaste kopian ur samma fält, via den hjälpare som redan hämtar `/v2/status`.
+- I appen: en `BGProcessingTask` som kräver ström och nätverk skickar exporten en gång per natt. Tid och resultat för senaste försöket sparas lokalt utan innehåll. Återställningen i inställningarna hämtar en vald kopia och ersätter appens lokala data först efter en bekräftelse, bara om exportens schema är känt, och aldrig medan fångst pågår.
