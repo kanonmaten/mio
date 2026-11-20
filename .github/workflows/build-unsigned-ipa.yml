@@ -3,8 +3,19 @@ name: Bygg Mio IPA
 run-name: "Bygg Mio IPA #${{ github.run_number }}"
 
 on:
+  # Every push to main that touches the app makes an installable IPA. tools/ is listed because the
+  # diagnostics step runs the verifier. Path filters are not evaluated for tag pushes.
   push:
+    branches: [main]
     tags: ['v*']
+    paths:
+      - 'Mio/**'
+      - 'MioWidgets/**'
+      - 'MioTests/**'
+      - 'MioUITests/**'
+      - 'Mio.xcodeproj/**'
+      - 'tools/**'
+      - '.github/workflows/build-unsigned-ipa.yml'
   # Nightly UI tests and strict concurrency diagnostics against main. GitHub turns scheduled
   # workflows off in public repos after 60 days without activity; re-enable it under Actions.
   schedule:
