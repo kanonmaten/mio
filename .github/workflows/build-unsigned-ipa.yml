@@ -317,19 +317,10 @@ jobs:
           IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
           test "${XCODE_VERSION%%.*}" = "27"
           test "${IOS_SDK_VERSION%%.*}" = "$EXPECTED_IOS_MAJOR"
-          # Cache keys follow the exact Xcode build, so a new Xcode never reads an old cache.
-          echo "XCODE_BUILD=$(xcodebuild -version | awk 'NR == 2 { print $3 }')" >> "$GITHUB_ENV"
-
-      - name: Återanvänd testbyggets DerivedData
-        # Test job only: the IPA job stays a clean build, since it makes what gets installed.
-        # Restores the source files' modification times so Xcode only rebuilds what changed.
-        uses: irgaly/xcode-cache@4141f139f00e335c6e1031fb93e667181f86146f # v1.9.2
-        with:
-          key: xcode-deriveddata-${{ env.XCODE_BUILD }}-${{ github.run_id }}
-          restore-keys: xcode-deriveddata-${{ env.XCODE_BUILD }}-
-          deriveddata-directory: ${{ runner.temp }}/TestDerivedData
 
       - name: Kompilera enhetstester
+        # No build cache: Xcode's compilation cache (#54–#57) and DerivedData with restored mtimes
+        # (#58, #59) gave no steady gain, since the booting simulator decides the compile time.
         # One architecture for the simulator already chosen above: half the compile work of a
         # generic simulator build, and the tests only ever run on that simulator.
         run: |
