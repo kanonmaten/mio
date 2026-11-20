@@ -317,6 +317,16 @@ jobs:
           IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
           test "${XCODE_VERSION%%.*}" = "27"
           test "${IOS_SDK_VERSION%%.*}" = "$EXPECTED_IOS_MAJOR"
+          # Cache keys follow the exact Xcode build, so a new Xcode never reads an old cache.
+          echo "XCODE_BUILD=$(xcodebuild -version | awk 'NR == 2 { print $3 }')" >> "$GITHUB_ENV"
+
+      - name: Återanvänd kompileringscachen
+        # Test job only: the IPA job stays a clean build, since it makes what gets installed.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/TestDerivedData/CompilationCache.noindex
+          key: xcode-compilation-cache-${{ env.XCODE_BUILD }}-${{ github.run_id }}
+          restore-keys: xcode-compilation-cache-${{ env.XCODE_BUILD }}-
 
       - name: Kompilera enhetstester
         # One architecture for the simulator already chosen above: half the compile work of a
@@ -334,6 +344,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             ONLY_ACTIVE_ARCH=YES \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
             build-for-testing 2>&1 | tee "$RUNNER_TEMP/Mio-test-build.log"
 
       - name: Kör enhetstester
