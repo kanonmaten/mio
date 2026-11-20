@@ -230,6 +230,25 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Meddela att IPA:n är klar
+        # Only the run number and link: the topic is public to anyone who knows it, so no commit
+        # text. Skips itself until the user adds the NTFY_TOPIC secret.
+        if: ${{ success() }}
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$NTFY_TOPIC" ]]; then
+            echo "NTFY_TOPIC saknas; ingen notis."
+            exit 0
+          fi
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          curl --proto '=https' --tlsv1.2 -sSf --max-time 20 \
+            -H "Title: Mio IPA #$GITHUB_RUN_NUMBER klar" \
+            -H "Click: $url" \
+            -d "Mio IPA #$GITHUB_RUN_NUMBER är klar: $url" \
+            "https://ntfy.sh/$NTFY_TOPIC" > /dev/null || echo "::warning::Notisen kunde inte skickas."
+
   test:
     name: Xcode 27 – tester
     needs: plan
