@@ -219,6 +219,8 @@ jobs:
           xcrun simctl boot "$SIMULATOR_UDID" || true
 
       - name: Kompilera enhetstester
+        # One architecture for the simulator already chosen above: half the compile work of a
+        # generic simulator build, and the tests only ever run on that simulator.
         run: |
           set -euo pipefail
           xcodebuild \
@@ -226,12 +228,12 @@ jobs:
             -scheme Mio \
             -configuration Debug \
             -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath "$RUNNER_TEMP/TestDerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            ONLY_ACTIVE_ARCH=NO \
+            ONLY_ACTIVE_ARCH=YES \
             build-for-testing 2>&1 | tee "$RUNNER_TEMP/Mio-test-build.log"
 
       - name: Kör enhetstester
@@ -263,7 +265,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            ONLY_ACTIVE_ARCH=NO \
+            ONLY_ACTIVE_ARCH=YES \
             test-without-building 2>&1 | tee "$RUNNER_TEMP/Mio-tests.log"
 
       - name: Kör UI-tester
@@ -296,7 +298,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            ONLY_ACTIVE_ARCH=NO \
+            ONLY_ACTIVE_ARCH=YES \
             test-without-building 2>&1 | tee "$RUNNER_TEMP/Mio-uitests.log"
 
       - name: Ta skärmbilder i simulatorn
