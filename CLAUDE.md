@@ -53,6 +53,8 @@ On the user's PC, `git config core.hooksPath .githooks` turns on `.githooks/pre-
 
 The verifier (`tools/`, binary `mio-verify`) is Rust since 2026-11-17. Pianissimo and its tests stay Python (NeMo). Keep the verifier's Swedish messages unchanged: CI logs and `docs/STATUS.md` quote them. Its Swift rewrites must stay byte-identical to what they replace; the substituted Swift lives in `tools/swift/`.
 
+Push when a coherent change is done and passes locally, not after every small commit: every push starts both workflows and cancels the previous run of each, so a push a few minutes after another leaves the first commit without a CI result. Follow CI in the background (`gh run watch <id> --exit-status` with `run_in_background`) and keep working; confirm CI for the exact commit before handover.
+
 GitHub runs "Verifiera Mio på Linux" on every push; check it for the exact commit. "Bygg Mio IPA" (manual) builds the iOS app, runs simulator tests and makes the unsigned IPA; it is the only check of iOS-only code such as Keychain, UIKit and SwiftUI views.
 
 When you hand over, say what changed, what was tested on which commit, and what to test on the phone. Never call a revision built, installed or phone-tested without proof for that exact revision.
