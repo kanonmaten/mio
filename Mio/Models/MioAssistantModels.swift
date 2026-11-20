@@ -29,6 +29,8 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
     /// Optional for legacy documents; changes to the reviewed proposal advance it.
     var revision: Int?
     var reviewRevision: Int { revision ?? 0 }
+    /// Set when the proposal came from "Mio, kom ihåg/notera" (2026-11-20). Absent otherwise.
+    var direct: MioDirectOrigin?
 
     init(
         id: UUID = UUID(),
@@ -45,7 +47,8 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         evidence: String? = nil,
         needsDateConfirmation: Bool? = nil,
         revision: Int? = nil,
-        isAllDay: Bool? = nil
+        isAllDay: Bool? = nil,
+        direct: MioDirectOrigin? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -62,10 +65,11 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         self.needsDateConfirmation = needsDateConfirmation
         self.revision = revision
         self.isAllDay = isAllDay
+        self.direct = direct
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, kind, title, body, createdAt, scheduledAt, sessionID, sourceSegmentID, state, deferredAt, purpose, evidence, needsDateConfirmation, revision, isAllDay
+        case id, kind, title, body, createdAt, scheduledAt, sessionID, sourceSegmentID, state, deferredAt, purpose, evidence, needsDateConfirmation, revision, isAllDay, direct
     }
 
     init(from decoder: Decoder) throws {
@@ -84,6 +88,7 @@ struct MioSuggestion: Identifiable, Codable, Hashable, Sendable {
         needsDateConfirmation = try values.decodeIfPresent(Bool.self, forKey: .needsDateConfirmation)
         revision = try values.decodeIfPresent(Int.self, forKey: .revision)
         isAllDay = try values.decodeIfPresent(Bool.self, forKey: .isAllDay)
+        direct = try values.decodeIfPresent(MioDirectOrigin.self, forKey: .direct)
         // Older assistant documents contain only proposed content items.
         purpose = try values.decodeIfPresent(MioSuggestionPurpose.self, forKey: .purpose) ?? .content
     }
@@ -349,8 +354,10 @@ enum MioLocalSuggestionEngine {
         return suggestion
     }
 
-    /// A narrow Swedish command grammar is deliberate. A mere mention of Mio or
-    /// ordinary conversation must not become a task, plan or personal memory.
+    /// Only "Mio, kom ihåg …" and "Mio, notera …" at the start of a sentence become proposals
+    /// (user decision 2026-11-19; see `MioDirectCommandGrammar`). A mere mention of Mio or
+    /// ordinary conversation never does. The workflow saves Reminders and Mio notes straight away
+    /// and leaves calendar events here for Calendar's own sheet.
     static func suggestion(
         from segment: TranscriptSegment,
         sessionID: UUID,
@@ -362,62 +369,18 @@ enum MioLocalSuggestionEngine {
     static func suggestions(
         from segment: TranscriptSegment,
         sessionID: UUID,
-        now: Date = .now
+        now: Date = .now,
+        calendar: Calendar = .current
     ) -> [MioSuggestion] {
-        let text = segment.displayText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let expression = try? NSRegularExpression(
-            pattern: #"(?:^|[.!?\n])\s*mio\b[\s,.:;!–—-]*"#,
-            options: .caseInsensitive
-        ) else { return [] }
-        let addresses = expression.matches(in: text, range: NSRange(text.startIndex..., in: text))
-            .compactMap { Range($0.range, in: text) }
-        return addresses.enumerated().compactMap { index, address in
-            let commandEnd = index + 1 < addresses.count ? addresses[index + 1].lowerBound : text.endIndex
-            let command = String(text[address.upperBound..<commandEnd])
-            return parseCommand(command, sourceSegmentID: segment.id, sessionID: sessionID, now: now)
-        }
-    }
-
-    private static func parseCommand(
-        _ command: String,
-        sourceSegmentID: UUID,
-        sessionID: UUID,
-        now: Date
-    ) -> MioSuggestion? {
-        let questionText: String?
-        if let prefix = command.range(of: #"^fråga\s+"#, options: [.regularExpression, .caseInsensitive]) {
-            questionText = String(command[prefix.upperBound...])
-        } else if command.range(
-            of: #"^(?:vad|hur|varför|när|var|vem|kan du förklara)\s+"#,
-            options: [.regularExpression, .caseInsensitive]
-        ) != nil {
-            questionText = command
-        } else {
-            questionText = nil
-        }
-        if let questionText,
-           let draft = try? explicitQuestion(text: questionText, sessionID: sessionID, now: now) {
-            return MioSuggestion(
-                kind: draft.kind, title: draft.title, body: draft.body,
-                createdAt: draft.createdAt, scheduledAt: draft.scheduledAt,
-                sessionID: sessionID, sourceSegmentID: sourceSegmentID, purpose: .question
-            )
-        }
-        let rules: [(String, MioContentKind)] = [
-            (#"^(?:kom ihåg att|kom ihåg|minns att)\s+"#, .memory),
-            (#"^(?:påminn mig (?:om att|att|om)|lägg till en uppgift att|lägg till uppgiften|skapa en uppgift att|skapa en uppgift)\s+"#, .task),
-            (#"^(?:planera att|planera|lägg till en plan för|lägg till en plan|boka in)\s+"#, .plan),
-            (#"^(?:anteckna att|anteckna|skriv en anteckning om|skriv en anteckning|spara en anteckning om)\s+"#, .note)
-        ]
-        for (pattern, kind) in rules {
-            guard let prefix = command.range(of: pattern, options: [.regularExpression, .caseInsensitive]) else {
-                continue
+        MioDirectCommandGrammar.parse(segment.displayText, now: now, calendar: calendar).compactMap { parse in
+            guard case .command(let command) = parse else { return nil }
+            let kind: MioContentKind = switch command.destination {
+            case .reminders: .task
+            case .calendar: .plan
+            case .mioNote: .note
             }
-            let body = String(command[prefix.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !["att", "om", "för"].contains(body.lowercased(with: Locale(identifier: "sv-SE"))),
-                  let draft = try? explicitSuggestion(text: body, kind: kind, sessionID: sessionID, now: now) else {
-                return nil
-            }
+            guard let draft = try? explicitSuggestion(text: command.text, kind: kind, scheduledAt: command.date,
+                                                      sessionID: sessionID, now: now) else { return nil }
             return MioSuggestion(
                 kind: draft.kind,
                 title: draft.title,
@@ -425,10 +388,11 @@ enum MioLocalSuggestionEngine {
                 createdAt: draft.createdAt,
                 scheduledAt: draft.scheduledAt,
                 sessionID: sessionID,
-                sourceSegmentID: sourceSegmentID
+                sourceSegmentID: segment.id,
+                isAllDay: command.date != nil && !command.hasTime ? true : nil,
+                direct: MioDirectOrigin(destination: command.destination, hasDate: command.date != nil, hasTime: command.hasTime)
             )
         }
-        return nil
     }
 
     static func validateLesson(_ lesson: MioLesson, session: MioSession, otherLessons: [MioLesson]) throws {

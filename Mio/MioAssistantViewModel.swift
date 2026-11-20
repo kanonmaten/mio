@@ -63,30 +63,37 @@ final class MioAssistantViewModel {
     /// Automatic local commands use admission, never the presentation busy flag.
     @discardableResult
     func detectSuggestions(in session: MioSession) async -> Int {
-        await runDetection(in: session).count
+        await runDetection(in: session).added.count
     }
 
     func detectSuggestionsOutcome(in session: MioSession) async -> MioOperationOutcome {
         await runDetection(in: session).outcome
     }
 
-    private func runDetection(in session: MioSession) async -> (count: Int, outcome: MioOperationOutcome) {
-        guard !isDeletingAll, !sessionsBeingDeleted.contains(session.id), !Task.isCancelled else { return (0, .cancelled) }
+    /// Like `detectSuggestionsOutcome`, plus the proposals this call added from direct
+    /// instructions, which the workflow saves straight away.
+    func detectDirectCommands(in session: MioSession) async -> (outcome: MioOperationOutcome, direct: [MioSuggestion]) {
+        let result = await runDetection(in: session)
+        return (result.outcome, result.added.filter { $0.direct != nil })
+    }
+
+    private func runDetection(in session: MioSession) async -> (added: [MioSuggestion], outcome: MioOperationOutcome) {
+        guard !isDeletingAll, !sessionsBeingDeleted.contains(session.id), !Task.isCancelled else { return ([], .cancelled) }
         guard MioMaintenanceState.shared.beginWrite() else {
-            return (0, .conflict("Slutför den lokala dataåtgärden innan Mio-kommandon kan sparas."))
+            return ([], .conflict("Slutför den lokala dataåtgärden innan Mio-kommandon kan sparas."))
         }
         defer { MioMaintenanceState.shared.endWrite() }
         do {
-            let count = try await repository.detectSuggestions(in: session, now: .now)
+            let added = try await repository.detectNewSuggestions(in: session, now: .now)
             // Storage success is authoritative even if refreshing presentation fails.
             do { try await refresh() }
             catch { errorMessage = "Kommandona sparades, men listan kunde inte uppdateras. Försök läsa den igen." }
-            return (count, .success)
-        } catch is CancellationError { return (0, .cancelled) }
+            return (added, .success)
+        } catch is CancellationError { return ([], .cancelled) }
         catch {
             let message = "Kunde inte läsa lokala Mio-kommandon: \(error.localizedDescription)"
             errorMessage = message
-            return (0, .failure(message))
+            return ([], .failure(message))
         }
     }
 

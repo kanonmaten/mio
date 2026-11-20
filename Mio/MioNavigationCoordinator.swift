@@ -40,6 +40,9 @@ final class MioNavigationCoordinator {
         case .resumeListening:
             // Becoming active retries the microphone in MioViewModel; this only shows it.
             selectedTab = .capture
+        case .stillListening:
+            // The answer itself is handled by MioViewModel.confirmStillListening; this only shows it.
+            selectedTab = .capture
         }
     }
 

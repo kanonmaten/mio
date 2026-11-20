@@ -67,7 +67,7 @@ final class MioAnalysisTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json"))
-        let session = MioSession(transcripts: [TranscriptSegment(text: "Mio anteckna ett exempel", containsMio: true)], captureMode: .lesson)
+        let session = MioSession(transcripts: [TranscriptSegment(text: "Mio, notera ett exempel", containsMio: true)], captureMode: .lesson)
         let count = try await repository.detectSuggestions(in: session)
         XCTAssertEqual(count, 0)
         let decoded = try JSONDecoder().decode(MioSession.self, from: JSONEncoder().encode(session))

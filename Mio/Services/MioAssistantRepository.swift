@@ -108,6 +108,9 @@ actor MioAssistantRepository {
     func detectSuggestions(in session: MioSession, now: Date = .now) throws -> Int {
         try core.detectSuggestions(in: session, now: now)
     }
+    func detectNewSuggestions(in session: MioSession, now: Date) throws -> [MioSuggestion] {
+        try core.detectNewSuggestions(in: session, now: now)
+    }
     @discardableResult
     func applyAnalysis(_ result: MioAnalysisResult, request: MioAnalysisRequest, session: MioSession) throws -> Int {
         try core.applyAnalysis(result, request: request, session: session)
@@ -239,9 +242,14 @@ final class MioAssistantRepositoryCore {
 
     @discardableResult
     func detectSuggestions(in session: MioSession, now: Date = .now) throws -> Int {
-        guard !isDeleted(session), !session.isLesson else { return 0 }
+        try detectNewSuggestions(in: session, now: now).count
+    }
+
+    /// The proposals this call added, so the workflow can save direct instructions at once.
+    func detectNewSuggestions(in session: MioSession, now: Date = .now) throws -> [MioSuggestion] {
+        guard !isDeleted(session), !session.isLesson else { return [] }
         var document = try loadDocument()
-        var count = 0
+        var added: [MioSuggestion] = []
         for segment in session.transcripts {
             let source = MioProcessedSource(sessionID: session.id, segmentID: segment.id)
             guard !document.processedSources.contains(source) else { continue }
@@ -249,10 +257,10 @@ final class MioAssistantRepositoryCore {
             guard !suggestions.isEmpty else { continue }
             document.suggestions.append(contentsOf: suggestions)
             document.processedSources.insert(source)
-            count += suggestions.count
+            added += suggestions
         }
-        if count > 0 { try write(document) }
-        return count
+        if !added.isEmpty { try write(document) }
+        return added
     }
 
     @discardableResult

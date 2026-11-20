@@ -52,6 +52,9 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
     /// Set from 0.9.1: the item was handed to Apple's Calendar, Reminders or Notes and this is
     /// only its record in Mio, with no text and no date of its own (user decision 2026-10-13).
     var handoff: MioHandoff?
+    /// Saved straight from "Mio, kom ihåg/notera" (2026-11-20): a reminder record (with `handoff`)
+    /// or a Mio note that keeps its text here. Ångra is offered for 24 hours.
+    var direct: MioDirectRecord?
 
     init(
         id: UUID = UUID(),
@@ -64,7 +67,8 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
         completedAt: Date? = nil,
         sessionID: UUID? = nil,
         isAllDay: Bool? = nil,
-        handoff: MioHandoff? = nil
+        handoff: MioHandoff? = nil,
+        direct: MioDirectRecord? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -77,6 +81,7 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
         self.sessionID = sessionID
         self.isAllDay = (kind == .task || kind == .plan) && isAllDay == true ? true : nil
         self.handoff = handoff
+        self.direct = direct
     }
 
     var isCompleted: Bool {

@@ -76,12 +76,14 @@ enum MioReminderError: Error, LocalizedError, Equatable {
     case accessDenied
     case unavailable
     case saveFailed
+    case removeFailed
 
     var errorDescription: String? {
         switch self {
         case .accessDenied: MioReminderPort.deniedMessage
         case .unavailable: "Påminnelser är inte tillgängligt på den här enheten."
         case .saveFailed: "Påminnelsen kunde inte sparas. Förslaget ligger kvar."
+        case .removeFailed: "Påminnelsen kunde inte tas bort. Försök igen."
         }
     }
 }
@@ -101,13 +103,17 @@ struct MioReminderPort {
     var save: @MainActor (MioReminderDraft) async throws -> String
     /// Unfinished reminders due in the interval, plus overdue ones, for Hem.
     var upcoming: @MainActor (DateInterval) async -> [MioReminderSummary]
+    /// Ångra for a direct instruction (2026-11-20): removes the reminder Mio created. A reminder
+    /// that is already gone counts as removed.
+    var remove: @MainActor (String) async throws -> Void = { _ in throw MioReminderError.unavailable }
 
     static var native: Self {
         #if canImport(EventKit) && os(iOS)
         let store = MioReminderStore.shared
         return Self(access: { store.access }, requestAccess: { await store.requestAccess() },
                     lists: { store.lists() }, defaultListID: { store.defaultListID() },
-                    save: { try await store.save($0) }, upcoming: { await store.upcoming(in: $0) })
+                    save: { try await store.save($0) }, upcoming: { await store.upcoming(in: $0) },
+                    remove: { try store.remove(identifier: $0) })
         #else
         return unavailable
         #endif

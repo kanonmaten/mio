@@ -76,7 +76,7 @@ struct MioListeningBar: View {
     private var title: String {
         switch model.runState {
         case .listening: model.isLessonActive ? "Lektion" : "Lyssnar"
-        case .paused: "Pausad"
+        case .paused: model.automaticPause?.shortTitle ?? "Pausad"
         case .interrupted: "Avbruten, fortsätter snart"
         case .preparing: "Startar"
         case .stopping: "Stänger"

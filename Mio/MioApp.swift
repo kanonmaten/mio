@@ -37,7 +37,8 @@ struct MioApp: App {
         _workflow = State(initialValue: workflow)
         _navigation = State(initialValue: navigation)
         _day = State(initialValue: day)
-        MioSystemServices.shared.configureNotificationRouting { navigation.receive($0) }
+        MioSystemServices.shared.configureNotificationRouting({ navigation.receive($0) },
+                                                              stillListening: { capture.confirmStillListening() })
         MioMetricKitSubscriber.shared.start()
         // Lock Screen presence: Live Activity with App Intent controls, and iOS's own
         // progress UI for lesson notes that continue after the user leaves the app.
@@ -57,6 +58,11 @@ struct MioApp: App {
         capture.onResumeNotice = { notice in
             Task { await MioSystemServices.shared.handleResumeNotice(notice) }
         }
+        capture.onSilenceNotice = { notice in
+            Task { await MioSystemServices.shared.handleSilenceNotice(notice) }
+        }
+        capture.batteryStatus = { MioDeviceSignals.batteryStatus() }
+        capture.directFeedback = { MioDirectHaptics.play($0) }
     }
 
     var body: some Scene {

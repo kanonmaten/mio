@@ -775,6 +775,9 @@ actor MioSwiftDataAssistantRepository: MioAssistantStore {
     func detectSuggestions(in session: MioSession, now: Date) throws -> Int {
         try core.detectSuggestions(in: session, now: now)
     }
+    func detectNewSuggestions(in session: MioSession, now: Date) throws -> [MioSuggestion] {
+        try core.detectNewSuggestions(in: session, now: now)
+    }
     @discardableResult
     func applyAnalysis(_ result: MioAnalysisResult, request: MioAnalysisRequest, session: MioSession) throws -> Int {
         try core.applyAnalysis(result, request: request, session: session)

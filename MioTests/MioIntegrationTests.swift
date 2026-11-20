@@ -151,7 +151,7 @@ final class MioIntegrationTests: XCTestCase {
         )
         let lateProposal = await assistant.propose(text: "Får inte återskapas", kind: .task)
         let lateDetection = await assistant.detectSuggestions(in: MioSession(transcripts: [
-            TranscriptSegment(text: "Mio, anteckna sen text", containsMio: true)
+            TranscriptSegment(text: "Mio, notera sen text", containsMio: true)
         ]))
         XCTAssertFalse(lateSave)
         XCTAssertFalse(lateProposal)

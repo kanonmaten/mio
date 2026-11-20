@@ -80,6 +80,8 @@ struct ContentView: View {
             MioKeychainAccess.migrateOnce()
             await workflow.bootstrap()
             storesLoaded = true
+            // Everyday transcripts older than 30 days go at launch (and in the background below).
+            await workflow.pruneExpiredEverydaySessions()
             followDayPhase()
             resolveNotificationRoute()
             resolveLink()
@@ -87,6 +89,7 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase) { _, newPhase in
             model.handleScenePhase(newPhase)
+            if newPhase == .background, storesLoaded { Task { await workflow.pruneExpiredEverydaySessions() } }
             if newPhase == .active { day.refresh(); followDayPhase(); resolveNotificationRoute(); resolveLink(); resumeAI() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in day.refresh() }
@@ -459,7 +462,7 @@ private struct LiveTranscriptCard: View {
                 }
 
                 Label(
-                    "Mio upptäckt \(session.mioDetectionCount) \(session.mioDetectionCount == 1 ? "gång" : "gånger")",
+                    "”Mio, kom ihåg/notera” \(session.mioDetectionCount) \(session.mioDetectionCount == 1 ? "gång" : "gånger")",
                     systemImage: session.mioDetectionCount > 0 ? "checkmark.circle.fill" : "ear"
                 )
                 .font(.subheadline.weight(.semibold))
@@ -512,9 +515,9 @@ private struct EvidenceCard: View {
                 )
                 Divider()
                 EvidenceRow(
-                    title: "Ordet Mio upptäckt",
+                    title: "Mio, kom ihåg/notera upptäckt",
                     passed: session.mioDetectionCount > 0,
-                    pendingText: "Säg Mio tydligt i en mening"
+                    pendingText: "Börja en mening med ”Mio, kom ihåg” eller ”Mio, notera”"
                 )
                 Divider()
                 EvidenceRow(
@@ -703,8 +706,8 @@ private struct FirstRunCard: View {
         Card(title: "Börja med Mio", symbol: "1.circle") {
             VStack(alignment: .leading, spacing: 9) {
                 Text("1. Para datorn under Inställningar → Parning. Starta sedan Mio och tillåt mikrofonen.")
-                Text("2. Säg svenska meningar och ordet Mio.")
-                Text("3. Prova ‘Mio, anteckna att vi arbetar med procent’. Granska förslaget på Hem och välj Ja, Nej eller Inte nu.")
+                Text("2. Säg några svenska meningar.")
+                Text("3. Prova ”Mio, notera att vi arbetar med procent”. Två korta vibrationer betyder att det sparats; du hittar det under Förslag och kan ångra i 24 timmar.")
                 Text("4. Använd Starta lektion för lektionsläge. Historik och råtext finns under Lektioner.")
                 Text("5. Hem visar veckan, nästa påminnelse och dagens att göra. Från kl. 17 visar Hem vad du gjort.")
             }

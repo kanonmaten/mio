@@ -18,6 +18,9 @@ enum MioNotificationRoute: Equatable, Sendable {
     /// Fallback when iOS refused to restart the microphone in the background. Opening the
     /// app is what resumes listening; the route itself only selects the capture tab.
     case resumeListening
+    /// "Lyssnar Mio fortfarande?" after 20 minutes without speech. Ja keeps listening without
+    /// restarting the microphone; opening the notification also counts as Ja and shows Fånga.
+    case stillListening
 
     init?(userInfo: [AnyHashable: Any]) {
         guard let name = userInfo["mioRoute"] as? String else { return nil }
@@ -35,6 +38,9 @@ enum MioNotificationRoute: Equatable, Sendable {
         case "resumeListening":
             guard userInfo.count == 1 else { return nil }
             self = .resumeListening
+        case "stillListening":
+            guard userInfo.count == 1 else { return nil }
+            self = .stillListening
         default: return nil
         }
     }
@@ -45,6 +51,7 @@ enum MioNotificationRoute: Equatable, Sendable {
         case .morning: ["mioRoute": "morning"]
         case .evening: ["mioRoute": "evening"]
         case .resumeListening: ["mioRoute": "resumeListening"]
+        case .stillListening: ["mioRoute": "stillListening"]
         }
     }
 
@@ -54,6 +61,7 @@ enum MioNotificationRoute: Equatable, Sendable {
         case .morning: "Din morgonöversikt finns i Mio. Öppna appen när det passar."
         case .evening: "Din kvällsöversikt finns i Mio. Öppna appen när det passar."
         case .resumeListening: "Tryck för att fortsätta lyssna."
+        case .stillListening: "Inget tal på 20 minuter. Svara Ja för att fortsätta lyssna. Annars pausar Mio om fem minuter."
         }
     }
 }

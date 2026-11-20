@@ -8,7 +8,12 @@ import UIKit
 @Observable
 final class MioViewModel {
     var runState: MioRunState = .off {
-        didSet { if oldValue != runState { onCaptureStateChanged?(runState) } }
+        didSet {
+            guard oldValue != runState else { return }
+            // Listening (re)started: the silence clock counts from now, never from before a pause.
+            if runState == .listening { silenceWatch.reset(at: .now) }
+            onCaptureStateChanged?(runState)
+        }
     }
     private(set) var stateRevision: UInt64 = 0
     @ObservationIgnored var onCaptureStateChanged: ((MioRunState) -> Void)?
@@ -48,6 +53,17 @@ final class MioViewModel {
     @ObservationIgnored var onLessonFinished: ((MioSession) -> Void)?
     /// Local-notification fallback when iOS refuses a background microphone restart.
     @ObservationIgnored var onResumeNotice: ((MioResumeNotice) -> Void)?
+    /// "Lyssnar Mio fortfarande?" after 20 minutes without speech in everyday capture.
+    @ObservationIgnored var onSilenceNotice: ((MioSilenceNotice) -> Void)?
+    /// Two short or one long vibration after "Mio, kom ihåg/notera"; the app sets the native player.
+    @ObservationIgnored var directFeedback: @MainActor (MioDirectFeedback) -> Void = { _ in }
+    /// Level, charging and Low Power Mode; the app sets the native reader.
+    @ObservationIgnored var batteryStatus: @MainActor () -> MioBatteryStatus = { .unknown }
+    /// Why Mio paused everyday capture by itself; cleared when she starts, pauses or stops.
+    private(set) var automaticPause: MioAutomaticPause?
+    @ObservationIgnored private var batteryGuard = MioBatteryGuard()
+    @ObservationIgnored private var silenceWatch = MioSilenceWatch()
+    @ObservationIgnored private var automaticPauseInProgress = false
     @ObservationIgnored var isAppActive: @MainActor () -> Bool = { UIApplication.shared.applicationState == .active }
 
     @ObservationIgnored private let diagnostics: MioDiagnosticsRepository
@@ -211,6 +227,9 @@ final class MioViewModel {
                 || runState == .failed
                 || runState == .unavailable
         else { return }
+        automaticPause = nil
+        // Her own start of everyday capture wins over the battery rule until it has cleared.
+        if !isLessonActive { batteryGuard.userStartedEveryday(with: batteryStatus()) }
         preparationCancellationRequested = false
         startupTask?.cancel()
         let taskID = UUID()
@@ -462,6 +481,8 @@ final class MioViewModel {
         activePipelineID = nil
 
         onResumeNotice?(.withdraw)
+        onSilenceNotice?(.withdraw)
+        automaticPause = nil
         if let endedID = currentSession?.id { releaseServerSession(endedID) }
         sampleBattery(reason: "Slutvärde för batteriet")
         finishCurrentSession(message: "Sessionen stoppades av användaren.")
@@ -494,6 +515,8 @@ final class MioViewModel {
         runState = .paused
         liveTranscript = ""
         onResumeNotice?(.withdraw)
+        onSilenceNotice?(.withdraw)
+        automaticPause = nil
         if let interval = length.interval {
             let resumeDate = Date.now.addingTimeInterval(interval)
             pauseUntil = resumeDate
@@ -803,6 +826,8 @@ final class MioViewModel {
     ) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // Any recognised speech, live or final, restarts the silence clock.
+        silenceWatch.reset(at: .now)
 
         if isFinal {
             liveTranscript = ""
@@ -841,11 +866,15 @@ final class MioViewModel {
                 currentSession?.events.append(
                     DiagnosticEvent(
                         kind: .wakeWord,
-                        message: "Ordet Mio upptäcktes lokalt i texten från den privata transkriptionsservern."
+                        message: "Ett direkt tilltal (Mio, kom ihåg/notera) upptäcktes lokalt i texten från den privata transkriptionsservern."
                     )
                 )
-                if UIApplication.shared.applicationState == .active {
-                    MioFeedback.success()
+                // Saved instructions vibrate from the workflow once stored. Here only the case
+                // where nothing after the wake phrase could be used: one long vibration. Lessons
+                // take no direct instructions and never vibrate.
+                if currentSession?.isLesson != true,
+                   MioDirectCommandGrammar.parse(trimmed).allSatisfy({ $0 == .notUnderstood }) {
+                    directFeedback(.notUnderstood)
                 }
             }
             persistSoon()
@@ -1071,6 +1100,48 @@ final class MioViewModel {
         return token
     }
 
+    /// Battery rule and silence check for everyday capture, run every second by the clock.
+    /// Lessons are never paused by either (user decision 2026-11-19). An automatic pause is an
+    /// ordinary pause: the microphone never restarts by itself afterwards.
+    func evaluateAutomaticPause(now: Date = .now) {
+        guard !automaticPauseInProgress, !isSwitchingCaptureMode, currentSession?.endedAt == nil else { return }
+        let listening = runState == .listening
+        if let reason = batteryGuard.evaluate(batteryStatus(), isLesson: isLessonActive, isListening: listening) {
+            pauseAutomatically(reason)
+            return
+        }
+        guard listening, !isLessonActive else { return }
+        switch silenceWatch.evaluate(now: now) {
+        case .none: break
+        case .ask:
+            appendEvent(kind: .info, message: "20 minuter utan tal. En notis frågar om Mio ska fortsätta lyssna.")
+            onSilenceNotice?(.post)
+        case .pause:
+            pauseAutomatically(.silence)
+        }
+    }
+
+    /// Ja on "Lyssnar Mio fortfarande?": keeps listening without touching the microphone.
+    func confirmStillListening() {
+        onSilenceNotice?(.withdraw)
+        guard runState == .listening, !isLessonActive else { return }
+        silenceWatch.reset(at: .now)
+        appendEvent(kind: .info, message: "Användaren svarade Ja på notisen. Mio fortsätter lyssna.")
+    }
+
+    private func pauseAutomatically(_ reason: MioAutomaticPause) {
+        automaticPauseInProgress = true
+        Task { [weak self] in
+            guard let self else { return }
+            defer { self.automaticPauseInProgress = false }
+            await self.pause(.untilResumed)
+            guard self.runState == .paused else { return }
+            self.automaticPause = reason
+            self.statusMessage = reason.message
+            self.appendEvent(kind: .info, message: reason.eventMessage)
+        }
+    }
+
     private func registerBatteryObservers() {
         let center = NotificationCenter.default
         for name in [UIDevice.batteryLevelDidChangeNotification, UIDevice.batteryStateDidChangeNotification] {
@@ -1103,6 +1174,7 @@ final class MioViewModel {
                 if shouldSampleBattery {
                     self.sampleBattery(reason: "Periodiskt batterivärde")
                 }
+                self.evaluateAutomaticPause()
             }
         }
     }

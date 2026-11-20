@@ -3,6 +3,7 @@ import UIKit
 
 /// Förslag (0.9.1): proposals waiting for Ja, Nej or Inte nu, then what was handed to Apple's
 /// apps. Nothing is created here by hand; write in Calendar, Reminders or Notes directly.
+/// From 2026-11-20 also what "Mio, kom ihåg/notera" saved straight away, with Ångra for 24 hours.
 struct SuggestionInboxView: View {
     @Environment(MioAssistantViewModel.self) private var assistant
     @Environment(MioWorkflowCoordinator.self) private var workflow
@@ -10,19 +11,35 @@ struct SuggestionInboxView: View {
     let sessionModel: MioViewModel
     @State private var pendingDeletion: MioContentItem?
     @State private var deletionOutcome: MioOperationOutcome?
+    @State private var undoOutcome: MioOperationOutcome?
+    @State private var undoing: UUID?
 
     var body: some View {
         List {
             Section {
-                Text("Inget skickas till Kalender, Påminnelser eller Anteckningar förrän du väljer Ja. Inte nu behåller förslaget här. Nej tar bort förslaget; originaltranskriptet påverkas inte.")
+                Text("Förslag som Mio hittar skickas inte förrän du väljer Ja. Det du säger efter ”Mio, kom ihåg” eller ”Mio, notera” räknas som ett Ja och sparas direkt; du kan ångra det i 24 timmar. Kalenderhändelser väntar alltid här. Nej tar bort förslaget; originaltranskriptet påverkas inte.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             if assistant.suggestions.isEmpty {
-                ContentUnavailableView("Inga väntande förslag", systemImage: "checkmark.bubble", description: Text("När AI är på kommer förslag ur vanliga samtal hit, liksom lokala Mio-kommandon."))
+                ContentUnavailableView("Inga väntande förslag", systemImage: "checkmark.bubble", description: Text("När AI är på kommer förslag ur vanliga samtal hit. Kalenderhändelser du säger till Mio väntar också här."))
             }
             suggestionSection("Att granska", state: .pending)
             suggestionSection("Inte nu", state: .deferred)
+            if !direct.isEmpty {
+                Section {
+                    ForEach(direct) { item in
+                        directRow(item)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) { pendingDeletion = item } label: { Label("Glöm", systemImage: "trash") }
+                            }
+                    }
+                } header: {
+                    Text("Sparat med rösten")
+                } footer: {
+                    Text("”Mio, kom ihåg” hamnar i Påminnelser och ”Mio, notera” sparas här som en Mio-anteckning. Ångra tar bort det helt och går att använda i 24 timmar.")
+                }
+            }
             if !sent.isEmpty {
                 Section {
                     ForEach(sent) { item in
@@ -55,7 +72,16 @@ struct SuggestionInboxView: View {
         } message: {
             if let item = pendingDeletion, let handoff = item.handoff {
                 Text("Posten i \(handoff.destination.title) finns kvar. Bara Mios notering försvinner.")
+            } else if pendingDeletion != nil {
+                Text("Mio-anteckningen raderas.")
             }
+        }
+        .alert("Kunde inte ångra", isPresented: Binding(
+            get: { undoOutcome?.message != nil }, set: { if !$0 { undoOutcome = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(undoOutcome?.message ?? "Försök igen.")
         }
         .alert("Kunde inte glömma posten", isPresented: Binding(
             get: { deletionOutcome?.message != nil }, set: { if !$0 { deletionOutcome = nil } }
@@ -67,8 +93,45 @@ struct SuggestionInboxView: View {
     }
 
     private var sent: [MioContentItem] {
-        contentModel.items.filter { $0.handoff != nil }
+        contentModel.items.filter { $0.handoff != nil && $0.direct == nil }
             .sorted { ($0.handoff?.sentAt ?? .distantPast) > ($1.handoff?.sentAt ?? .distantPast) }
+    }
+
+    private var direct: [MioContentItem] {
+        contentModel.items.filter { $0.direct != nil }
+            .sorted { ($0.direct?.savedAt ?? .distantPast) > ($1.direct?.savedAt ?? .distantPast) }
+    }
+
+    /// A plain row, no navigation, so the Ångra button is the only thing to tap. A Mio note shows
+    /// its whole text, which can be selected and copied.
+    @ViewBuilder
+    private func directRow(_ item: MioContentItem) -> some View {
+        let destination = item.direct?.destination ?? .mioNote
+        VStack(alignment: .leading, spacing: 6) {
+            Label("\(destination.title) · \((item.direct?.savedAt ?? item.createdAt).formatted(date: .abbreviated, time: .shortened))",
+                  systemImage: destination == .reminders ? "checklist" : "note.text")
+                .font(.caption).foregroundStyle(.secondary)
+            Text(item.title).font(.headline).textSelection(.enabled)
+            if !item.body.isEmpty {
+                Text(item.body).font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            if item.direct?.canUndo(at: .now) == true {
+                Button(undoing == item.id ? "Ångrar …" : "Ångra") { undo(item) }
+                    .buttonStyle(.bordered)
+                    .disabled(undoing != nil)
+                    .accessibilityHint(destination == .reminders ? "Tar bort påminnelsen ur Påminnelser" : "Raderar Mio-anteckningen")
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func undo(_ item: MioContentItem) {
+        undoing = item.id
+        Task {
+            let result = await workflow.undoDirect(id: item.id)
+            undoing = nil
+            if !result.isSuccess { undoOutcome = result }
+        }
     }
 
     @ViewBuilder
@@ -99,7 +162,8 @@ struct SuggestionInboxView: View {
                         }
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
-                            Label(suggestion.purpose == .question ? "Fråga till AI" : suggestion.kind.title,
+                            Label(suggestion.purpose == .question ? "Fråga till AI"
+                                    : suggestion.direct != nil ? "\(suggestion.kind.title), sagt till Mio" : suggestion.kind.title,
                                   systemImage: suggestion.purpose == .question ? "questionmark.bubble" : suggestion.kind.symbolName)
                                 .font(.caption).foregroundStyle(.secondary)
                             Text(suggestion.title)
@@ -229,7 +293,9 @@ private struct SuggestionReviewView: View {
         _date = State(initialValue: suggestion.scheduledAt)
         _isAllDay = State(initialValue: suggestion.isAllDay == true)
         // A proposal from AI without a safe day has no due date until the user picks one.
-        _hasDueDate = State(initialValue: suggestion.evidence != nil && suggestion.needsDateConfirmation != true)
+        // A day she said herself after "Mio, kom ihåg" is kept as the due date.
+        _hasDueDate = State(initialValue: (suggestion.evidence != nil && suggestion.needsDateConfirmation != true)
+                            || suggestion.direct?.hasDate == true)
         _reviewedRevision = State(initialValue: suggestion.reviewRevision)
         _reviewedSuggestion = State(initialValue: suggestion)
     }
@@ -589,14 +655,20 @@ struct MioGuideView: View {
                 Text("Mio fångar och föreslår; Apples appar sparar. Godkänner du ett förslag hamnar en händelse i Kalender, en att göra-post i Påminnelser och en anteckning eller ett minne i Anteckningar.")
                 Text("Para din dator under Inställningar → Parning: kör mio-pair på datorn och skanna QR-koden. Starta Mio skickar ljud till din dator för svensk text. Starta Mio för vardagslyssning. Starta lektion pausar vardags-Mio och samlar lektionsunderlag separat. Paus och stopp stänger mikrofonen. Historik och rättningar finns under Lektioner → Historik och råtext.")
             }
-            Section("Tilltala Mio") {
-                Text("Mio, anteckna att vi arbetar med procent.")
-                Text("Mio, påminn mig att ta med boken.")
-                Text("Mio, planera tandläkaren.")
-                Text("Mio, kom ihåg att jag föredrar blå pennor.")
-                Text("Mio, fråga varför himlen är blå.")
-                Text("Använd kommandot i början av en mening. Granska sedan förslaget under Förslag: kontrollera typ, text och tid. Lokala kommandon tolkar inte datum; även AI-tolkade tider måste granskas. Vibration ges när Mio upptäcks i förgrunden; i bakgrunden kan du behöva öppna appen för att se frågor.")
+            Section("Säg till Mio") {
+                Text("Mio, kom ihåg att köpa mjölk.")
+                Text("Mio, kom ihåg att lämna in uppsatsen på fredag.")
+                Text("Mio, notera att provet gäller kapitel tre.")
+                Text("Mio, kom ihåg tandläkaren i morgon klockan 14 hos Folktandvården.")
+                Text("Börja meningen med ”Mio, kom ihåg” eller ”Mio, notera”. Bara ”Mio” räcker inte. ”Kom ihåg” sparas direkt i Påminnelser, med datum om du säger en dag (i dag, i morgon, på fredag) och en notis om du säger en tid. ”Notera” sparas som en Mio-anteckning under Förslag. Säger du både tid och plats väntar det som en händelse under Förslag, och Ja öppnar Kalender. Ångra finns under Förslag i 24 timmar.")
                     .font(.footnote).foregroundStyle(.secondary)
+                Text("Två korta vibrationer betyder sparat. En lång betyder att Mio inte förstod eller inte kunde spara; titta då under Förslag. Det AI hittar i vanliga samtal vibrerar aldrig. Under en lektion tar Mio inte emot sådant. Frågor till AI ställer du med Fråga Mio.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            Section("Batteri, tystnad och lagring") {
+                Text("Under 20 % batteri eller i strömsparläge pausar vardags-Mio och visar varför. Tryck Fortsätt för att lyssna ändå; då pausar Mio inte igen förrän batteriet har varit över 20 % eller laddats. Lektioner pausas aldrig av batteriet.")
+                Text("Efter 20 minuter utan tal frågar en notis ”Lyssnar Mio fortfarande?”. Svarar du Ja fortsätter Mio. Annars pausar Mio efter fem minuter till, och startar inte igen av sig själv.")
+                Text("Vardagstranskript raderas efter 30 dagar. Lektioner, anteckningar och det du sagt Ja till sparas.")
             }
             Section("Planera dagen") {
                 Text("Ja på en händelse öppnar Kalenders egen ruta, där du väljer kalender och notis. Ja på en att göra-post skapar den i Påminnelser, i den lista du väljer. Ändra och bocka av där; Mio skriver aldrig över dina poster.")

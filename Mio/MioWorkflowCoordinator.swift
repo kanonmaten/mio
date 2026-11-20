@@ -137,7 +137,8 @@ final class MioWorkflowCoordinator {
     func removeLegacyItemsOnce() async {
         guard !pendingLessonDefaults.bool(forKey: Self.legacyCleanupKey), await storesAreDurable() else { return }
         guard let items = try? await content.latestItems() else { return }
-        for item in items where item.handoff == nil {
+        // Mio notes from a direct instruction (2026-11-20) are kept.
+        for item in items where item.handoff == nil && item.direct == nil {
             guard await content.deleteOutcome(id: item.id, cancelSystem: false).isSuccess else { return }
         }
         guard await systemActions.removeLegacy().isSuccess else { return }
@@ -184,6 +185,16 @@ final class MioWorkflowCoordinator {
                           body: String, scheduledAt: Date, dateConfirmed: Bool, dateChosen: Bool,
                           isAllDay: Bool = false) async -> MioOperationOutcome {
         await enqueue { [self] in
+            await performAccept(id: id, expectedRevision: expectedRevision, kind: kind, title: title, body: body,
+                                scheduledAt: scheduledAt, dateConfirmed: dateConfirmed, dateChosen: dateChosen, isAllDay: isAllDay)
+        }
+    }
+
+    /// The body of `acceptSuggestion`, for callers already inside the command queue.
+    private func performAccept(id: UUID, expectedRevision: Int, kind: MioContentKind, title: String,
+                               body: String, scheduledAt: Date, dateConfirmed: Bool, dateChosen: Bool,
+                               isAllDay: Bool, direct: MioDirectRecord? = nil) async -> MioOperationOutcome {
+        do {
             var claim: MioSuggestionApprovalClaim?
             do {
                 try Task.checkCancellation()
@@ -207,7 +218,8 @@ final class MioWorkflowCoordinator {
                 let item = MioContentItem(id: id, kind: kind, title: cleanTitle, body: body,
                     createdAt: suggestion.createdAt, updatedAt: .now,
                     scheduledAt: allDay ? Calendar.current.startOfDay(for: scheduledAt) : scheduledAt,
-                    sessionID: suggestion.sessionID.flatMap { capture.session(id: $0)?.id }, isAllDay: allDay)
+                    sessionID: suggestion.sessionID.flatMap { capture.session(id: $0)?.id }, isAllDay: allDay,
+                    direct: direct)
                 let saved = await content.saveApproved(item)
                 guard saved.isSuccess else {
                     // A privacy-attribute failure may follow an atomic content commit.
@@ -267,6 +279,15 @@ final class MioWorkflowCoordinator {
     private func approveHandoff(id: UUID, expectedRevision: Int?, title: String, kind: MioContentKind,
                                 perform: @escaping @MainActor (MioSuggestion, String) async throws -> MioHandoff) async -> MioOperationOutcome {
         await enqueue { [self] in
+            await performHandoff(id: id, expectedRevision: expectedRevision, title: title, kind: kind, perform: perform)
+        }
+    }
+
+    /// The body of `approveHandoff`, for callers already inside the command queue.
+    private func performHandoff(id: UUID, expectedRevision: Int?, title: String, kind: MioContentKind,
+                                direct: MioDirectRecord? = nil,
+                                perform: @MainActor (MioSuggestion, String) async throws -> MioHandoff) async -> MioOperationOutcome {
+        do {
             var claim: MioSuggestionApprovalClaim?
             do {
                 try Task.checkCancellation()
@@ -284,7 +305,8 @@ final class MioWorkflowCoordinator {
                 // The record keeps no text and no date: Apple's app owns both from now on.
                 let item = MioContentItem(id: id, kind: kind, title: cleanTitle, createdAt: suggestion.createdAt,
                     updatedAt: handoff.sentAt, scheduledAt: handoff.sentAt,
-                    sessionID: suggestion.sessionID.flatMap { capture.session(id: $0)?.id }, handoff: handoff)
+                    sessionID: suggestion.sessionID.flatMap { capture.session(id: $0)?.id }, handoff: handoff,
+                    direct: direct.map { MioDirectRecord(destination: $0.destination, savedAt: handoff.sentAt) })
                 let saved = await content.saveApproved(item)
                 guard saved.isSuccess else {
                     if try await content.latestItems().contains(where: { $0.id == id }) {
@@ -310,7 +332,100 @@ final class MioWorkflowCoordinator {
     }
 
     func rejectSuggestion(id: UUID) async -> MioOperationOutcome {
-        await enqueue { [assistant] in await assistant.rejectSuggestionOutcome(id: id) }
+        let fromDirect = assistant.suggestions.first { $0.id == id }?.direct != nil
+        let outcome = await enqueue { [assistant] in await assistant.rejectSuggestionOutcome(id: id) }
+        // Text-free count of Nej on direct instructions, to see whether the phrases misfire.
+        if fromDirect, outcome.isSuccess { MioDirectNoteTally.record(.rejected, in: pendingLessonDefaults) }
+        return outcome
+    }
+
+    /// Ångra for a direct instruction within 24 hours: the reminder is removed from Reminders
+    /// (or the Mio note from Mio) and nothing is left under Förslag. After 24 hours the item
+    /// stays and this refuses.
+    func undoDirect(id: UUID, now: Date = .now) async -> MioOperationOutcome {
+        let removal = await enqueue { [self] in
+            guard let item = try? await content.latestItems().first(where: { $0.id == id }), let direct = item.direct else {
+                return .conflict("Posten finns inte längre.")
+            }
+            guard direct.canUndo(at: now) else { return .conflict("Ångra går bara i 24 timmar. Posten finns kvar.") }
+            if let handoff = item.handoff, handoff.destination == .reminders, let identifier = handoff.externalIdentifier {
+                do { try await reminders.remove(identifier) }
+                catch MioReminderError.accessDenied {
+                    return .failure("Mio behöver åtkomst till Påminnelser för att ta bort påminnelsen. Tillåt det i Inställningar → Mio → Påminnelser.")
+                } catch {
+                    return .failure("Påminnelsen kunde inte tas bort. Försök igen.")
+                }
+            }
+            return .success
+        }
+        guard removal.isSuccess else { return removal }
+        // The ordinary deletion: its journal and the item's system actions, never the transcript.
+        let deleted = await deleteContent(id: id)
+        if deleted.isSuccess { MioDirectNoteTally.record(.undone, in: pendingLessonDefaults) }
+        return deleted
+    }
+
+    /// Saves proposals that came from "Mio, kom ihåg/notera" straight away, since a direct
+    /// instruction counts as Yes (rule changed with the user's approval 2026-11-20): Reminders
+    /// for "kom ihåg", a Mio note for "notera". A calendar event is never saved silently; it
+    /// waits under Förslag. Anything that cannot be saved (for example without access to
+    /// Reminders) also stays under Förslag, so nothing is lost. Runs inside the command queue.
+    private func saveDirectCommands(_ suggestions: [MioSuggestion]) async -> MioDirectFeedback? {
+        guard !suggestions.isEmpty else { return nil }
+        var allSaved = true
+        for suggestion in suggestions {
+            guard let origin = suggestion.direct else { continue }
+            let record = MioDirectRecord(destination: origin.destination, savedAt: .now)
+            let outcome: MioOperationOutcome
+            switch origin.destination {
+            case .calendar:
+                MioDirectNoteTally.record(.waiting, in: pendingLessonDefaults)
+                continue
+            case .mioNote:
+                outcome = await performAccept(id: suggestion.id, expectedRevision: suggestion.reviewRevision, kind: .note,
+                    title: suggestion.title, body: suggestion.body, scheduledAt: suggestion.scheduledAt,
+                    dateConfirmed: false, dateChosen: false, isAllDay: false, direct: record)
+            case .reminders:
+                let appIsActive = capture.isAppActive()
+                outcome = await performHandoff(id: suggestion.id, expectedRevision: suggestion.reviewRevision,
+                                               title: suggestion.title, kind: .task, direct: record) { [reminders] proposal, cleanTitle in
+                    // iOS can only ask for access on screen; from the background the proposal waits.
+                    if reminders.access() == .notDetermined, appIsActive { _ = await reminders.requestAccess() }
+                    guard reminders.access() == .granted else { throw MioReminderError.accessDenied }
+                    let due: Date? = origin.hasDate
+                        ? (origin.hasTime ? proposal.scheduledAt : Calendar.current.startOfDay(for: proposal.scheduledAt)) : nil
+                    let draft = MioReminderDraft(title: cleanTitle, notes: proposal.body,
+                        url: proposal.sessionID.flatMap { MioLink.session($0, proposal: proposal.id) } ?? MioLink.proposal(proposal.id),
+                        dueDate: due, hasTime: due != nil && origin.hasTime,
+                        listID: UserDefaults.standard.string(forKey: MioReminderPort.lastListKey))
+                    let identifier = try await reminders.save(draft)
+                    return MioHandoff(destination: .reminders, externalIdentifier: identifier, sentAt: .now)
+                }
+            }
+            if outcome.isSuccess {
+                MioDirectNoteTally.record(.saved, in: pendingLessonDefaults)
+            } else {
+                allSaved = false
+                MioDirectNoteTally.record(.waiting, in: pendingLessonDefaults)
+            }
+        }
+        return allSaved ? .saved : .notUnderstood
+    }
+
+    /// Everyday transcripts older than 30 days are deleted (see `MioRetentionPolicy`). Runs at
+    /// launch and when the app goes to the background; does nothing when nothing has expired.
+    @discardableResult
+    func pruneExpiredEverydaySessions(now: Date = .now) async -> Int {
+        guard !maintenance.recoveryBlocked, await storesAreDurable(),
+              let document = try? await assistant.latestDocument() else { return 0 }
+        let expired = MioRetentionPolicy.expiredEverydaySessionIDs(capture.allSessions,
+            lessonSessionIDs: Set(document.lessons.map(\.sessionID)), now: now)
+        var deleted = 0
+        for id in expired {
+            guard await deleteSession(id: id).isSuccess else { break }
+            deleted += 1
+        }
+        return deleted
     }
 
     func deferSuggestion(id: UUID) async -> MioOperationOutcome {
@@ -459,7 +574,10 @@ final class MioWorkflowCoordinator {
             let outcome = await deletion.begin(scope: scope, targetID: targetID)
             maintenance.setRecoveryBlocked(!outcome.isSuccess)
             if outcome.isSuccess {
-                if scope == .all { pendingLessonIDs = []; storePendingLessons(); storeLessonNotes([]) }
+                if scope == .all {
+                    pendingLessonIDs = []; storePendingLessons(); storeLessonNotes([])
+                    MioDirectNoteTally.reset(in: pendingLessonDefaults)
+                }
                 else if scope == .session, let targetID { clearLessonPending(targetID) }
                 // Invalidation cancelled queued automatic work; surviving lessons are retried.
                 resumePendingLessons()
@@ -519,7 +637,10 @@ final class MioWorkflowCoordinator {
                 guard let self else { return }
                 _ = await enqueue { [self] in
                     guard self.capture.session(id: session.id) != nil, !self.maintenance.recoveryBlocked else { return .cancelled }
-                    return await self.assistant.detectSuggestionsOutcome(in: session)
+                    let detection = await self.assistant.detectDirectCommands(in: session)
+                    // Vibrate only after direct address, never for proposals AI picks up.
+                    if let feedback = await self.saveDirectCommands(detection.direct) { self.capture.directFeedback(feedback) }
+                    return detection.outcome
                 }
             }
         }

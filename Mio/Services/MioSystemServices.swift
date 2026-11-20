@@ -43,10 +43,16 @@ final class MioSystemServices {
         (UserDefaults.standard.stringArray(forKey: "mio.alarm.identities") ?? []).compactMap(UUID.init(uuidString:))
     )
 
-    func configureNotificationRouting(_ receive: @escaping @MainActor @Sendable (MioNotificationRoute) -> Void) {
-        let delegate = MioNotificationDelegate(receive: receive)
+    func configureNotificationRouting(_ receive: @escaping @MainActor @Sendable (MioNotificationRoute) -> Void,
+                                      stillListening: @escaping @MainActor @Sendable () -> Void = {}) {
+        let delegate = MioNotificationDelegate(receive: receive, stillListening: stillListening)
         notificationDelegate = delegate
         notificationCenter.delegate = delegate
+        // Ja answers "Lyssnar Mio fortfarande?" from the notification itself, without opening Mio.
+        let yes = UNNotificationAction(identifier: Self.stillListeningYesAction, title: "Ja, fortsätt lyssna", options: [])
+        notificationCenter.setNotificationCategories([
+            UNNotificationCategory(identifier: Self.stillListeningCategory, actions: [yes], intentIdentifiers: [], options: [])
+        ])
     }
 
     var notificationStatusText: String {
@@ -304,6 +310,32 @@ final class MioSystemServices {
         }
     }
 
+    nonisolated static let stillListeningID = "app.mio.capture.still-listening"
+    nonisolated static let stillListeningCategory = "app.mio.capture.still-listening"
+    nonisolated static let stillListeningYesAction = "app.mio.capture.still-listening.yes"
+
+    /// "Lyssnar Mio fortfarande?" after 20 minutes without speech. Generic text only. When
+    /// notifications are not allowed nothing is shown and Mio still pauses after 25 minutes.
+    func handleSilenceNotice(_ notice: MioSilenceNotice) async {
+        switch notice {
+        case .post:
+            let status = await notificationCenter.notificationSettings().authorizationStatus
+            guard status == .authorized || status == .provisional else { return }
+            let route = MioNotificationRoute.stillListening
+            let content = UNMutableNotificationContent()
+            content.title = "Lyssnar Mio fortfarande?"
+            content.body = route.notificationBody
+            content.userInfo = route.userInfo
+            content.categoryIdentifier = Self.stillListeningCategory
+            content.sound = .default
+            try? await notificationCenter.add(UNNotificationRequest(identifier: Self.stillListeningID,
+                                                                   content: content, trigger: nil))
+        case .withdraw:
+            notificationCenter.removePendingNotificationRequests(withIdentifiers: [Self.stillListeningID])
+            notificationCenter.removeDeliveredNotifications(withIdentifiers: [Self.stillListeningID])
+        }
+    }
+
     private func rememberAlarmIDs(_ ids: Set<UUID>) {
         knownAlarmIDs = ids
         if ids.isEmpty {
@@ -379,22 +411,38 @@ final class MioSystemServices {
 
 private final class MioNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     private let receive: @MainActor @Sendable (MioNotificationRoute) -> Void
+    private let stillListening: @MainActor @Sendable () -> Void
 
-    init(receive: @escaping @MainActor @Sendable (MioNotificationRoute) -> Void) { self.receive = receive }
+    init(receive: @escaping @MainActor @Sendable (MioNotificationRoute) -> Void,
+         stillListening: @escaping @MainActor @Sendable () -> Void) {
+        self.receive = receive
+        self.stillListening = stillListening
+    }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                            withCompletionHandler completionHandler: @escaping @Sendable () -> Void) {
+        let action = response.actionIdentifier
         // Dismissal and unknown payloads only finish the native callback. Copy a
         // Sendable ID-only route before crossing to the main actor.
-        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+        guard action == UNNotificationDefaultActionIdentifier || action == MioSystemServices.stillListeningYesAction,
               let route = MioNotificationRoute(userInfo: response.notification.request.content.userInfo) else {
             completionHandler()
             return
         }
-        Task { @MainActor [receive] in
-            receive(route)
+        Task { @MainActor [receive, stillListening] in
+            // Ja, and opening the question, keep listening without restarting the microphone.
+            if route == .stillListening { stillListening() }
+            if action == UNNotificationDefaultActionIdentifier { receive(route) }
             completionHandler()
         }
+    }
+
+    /// Only the silence question is shown while Mio is open, since she may not be looking at
+    /// the screen; every other notification keeps iOS's default of not showing in the foreground.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                           withCompletionHandler completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void) {
+        let isQuestion = notification.request.identifier == MioSystemServices.stillListeningID
+        completionHandler(isQuestion ? [.banner, .sound] : [])
     }
 }
 

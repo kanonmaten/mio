@@ -153,7 +153,7 @@ final class MioWorkflowTests: XCTestCase {
         try Data([1]).write(to: blocker)
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let session = MioSession(startedAt: start, endedAt: start.addingTimeInterval(60),
-            transcripts: [TranscriptSegment(text: "Mio, anteckna syntetiskt exempel", containsMio: true)])
+            transcripts: [TranscriptSegment(text: "Mio, notera syntetiskt exempel", containsMio: true)])
         capture.currentSession = session
         capture.onFinalizedTranscript?(session)
         for _ in 0..<10_000 {

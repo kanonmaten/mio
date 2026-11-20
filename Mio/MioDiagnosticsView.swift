@@ -5,9 +5,20 @@ import UIKit
 struct MioDiagnosticsView: View {
     @State private var reports: [MioMetricReport] = []
     @State private var hasLoaded = false
+    @State private var tally = MioDirectNoteTally()
 
     var body: some View {
         List {
+            Section {
+                LabeledContent("Sparade direkt", value: "\(tally.saved)")
+                LabeledContent("Väntade under Förslag", value: "\(tally.waiting)")
+                LabeledContent("Ångrade", value: "\(tally.undone)")
+                LabeledContent("Nej", value: "\(tally.rejected)")
+            } header: {
+                Text("Mio, kom ihåg och notera")
+            } footer: {
+                Text("Bara antal, ingen text. Många Ångra eller Nej kan betyda att Mio hör fraserna fel.")
+            }
             if hasLoaded && reports.isEmpty {
                 ContentUnavailableView("Inga rapporter ännu", systemImage: "waveform.path.ecg",
                     description: Text("iOS skickar mätvärden högst en gång per dygn och krasch- eller hängrapporter när de uppstår."))
@@ -41,6 +52,7 @@ struct MioDiagnosticsView: View {
         .navigationTitle("Diagnostik")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            tally = MioDirectNoteTally.load(from: .standard)
             reports = await MioMetricArchive.shared.reports()
             hasLoaded = true
         }

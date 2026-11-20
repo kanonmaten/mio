@@ -9,7 +9,7 @@ final class MioAssistantTests: XCTestCase {
         let manager = AssistantPartialDeletionFileManager(target: fixture.file)
         let repository = MioAssistantRepository(fileManager: manager, storageURL: fixture.file)
         let session = MioSession(startedAt: Date(timeIntervalSince1970: 10), endedAt: Date(timeIntervalSince1970: 20),
-            transcripts: [TranscriptSegment(text: "Mio, anteckna ett syntetiskt underlag", containsMio: true)])
+            transcripts: [TranscriptSegment(text: "Mio, notera ett syntetiskt underlag", containsMio: true)])
         let original = try await repository.detectSuggestions(in: session)
         XCTAssertEqual(original, 1)
         manager.failAfterCommit = true
@@ -29,7 +29,7 @@ final class MioAssistantTests: XCTestCase {
         let manager = AssistantPartialDeletionFileManager(target: fixture.file)
         let repository = MioAssistantRepository(fileManager: manager, storageURL: fixture.file)
         let session = MioSession(startedAt: Date(timeIntervalSince1970: 10), endedAt: Date(timeIntervalSince1970: 20),
-            transcripts: [TranscriptSegment(text: "Mio, anteckna ett gammalt underlag", containsMio: true)])
+            transcripts: [TranscriptSegment(text: "Mio, notera ett gammalt underlag", containsMio: true)])
         let original = try await repository.detectSuggestions(in: session)
         XCTAssertEqual(original, 1)
         manager.failAfterRemoval = true
@@ -379,25 +379,29 @@ final class MioAssistantTests: XCTestCase {
         catch { XCTAssertEqual(try Data(contentsOf: url), data) }
     }
 
-    func testOnlyExplicitAddressedCommandsProduceSuggestions() throws {
+    func testOnlyTheTwoWakePhrasesProduceSuggestions() throws {
         let sessionID = UUID()
-        let cases: [(String, MioContentKind)] = [
-            ("Mio, kom ihåg att jag föredrar en blå penna", .memory),
-            ("MIO påminn mig att köpa mjölk", .task),
-            ("Mio. Påminn mig om att lämna boken på fredag", .task),
-            ("Mio, påminn mig om läxan", .task),
-            ("Mio: planera middag på fredag", .plan),
-            ("Mio, anteckna att provet gäller procent", .note)
+        let cases: [(String, MioContentKind, MioDirectDestination)] = [
+            ("Mio, kom ihåg att köpa mjölk", .task, .reminders),
+            ("MIO kom ihåg att lämna boken", .task, .reminders),
+            ("Mio. Kom ihåg: ringa mormor", .task, .reminders),
+            ("Mio, notera att provet gäller procent", .note, .mioNote),
+            ("Mio: notera exemplet med bråk", .note, .mioNote)
         ]
-        for (text, kind) in cases {
+        for (text, kind, destination) in cases {
             let segment = TranscriptSegment(text: text, containsMio: true)
-            let suggestion = try XCTUnwrap(MioLocalSuggestionEngine.suggestion(from: segment, sessionID: sessionID))
-            XCTAssertEqual(suggestion.kind, kind)
+            let suggestion = try XCTUnwrap(MioLocalSuggestionEngine.suggestion(from: segment, sessionID: sessionID), text)
+            XCTAssertEqual(suggestion.kind, kind, text)
+            XCTAssertEqual(suggestion.direct?.destination, destination, text)
             XCTAssertEqual(suggestion.sourceSegmentID, segment.id)
             XCTAssertEqual(suggestion.sessionID, sessionID)
             XCTAssertFalse(suggestion.title.lowercased().hasPrefix("mio"))
+            XCTAssertFalse(suggestion.title.lowercased().hasPrefix("att "), text)
         }
-        for text in ["Jag borde köpa mjölk", "Jag pratade med Mio", "Mio jag är ledsen", "Mios anteckna något", "Mio kom ihåg att "] {
+        // A lone "Mio" and the old commands are no longer direct address (2026-11-20).
+        for text in ["Jag borde köpa mjölk", "Jag pratade med Mio", "Mio jag är ledsen", "Mios anteckna något",
+                     "Mio kom ihåg att ", "Mio, påminn mig att köpa mjölk", "Mio, anteckna att provet gäller procent",
+                     "Mio, planera middag på fredag", "Mio, noterade du det?"] {
             let segment = TranscriptSegment(text: text, containsMio: true)
             XCTAssertNil(MioLocalSuggestionEngine.suggestion(from: segment, sessionID: sessionID), text)
         }
@@ -405,15 +409,15 @@ final class MioAssistantTests: XCTestCase {
 
     func testCommandsAtSentenceBoundariesProduceSeparateSuggestions() {
         let segment = TranscriptSegment(
-            text: "Vi arbetar med procent. Mio, anteckna exemplet. Mio, påminn mig att ta med boken",
+            text: "Vi arbetar med procent. Mio, notera exemplet. Mio, kom ihåg att ta med boken",
             containsMio: true
         )
         let suggestions = MioLocalSuggestionEngine.suggestions(from: segment, sessionID: UUID())
         XCTAssertEqual(suggestions.map(\.kind), [.note, .task])
-        XCTAssertEqual(suggestions.map(\.title), ["exemplet", "ta med boken"])
+        XCTAssertEqual(suggestions.map(\.title), ["Exemplet", "Ta med boken"])
         XCTAssertEqual(Set(suggestions.map(\.id)).count, 2)
         XCTAssertEqual(Set(suggestions.compactMap(\.sourceSegmentID)), [segment.id])
-        let ordinary = TranscriptSegment(text: "Jag sa Mio, anteckna detta", containsMio: true)
+        let ordinary = TranscriptSegment(text: "Jag sa Mio, notera detta", containsMio: true)
         XCTAssertTrue(MioLocalSuggestionEngine.suggestions(from: ordinary, sessionID: UUID()).isEmpty)
     }
 
@@ -503,8 +507,8 @@ final class MioAssistantTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         let repository = MioAssistantRepository(storageURL: fixture.file)
         let session = MioSession(transcripts: [
-            TranscriptSegment(text: "Mio, anteckna integritetsexempel-123", containsMio: true),
-            TranscriptSegment(text: "Mio, påminn mig att köpa mjölk", containsMio: true)
+            TranscriptSegment(text: "Mio, notera integritetsexempel-123", containsMio: true),
+            TranscriptSegment(text: "Mio, kom ihåg att köpa mjölk", containsMio: true)
         ])
         let created = try await repository.detectSuggestions(in: session)
         XCTAssertEqual(created, 2)
@@ -530,7 +534,7 @@ final class MioAssistantTests: XCTestCase {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         let repository = MioAssistantRepository(storageURL: fixture.file)
-        let session = MioSession(transcripts: [TranscriptSegment(text: "Mio, anteckna något", containsMio: true)])
+        let session = MioSession(transcripts: [TranscriptSegment(text: "Mio, notera något", containsMio: true)])
         async let first = repository.detectSuggestions(in: session)
         async let second = repository.detectSuggestions(in: session)
         let counts = try await [first, second]
@@ -568,7 +572,7 @@ final class MioAssistantTests: XCTestCase {
         let date = Date(timeIntervalSince1970: 9_000)
         let session = MioSession(
             startedAt: date, endedAt: date.addingTimeInterval(60),
-            transcripts: [TranscriptSegment(text: "Mio, anteckna en lektion", containsMio: true)]
+            transcripts: [TranscriptSegment(text: "Mio, notera en lektion", containsMio: true)]
         )
         try await repository.detectSuggestions(in: session)
         let manual = MioSuggestion(kind: .note, title: "Fristående förslag")
@@ -596,7 +600,7 @@ final class MioAssistantTests: XCTestCase {
         let date = Date(timeIntervalSince1970: 20_000)
         let session = MioSession(
             startedAt: date, endedAt: date.addingTimeInterval(60),
-            transcripts: [TranscriptSegment(text: "Mio, anteckna sen återkoppling", containsMio: true)]
+            transcripts: [TranscriptSegment(text: "Mio, notera sen återkoppling", containsMio: true)]
         )
         // The session did not have to occur in the assistant store before deletion.
         try await repository.deleteSessionData(sessionID: session.id)
@@ -618,7 +622,7 @@ final class MioAssistantTests: XCTestCase {
         let deletionTime = Date(timeIntervalSince1970: 30_000)
         let oldSession = MioSession(
             startedAt: deletionTime.addingTimeInterval(-60),
-            transcripts: [TranscriptSegment(text: "Mio, anteckna gammal text", containsMio: true)]
+            transcripts: [TranscriptSegment(text: "Mio, notera gammal text", containsMio: true)]
         )
         try await repository.deleteAll(now: deletionTime)
         let lateCount = try await repository.detectSuggestions(in: oldSession)
@@ -626,44 +630,26 @@ final class MioAssistantTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.file.path))
         let newSession = MioSession(
             startedAt: deletionTime.addingTimeInterval(1),
-            transcripts: [TranscriptSegment(text: "Mio, anteckna ny text", containsMio: true)]
+            transcripts: [TranscriptSegment(text: "Mio, notera ny text", containsMio: true)]
         )
         let newCount = try await repository.detectSuggestions(in: newSession)
         XCTAssertEqual(newCount, 1)
         let document = try await repository.loadDocument()
-        XCTAssertEqual(document.suggestions.first?.title, "ny text")
+        XCTAssertEqual(document.suggestions.first?.title, "Ny text")
     }
 
-    func testOnlyAddressedQuestionsBecomeLocalQuestionSuggestions() throws {
-        let questions = [
-            "Mio, fråga vad procent betyder",
-            "Mio, vad betyder procent?",
-            "Mio, hur räknar jag ut tio procent?",
-            "Mio, varför använder vi procent?",
-            "Mio, när används procent?",
-            "Mio, var hittar jag exemplet?",
-            "Mio, vem skrev boken?",
-            "Mio, kan du förklara procent?"
-        ]
+    func testQuestionsAreTypedInFragaMioAndNoLongerSpoken() throws {
         let sessionID = UUID()
-        for text in questions {
+        // Since 2026-11-20 "Mio, vad …" is not direct address; questions go through Fråga Mio.
+        for text in ["Mio, fråga vad procent betyder", "Mio, vad betyder procent?", "Mio, kan du förklara procent?",
+                     "Vad betyder procent?", "Jag undrar vad Mio tycker", "Mio tycker om matematik", "Mio, fråga "] {
             let segment = TranscriptSegment(text: text, containsMio: true)
-            let suggestion = try XCTUnwrap(MioLocalSuggestionEngine.suggestion(from: segment, sessionID: sessionID))
-            XCTAssertEqual(suggestion.purpose, .question, text)
-            XCTAssertEqual(suggestion.state, .pending)
-            XCTAssertNotNil(suggestion.questionText)
-            XCTAssertEqual(suggestion.sourceSegmentID, segment.id)
-            XCTAssertEqual(suggestion.sessionID, sessionID)
-            XCTAssertEqual(segment.text, text)
+            XCTAssertTrue(MioLocalSuggestionEngine.suggestions(from: segment, sessionID: sessionID).isEmpty, text)
         }
         let explicit = try MioLocalSuggestionEngine.explicitQuestion(text: "  Hur fungerar procent?  ")
         XCTAssertEqual(explicit.questionText, "Hur fungerar procent?")
         XCTAssertNil(try MioLocalSuggestionEngine.explicitSuggestion(text: "En anteckning", kind: .note).questionText)
         XCTAssertThrowsError(try MioLocalSuggestionEngine.explicitQuestion(text: "   "))
-        for text in ["Vad betyder procent?", "Jag undrar vad Mio tycker", "Mio tycker om matematik", "Mio, fråga "] {
-            let segment = TranscriptSegment(text: text, containsMio: true)
-            XCTAssertTrue(MioLocalSuggestionEngine.suggestions(from: segment, sessionID: sessionID).isEmpty, text)
-        }
         XCTAssertEqual(Set(MioContentKind.allCases.map(\.rawValue)), ["timeline", "note", "task", "plan", "memory"])
     }
 
@@ -691,27 +677,23 @@ final class MioAssistantTests: XCTestCase {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         let repository = MioAssistantRepository(storageURL: fixture.file)
-        let segment = TranscriptSegment(text: "Mio, vad betyder frågeexempel-456?", containsMio: true)
-        let session = MioSession(transcripts: [segment])
-        let count = try await repository.detectSuggestions(in: session)
-        XCTAssertEqual(count, 1)
-        let initial = try await repository.loadDocument()
-        let question = try XCTUnwrap(initial.suggestions.first)
-        XCTAssertEqual(question.purpose, .question)
+        let sessionID = UUID(), segmentID = UUID()
+        let question = MioSuggestion(kind: .note, title: "Vad betyder frågeexempel-456?", sessionID: sessionID,
+                                     sourceSegmentID: segmentID, purpose: .question)
+        try await repository.addSuggestion(question)
         try await repository.deferSuggestion(id: question.id)
         let deferred = try await repository.loadDocument()
         XCTAssertEqual(deferred.suggestions.first?.state, .deferred)
         XCTAssertEqual(deferred.suggestions.first?.purpose, .question)
         try await repository.removeSuggestion(id: question.id)
         let newRepository = MioAssistantRepository(storageURL: fixture.file)
-        let repeated = try await newRepository.detectSuggestions(in: session)
-        XCTAssertEqual(repeated, 0)
+        try await newRepository.addSuggestion(MioSuggestion(kind: .note, title: "Igen", sessionID: sessionID,
+                                                            sourceSegmentID: segmentID, purpose: .question))
         let final = try await newRepository.loadDocument()
-        XCTAssertTrue(final.suggestions.isEmpty)
+        XCTAssertTrue(final.suggestions.isEmpty, "a rejected source is never proposed again")
         XCTAssertEqual(final.processedSources.count, 1)
         let stored = try String(contentsOf: fixture.file, encoding: .utf8)
         XCTAssertFalse(stored.contains("frågeexempel-456"))
-        XCTAssertEqual(session.transcripts, [segment])
     }
 
     private func makeFixture() throws -> (root: URL, file: URL) {

@@ -1,15 +1,9 @@
 import Foundation
 
+/// Marks a segment as direct address. Since 2026-11-20 only "Mio, kom ihåg" and "Mio, notera"
+/// at the start of a sentence count; a lone "Mio" is just a word in the conversation.
 enum MioWakeWordDetector {
     static func containsWakeWord(in text: String) -> Bool {
-        let normalized = text
-            .folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: Locale(identifier: "sv-SE"))
-            .lowercased(with: Locale(identifier: "sv-SE"))
-
-        let words = normalized.split { character in
-            !character.isLetter && !character.isNumber
-        }
-
-        return words.contains { $0 == "mio" }
+        MioDirectCommandGrammar.containsWakePhrase(text)
     }
 }

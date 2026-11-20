@@ -230,7 +230,7 @@ struct SessionEditorView: View {
                         Button("Hitta lokala Mio-förslag") {
                             Task { _ = await assistant.detectSuggestions(in: session) }
                         }
-                        Text("Endast uttryckliga Mio-kommandon blir förslag. Granska dem i Mio → Förslag.")
+                        Text("Bara det du sa efter ”Mio, kom ihåg” eller ”Mio, notera” blir förslag här. Granska dem under Förslag.")
                             .font(.footnote).foregroundStyle(.secondary)
                         if let error = assistant.errorMessage { Text(error).foregroundStyle(.red) }
                     }

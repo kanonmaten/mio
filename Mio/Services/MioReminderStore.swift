@@ -64,6 +64,18 @@ final class MioReminderStore {
         return reminder.calendarItemIdentifier
     }
 
+    /// Ångra for a direct instruction: removes the reminder Mio created. One that is already
+    /// gone (she deleted it in Reminders) counts as removed.
+    func remove(identifier: String) throws {
+        guard access == .granted else { throw MioReminderError.accessDenied }
+        guard let reminder = store.calendarItem(withIdentifier: identifier) as? EKReminder else { return }
+        do { try store.remove(reminder, commit: true) }
+        catch {
+            MioLog.error(.storage, "reminder removal failed")
+            throw MioReminderError.removeFailed
+        }
+    }
+
     /// Unfinished reminders due before the end of the interval, overdue ones included.
     func upcoming(in interval: DateInterval) async -> [MioReminderSummary] {
         guard access == .granted else { return [] }
