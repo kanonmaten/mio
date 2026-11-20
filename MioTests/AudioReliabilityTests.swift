@@ -300,7 +300,9 @@ final class AudioReliabilityTests: XCTestCase {
         _ = try await pipeline.start()
         await waitUntil { fixture.events.offline }
         fixture.time.advance(to: 32)
-        await settle()
+        // The retry is sent from conversion on other threads; a fixed yield count lost that race
+        // on a loaded CI container (Linux run 44725701475), so wait for the second request itself.
+        await waitUntil { fixture.transport.identities.count == 2 }
         XCTAssertEqual(fixture.transport.identities.count, 2)
         XCTAssertEqual(fixture.transport.identities.first, fixture.transport.identities.last)
         XCTAssertEqual(fixture.transport.expiries, [70, 70])
