@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   # The event name keeps push, nightly and manual runs from cancelling each other.
@@ -20,19 +21,16 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    container: swift:6.3.3-noble
+    # swift:6.3.3-noble plus the apt packages, Rust 1.100.0 and uv, built by ci-image.yml from
+    # .github/ci-image/Dockerfile. The credentials work whether or not the package is public.
+    container:
+      image: ghcr.io/kanonmaten/mio/verify-linux:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
     # The control panel compiles GPUI (gpui-kit); a cold cache needs most of this.
     timeout-minutes: 45
     steps:
-      - name: Installera Python och byggverktyg för verifieraren
-        # The Swift image has no python3 or curl; uv and the Pianissimo tests use the system
-        # interpreter, rustup needs curl, and the gateway's TLS library compiles C code with gcc.
-        # The rest is what gpui-kit lists for Ubuntu 24.04, for the control panel in control/.
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends python3 ca-certificates curl gcc libc6-dev \
-            g++ cmake pkg-config libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev \
-            libssl-dev libzstd-dev libvulkan1
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -40,15 +38,6 @@ jobs:
         # The checkout is owned by the runner user, the container runs as root;
         # the verifier records git provenance and must not hit dubious-ownership errors.
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - name: Installera Rust för gatewayen och verifieraren
-        # Pinned to the toolchain the gateway was verified with; rustup checks the download.
-        # Downloaded to a file first: a failed download must fail the step, not pipe nothing into sh.
-        run: |
-          set -eu
-          curl --proto '=https' --tlsv1.2 -sSf -o "$RUNNER_TEMP/rustup-init.sh" https://sh.rustup.rs
-          sh "$RUNNER_TEMP/rustup-init.sh" -y --profile minimal --component clippy --default-toolchain 1.100.0
-          "$HOME/.cargo/bin/cargo" --version
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - name: Återanvänd Rust-byggena
         # GPUI takes minutes to compile from scratch. rust-cache keeps the dependencies of all three
         # workspaces plus the cargo registry, drops the workspaces' own crates before saving, and keys
