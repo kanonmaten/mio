@@ -1,6 +1,35 @@
 # Bygg- och teststatus
 
-Senast uppdaterad **2026-11-17**. Version **0.9.1, ej släppt** (0.9.0 är revisionen `8f90ddc`, ej taggad). Den här filen innehåller bara vad som faktiskt är kontrollerat. Äldre poster finns i Git-historiken (`git log -- docs/STATUS.md`). [Ändringsloggen](../CHANGELOG.md) beskriver vad koden gör; [helhetstestet](TESTPLAN_HELHET.md) beskriver acceptansproven.
+Senast uppdaterad **2026-11-20**. Version **0.9.1, ej släppt** (0.9.0 är revisionen `8f90ddc`, ej taggad). Den här filen innehåller bara vad som faktiskt är kontrollerat. Äldre poster finns i Git-historiken (`git log -- docs/STATUS.md`). [Ändringsloggen](../CHANGELOG.md) beskriver vad koden gör; [helhetstestet](TESTPLAN_HELHET.md) beskriver acceptansproven.
+
+## Snabbare CI, 2026-11-20
+
+CI-planen från 2026-11-20 ([beslut](DECISIONS.md#snabbare-utvecklingsslinga-i-ci-2026-11-20)), `aae9ff8` till `ebbbac2`. Tiderna är uppmätta från stegens start- och sluttider i GitHub. "Efter" är push-körningar på den slutliga uppsättningen.
+
+| Vad | Före (#49, Linux #170) | Efter |
+|---|---|---|
+| IPA uppladdad efter pushen | Ingen push-körning; cirka 2 min efter manuell start (#49) | 1 min 15 s ([#58](https://github.com/kanonmaten/mio/actions/runs/44743278927), `a53084d`), 1 min 51 s ([#60](https://github.com/kanonmaten/mio/actions/runs/44747809326), `ebbbac2`); 1 min 28 s–3 min 14 s i #50–#57 |
+| Release-bygget | 1 min 43 s | 1 min 1 s (#58), 1 min 34 s (#60) |
+| Testjobbet utan UI-tester | Fanns inte; hela körningen cirka 19 min med UI-tester | 12 min 20 s (#58), 11 min 57 s (#60); 9 min 5 s–20 min i #50–#57. **Målet 8 min nåddes inte.** |
+| Kompilera testerna | 4,5 min (9 min i #47) | 5 min 40 s (#58), 4 min 14 s (#60); själva bygget 1 min 40 s utan simulator igång (#52) |
+| Enhetstesterna | 4,8 min (1,8 min i #47) | 1 min 50 s (#58), 2 min 25 s (#60) |
+| UI-tester | 7 min | Bara nattligen, på `v*`-taggar och manuellt |
+| Strikt concurrency-diagnostik | 2,4 min | Bara nattligen, på `v*`-taggar och manuellt |
+| Verifiera Mio på Linux, hela körningen | cirka 5,3 min | 2 min 41 s ([184](https://github.com/kanonmaten/mio/actions/runs/44743278956), `a53084d`), 2 min 34 s ([185](https://github.com/kanonmaten/mio/actions/runs/44743760134), `408560c`), 2 min 37 s ([186](https://github.com/kanonmaten/mio/actions/runs/44747809261), `ebbbac2`) |
+| Linux: container och apt | cirka 50 s | 26–33 s plus 5–7 s |
+| Linux: återställa Rust-cachen | 2 min 8 s | `verify`-jobbet 13 s; `control`-jobbet 53 s, parallellt (körning 186) |
+| Linux: `verify` | 1 min 55 s | 1 min 27 s med `--skip-control`; `control`-jobbets clippy och tester 14 s varma (körning 186) |
+
+Varför testjobbet inte når 8 min: en nystartad iOS 27-simulator mättar runnern i 6–15 minuter. I #50 stod xcodebuild tyst i 6 min 42 s innan kompileringen började, i #53 och #59 tog utcheckningen 6–7 min, och i #52 stannade även runnerns egen logg. När simulatorn hade hunnit bli klar tog enhetstesterna 1 min 29 s (#51). Byggcachar (#54–#59) och att starta simulatorn efter kompileringen (#52) hjälpte inte; se besluten.
+
+| Kontroll | Resultat |
+|---|---|
+| Hela grinden, lokalt (Rust 1.100, Swift 6.4.2) | `mio-verify verify` godkänd genom pre-push-kroken före varje push med kod, senast på `ebbbac2`. Kroken stoppade en push när strukturkontrollen inte godtog plan-jobbet (rättat i `185f6b5`). |
+| Linux-grinden på GitHub | Godkänd för den sista commiten i varje push, senast `ebbbac2` (körning 186, båda jobben); körningar för mellanliggande commits avbröts av nästa push. En körning på `185f6b5` föll på `AudioReliabilityTests.testRetryPreservesChunkIdentityAndOriginalExpiry`, ett tidsberoende test som rättades i `7ac9e50`. |
+| Bygg Mio IPA vid push | Godkänd för `185f6b5` (#50), `7ac9e50` (#51), `a4468dc` (#52), `26ba0f5` (#53), `4a50a15` (#54), `7ffa809` (#56), `0ab1d4d` (#57), `a53084d` (#58) och `ebbbac2` (#60): IPA skapad och enhetstesterna godkända (370 i #60), UI-tester och diagnostik överhoppade som avsett. ntfy-steget hoppade över sig utan `NTFY_TOPIC`. |
+| Bygg Mio IPA med UI-tester och diagnostik | [#61](https://github.com/kanonmaten/mio/actions/runs/44747809597) på `ebbbac2`, manuell med `uitester` och `diagnostik`: IPA skapad, enhetstesterna godkända, tre av fyra UI-tester godkända; `testThreeTabsPlusCaptureButtonAndIndependentActivityStates` hängde i simulatorn och startades om (samma häng som #31, #33, #47). Diagnostiken rapporterade fyra concurrency-varningar, men det var tre iOS 27-avrådningar som verifieraren räknade fel (rättat i `36835e7`; riktiga concurrency-varningar: noll). |
+| Nattkörning (`schedule`) | **Inte körd ännu.** Plan-jobbet är provat för push och manuell start; jämförelsen med senaste lyckade nattkörning körs först i natt. |
+| Telefon | Ingen ändring i appen. Ingen ny IPA är installerad eller provad på telefonen. |
 
 ## Lägsta iOS-version 27.0, 2026-11-18
 
