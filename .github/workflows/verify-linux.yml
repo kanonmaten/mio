@@ -1,15 +1,20 @@
 name: Verifiera Mio på Linux
 
+# No pull_request: the project works on main without branches or pull requests.
+# The nightly run keeps the cache warm and catches toolchain or dependency drift.
 on:
   push:
-  pull_request:
+    branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '47 1 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: mio-linux-${{ github.ref }}
+  # The event name keeps push, nightly and manual runs from cancelling each other.
+  group: mio-linux-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
