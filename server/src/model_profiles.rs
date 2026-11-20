@@ -47,11 +47,13 @@ impl std::fmt::Display for Incompatible {
     }
 }
 
-/// How a model is told not to reason. Hiding reasoning is never enough: answers that still
-/// carry reasoning are rejected by the adapter.
+/// How a model's reasoning is set. Every pair but one turns reasoning off; hiding reasoning is
+/// never enough, so answers that still carry reasoning are rejected by the adapter. The one
+/// exception (`Effort`) is bound to the `lesson` task (user decision 2026-11-19): its thinking
+/// is thrown away in the adapter and never logged, stored or shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReasoningOff {
-    /// `reasoning_effort: "none"` (Groq, Mistral).
+pub enum Reasoning {
+    /// `reasoning_effort: "none"` (Groq, Mistral Small 4).
     EffortNone,
     /// `chat_template_kwargs: {enable_thinking: false}` (NVIDIA NIM's Qwen models).
     ChatTemplate,
@@ -59,7 +61,28 @@ pub enum ReasoningOff {
     ThinkingDisabled,
     /// The model has no reasoning to turn off.
     None,
+    /// `reasoning_effort: <level>` with reasoning on, for a model that cannot turn it off (Mistral
+    /// Large 4 takes `low`, `medium` or `high`, never `none`). Only selectable for `lesson`.
+    Effort(&'static str),
 }
+
+impl Reasoning {
+    /// Whether the model reasons on every call.
+    pub const fn reasons(self) -> bool {
+        matches!(self, Self::Effort(_))
+    }
+
+    /// `"off"`, or the reviewed level, as `/v2/status` publishes it.
+    pub const fn level(self) -> &'static str {
+        match self {
+            Self::Effort(level) => level,
+            _ => "off",
+        }
+    }
+}
+
+/// The only task a reasoning pair may serve. Everything else needs reasoning off.
+pub const REASONING_TASK: &str = "lesson";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContractReview {
@@ -78,7 +101,7 @@ pub struct Profile {
     pub requested_model: String,
     /// A model without a reasoning switch.
     pub plain: bool,
-    pub reasoning_off: ReasoningOff,
+    pub reasoning: Reasoning,
     /// Whether `temperature: 0` is sent. False only for a reviewed model whose provider refuses
     /// the parameter (Anthropic since API version 2026-10-21; user decision 2026-11-17). It is
     /// then left out, never replaced by another value, and `/v2/status` says so.
@@ -95,7 +118,7 @@ pub struct Reviewed {
     pub schema_dialect: &'static str,
     pub sources: &'static [&'static str],
     pub plain: bool,
-    pub reasoning_off: ReasoningOff,
+    pub reasoning: Reasoning,
     pub temperature: bool,
     pub reviewed_at: &'static str,
     /// Why a candidate is not selectable yet; `None` for a reviewed pair.
@@ -106,38 +129,80 @@ pub struct Reviewed {
 pub const REVIEWED_MODELS: [Reviewed; 2] = [
     // Qwen 3.8 accepts reasoning_effort "none"; models that always think stay absent.
     Reviewed { provider: "groq", model: "qwen/qwen3.8-27b", schema_dialect: "strict-json-schema", plain: false,
-        reasoning_off: ReasoningOff::EffortNone, temperature: true, reviewed_at: "2026-10-11", blocked: None,
+        reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-10-11", blocked: None,
         sources: &["https://console.groq.com/docs/structured-outputs", "https://console.groq.com/docs/reasoning"] },
     // Haiku 5.5 accepts thinking disabled at effort high or below and enforces output_config.format;
     // any non-default sampling parameter is a 400, so temperature is left out (rule approved 2026-11-17).
     // Opus 5.5 and Sonnet 5.5 cannot turn thinking off and stay absent.
     Reviewed { provider: "anthropic", model: "claude-haiku-5-5", schema_dialect: "strict-json-schema", plain: false,
-        reasoning_off: ReasoningOff::ThinkingDisabled, temperature: false, reviewed_at: "2026-11-17", blocked: None,
+        reasoning: Reasoning::ThinkingDisabled, temperature: false, reviewed_at: "2026-11-17", blocked: None,
         sources: &["https://platform.claude.com/docs/en/build-with-claude/structured-outputs",
             "https://platform.claude.com/docs/en/build-with-claude/thinking",
             "https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback"] },
 ];
 
-/// Pairs with an adapter but not selectable: reasoning-off is documented, strict schema
-/// enforcement is not. Each needs one approved synthetic call before it moves to
-/// `REVIEWED_MODELS` (user decision 2026-11-17).
+/// Pairs with an adapter but not selectable: strict schema enforcement is not documented. Each
+/// needs one approved synthetic call before it runs (user decision 2026-11-17).
+///
+/// Mistral (checked again 2026-11-20): the structured-output page puts the schema in the system
+/// prompt and does not mention `strict` (the OpenAPI spec has `strict`, default false), so both
+/// stay `json-schema` and every answer is validated (user decision 2026-11-20). Medium 3.5 was
+/// deprecated 2026-10-31 and removed. Large 4 always reasons (`low`/`medium`/`high`, no `none`),
+/// so it is bound to `lesson`; `mistral-large-4-0` is the version-locked ID, while
+/// `mistral-large-4` and `mistral-large-latest` are aliases that can move. Whether Mistral accepts
+/// temperature 0 with reasoning on is not documented; the trial settles it.
 pub const CANDIDATE_MODELS: [Reviewed; 3] = [
     Reviewed { provider: "mistral", model: "mistral-small-2603", schema_dialect: "json-schema", plain: false,
-        reasoning_off: ReasoningOff::EffortNone, temperature: true, reviewed_at: "2026-11-17",
+        reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-20",
         blocked: Some("Strikt JSON-schema är inte bekräftat i Mistrals dokumentation; kräver ett godkänt prov."),
         sources: &["https://docs.mistral.ai/inference/conversations/reasoning",
-            "https://docs.mistral.ai/inference/conversations/structured-output/custom"] },
-    Reviewed { provider: "mistral", model: "mistral-medium-3-5", schema_dialect: "json-schema", plain: false,
-        reasoning_off: ReasoningOff::EffortNone, temperature: true, reviewed_at: "2026-11-17",
-        blocked: Some("Strikt JSON-schema är inte bekräftat i Mistrals dokumentation; kräver ett godkänt prov."),
+            "https://docs.mistral.ai/inference/conversations/structured-output/custom",
+            "https://docs.mistral.ai/models/mistral-small-4-0-26-03"] },
+    Reviewed { provider: "mistral", model: "mistral-large-4-0", schema_dialect: "json-schema", plain: false,
+        reasoning: Reasoning::Effort("medium"), temperature: true, reviewed_at: "2026-11-20",
+        blocked: Some("Resonerar alltid och får bara användas för lektioner. Strikt JSON-schema är inte bekräftat i Mistrals dokumentation; kräver ett godkänt prov."),
         sources: &["https://docs.mistral.ai/inference/conversations/reasoning",
-            "https://docs.mistral.ai/inference/conversations/structured-output/custom"] },
+            "https://docs.mistral.ai/inference/conversations/structured-output/custom",
+            "https://docs.mistral.ai/models/mistral-large-4-0"] },
     Reviewed { provider: "nvidia", model: "qwen/qwen3.8-27b", schema_dialect: "json-schema", plain: false,
-        reasoning_off: ReasoningOff::ChatTemplate, temperature: true, reviewed_at: "2026-11-17",
+        reasoning: Reasoning::ChatTemplate, temperature: true, reviewed_at: "2026-11-17",
         blocked: Some("Strikt JSON-schema och modellnamnet i NVIDIAs hostade API är inte bekräftade; kräver ett godkänt prov."),
         sources: &["https://docs.nvidia.com/nim/vision-language-models/2.1.1-variant/get-started/advanced/get-started-qwen3-8-27b.html",
             "https://docs.nvidia.com/nim/large-language-models/1.15.0/structured-generation.html"] },
 ];
+
+/// A reviewed price in USD per million tokens. Only pairs listed here get a cost in `/v2/status`;
+/// any other (Groq's free tier) gets `estimatedCost: null`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Price {
+    pub provider: &'static str,
+    pub model: &'static str,
+    pub input: f64,
+    pub cached_input: f64,
+    pub output: f64,
+    pub as_of: &'static str,
+    pub source: &'static str,
+}
+
+/// Read 2026-11-20 on Mistral's pricing page. Reasoning is billed as output (the usage counter
+/// counts it inside `outputTokens`). The page names Small 4 `mistral-small-4-0-26-03`; its model
+/// page gives `mistral-small-2603` as the API ID.
+pub const PRICES: [Price; 2] = [
+    Price { provider: "mistral", model: "mistral-small-2603", input: 0.15, cached_input: 0.015, output: 0.6,
+        as_of: "2026-11-20", source: "https://docs.mistral.ai/inference/pricing" },
+    Price { provider: "mistral", model: "mistral-large-4-0", input: 0.7, cached_input: 0.07, output: 2.1,
+        as_of: "2026-11-20", source: "https://docs.mistral.ai/inference/pricing" },
+];
+
+pub fn price(provider: &str, model: &str) -> Option<&'static Price> {
+    PRICES.iter().find(|price| price.provider == provider && price.model == model)
+}
+
+/// The reasoning setting of a reviewed or candidate pair, approved or not.
+pub fn pair_reasoning(provider: &str, model: &str) -> Option<Reasoning> {
+    REVIEWED_MODELS.iter().chain(CANDIDATE_MODELS.iter())
+        .find(|entry| entry.provider == provider && entry.model == model).map(|entry| entry.reasoning)
+}
 
 fn reviewed_model(provider: &str, model: &str) -> Option<&'static Reviewed> {
     REVIEWED_MODELS.iter().find(|reviewed| reviewed.provider == provider && reviewed.model == model)
@@ -149,7 +214,7 @@ pub fn provider(id: &str) -> Option<&'static Provider> {
 
 fn profile_for(provider: &'static Provider, reviewed: &'static Reviewed, model: &str) -> Profile {
     Profile { provider: provider.id, base: provider.base, wire: provider.wire, requested_model: model.to_owned(),
-        plain: reviewed.plain, reasoning_off: reviewed.reasoning_off, temperature: reviewed.temperature,
+        plain: reviewed.plain, reasoning: reviewed.reasoning, temperature: reviewed.temperature,
         schema_dialect: reviewed.schema_dialect, capabilities: CAPABILITIES,
         contract_review: ContractReview { reviewed_at: reviewed.reviewed_at,
             status: if reviewed.blocked.is_some() { "candidate" } else { "documentation-reviewed" },

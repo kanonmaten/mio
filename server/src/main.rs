@@ -5,6 +5,7 @@ use mio_gateway::config::load_config;
 use mio_gateway::server::Gateway;
 use mio_gateway::state_store::FileCounterStore;
 use mio_gateway::transport::HttpsTransport;
+use mio_gateway::usage::FileUsageStore;
 use tokio::signal::unix::{SignalKind, signal};
 
 fn serve() -> Result<(), &'static str> {
@@ -16,6 +17,10 @@ fn serve() -> Result<(), &'static str> {
     // MIO_STATE_FILE keeps the daily counters across restarts (set by the systemd unit).
     if let Some(path) = std::env::var_os("MIO_STATE_FILE").filter(|path| !path.is_empty()) {
         gateway = gateway.with_store(Arc::new(FileCounterStore::new(path)));
+    }
+    // MIO_USAGE_FILE keeps the monthly usage counter for Mio Kontroll's credit meter.
+    if let Some(path) = std::env::var_os("MIO_USAGE_FILE").filter(|path| !path.is_empty()) {
+        gateway = gateway.with_usage_store(Arc::new(FileUsageStore::new(path)));
     }
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|_| START)?;
     runtime.block_on(async {

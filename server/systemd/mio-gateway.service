@@ -1,5 +1,5 @@
 [Unit]
-Description=Mio privat AI-gateway (Groq)
+Description=Mio privat AI-gateway
 Documentation=file:///opt/mio-gateway/README.md
 After=network-online.target
 Wants=network-online.target
@@ -11,6 +11,8 @@ Group=mio-gateway
 # Read by systemd as root before privileges drop; the file itself stays root-only (0600).
 EnvironmentFile=/etc/mio-gateway/gateway.env
 Environment=MIO_STATE_FILE=/var/lib/mio-gateway/counters.json
+# Monthly token counts per task and model for the credit meter in Mio Kontroll. Numbers only.
+Environment=MIO_USAGE_FILE=/var/lib/mio-gateway/usage.json
 ExecStart=/opt/mio-gateway/mio-gateway
 Restart=on-failure
 RestartSec=5
@@ -18,7 +20,7 @@ StateDirectory=mio-gateway
 StateDirectoryMode=0700
 UMask=0077
 
-# Hardening: the gateway only needs outbound HTTPS to Groq and a loopback listener.
+# Hardening: the gateway only needs outbound HTTPS to its AI provider and a loopback listener.
 NoNewPrivileges=yes
 CapabilityBoundingSet=
 AmbientCapabilities=

@@ -5,10 +5,34 @@ use std::collections::BTreeMap;
 use serde_json::Value;
 
 use crate::js::{ascii_alphanumeric_or, trim};
-use crate::model_profiles::{CANDIDATE_MODELS, Incompatible, PROVIDERS, Profile, approved_profile};
+use crate::model_profiles::{CANDIDATE_MODELS, Incompatible, PROVIDERS, Profile, REASONING_TASK, approved_profile, pair_reasoning};
 
 pub const MAX_REQUESTS_PER_DAY: u64 = 1_000_000;
 pub const MAX_TOKENS_PER_DAY: u64 = 1_000_000;
+
+/// `max_tokens` for a lesson part on a profile that reasons (Mistral Large 4, medium). The
+/// thinking is billed as output and counts against `max_tokens`, so the 3,000 tokens the notes
+/// themselves get on every other profile would leave little or nothing for the answer. Mistral's
+/// documentation (read 2026-11-20) gives no output limit for Large 4 (1M context) and no advice
+/// on `max_tokens` with reasoning, so this keeps the notes' 3,000 and adds 9,000 for thinking.
+/// Mistral has no per-minute reservation like Groq's free tier, so an unused margin costs
+/// nothing; a full answer costs at most 12,000 × $2.10/M ≈ $0.025. The user measures with the
+/// trial (Prova) and the limit is adjusted after that. Other tasks keep their own limits.
+pub const LESSON_REASONING_MAX_OUTPUT_TOKENS: u64 = 12_000;
+
+/// The answer budget for `task` on `profile`: the task's own unless the profile reasons.
+pub fn output_limit(task: &str, profile: &Profile, task_limit: u64) -> u64 {
+    if task == REASONING_TASK && profile.reasoning.reasons() { LESSON_REASONING_MAX_OUTPUT_TOKENS } else { task_limit }
+}
+
+/// True when a pair that always reasons stands for a task other than `lesson` (user decision
+/// 2026-11-19: only lessons may reason). The gateway then refuses to start.
+pub fn reasoning_outside_lesson(config: &Config) -> bool {
+    crate::task_profiles::TASK_IDS.iter().filter(|task| **task != REASONING_TASK).any(|task| {
+        let (provider, model) = crate::task_profiles::task_configuration_identifiers(config, task);
+        pair_reasoning(&provider, &model).is_some_and(|reasoning| reasoning.reasons())
+    })
+}
 
 #[derive(Clone, PartialEq)]
 pub struct Config {
@@ -188,6 +212,9 @@ pub fn validate_config(config: &Config) -> Result<(), ConfigError> {
     }
     if config.requests_per_minute < 1 || config.upstream_timeout_ms < 1 || config.body_timeout_ms < 1 {
         return Err(ConfigError("Ogiltig servergräns."));
+    }
+    if reasoning_outside_lesson(config) {
+        return Err(ConfigError("En modell som alltid resonerar får bara användas för lektioner (provider_options_incompatible)."));
     }
     Ok(())
 }

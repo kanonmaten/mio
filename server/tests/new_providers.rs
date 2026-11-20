@@ -122,7 +122,7 @@ fn only_haiku_55_is_reviewed_at_anthropic() {
 
 #[test]
 fn candidates_are_refused_until_a_live_test_is_approved() {
-    for (provider, model) in [("mistral", "mistral-small-2603"), ("mistral", "mistral-medium-3-5"), ("nvidia", "qwen/qwen3.8-27b")] {
+    for (provider, model) in [("mistral", "mistral-small-2603"), ("nvidia", "qwen/qwen3.8-27b")] {
         assert_eq!(provider_profile(provider, model, None), Err(Incompatible::Model), "{provider} {model}");
         let candidate = candidate_profile(provider, model).unwrap();
         assert_eq!(candidate.contract_review.status, "candidate");
@@ -130,7 +130,9 @@ fn candidates_are_refused_until_a_live_test_is_approved() {
             ("MISTRAL_API_KEY", "fixture-mistral"), ("NVIDIA_API_KEY", "fixture-nvidia"), ("MIO_GATEWAY_TOKEN", TOKEN)])).unwrap();
         assert_eq!(resolve_task_profile(&config, "ask").configuration_error, Some("provider_model_incompatible"));
     }
-    assert!(candidate_profile("mistral", "mistral-large-4-0").is_none(), "Large 4 cannot turn reasoning off");
+    // Medium 3.5 was deprecated 2026-10-31; Large 4 is a lesson-only candidate (tests/reasoning_usage.rs).
+    assert!(candidate_profile("mistral", "mistral-medium-3-5").is_none());
+    assert_eq!(provider_profile("mistral", "mistral-large-4-0", None), Err(Incompatible::Model));
 }
 
 #[test]

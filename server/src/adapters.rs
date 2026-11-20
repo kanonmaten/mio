@@ -5,7 +5,7 @@ use serde_json::{Map, Value, json};
 
 use crate::config::Config;
 use crate::js::{ascii_alphanumeric_or, credential_shaped, exact_keys, get, has_length, is_blank, safe_integer, trim, truthy};
-use crate::model_profiles::{Incompatible, Profile, ReasoningOff};
+use crate::model_profiles::{Incompatible, Profile, Reasoning};
 use crate::time::http_date_ms;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -161,11 +161,16 @@ fn chat_request(profile: Profile, api_key: &str, generation: &Generation) -> Pro
     body.insert("max_tokens".to_owned(), json!(generation.max_output_tokens));
     body.insert("stream".to_owned(), json!(false));
     // Reasoning must be off, not hidden; responses that still carry reasoning are rejected below.
-    match profile.reasoning_off {
-        ReasoningOff::EffortNone if !profile.plain => {
+    // The one exception is a reviewed level for a model that cannot turn it off, which only the
+    // lesson task may select (resolve_task_profile and validate_config refuse it elsewhere).
+    match profile.reasoning {
+        Reasoning::EffortNone if !profile.plain => {
             body.insert("reasoning_effort".to_owned(), json!("none"));
         }
-        ReasoningOff::ChatTemplate if !profile.plain => {
+        Reasoning::Effort(level) if !profile.plain => {
+            body.insert("reasoning_effort".to_owned(), json!(level));
+        }
+        Reasoning::ChatTemplate if !profile.plain => {
             body.insert("chat_template_kwargs".to_owned(), json!({ "enable_thinking": false }));
         }
         _ => {}
@@ -181,7 +186,7 @@ fn chat_request(profile: Profile, api_key: &str, generation: &Generation) -> Pro
 /// `medium` (Haiku 5.5 refuses disabled above `high`), the schema enforced by
 /// `output_config.format`, and no sampling parameters (refused since API version 2026-10-21).
 fn messages_request(profile: Profile, api_key: &str, generation: &Generation) -> Result<ProviderRequest, Incompatible> {
-    ensure(profile.reasoning_off == ReasoningOff::ThinkingDisabled && !profile.temperature)?;
+    ensure(profile.reasoning == Reasoning::ThinkingDisabled && !profile.temperature)?;
     let system: Vec<&str> = generation.messages.iter().filter(|message| message.role == "system")
         .map(|message| message.content.as_str()).collect();
     let turns: Vec<Value> = generation.messages.iter().filter(|message| message.role != "system")
@@ -260,13 +265,69 @@ fn token_count(value: Option<&Value>) -> Option<i64> {
 
 pub type HeaderLookup<'a> = &'a dyn Fn(&str) -> Option<String>;
 
+/// The token counts of a provider answer, read the same way whether the answer is later accepted
+/// or not (the provider bills both). Numbers only; never any text from the answer.
+///
+/// `output_tokens` is everything billed as output, reasoning included: Mistral's OpenAPI spec
+/// does not say whether `completion_tokens` holds the reasoning, so when `total_tokens` shows
+/// the reasoning was counted beside it (total = prompt + completion + reasoning), it is added.
+/// `cached_input_tokens` is the part of `input_tokens` billed as cached.
+pub fn response_usage(data: &Value, wire: &str) -> Option<Usage> {
+    let usage = data.as_object()?.get("usage")?;
+    let count = |name: &str| token_count(get(usage, name));
+    let detail = |outer: &str, inner: &str| token_count(get(usage, outer).and_then(|details| get(details, inner)));
+    let usage = if wire == "messages" {
+        let (input, output) = (count("input_tokens"), count("output_tokens"));
+        Usage { input_tokens: input, output_tokens: output, total_tokens: input.zip(output).map(|(input, output)| input + output),
+            reasoning_tokens: None, cached_input_tokens: count("cache_read_input_tokens") }
+    } else {
+        let (input, completion, total) = (count("prompt_tokens"), count("completion_tokens"), count("total_tokens"));
+        let reasoning = detail("completion_tokens_details", "reasoning_tokens");
+        let beside = matches!((input, completion, total, reasoning),
+            (Some(input), Some(completion), Some(total), Some(reasoning)) if reasoning > 0 && total == input + completion + reasoning);
+        Usage { input_tokens: input,
+            output_tokens: if beside { completion.zip(reasoning).map(|(completion, reasoning)| completion + reasoning) } else { completion },
+            total_tokens: total, reasoning_tokens: reasoning,
+            // Mistral also reports `num_cached_tokens` (and a misspelt `prompt_token_details`).
+            cached_input_tokens: detail("prompt_tokens_details", "cached_tokens").or_else(|| count("num_cached_tokens"))
+                .or_else(|| detail("prompt_token_details", "cached_tokens")) }
+    };
+    (usage != Usage::default()).then_some(usage)
+}
+
+/// The answer text of a chat message whose `content` may be a list of chunks. A profile that
+/// reasons (Mistral Large 4 for `lesson`) answers with thinking chunks and one text chunk: the
+/// thinking chunks are skipped without reading them, so their text is never copied, logged,
+/// stored or returned. Anything else in the list (several text chunks, tool or reference chunks,
+/// a text chunk without text) is invalid. Every other profile rejects a thinking chunk as
+/// reasoning that should have been off, and any list at all as invalid.
+fn chat_content<'a>(content: Option<&'a Value>, profile: &Profile) -> Result<Option<&'a str>, ResponseError> {
+    let Some(Value::Array(chunks)) = content else { return Ok(content.and_then(Value::as_str)) };
+    let kind = |chunk: &Value| get(chunk, "type").and_then(Value::as_str).map(str::to_owned);
+    if !profile.reasoning.reasons() {
+        let thinking = chunks.iter().any(|chunk| kind(chunk).as_deref() == Some("thinking"));
+        return Err(if thinking { REASONING } else { INVALID });
+    }
+    let mut text = None;
+    for chunk in chunks {
+        match kind(chunk).as_deref() {
+            // Dropped unread: tanketext never leaves this loop.
+            Some("thinking") => {}
+            Some("text") if text.is_none() => text = Some(get(chunk, "text").and_then(Value::as_str).ok_or(INVALID)?),
+            _ => return Err(INVALID),
+        }
+    }
+    Ok(text)
+}
+
 pub fn normalize_provider_response(data: &Value, profile: &Profile, headers: HeaderLookup) -> Result<Normalized, ResponseError> {
     let envelope = data.as_object().ok_or(INVALID)?;
     let usage = envelope.get("usage");
     let detail = |outer: &str, inner: &str| usage.and_then(|usage| get(usage, outer)).and_then(|details| get(details, inner));
-    // Hiding reasoning text does not satisfy an explicit reasoning-off contract.
+    // Hiding reasoning text does not satisfy an explicit reasoning-off contract. Only a profile
+    // bound to reasoning (lesson) may report reasoning tokens.
     for value in [detail("output_tokens_details", "reasoning_tokens"), detail("completion_tokens_details", "reasoning_tokens")] {
-        if value.and_then(Value::as_f64).is_some_and(|tokens| tokens > 0.0) {
+        if !profile.reasoning.reasons() && value.and_then(Value::as_f64).is_some_and(|tokens| tokens > 0.0) {
             return Err(REASONING);
         }
     }
@@ -287,12 +348,8 @@ pub fn normalize_provider_response(data: &Value, profile: &Profile, headers: Hea
         || has_length(message.get("reasoning_details")) {
         return Err(REASONING);
     }
-    // Mistral's reasoning models answer with a list of chunks, one of them the thinking; only a
-    // plain string answer is accepted.
-    if let Some(Value::Array(chunks)) = message.get("content") {
-        let thinking = chunks.iter().any(|chunk| get(chunk, "type").is_some_and(|kind| kind == "thinking"));
-        return Err(if thinking { REASONING } else { INVALID });
-    }
+    // Mistral's reasoning models answer with a list of chunks, one of them the thinking.
+    let content = chat_content(message.get("content"), profile)?;
     let reason = get(choice, "finish_reason").and_then(Value::as_str);
     let finish = if message.get("refusal").is_some_and(truthy) || reason == Some("content_filter") { Finish::Refused }
         // Mistral reports a cut at the model's own context limit as `model_length`.
@@ -300,7 +357,7 @@ pub fn normalize_provider_response(data: &Value, profile: &Profile, headers: Hea
         else if reason == Some("stop") { Finish::Completed }
         else { return Err(INVALID) };
     let text = if finish == Finish::Completed {
-        let content = message.get("content").and_then(Value::as_str).ok_or(INVALID)?;
+        let content = content.ok_or(INVALID)?;
         if is_blank(content) || content.len() > 24_000 {
             return Err(INVALID);
         }
@@ -308,18 +365,10 @@ pub fn normalize_provider_response(data: &Value, profile: &Profile, headers: Hea
     } else {
         None
     };
-    let usage = Usage {
-        input_tokens: token_count(usage.and_then(|usage| get(usage, "prompt_tokens"))),
-        output_tokens: token_count(usage.and_then(|usage| get(usage, "completion_tokens"))),
-        total_tokens: token_count(usage.and_then(|usage| get(usage, "total_tokens"))),
-        reasoning_tokens: token_count(detail("completion_tokens_details", "reasoning_tokens")),
-        cached_input_tokens: token_count(detail("prompt_tokens_details", "cached_tokens")),
-    };
     let request_id = headers("x-request-id").or_else(|| headers("request-id")).map(Value::String);
     let provenance = Provenance { response_id: safe_id(envelope.get("id"), false), request_id: safe_id(request_id.as_ref(), false) };
     Ok(Normalized { text, finish, refusal: finish == Finish::Refused, requested_model: profile.requested_model.clone(),
-        returned_model: safe_id(envelope.get("model"), true),
-        usage: (usage != Usage::default()).then_some(usage),
+        returned_model: safe_id(envelope.get("model"), true), usage: response_usage(data, "chat"),
         provenance: (provenance != Provenance::default()).then_some(provenance) })
 }
 
@@ -356,21 +405,10 @@ fn normalize_messages_response(envelope: &Map<String, Value>, profile: &Profile,
         }
         None
     };
-    let usage = envelope.get("usage");
-    let count = |name: &str| token_count(usage.and_then(|usage| get(usage, name)));
-    let (input, output) = (count("input_tokens"), count("output_tokens"));
-    let usage = Usage {
-        input_tokens: input,
-        output_tokens: output,
-        total_tokens: input.zip(output).map(|(input, output)| input + output),
-        reasoning_tokens: None,
-        cached_input_tokens: count("cache_read_input_tokens"),
-    };
     let request_id = headers("request-id").or_else(|| headers("x-request-id")).map(Value::String);
     let provenance = Provenance { response_id: safe_id(envelope.get("id"), false), request_id: safe_id(request_id.as_ref(), false) };
     Ok(Normalized { text, finish, refusal: finish == Finish::Refused, requested_model: profile.requested_model.clone(),
-        returned_model: safe_id(envelope.get("model"), true),
-        usage: (usage != Usage::default()).then_some(usage),
+        returned_model: safe_id(envelope.get("model"), true), usage: response_usage(&Value::Object(envelope.clone()), "messages"),
         provenance: (provenance != Provenance::default()).then_some(provenance) })
 }
 

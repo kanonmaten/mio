@@ -3,7 +3,7 @@
 //! nothing about a request is logged.
 
 use std::convert::Infallible;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
@@ -18,12 +18,14 @@ use tokio::net::TcpListener;
 use crate::analysis::{validate_analysis_payload, validate_analysis_v2_payload, validate_ask_payload, validate_lesson_payload};
 use crate::config::{Config, ConfigError, validate_config};
 use crate::error::RequestError;
-use crate::generation::{Transport, execute_generation, generation_metadata_headers};
+use crate::adapters::Usage;
+use crate::generation::{Spent, Transport, execute_generation, generation_metadata_headers};
 use crate::prompts::{ANALYSIS_V2_PROMPT_VERSION, PROMPT_VERSION};
 use crate::state_store::{CounterStore, Counters, MemoryCounterStore};
 use crate::status::{QuotaObservation, authenticated, configuration_revision, gateway_status, gateway_status_v2, is_revision, metadata_headers};
 use crate::task_profiles::task_configuration_identifiers;
 use crate::tasks::Mode;
+use crate::usage::{Ledger, Loaded, MemoryUsageStore, UsageStore, month_of};
 use crate::time::next_utc_midnight;
 
 const MAX_BODY_BYTES: usize = 40_000;
@@ -38,6 +40,8 @@ type ConfigSource = Arc<dyn Fn() -> Config + Send + Sync>;
 struct State {
     counters: Counters,
     active: u32,
+    /// `None` when the usage file has an unknown schema: it is then never written.
+    usage: Option<Ledger>,
 }
 
 struct Inner {
@@ -45,6 +49,7 @@ struct Inner {
     transport: Arc<dyn Transport>,
     clock: Clock,
     store: Arc<dyn CounterStore>,
+    usage_store: Arc<dyn UsageStore>,
     state: Mutex<State>,
 }
 
@@ -124,6 +129,30 @@ impl Inner {
         let _ = self.store.save(&state.counters);
     }
 
+    /// Counts the provider answers of one request for the credit meter. Identifiers and token
+    /// counts only. A failed write keeps the counts in memory; the next answer writes them again.
+    fn record_answers(&self, config: &Config, mode: Mode, answers: Vec<Option<Usage>>) {
+        if answers.is_empty() {
+            return;
+        }
+        let (provider, model) = task_configuration_identifiers(config, mode.task_id());
+        let wire = crate::model_profiles::provider(&provider).map_or("chat", |provider| provider.wire);
+        let month = month_of((self.clock)());
+        let mut state = self.state();
+        let Some(ledger) = state.usage.as_mut() else { return };
+        for usage in &answers {
+            ledger.record(&month, mode.task_id(), &provider, &model, wire, usage.as_ref());
+        }
+        let _ = self.usage_store.save(ledger);
+    }
+
+    /// The `usage` object of `/v2/status` for the current UTC month, or null for a usage file
+    /// this gateway must not touch.
+    fn usage_report(&self) -> Value {
+        let month = month_of((self.clock)());
+        self.state().usage.as_ref().map_or(Value::Null, |ledger| ledger.report(&month))
+    }
+
     /// Status observes counters only; it never reserves capacity or calls the provider.
     fn quota_snapshot(&self, config: &Config) -> Option<QuotaObservation> {
         let time = (self.clock)();
@@ -200,13 +229,25 @@ fn parse_payload(bytes: &[u8], mode: Mode) -> Result<Value, RequestError> {
     Ok(value)
 }
 
+fn loaded_usage(store: &dyn UsageStore) -> Option<Ledger> {
+    match store.load() {
+        Loaded::Ledger(ledger) => Some(ledger),
+        Loaded::Unknown => {
+            // One journal line; the file is left exactly as it is.
+            eprintln!("Mio-servern: användningsfilen har ett okänt format och lämnas orörd; kreditmätaren visar inget.");
+            None
+        }
+    }
+}
+
 impl Gateway {
     pub fn new(config: Config, transport: Arc<dyn Transport>) -> Result<Self, ConfigError> {
         validate_config(&config)?;
         let store: Arc<dyn CounterStore> = Arc::new(MemoryCounterStore::default());
         let counters = store.load();
         Ok(Self { inner: Arc::new(Inner { config: Arc::new(move || config.clone()), transport,
-            clock: Arc::new(system_clock), store, state: Mutex::new(State { counters, active: 0 }) }) })
+            clock: Arc::new(system_clock), store, usage_store: Arc::new(MemoryUsageStore::default()),
+            state: Mutex::new(State { counters, active: 0, usage: Some(Ledger::default()) }) }) })
     }
 
     fn rebuild(self, change: impl FnOnce(&mut Inner)) -> Self {
@@ -218,8 +259,17 @@ impl Gateway {
     /// Keeps the counters across restarts. Loads them at once.
     pub fn with_store(self, store: Arc<dyn CounterStore>) -> Self {
         self.rebuild(|inner| {
-            inner.state = Mutex::new(State { counters: store.load(), active: 0 });
+            let usage = inner.state().usage.take();
+            inner.state = Mutex::new(State { counters: store.load(), active: 0, usage });
             inner.store = store;
+        })
+    }
+
+    /// Keeps the monthly usage counter across restarts (`usage.json`). Loads it at once.
+    pub fn with_usage_store(self, store: Arc<dyn UsageStore>) -> Self {
+        self.rebuild(|inner| {
+            inner.state().usage = loaded_usage(store.as_ref());
+            inner.usage_store = store;
         })
     }
 
@@ -283,7 +333,9 @@ impl Gateway {
             if target == "/v1/status" {
                 return reply(&headers, 200, &gateway_status(&config), 60);
             }
-            return reply(&headers, 200, &gateway_status_v2(&config, inner.quota_snapshot(&config).as_ref()), 60);
+            let mut status = gateway_status_v2(&config, inner.quota_snapshot(&config).as_ref());
+            status["usage"] = inner.usage_report();
+            return reply(&headers, 200, &status, 60);
         }
         if parts.method == Method::GET && target == "/health" {
             return reply(&headers, 200, &json!({ "status": "ok" }), 60);
@@ -315,20 +367,23 @@ impl Gateway {
         };
         let mut slot = None;
         let mut reserve = || inner.reserve(&config).map(|reserved| slot = Some(reserved));
-        let spent = AtomicI64::new(0);
-        let generated = match execute_generation(&config, mode, &payload, inner.transport.as_ref(), &mut reserve,
-            inner.clock.as_ref(), &spent).await {
+        let spent = Spent::default();
+        let outcome = execute_generation(&config, mode, &payload, inner.transport.as_ref(), &mut reserve,
+            inner.clock.as_ref(), &spent).await;
+        // Every answer the provider billed counts in the month's usage, failed or not.
+        inner.record_answers(&config, mode, spent.take_answers());
+        let generated = match outcome {
             Ok(generated) => generated,
             Err(error) => {
                 // A failed call can still have used tokens; they count against the day (ultrareview C1).
-                let tokens = spent.load(Ordering::Relaxed);
+                let tokens = spent.tokens.load(Ordering::Relaxed);
                 if tokens > 0 {
                     inner.record_usage(tokens);
                 }
                 return failure(&headers, &error);
             }
         };
-        inner.record_usage(spent.load(Ordering::Relaxed));
+        inner.record_usage(spent.tokens.load(Ordering::Relaxed));
         headers.set("X-Mio-Provider", generated.config.provider.clone());
         headers.set("X-Mio-Model", generated.config.model.clone());
         headers.set("X-Mio-Prompt-Version", generated.prompt_version.to_owned());

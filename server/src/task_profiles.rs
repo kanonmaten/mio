@@ -107,6 +107,10 @@ pub fn resolve_task_profile(config: &Config, task: &str) -> Resolved {
     match crate::config::profile(&selected) {
         Err(Incompatible::Options) => return Resolved::failed("provider_options_incompatible"),
         Err(Incompatible::Model) => return Resolved::failed("provider_model_incompatible"),
+        // Only lessons may reason (user decision 2026-11-19); validate_config also refuses to start.
+        Ok(profile) if profile.reasoning.reasons() && task != crate::model_profiles::REASONING_TASK => {
+            return Resolved::failed("provider_options_incompatible");
+        }
         Ok(_) => {}
     }
     let key = &selected.api_key;

@@ -101,8 +101,13 @@ fn task_prompt_version(task: &str) -> &'static str {
 
 /// A backlog batch (twelve sources, 16,000 bytes) cannot fit an 8,000-token minute, so it is
 /// offered only without per-minute sizing or with a budget that holds it.
+/// The budget is the everyday provider's: another known provider's own
+/// (`MIO_TOKENS_PER_MINUTE_<PROVIDER>`, none by default for Mistral), otherwise Groq's
+/// `MIO_TOKENS_PER_MINUTE` exactly as before, so a Groq configuration's revision is unchanged.
 pub fn accepts_backlog(config: &Config) -> bool {
-    config.tokens_per_minute.is_none_or(|limit| limit >= 20_000)
+    let (everyday, _) = task_configuration_identifiers(config, "everyday");
+    let budget = if everyday != "groq" && provider(&everyday).is_some() { config.minute_budget(&everyday) } else { config.tokens_per_minute };
+    budget.is_none_or(|limit| limit >= 20_000)
 }
 
 fn task_capabilities(task: &str, config: &Config) -> Vec<&'static str> {
@@ -175,14 +180,17 @@ pub fn gateway_status_v2(config: &Config, quota: Option<&QuotaObservation>) -> V
         let mut entry = json!({ "configured": selected.configured, "provider": provider, "model": model,
             "promptVersion": task_prompt_version(task), "capabilities": task_capabilities(task, config),
             "configurationError": selected.configuration_error });
+        let profile = selected.config.as_ref().and_then(|config| crate::config::profile(config).ok());
         // A reviewed model whose provider refuses temperature runs without it; that is never silent
         // (rule approved 2026-11-17). Absent for every model that gets temperature 0.
-        let omitted = selected.config.as_ref()
-            .and_then(|config| crate::config::profile(config).ok())
-            .is_some_and(|profile| !profile.temperature);
-        if omitted {
+        if profile.as_ref().is_some_and(|profile| !profile.temperature) {
             entry["temperature"] = json!("provider-default");
         }
+        // Contract after the grilling (DATAMODELL.md): the reviewed reasoning level ("off" unless a
+        // lesson runs on a model that always reasons) and the schema dialect, null without a
+        // valid configuration. The capability list stays as older apps expect it.
+        entry["reasoning"] = json!(profile.as_ref().map_or("off", |profile| profile.reasoning.level()));
+        entry["schemaDialect"] = json!(profile.as_ref().map(|profile| profile.schema_dialect));
         tasks.insert(task.to_owned(), entry);
     }
     // null means no daily cap; status then reports quota as null instead of an invented limit.

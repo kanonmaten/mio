@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use crate::config::{is_gateway_token, load_config, looks_like_provider_key};
 use crate::generation::{Transport, trial_call};
 use crate::tasks::Mode;
-use crate::model_profiles::{CANDIDATE_MODELS, PROVIDERS, REVIEWED_MODELS, Reviewed, provider};
+use crate::model_profiles::{CANDIDATE_MODELS, PROVIDERS, REASONING_TASK, REVIEWED_MODELS, Reviewed, price, provider};
 use crate::task_profiles::{TASK_IDS, resolve_task_profile, task_configuration_identifiers};
 
 /// The value of `NAME=value` on its own line, when it has the shape of a Mio token. A file
@@ -46,6 +46,38 @@ pub fn gateway_env(key: &str, existing: Option<&[u8]>, model: &str, port: &str, 
             if is_gateway_token(&token) { contents } else { rotate_key(&contents, fresh_token, "MIO_GATEWAY_TOKEN") }
         }
         _ => fresh_env(key, model, port, fresh_token).into_bytes(),
+    }
+}
+
+/// The Mistral models `install.sh` sets up (user decisions 2026-11-19 and 2026-11-20): Small 4
+/// with reasoning off for `ask` and `everyday`, Large 4 at medium reasoning for `lesson` only.
+pub const MISTRAL_DEFAULT_MODEL: &str = "mistral-small-2603";
+pub const MISTRAL_LESSON_MODEL: &str = "mistral-large-4-0";
+
+/// `gateway.env` for Mistral. A file that already has a gateway token keeps everything,
+/// provider choice included, and only gets its `MISTRAL_API_KEY` line set: an existing Groq
+/// installation stays on Groq with the same token (no re-pairing) and switches to Mistral in
+/// Mio Kontroll. Anything else gets a new Mistral file. Neither approves a candidate: that line
+/// is only written after a passed `mio-gateway prova` (by install.sh or the panel's helper).
+pub fn mistral_gateway_env(key: &str, existing: Option<&[u8]>, port: &str, fresh_token: &str) -> Vec<u8> {
+    let kept = existing.and_then(|existing| token_in(&String::from_utf8_lossy(existing), "MIO_GATEWAY_TOKEN").map(str::to_owned));
+    match (existing, kept) {
+        (Some(existing), Some(token)) => {
+            let contents = rotate_key(existing, key, "MISTRAL_API_KEY");
+            if is_gateway_token(&token) { contents } else { rotate_key(&contents, fresh_token, "MIO_GATEWAY_TOKEN") }
+        }
+        _ => [
+            "# Mio gateway. Skapad av install.sh. Dela aldrig denna fil.".to_owned(),
+            format!("MISTRAL_API_KEY={key}"), format!("MIO_GATEWAY_TOKEN={fresh_token}"),
+            "MIO_AI_PROVIDER=mistral".to_owned(), format!("MIO_AI_MODEL={MISTRAL_DEFAULT_MODEL}"),
+            // Raw JSON, as Mio Kontroll writes it; only lessons may reason.
+            format!("MIO_AI_TASK_PROFILES={{\"lesson\":{{\"model\":\"{MISTRAL_LESSON_MODEL}\"}}}}"),
+            // Mistral has no per-minute token reservation like Groq's free tier, so no budget is
+            // set for it. MIO_TOKENS_PER_MINUTE is Groq's and only applies if Groq is chosen later.
+            "MIO_REQUESTS_PER_MINUTE=10".to_owned(), "MIO_TOKENS_PER_MINUTE=8000".to_owned(),
+            "MIO_TOKENS_PER_MINUTE_MISTRAL=".to_owned(), "MIO_TOKENS_PER_DAY=".to_owned(), "MIO_REQUESTS_PER_DAY=".to_owned(),
+            "MIO_LESSON_INTERVAL_SECONDS=60".to_owned(), format!("PORT={port}"), String::new(),
+        ].join("\n").into_bytes(),
     }
 }
 
@@ -160,6 +192,12 @@ pub fn reviewed_models() -> String {
         json!({ "provider": reviewed.provider, "model": reviewed.model, "secretVariable": secret,
             "plain": reviewed.plain, "schemaDialect": reviewed.schema_dialect, "sources": reviewed.sources,
             "temperature": if reviewed.temperature { "0" } else { "provider-default" },
+            // A pair that always reasons may only serve lessons (user decision 2026-11-19).
+            "reasoning": reviewed.reasoning.level(),
+            "tasks": if reviewed.reasoning.reasons() { vec![REASONING_TASK] } else { TASK_IDS.to_vec() },
+            // USD per million tokens from the reviewed table, or null (Groq's free tier, Haiku).
+            "prices": price(reviewed.provider, reviewed.model).map(|price| json!({ "inputPerMillion": price.input,
+                "cachedInputPerMillion": price.cached_input, "outputPerMillion": price.output, "asOf": price.as_of })),
             "reviewedAt": reviewed.reviewed_at, "liveTested": false, "blocked": reviewed.blocked })
     };
     let providers: Vec<&str> = PROVIDERS.iter().map(|provider| provider.id).collect();
@@ -186,7 +224,8 @@ fn trial_payloads() -> [(&'static str, Mode, Value); 3] {
 
 /// `mio-gateway prova <provider> <model>`: one synthetic call per task against a reviewed pair
 /// or a candidate, with the key from the environment file on stdin. Prints JSON per task;
-/// `Err` unless all three answers passed validation. Only run when the user asks for it.
+/// `Err` unless every answer passed validation. A pair that always reasons (Mistral Large 4)
+/// may only serve lessons, so it is tried on `lesson` alone. Only run when the user asks for it.
 pub fn trial(text: &str, provider_id: &str, model: &str, transport: &dyn Transport) -> Result<String, String> {
     let variables = environment_file(text);
     let config = load_config(&|name| variables.get(name).cloned()).map_err(|error| error.0.to_owned())?;
@@ -200,7 +239,8 @@ pub fn trial(text: &str, provider_id: &str, model: &str, transport: &dyn Transpo
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|_| "Kunde inte starta.".to_owned())?;
     let now = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_millis() as i64);
     let mut passed = true;
-    let tasks: Vec<Value> = trial_payloads().into_iter().map(|(task, mode, payload)| {
+    let tasks: Vec<Value> = trial_payloads().into_iter()
+        .filter(|(task, _, _)| !profile.reasoning.reasons() || *task == REASONING_TASK).map(|(task, mode, payload)| {
         let started = std::time::Instant::now();
         let outcome = runtime.block_on(trial_call(profile.clone(), &key, mode, &payload, transport, &now, config.minute_budget(provider_id)));
         let milliseconds = started.elapsed().as_millis() as u64;
@@ -208,8 +248,9 @@ pub fn trial(text: &str, provider_id: &str, model: &str, transport: &dyn Transpo
         match outcome {
             Ok((answer, normalized)) => {
                 let usage = normalized.usage.unwrap_or_default();
+                // Token counts only; the thinking itself was dropped in the adapter.
                 json!({ "task": task, "ok": true, "error": null, "milliseconds": milliseconds, "answer": answer,
-                    "inputTokens": usage.input_tokens, "outputTokens": usage.output_tokens })
+                    "inputTokens": usage.input_tokens, "outputTokens": usage.output_tokens, "reasoningTokens": usage.reasoning_tokens })
             }
             Err(error) => json!({ "task": task, "ok": false, "error": error.code, "milliseconds": milliseconds, "answer": null }),
         }
@@ -238,11 +279,16 @@ fn fresh_token() -> Result<String, String> {
     }
 }
 
-fn write_config(path: &str, model: &str, port: &str) -> Result<(), String> {
+fn write_config(path: &str, provider: &str, model: &str, port: &str) -> Result<(), String> {
     let key = standard_input()?;
     let fresh = fresh_token()?;
     debug_assert!(is_gateway_token(&fresh));
-    let contents = gateway_env(&key, std::fs::read(path).ok().as_deref(), model, port, &fresh);
+    let existing = std::fs::read(path).ok();
+    let contents = if provider == "mistral" {
+        mistral_gateway_env(&key, existing.as_deref(), port, &fresh)
+    } else {
+        gateway_env(&key, existing.as_deref(), model, port, &fresh)
+    };
     let temporary = format!("{path}.tmp");
     let failed = |_| "Kunde inte skriva konfigurationen.".to_owned();
     let mut file = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&temporary).map_err(failed)?;
@@ -256,7 +302,9 @@ pub fn run(arguments: &[String]) -> Option<Result<(), String>> {
     let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
     let print = |text: String| { print!("{text}"); Ok(()) };
     Some(match arguments.as_slice() {
-        ["write-config", path, model, port] => write_config(path, model, port),
+        ["write-config", path, model, port] => write_config(path, "groq", model, port),
+        // Mistral: a new file with Small 4 and Large 4 (lessons), or only the key line set.
+        ["write-mistral-config", path, port] => write_config(path, "mistral", "", port),
         ["tailscale-host"] => standard_input().and_then(|status| print(tailscale_host(&status))),
         ["pairing-payload", host] => standard_input().and_then(|text| pairing_payload(&text, host)
             .ok_or_else(|| "Hittar ingen gatewaytoken. Kör server/install.sh först.".to_owned()).and_then(print)),

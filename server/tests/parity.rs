@@ -39,6 +39,23 @@ fn expand(value: &Value, shared: &[Value]) -> Value {
     }
 }
 
+/// `/v2/status` without the fields added after the recording (grilling contract 2026-11-20:
+/// `reasoning` and `schemaDialect` per task, `usage` at the top). Node never had them, so the
+/// recording stays as Node wrote it and everything Node did publish is still compared byte for
+/// byte; the new fields have their own tests (tests/reasoning_usage.rs).
+fn without_additions(mut status: Value) -> Value {
+    if let Some(map) = status.as_object_mut() {
+        map.shift_remove("usage");
+        for task in map.get_mut("tasks").and_then(Value::as_object_mut).into_iter().flat_map(|tasks| tasks.values_mut()) {
+            if let Some(task) = task.as_object_mut() {
+                task.shift_remove("reasoning");
+                task.shift_remove("schemaDialect");
+            }
+        }
+    }
+    status
+}
+
 fn golden() -> Value {
     let recorded: Value = serde_json::from_str(include_str!("golden/node-parity.json")).unwrap();
     let shared = recorded["shared"].as_array().unwrap();
@@ -118,7 +135,7 @@ fn evaluate(kind: &str, input: &Value) -> Value {
                     "port": config.port, "requestsPerMinute": config.requests_per_minute, "tokensPerMinute": config.tokens_per_minute,
                     "requestsPerDay": config.requests_per_day, "tokensPerDay": config.tokens_per_day, "lessonIntervalSeconds": config.lesson_interval_seconds })),
                 "revision": parsed.as_ref().ok().map(configuration_revision),
-                "statusV1": status_from_environment(&env, &parsed), "statusV2": status_v2_from_environment(&env, &parsed, quota.as_ref()) })
+                "statusV1": status_from_environment(&env, &parsed), "statusV2": without_additions(status_v2_from_environment(&env, &parsed, quota.as_ref())) })
         }
         other => panic!("unknown case kind {other}"),
     }
@@ -187,7 +204,12 @@ async fn http_exchanges_match_the_recorded_gateway() {
                 .map(|name| (name.clone(), json!(reply.header(name)))).collect();
             let calls: Vec<Value> = provider.calls.lock().unwrap()[before..].iter()
                 .map(|call| json!({ "url": call.url, "authorization": call.authorization, "body": digest(&call.body) })).collect();
-            let actual = json!({ "status": reply.status, "headers": kept, "body": reply.body, "calls": calls, "unusedUpstream": script.lock().unwrap().len() });
+            let body = if request["path"] == "/v2/status" && reply.status == 200 {
+                without_additions(serde_json::from_str(&reply.body).unwrap()).to_string()
+            } else {
+                reply.body.clone()
+            };
+            let actual = json!({ "status": reply.status, "headers": kept, "body": body, "calls": calls, "unusedUpstream": script.lock().unwrap().len() });
             if &actual != wanted {
                 let clip = |value: &Value| value.to_string().chars().take(900).collect::<String>();
                 failures.push(format!("{} step {index}: {}\n  expected {}\n  actual   {}", scenario["name"], clip(request), clip(wanted), clip(&actual)));

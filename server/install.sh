@@ -2,10 +2,17 @@
 # Installs or updates Mio's private AI gateway on CachyOS/Arch, next to Pianissimo.
 # Run as your normal user from any directory: ./install.sh  (it uses sudo where needed).
 # It builds the Rust gateway with cargo, so the PC needs no Node or other runtime.
-# Re-running is the update path: code and the systemd unit are refreshed; the Groq key,
-# gateway token and daily counters are kept. ./install.sh --ny-groq-nyckel replaces the key.
-# --nyckel-pa-stdin reads the key from stdin instead of asking (for Mio Kontroll); without it
-# the script behaves exactly as before.
+# A new installation uses Mistral (user decision 2026-11-20): Small 4 for questions and everyday
+# text, Large 4 with medium reasoning for lessons. It asks for the Mistral key and then runs one
+# synthetic trial per pair (real, paid Mistral traffic, started by you running this script);
+# the pairs are approved only if the trial passes, otherwise the script stops.
+# Re-running is the update path: code and the systemd unit are refreshed; keys, provider choice,
+# gateway token and counters are kept, so an existing Groq installation stays on Groq with the
+# same token and switches to Mistral in Mio Kontroll.
+#   --ny-mistral-nyckel  sets the Mistral key (and runs the trial when Mistral is the provider)
+#   --ny-groq-nyckel     sets the Groq key; on a computer without a configuration it makes a Groq one
+#   --prova-mistral      runs the Mistral trial again, e.g. after a failed one
+#   --nyckel-pa-stdin    reads the key from stdin instead of asking (for Mio Kontroll)
 set -euo pipefail
 
 source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,27 +20,33 @@ app_dir=/opt/mio-gateway
 config_dir=/etc/mio-gateway
 config=$config_dir/gateway.env
 unit=/etc/systemd/system/mio-gateway.service
-model=qwen/qwen3.8-27b
+groq_model=qwen/qwen3.8-27b
+mistral_pairs=(mistral-small-2603 mistral-large-4-0)
 port=8787
 https_port=8443
 
 step() { printf '\n==> %s\n' "$1"; }
 fail() { printf 'FEL: %s\n' "$1" >&2; exit 1; }
 
+# Which key a new configuration or a key change is for: Mistral unless --ny-groq-nyckel.
+key_provider=mistral
 replace_key=false
 key_on_stdin=false
+run_trial=false
 for argument in "$@"; do
     case "$argument" in
-        --ny-groq-nyckel) replace_key=true ;;
+        --ny-mistral-nyckel) replace_key=true; key_provider=mistral ;;
+        --ny-groq-nyckel) replace_key=true; key_provider=groq ;;
+        --prova-mistral) run_trial=true ;;
         --nyckel-pa-stdin) key_on_stdin=true ;;
-        *) fail "Okänt val: $argument. Använd inget val, --ny-groq-nyckel eller --nyckel-pa-stdin." ;;
+        *) fail "Okänt val: $argument. Använd inget val, --ny-mistral-nyckel, --ny-groq-nyckel, --prova-mistral eller --nyckel-pa-stdin." ;;
     esac
 done
-groq_key=""
+provider_key=""
 if $key_on_stdin; then
     # Read before anything else can consume stdin. The last line may lack a line break.
-    IFS= read -r groq_key || [[ -n $groq_key ]] || fail "Ingen nyckel på stdin."
-    groq_key="${groq_key%$'\r'}"
+    IFS= read -r provider_key || [[ -n $provider_key ]] || fail "Ingen nyckel på stdin."
+    provider_key="${provider_key%$'\r'}"
 fi
 
 [[ $EUID -ne 0 ]] || fail "Kör som din vanliga användare, inte root. Skriptet använder sudo själv."
@@ -77,29 +90,44 @@ if sudo test -f "$config" && ! $replace_key; then
     if sudo grep -qiE '^MIO_GATEWAY_TOKEN=(sk-|sk_|gsk_|aiza)' "$config"; then
         fail "Gatewaytoken börjar som en leverantörsnyckel och godtas inte av telefonen. Kör ./install.sh --ny-groq-nyckel; då får gatewayen en ny token, och du parar telefonen igen med mio-pair."
     fi
-    echo "Finns redan; Groq-nyckel och gatewaytoken behålls."
+    echo "Finns redan; nycklar, vald leverantör och gatewaytoken behålls."
     # 2026-11-15: the old installer default of three requests per minute made asking Mio fail
     # while analysis ran. Requests are now sized to the tokens-per-minute budget instead.
     # A value you changed yourself is left alone.
     sudo sed -i 's/^MIO_REQUESTS_PER_MINUTE=3$/MIO_REQUESTS_PER_MINUTE=10/' "$config"
     sudo grep -q '^MIO_TOKENS_PER_MINUTE=' "$config" \
         || printf 'MIO_TOKENS_PER_MINUTE=8000\n' | sudo tee -a "$config" >/dev/null
-else
+elif [[ $key_provider == groq ]]; then
     if ! $key_on_stdin; then
         echo "Skapa en nyckel på https://console.groq.com/keys (gratisnivån räcker)."
         # Hidden prompt: the key never appears on screen, in argv, shell history or logs.
-        IFS= read -rsp "Klistra in Groq-nyckeln (syns inte) och tryck Enter: " groq_key; echo
+        IFS= read -rsp "Klistra in Groq-nyckeln (syns inte) och tryck Enter: " provider_key; echo
     fi
-    [[ $groq_key =~ ^gsk_[A-Za-z0-9]{20,200}$ ]] || fail "Det ser inte ut som en Groq-nyckel (börjar med gsk_)."
+    [[ $provider_key =~ ^gsk_[A-Za-z0-9]{20,200}$ ]] || fail "Det ser inte ut som en Groq-nyckel (börjar med gsk_)."
     # The key travels only on stdin; the gateway binary writes the root-only file (0600). With an
     # existing file only the GROQ_API_KEY line changes: the token (no re-pairing), limits, port
     # and task profiles you set are kept.
-    printf '%s' "$groq_key" | sudo "$app_dir/mio-gateway" write-config "$config" "$model" "$port"
-    unset groq_key
+    printf '%s' "$provider_key" | sudo "$app_dir/mio-gateway" write-config "$config" "$groq_model" "$port"
+    unset provider_key
     echo "Sparad (endast root kan läsa den)."
+else
+    if ! $key_on_stdin; then
+        echo "Skapa en nyckel på https://console.mistral.ai/api-keys (Vibe Pro-provet ger krediter i tre månader)."
+        echo "Stäng också av träning på din API-data i Mistrals admin-konsol, https://admin.mistral.ai (se server/README.md)."
+        # Hidden prompt: the key never appears on screen, in argv, shell history or logs.
+        IFS= read -rsp "Klistra in Mistral-nyckeln (syns inte) och tryck Enter: " provider_key; echo
+    fi
+    [[ $provider_key =~ ^[A-Za-z0-9]{20,200}$ ]] || fail "Det ser inte ut som en Mistral-nyckel (bara bokstäver och siffror)."
+    # A new file gets Small 4 for questions and everyday text and Large 4 for lessons, not yet
+    # approved. An existing file only gets its MISTRAL_API_KEY line: provider, token and the
+    # rest stay as they are.
+    printf '%s' "$provider_key" | sudo "$app_dir/mio-gateway" write-mistral-config "$config" "$port"
+    unset provider_key
+    echo "Sparad (endast root kan läsa den)."
+    run_trial=true
 fi
 
-unset groq_key
+unset provider_key
 
 step "systemd-tjänst"
 sudo install -m 644 "$source_dir/systemd/mio-gateway.service" "$unit"
@@ -114,6 +142,46 @@ done
 curl --silent --fail --max-time 2 "http://127.0.0.1:$port/health" >/dev/null \
     || fail "Gatewayen svarar inte. Se: journalctl -u mio-gateway -n 50"
 echo "Gatewayen svarar på 127.0.0.1:$port."
+
+if $run_trial; then
+    step "Provar Mistral (ett påhittat anrop per uppgift, riktig trafik med din nyckel)"
+    if ! sudo grep -q '^MIO_AI_PROVIDER=mistral$' "$config"; then
+        # An existing Groq installation: the trial and the switch happen in Mio Kontroll.
+        echo "Gatewayen använder inte Mistral som standard. Byt och tryck Prova i Mio Kontroll."
+    else
+        approved=()
+        for pair_model in "${mistral_pairs[@]}"; do
+            # The root-only file goes in on stdin; the answer is synthetic text and token counts.
+            # Large 4 always reasons and is tried on the lesson task only.
+            if result="$(sudo cat "$config" | sudo "$app_dir/mio-gateway" prova mistral "$pair_model")"; then
+                echo "Godkänt: mistral $pair_model"
+                approved+=("mistral=$pair_model")
+            else
+                printf '%s\n' "$result"
+                fail "Provet av mistral $pair_model gick inte igenom, så Mistral godkändes inte och AI är av. Felkoden står ovan. Fel nyckel: kör ./install.sh --ny-mistral-nyckel. Annars: kör ./install.sh --prova-mistral senare, eller tryck Prova i Mio Kontroll."
+            fi
+        done
+        # Written only after every pair passed, like the panel's helper does it. Any other
+        # approved candidates on the line are kept.
+        current="$(sudo sed -n 's/^MIO_APPROVED_CANDIDATES=//p' "$config" | tail -n 1)"
+        IFS=',' read -r -a entries <<<"$current"
+        for entry in "${approved[@]}"; do
+            [[ ",$current," == *",$entry,"* ]] || entries+=("$entry")
+        done
+        line="MIO_APPROVED_CANDIDATES=$(IFS=','; printf '%s' "${entries[*]}")"
+        line="${line/=,/=}"
+        sudo sed -i '/^MIO_APPROVED_CANDIDATES=/d' "$config"
+        printf '%s\n' "$line" | sudo tee -a "$config" >/dev/null
+        sudo systemctl restart mio-gateway.service
+        for _ in $(seq 1 20); do
+            curl --silent --fail --max-time 2 "http://127.0.0.1:$port/health" >/dev/null && break
+            sleep 0.5
+        done
+        curl --silent --fail --max-time 2 "http://127.0.0.1:$port/health" >/dev/null \
+            || fail "Gatewayen svarar inte efter godkännandet. Se: journalctl -u mio-gateway -n 50"
+        echo "Mistral är godkänt och gatewayen är omstartad."
+    fi
+fi
 
 step "Tailscale (HTTPS på port $https_port, bredvid Pianissimo på 443)"
 if ! tailscale status >/dev/null 2>&1; then
