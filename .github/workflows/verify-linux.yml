@@ -102,6 +102,12 @@ jobs:
         run: |
           rustup toolchain install 1.100.0 --profile minimal --component clippy
           rustup default 1.100.0
+          # rust-cache hashes every installed toolchain into its key, and runner images differ in
+          # which stable they ship (1.99.1 on one, none on the next), so drop all but the pinned one.
+          for toolchain in $(rustup toolchain list | awk '{print $1}' | grep -v '^1\.100\.0-'); do
+            rustup toolchain uninstall "$toolchain"
+          done
+          rustup toolchain list
           cargo --version
       - name: Återanvänd kontrollpanelens bygge
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
