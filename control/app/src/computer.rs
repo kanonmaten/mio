@@ -48,6 +48,17 @@ pub fn preferences(cx: &App) -> Preferences {
     backend(cx).preferences.map(|path| Preferences::load(&path)).unwrap_or_default()
 }
 
+/// Reads the preferences again, changes one and writes them, so a page never writes back a
+/// stale copy of what another page changed.
+pub fn save_preferences(change: impl FnOnce(&mut Preferences), cx: &App) -> Result<(), String> {
+    let mut preferences = preferences(cx);
+    change(&mut preferences);
+    match backend(cx).preferences {
+        Some(path) => preferences.save(&path),
+        None => Ok(()),
+    }
+}
+
 /// Turns keeping awake on or off; on start too, when the preference says so.
 pub fn set_awake(on: bool, cx: &mut App) -> Result<(), String> {
     let held = if on { Some((backend(cx).inhibit)()?) } else { None };
@@ -63,11 +74,7 @@ pub struct ComputerPage;
 
 impl ComputerPage {
     fn save(change: impl FnOnce(&mut Preferences), window: &mut Window, cx: &mut App) {
-        let mut preferences = preferences(cx);
-        change(&mut preferences);
-        if let Some(path) = backend(cx).preferences
-            && let Err(message) = preferences.save(&path)
-        {
+        if let Err(message) = save_preferences(change, cx) {
             window.push_notification(Notification::error(message), cx);
         }
     }

@@ -106,7 +106,7 @@ impl Shell {
         let focus = cx.focus_handle();
         focus.focus(window, cx);
         let overview = cx.new(|cx| OverviewPage::new(status.clone(), cx));
-        let ai = cx.new(|cx| AiPage::new(status.clone(), cx));
+        let ai = cx.new(|cx| AiPage::new(status.clone(), window, cx));
         let transcription = cx.new(|cx| TranscriptionPage::new(status.clone(), cx));
         let words = cx.new(|cx| WordsPage::new(status.clone(), cx));
         let status_for_setup = status.clone();

@@ -4,7 +4,7 @@ use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Bounds, Entity, TestAppContext, WindowBounds, WindowOptions, px, size};
 use mio_control::model::StatusModel;
 use mio_control::shell::{Page, Shell};
-use mio_control_core::status::{GatewayStatus, Overview, PianissimoHealth, TailscaleStatus, UnitState};
+use mio_control_core::status::{GatewayStatus, Overview, PianissimoHealth, TailscaleStatus, TaskStatus, UnitState};
 
 fn healthy() -> Overview {
     Overview {
@@ -13,13 +13,14 @@ fn healthy() -> Overview {
         gateway_health: Some(true),
         gateway: Some(GatewayStatus {
             quota: Some((190_000, 150_000, "tokens".into())),
-            tasks: vec![("ask".into(), "groq".into(), "qwen/qwen3.8-27b".into())],
+            tasks: vec![TaskStatus::new("ask", "groq", "qwen/qwen3.8-27b")],
             ..Default::default()
         }),
         pianissimo: Some(PianissimoHealth { status: "ready".into(), precision: Some("fp16".into()), vocabulary: Some(12), ..Default::default() }),
         tailscale: Some(TailscaleStatus { installed: true, logged_in: true, ..Default::default() }),
         gpu: None,
         update_timer: None,
+        recent_starts: Default::default(),
     }
 }
 

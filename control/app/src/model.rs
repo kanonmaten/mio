@@ -3,8 +3,10 @@
 use std::time::{Duration, Instant};
 
 use gpui_kit::{App, AppContext as _, Context, Entity, EventEmitter, Global};
+use mio_control_core::format::now_seconds;
 use mio_control_core::probe;
-use mio_control_core::status::{Alert, Overview, alerts};
+use mio_control_core::status::{Alert, Overview};
+use mio_control_core::watch::Monitor;
 
 /// The gateway's port when the helper cannot tell (it is not installed yet).
 const DEFAULT_GATEWAY_PORT: u16 = 8_787;
@@ -18,9 +20,11 @@ pub struct StatusModel {
     overview: Overview,
     read_at: Option<Instant>,
     refresh_requested: bool,
+    /// Decides which changes become desktop notifications and keeps them from repeating.
+    monitor: Monitor,
 }
 
-/// Changes for the worse, for desktop notifications.
+/// Changes for the worse, for desktop notifications, already filtered for repeats.
 pub struct StatusAlerts(pub Vec<Alert>);
 
 impl EventEmitter<StatusAlerts> for StatusModel {}
@@ -36,7 +40,8 @@ impl StatusModel {
 
     /// Takes a new reading; notifies observers only when something changed.
     pub fn apply(&mut self, next: Overview, cx: &mut Context<Self>) {
-        let alerts = if self.read_at.is_some() { alerts(&self.overview, &next) } else { Vec::new() };
+        let before = self.read_at.is_some().then_some(&self.overview);
+        let alerts = self.monitor.check(before, &next, now_seconds());
         let first = self.read_at.is_none();
         self.read_at = Some(Instant::now());
         if first || next != self.overview {

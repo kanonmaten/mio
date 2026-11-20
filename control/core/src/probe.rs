@@ -12,9 +12,11 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 
 use crate::command::{Command, UPDATE_TIMER, Unit};
 use crate::helper_client::run_helper;
+use crate::journal::{LogUnit, recent_starts};
 use crate::status::{
-    GatewayStatus, GpuStatus, NVIDIA_SMI_QUERY, Overview, PianissimoHealth, TailscaleStatus, TimerStatus, UnitState,
+    GatewayStatus, GpuStatus, NVIDIA_SMI_QUERY, Overview, PianissimoHealth, RecentStarts, TailscaleStatus, TimerStatus, UnitState,
 };
+use crate::watch::WINDOW_SECONDS;
 
 const SYSTEMD: &str = "org.freedesktop.systemd1";
 
@@ -143,7 +145,15 @@ pub fn overview(gateway_port: u16, previous: &Overview) -> Overview {
     } else {
         None
     };
+    // Not installed means nothing to watch; the journal is read as the user, without a password.
+    let since = crate::format::now_seconds().saturating_sub(WINDOW_SECONDS);
+    let starts = |state: &UnitState, unit: LogUnit| (*state != UnitState::NotInstalled).then(|| recent_starts(unit, since)).flatten();
+    let recent_starts = RecentStarts {
+        gateway: starts(&gateway_unit, LogUnit::Gateway),
+        pianissimo: starts(&transcription_unit, LogUnit::Pianissimo),
+    };
     Overview {
+        recent_starts,
         gateway_health,
         gateway,
         pianissimo,

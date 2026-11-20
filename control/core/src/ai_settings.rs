@@ -8,8 +8,27 @@ use serde_json::{Map, Value, json};
 
 pub const TASKS: [(&str, &str); 3] = [("ask", "Frågor"), ("everyday", "Vardag"), ("lesson", "Lektioner")];
 
+/// Prices per million tokens, in dollars.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Price {
+    pub input_per_million: f64,
+    pub output_per_million: f64,
+    pub as_of: String,
+}
+
+/// Mistral's list prices, reviewed 2026-11-20, for a gateway that does not send `prices` with its
+/// model list. Matched on the model family so that the exact model ID (chosen in the gateway's
+/// reviewed profiles) is not repeated here.
+const REVIEWED_PRICES: [(&str, &str, f64, f64); 2] = [("mistral", "mistral-small", 0.15, 0.60), ("mistral", "mistral-large", 0.70, 2.10)];
+const REVIEWED_PRICES_AS_OF: &str = "2026-11-20";
+
+/// What "Prova" sends: one short made-up call per task (three calls). A rough upper bound in
+/// tokens for the estimate shown next to the button; reasoning counts as output.
+pub const TRIAL_INPUT_TOKENS: u64 = 4_500;
+pub const TRIAL_OUTPUT_TOKENS: u64 = 1_500;
+
 /// One provider and model pair from `mio-gateway granskade-modeller`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Pair {
     pub provider: String,
     pub model: String,
@@ -18,6 +37,12 @@ pub struct Pair {
     pub temperature: String,
     /// Why a candidate cannot be chosen; `None` for a reviewed pair.
     pub blocked: Option<String>,
+    /// `"off"` or the reviewed reasoning level; `None` from a gateway that does not say.
+    pub reasoning: Option<String>,
+    /// The tasks the pair may be chosen for; `None` means all of them.
+    pub tasks: Option<Vec<String>>,
+    /// From the model list's `prices`, or the reviewed constant above.
+    pub price: Option<Price>,
 }
 
 impl Pair {
@@ -28,6 +53,58 @@ impl Pair {
     pub fn is(&self, provider: &str, model: &str) -> bool {
         self.provider == provider && self.model == model
     }
+
+    pub fn allows(&self, task: &str) -> bool {
+        self.tasks.as_ref().is_none_or(|tasks| tasks.iter().any(|allowed| allowed == task))
+    }
+
+    /// Whether the pair reasons at all (anything but `"off"`).
+    pub fn reasons(&self) -> bool {
+        self.reasoning.as_deref().is_some_and(|reasoning| reasoning != "off")
+    }
+
+    /// "Resonerar (hög) · bara Lektioner", or `None` for a plain pair.
+    pub fn note(&self) -> Option<String> {
+        let mut parts = Vec::new();
+        if self.reasons() {
+            parts.push(crate::status::reasoning_label(self.reasoning.as_deref().unwrap_or_default()));
+        }
+        if let Some(tasks) = self.tasks.as_ref().filter(|tasks| tasks.len() < TASKS.len()) {
+            let names: Vec<&str> = TASKS.iter().filter(|(id, _)| tasks.iter().any(|task| task == id)).map(|(_, label)| *label).collect();
+            parts.push(format!("går bara att välja för {}", names.join(" och ")));
+        }
+        (!parts.is_empty()).then(|| {
+            let text = parts.join(" · ");
+            let mut characters = text.chars();
+            characters.next().map(|first| first.to_uppercase().chain(characters).collect()).unwrap_or_default()
+        })
+    }
+
+    /// What pressing "Prova" sends and costs, in one sentence for the row under the pair.
+    pub fn trial_estimate(&self) -> String {
+        let provider = provider_name(&self.provider);
+        let tokens = crate::format::count(TRIAL_INPUT_TOKENS + TRIAL_OUTPUT_TOKENS);
+        match &self.price {
+            Some(price) => {
+                let cost = (TRIAL_INPUT_TOKENS as f64 * price.input_per_million + TRIAL_OUTPUT_TOKENS as f64 * price.output_per_million) / 1_000_000.0;
+                let size = if cost < 0.01 { ", under en cent" } else { "" };
+                format!(
+                    "Går till {provider}: tre korta påhittade anrop, högst cirka {tokens} token. Uppskattat {}{size} (priser {}).",
+                    crate::credit::dollars(cost),
+                    price.as_of
+                )
+            }
+            None => format!("Går till {provider}: tre korta påhittade anrop, högst cirka {tokens} token, debiteras som vanliga anrop."),
+        }
+    }
+}
+
+fn reviewed_price(provider: &str, model: &str) -> Option<Price> {
+    REVIEWED_PRICES.iter().find(|(known, family, _, _)| *known == provider && model.starts_with(family)).map(|(_, _, input, output)| Price {
+        input_per_million: *input,
+        output_per_million: *output,
+        as_of: REVIEWED_PRICES_AS_OF.to_owned(),
+    })
 }
 
 pub fn provider_name(provider: &str) -> &str {
@@ -41,7 +118,7 @@ pub fn provider_name(provider: &str) -> &str {
 }
 
 /// The reviewed pairs (selectable) and the candidates (shown, not selectable).
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct Catalog {
     pub reviewed: Vec<Pair>,
     pub candidates: Vec<Pair>,
@@ -55,12 +132,24 @@ impl Catalog {
                 .iter()
                 .map(|pair| {
                     let text = |name: &str| pair.get(name).and_then(Value::as_str).map(str::to_owned);
+                    let (provider, model) = (text("provider")?, text("model")?);
+                    let listed_price = pair.get("prices").and_then(|prices| {
+                        let per_million = |name: &str| prices.get(name).and_then(Value::as_f64).filter(|price| price.is_finite() && *price >= 0.0);
+                        Some(Price {
+                            input_per_million: per_million("inputPerMillion")?,
+                            output_per_million: per_million("outputPerMillion")?,
+                            as_of: prices.get("asOf").and_then(Value::as_str)?.to_owned(),
+                        })
+                    });
                     Some(Pair {
-                        provider: text("provider")?,
-                        model: text("model")?,
                         secret_variable: text("secretVariable")?,
                         temperature: text("temperature").unwrap_or_else(|| "0".to_owned()),
                         blocked: text("blocked"),
+                        reasoning: text("reasoning"),
+                        tasks: pair.get("tasks").and_then(Value::as_array).map(|tasks| tasks.iter().filter_map(Value::as_str).map(str::to_owned).collect()),
+                        price: listed_price.or_else(|| reviewed_price(&provider, &model)),
+                        provider,
+                        model,
                     })
                 })
                 .collect()
@@ -70,6 +159,26 @@ impl Catalog {
 
     pub fn find(&self, provider: &str, model: &str) -> Option<&Pair> {
         self.reviewed.iter().find(|pair| pair.is(provider, model))
+    }
+
+    /// The reviewed pairs a select offers: for one task, those allowed for it; for the default
+    /// (`None`), those allowed for every task, since the default covers every task left on it.
+    pub fn choices(&self, task: Option<&str>) -> Vec<&Pair> {
+        self.reviewed
+            .iter()
+            .filter(|pair| match task {
+                Some(task) => pair.allows(task),
+                None => TASKS.iter().all(|(task, _)| pair.allows(task)),
+            })
+            .collect()
+    }
+
+    /// The "Prova" list: Mistral first (candidates before reviewed), then the rest as listed.
+    pub fn trial_order(&self) -> Vec<&Pair> {
+        let all: Vec<&Pair> = self.candidates.iter().chain(&self.reviewed).collect();
+        let mistral = all.iter().copied().filter(|pair| pair.provider == "mistral");
+        let rest = self.reviewed.iter().chain(&self.candidates).filter(|pair| pair.provider != "mistral");
+        mistral.chain(rest).collect()
     }
 }
 
@@ -205,6 +314,9 @@ impl AiForm {
             let (provider, model) = self.pair_for(task);
             match catalog.find(provider, model) {
                 None => problems.push(format!("{label}: {provider} · {model} är inte en granskad modell.")),
+                Some(pair) if !pair.allows(task) => {
+                    problems.push(format!("{label}: {} går bara att välja för en annan uppgift.", pair.label()));
+                }
                 Some(pair) if !file.has_secret(&pair.secret_variable) => {
                     problems.push(format!("{label}: nyckel saknas för {} ({}).", provider_name(provider), pair.secret_variable));
                 }
@@ -327,5 +439,54 @@ mod tests {
         assert_eq!(form.problems(&catalog(), &file()).len(), 3);
         assert!(form.problems(&catalog(), &file())[0].contains("inte en granskad modell"));
         assert_eq!(GatewayFile::parse(&json!({ "exists": false })), None);
+    }
+
+    /// A model list from a gateway after the grilling: a reasoning pair only for lessons. The
+    /// field names (`reasoning`, `tasks`, `prices`) are what the panel reads; values are made up.
+    fn catalog_with_lesson_only() -> Catalog {
+        Catalog::parse(&json!({ "models": [
+                { "provider": "groq", "model": "qwen/qwen3.8-27b", "secretVariable": "GROQ_API_KEY", "reasoning": "off" },
+                { "provider": "mistral", "model": "mistral-small-x", "secretVariable": "MISTRAL_API_KEY", "reasoning": "off" },
+                { "provider": "mistral", "model": "mistral-large-x", "secretVariable": "MISTRAL_API_KEY", "reasoning": "high", "tasks": ["lesson"],
+                  "prices": { "inputPerMillion": 0.7, "outputPerMillion": 2.1, "asOf": "2026-11-21" } }],
+            "candidates": [{ "provider": "nvidia", "model": "nemotron", "secretVariable": "NVIDIA_API_KEY", "blocked": "Kräver prov." },
+                { "provider": "mistral", "model": "mistral-medium-x", "secretVariable": "MISTRAL_API_KEY", "blocked": "Kräver prov." }] }))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_lesson_only_pair_is_offered_and_accepted_only_for_lessons() {
+        let catalog = catalog_with_lesson_only();
+        let models = |task: Option<&str>| catalog.choices(task).iter().map(|pair| pair.model.clone()).collect::<Vec<_>>();
+        assert_eq!(models(None), ["qwen/qwen3.8-27b", "mistral-small-x"]);
+        assert_eq!(models(Some("ask")), ["qwen/qwen3.8-27b", "mistral-small-x"]);
+        assert_eq!(models(Some("lesson")), ["qwen/qwen3.8-27b", "mistral-small-x", "mistral-large-x"]);
+        let large = catalog.find("mistral", "mistral-large-x").unwrap();
+        assert_eq!(large.note().as_deref(), Some("Resonerar (hög) · går bara att välja för Lektioner"));
+        assert_eq!(catalog.find("mistral", "mistral-small-x").unwrap().note(), None);
+        let mut with_key = file();
+        with_key.secrets.insert("MISTRAL_API_KEY".into(), true);
+        let mut form = AiForm::from_file(&with_key);
+        form.per_task.insert("lesson".into(), ("mistral".into(), "mistral-large-x".into()));
+        assert!(form.problems(&catalog, &with_key).is_empty());
+        form.per_task.insert("ask".into(), ("mistral".into(), "mistral-large-x".into()));
+        assert_eq!(form.problems(&catalog, &with_key), ["Frågor: Mistral · mistral-large-x går bara att välja för en annan uppgift."]);
+    }
+
+    #[test]
+    fn mistral_comes_first_in_the_trial_list_with_what_it_costs() {
+        let catalog = catalog_with_lesson_only();
+        let order: Vec<&str> = catalog.trial_order().iter().map(|pair| pair.model.as_str()).collect();
+        assert_eq!(order, ["mistral-medium-x", "mistral-small-x", "mistral-large-x", "qwen/qwen3.8-27b", "nemotron"]);
+        // The listed price wins over the reviewed constant; Small falls back to the constant.
+        let large = catalog.find("mistral", "mistral-large-x").unwrap();
+        assert_eq!(large.trial_estimate(), "Går till Mistral: tre korta påhittade anrop, högst cirka 6\u{202F}000 token. Uppskattat $0,0063, under en cent (priser 2026-11-21).");
+        let small = catalog.find("mistral", "mistral-small-x").unwrap();
+        assert_eq!(small.price.as_ref().map(|price| (price.input_per_million, price.as_of.as_str())), Some((0.15, "2026-11-20")));
+        assert!(small.trial_estimate().starts_with("Går till Mistral") && small.trial_estimate().contains(", under en cent (priser 2026-11-20)"));
+        // No price known: no amount is made up.
+        let groq = catalog.find("groq", "qwen/qwen3.8-27b").unwrap();
+        assert_eq!(groq.trial_estimate(), "Går till Groq: tre korta påhittade anrop, högst cirka 6\u{202F}000 token, debiteras som vanliga anrop.");
+        assert_eq!(catalog.candidates[1].price.as_ref(), None, "mistral-medium has no reviewed price");
     }
 }

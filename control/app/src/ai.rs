@@ -1,11 +1,13 @@
-//! AI: which reviewed model each task uses, the gateway's limits, provider keys, and a test call
-//! the user starts. Nothing is written before the "före → efter" list has been shown, and the
-//! gateway checks the file again before the helper writes it.
+//! AI: which reviewed model each task uses and whether it reasons, this month's credit meter, the
+//! gateway's limits, provider keys, and a test call the user starts. Nothing is written before the
+//! "före → efter" list has been shown, and the gateway checks the file again before the helper
+//! writes it. The meter and the reasoning levels come from `/v2/status` without a password.
 
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
+use gpui_kit::component::progress::Progress;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::select::{Select, SelectEvent, SelectState};
 use gpui_kit::component::{ActiveTheme as _, Disableable as _, Icon, IconName, IndexPath, Sizable as _, StyledExt as _, WindowExt as _, h_flex, v_flex};
@@ -14,6 +16,7 @@ use gpui_kit::{
     StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _, Window, div, prelude::FluentBuilder as _,
 };
 use mio_control_core::ai_settings::{AiForm, Catalog, GatewayFile, LIMITS, Pair, TASKS, provider_name};
+use mio_control_core::credit::{CreditLevel, CreditMeter, format_limit, parse_limit};
 use mio_control_core::command::{Command, PROVIDER_IDS, Unit, UnitAction};
 use mio_control_core::settings::{PROVIDER_SECRET_KEYS, SettingsFile};
 use serde_json::Value;
@@ -58,15 +61,46 @@ pub struct AiPage {
     saving: bool,
     trying: Option<String>,
     trial: Option<TrialReport>,
-    _observe: Subscription,
+    /// The credit meter's limit, saved in the panel's own preferences.
+    credit_limit_cents: u64,
+    credit_input: Entity<InputState>,
+    credit_input_valid: bool,
+    _subscriptions: Vec<Subscription>,
 }
 
 const SAME: &str = "Samma som standard";
 
 impl AiPage {
-    pub fn new(status: Entity<StatusModel>, cx: &mut Context<Self>) -> Self {
+    pub fn new(status: Entity<StatusModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let observe = cx.observe(&status, |_, _, cx| cx.notify());
-        Self { status, stage: Stage::Closed, saving: false, trying: None, trial: None, _observe: observe }
+        let credit_limit_cents = crate::computer::preferences(cx).credit_limit_cents;
+        let credit_input = cx.new(|cx| InputState::new(window, cx).default_value(format_limit(credit_limit_cents)).placeholder("20"));
+        // A valid amount is saved at once; an invalid one keeps the last saved limit.
+        let typed = cx.subscribe_in(&credit_input, window, |this: &mut Self, input, event: &InputEvent, window, cx| {
+            if !matches!(event, InputEvent::Change) {
+                return;
+            }
+            let parsed = parse_limit(&input.read(cx).value());
+            this.credit_input_valid = parsed.is_some();
+            if let Some(cents) = parsed.filter(|cents| *cents != this.credit_limit_cents) {
+                this.credit_limit_cents = cents;
+                if let Err(message) = crate::computer::save_preferences(|preferences| preferences.credit_limit_cents = cents, cx) {
+                    window.push_notification(Notification::error(message), cx);
+                }
+            }
+            cx.notify();
+        });
+        Self {
+            status,
+            stage: Stage::Closed,
+            saving: false,
+            trying: None,
+            trial: None,
+            credit_limit_cents,
+            credit_input,
+            credit_input_valid: true,
+            _subscriptions: vec![observe, typed],
+        }
     }
 
     /// Reads `gateway.env` through the helper (KDE asks for the password once) and the model list.
@@ -99,12 +133,15 @@ impl AiPage {
 
     fn build_editor(&mut self, file: GatewayFile, catalog: Catalog, window: &mut Window, cx: &mut Context<Self>) -> Editor {
         let form = AiForm::from_file(&file);
-        let labels: Vec<SharedString> = catalog.reviewed.iter().map(|pair| pair.label().into()).collect();
-        let index_of = |pair: &(String, String)| catalog.reviewed.iter().position(|known| known.is(&pair.0, &pair.1));
+        // Each select offers only the pairs allowed where it applies: a pair reviewed for lessons
+        // only (Large 4, which reasons) is never offered for the default, Frågor or Vardag.
+        let labels = |task: Option<&str>| -> Vec<SharedString> { catalog.choices(task).iter().map(|pair| pair.label().into()).collect() };
+        let index_of = |task: Option<&str>, pair: &(String, String)| catalog.choices(task).iter().position(|known| known.is(&pair.0, &pair.1));
         let mut subscriptions = Vec::new();
 
-        let default_index = index_of(&form.default_pair).map(|row| IndexPath::default().row(row));
-        let default_select = cx.new(|cx| SelectState::new(labels.clone(), default_index, window, cx));
+        let default_index = index_of(None, &form.default_pair).map(|row| IndexPath::default().row(row));
+        let default_labels = labels(None);
+        let default_select = cx.new(|cx| SelectState::new(default_labels, default_index, window, cx));
         subscriptions.push(cx.subscribe_in(&default_select, window, |this, _, event: &SelectEvent<Vec<SharedString>>, _, cx| {
             let SelectEvent::Confirm(Some(label)) = event else { return };
             if let Stage::Editing(editor) = &mut this.stage
@@ -118,8 +155,8 @@ impl AiPage {
         let mut task_selects = Vec::new();
         for (task, _) in TASKS {
             let mut items: Vec<SharedString> = vec![SAME.into()];
-            items.extend(labels.iter().cloned());
-            let selected = form.per_task.get(task).and_then(index_of).map(|row| row + 1).unwrap_or(0);
+            items.extend(labels(Some(task)));
+            let selected = form.per_task.get(task).and_then(|pair| index_of(Some(task), pair)).map(|row| row + 1).unwrap_or(0);
             let select = cx.new(|cx| SelectState::new(items, Some(IndexPath::default().row(selected)), window, cx));
             subscriptions.push(cx.subscribe_in(&select, window, move |this, _, event: &SelectEvent<Vec<SharedString>>, _, cx| {
                 let SelectEvent::Confirm(Some(label)) = event else { return };
@@ -256,9 +293,97 @@ impl AiPage {
             .text_sm()
             .when(tasks.is_empty(), |list| list.child(div().text_color(cx.theme().muted_foreground).child("Gatewayen svarar inte, så den aktuella modellen syns inte här.")))
             .children(TASKS.iter().filter_map(|(task, label)| {
-                let (_, provider, model) = tasks.iter().find(|(name, _, _)| name == task)?;
-                Some(h_flex().gap_3().justify_between().child(div().text_color(cx.theme().muted_foreground).child(*label)).child(format!("{} · {model}", provider_name(provider))))
+                let status = tasks.iter().find(|status| status.task == *task)?;
+                let reasoning = status.reasoning_label();
+                Some(
+                    h_flex()
+                        .gap_3()
+                        .justify_between()
+                        .child(div().text_color(cx.theme().muted_foreground).child(*label))
+                        .child(
+                            h_flex()
+                                .gap_2()
+                                .child(format!("{} · {}", provider_name(&status.provider), status.model))
+                                // An older gateway does not say; then nothing is shown.
+                                .when_some(reasoning, |row, reasoning| {
+                                    row.child(
+                                        div()
+                                            .id(SharedString::from(format!("reasoning-{task}")))
+                                            .test_support()
+                                            .aria_label(SharedString::from(reasoning.clone()))
+                                            .text_color(cx.theme().muted_foreground)
+                                            .child(format!("· {reasoning}")),
+                                    )
+                                }),
+                        ),
+                )
             }))
+            .when(tasks.iter().any(|status| status.reasoning.is_some()), |list| {
+                list.child(div().text_xs().text_color(cx.theme().muted_foreground).child(
+                    "Bara Lektioner får resonera. En modell som resonerar går bara att välja för Lektioner; gatewayen vägrar starta annars.",
+                ))
+            })
+    }
+
+    /// This month's tokens and estimated cost per task and model against the user's limit.
+    fn render_credit(&self, cx: &Context<Self>) -> impl IntoElement {
+        let theme = cx.theme().clone();
+        let muted = |text: &str| div().text_sm().text_color(theme.muted_foreground).child(text.to_owned());
+        let gateway = self.status.read(cx).overview().gateway.clone();
+        let meter = gateway.as_ref().and_then(|gateway| gateway.usage.as_ref()).map(|usage| CreditMeter::new(usage, self.credit_limit_cents));
+        let limit_field = v_flex()
+            .gap_1()
+            .child(
+                h_flex()
+                    .gap_2()
+                    .text_sm()
+                    .child(div().text_color(theme.muted_foreground).child("Kreditgräns i dollar per månad"))
+                    .child(div().w_24().child(Input::new(&self.credit_input).id("credit-limit").small())),
+            )
+            .when(!self.credit_input_valid, |field| {
+                field.child(h_flex().gap_2().text_xs().child(Icon::new(IconName::CircleX).text_color(theme.danger)).child(format!(
+                    "Skriv ett belopp i dollar, till exempel 20. Gränsen är kvar på ${}.",
+                    format_limit(self.credit_limit_cents)
+                )))
+            });
+        let body = match (&gateway, meter) {
+            (None, _) => muted("Gatewayen svarar inte, så månadens användning syns inte här.").into_any_element(),
+            (Some(_), None) => muted("Gatewayen redovisar ingen användning. Den är äldre än kreditmätaren eller kan inte läsa sin räknarfil.").into_any_element(),
+            (Some(_), Some(meter)) => {
+                let (icon, color) = match meter.level {
+                    CreditLevel::Normal => (IconName::CircleCheck, theme.success),
+                    CreditLevel::Warning => (IconName::TriangleAlert, theme.warning),
+                    CreditLevel::Over => (IconName::CircleX, theme.danger),
+                };
+                let summary = SharedString::from(format!("{}. {}", meter.level_label(), meter.summary()));
+                v_flex()
+                    .gap_2()
+                    .child(
+                        h_flex()
+                            .id("credit-meter")
+                            .test_support()
+                            .aria_label(summary.clone())
+                            .gap_2()
+                            .text_sm()
+                            .child(Icon::new(icon).text_color(color))
+                            .child(summary),
+                    )
+                    .child(Progress::new("credit-bar").value(meter.percent()).when(meter.level != CreditLevel::Normal, |bar| bar.color(color)))
+                    .when(meter.rows.is_empty(), |list| list.child(muted("Inga anrop än den här månaden.")))
+                    .children(meter.rows.iter().map(|row| {
+                        h_flex()
+                            .gap_3()
+                            .text_sm()
+                            .child(div().w_24().text_color(theme.muted_foreground).child(row.task.clone()))
+                            .child(div().flex_1().min_w_0().child(row.pair.clone()))
+                            .child(div().text_color(theme.muted_foreground).child(row.tokens.clone()))
+                            .child(div().w_20().text_right().child(row.cost.clone()))
+                    }))
+                    .child(muted("Uppskattat med gatewayens granskade priser. Leverantörens faktura gäller; gratisnivåer saknar pris."))
+                    .into_any_element()
+            }
+        };
+        v_flex().gap_2().child(div().font_semibold().child("Kreditmätaren")).child(body).child(limit_field)
     }
 
     fn render_editor(&self, editor: &Editor, cx: &mut Context<Self>) -> impl IntoElement {
@@ -277,6 +402,10 @@ impl AiPage {
             .children(editor.task_selects.iter().map(|(task, select)| {
                 let label = TASKS.iter().find(|(name, _)| name == task).map_or("", |(_, label)| *label);
                 field(label, Select::new(select).id(SharedString::from(format!("ai-task-{task}"))).into_any_element())
+            }))
+            .children(editor.catalog.reviewed.iter().filter_map(|pair| {
+                let note = pair.note()?;
+                Some(h_flex().gap_2().text_xs().text_color(theme.muted_foreground).child(Icon::new(IconName::Info)).child(format!("{}: {note}.", pair.label())))
             }))
             .child(section("Gränser"))
             .child(div().grid().grid_cols(2).gap_3().children(editor.limit_inputs.iter().map(|(key, input)| {
@@ -316,19 +445,33 @@ impl AiPage {
             )
             .child(section("Prova modellerna"))
             .child(div().text_sm().text_color(theme.muted_foreground).child(
-                "Ett kort, påhittat svenskt anrop per uppgift med din nyckel. Det enda som skickar något till en leverantör från panelen. En kandidat som klarar provet blir valbar.",
+                "Ett kort, påhittat svenskt anrop per uppgift med din nyckel, till leverantören som står vid modellen. Det enda som skickar något till en leverantör från panelen, och det kostar som vanliga anrop. En kandidat som klarar provet blir valbar. Mistral står först.",
             ))
-            .children(editor.catalog.reviewed.iter().chain(&editor.catalog.candidates).map(|pair| {
+            .children(editor.catalog.trial_order().into_iter().map(|pair| {
                 let label = pair.label();
                 let id = SharedString::from(format!("try-{}-{}", pair.provider, pair.model));
+                let estimate = SharedString::from(pair.trial_estimate());
                 let pair_for_click = pair.clone();
                 h_flex()
                     .gap_3()
                     .justify_between()
                     .text_sm()
-                    .child(v_flex().min_w_0().child(label.clone()).when_some(pair.blocked.clone(), |row, reason| {
-                        row.child(div().text_xs().text_color(theme.muted_foreground).child(reason))
-                    }))
+                    .child(
+                        v_flex()
+                            .min_w_0()
+                            .child(label.clone())
+                            .when_some(pair.note(), |row, note| row.child(div().text_xs().text_color(theme.muted_foreground).child(note)))
+                            .when_some(pair.blocked.clone(), |row, reason| row.child(div().text_xs().text_color(theme.muted_foreground).child(reason)))
+                            .child(
+                                div()
+                                    .id(SharedString::from(format!("trial-cost-{}-{}", pair.provider, pair.model)))
+                                    .test_support()
+                                    .aria_label(estimate.clone())
+                                    .text_xs()
+                                    .text_color(theme.muted_foreground)
+                                    .child(estimate),
+                            ),
+                    )
                     .child(
                         Button::new(id)
                             .small()
@@ -400,8 +543,9 @@ impl Render for AiPage {
                     .p_4()
                     .gap_4()
                     .child(v_flex().gap_1().child(div().text_xl().font_semibold().child("AI")).child(
-                        div().text_sm().text_color(cx.theme().muted_foreground).child("Vilken granskad modell gatewayen använder, gränserna och nycklarna."),
+                        div().text_sm().text_color(cx.theme().muted_foreground).child("Vilken granskad modell gatewayen använder, vad den kostar i månaden, gränserna och nycklarna."),
                     ))
+                    .child(self.render_credit(cx))
                     .child(body),
             )
     }

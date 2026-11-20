@@ -92,6 +92,101 @@ impl PianissimoHealth {
     }
 }
 
+/// One task in the gateway's `/v2/status`. `reasoning` and `schema_dialect` are `None` when the
+/// gateway is older than the post-grilling contract (docs/DATAMODELL.md) and does not send them.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct TaskStatus {
+    pub task: String,
+    pub provider: String,
+    pub model: String,
+    /// `"off"` or the reviewed level (`"low"`, `"medium"`, `"high"`).
+    pub reasoning: Option<String>,
+    /// `"strict-json-schema"` or `"json-schema"`.
+    pub schema_dialect: Option<String>,
+}
+
+impl TaskStatus {
+    pub fn new(task: &str, provider: &str, model: &str) -> Self {
+        Self { task: task.to_owned(), provider: provider.to_owned(), model: model.to_owned(), ..Self::default() }
+    }
+
+    /// "Resonerar inte", "Resonerar (hög)", or `None` when the gateway does not say.
+    pub fn reasoning_label(&self) -> Option<String> {
+        self.reasoning.as_deref().map(reasoning_label)
+    }
+}
+
+/// The Swedish words for a reasoning setting from the gateway.
+pub fn reasoning_label(reasoning: &str) -> String {
+    match reasoning {
+        "off" => "Resonerar inte".to_owned(),
+        "low" => "Resonerar (låg)".to_owned(),
+        "medium" => "Resonerar (medel)".to_owned(),
+        "high" => "Resonerar (hög)".to_owned(),
+        other => format!("Resonerar ({other})"),
+    }
+}
+
+/// One task, provider and model used this month, from `usage.entries`.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct UsageEntry {
+    pub task: String,
+    pub provider: String,
+    pub model: String,
+    pub requests: u64,
+    pub input_tokens: u64,
+    pub cached_input_tokens: u64,
+    pub output_tokens: u64,
+    pub reasoning_tokens: u64,
+    /// In `Usage::currency`; `None` for a model without a reviewed price (Groq's free tier).
+    pub estimated_cost: Option<f64>,
+    pub prices_as_of: Option<String>,
+}
+
+/// The gateway's token and cost counters for the current UTC month (`usage` in `/v2/status`).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Usage {
+    pub month: String,
+    pub currency: String,
+    /// The sum of the entries that have a price.
+    pub estimated_cost: f64,
+    pub entries: Vec<UsageEntry>,
+}
+
+impl Usage {
+    /// `None` for `null` (an unknown counter file on the gateway) or anything malformed.
+    pub fn parse(body: &Value) -> Option<Self> {
+        let number = |value: &Value, name: &str| value.get(name).and_then(Value::as_u64).unwrap_or(0);
+        let text = |value: &Value, name: &str| value.get(name).and_then(Value::as_str).map(str::to_owned);
+        let entries = body
+            .get("entries")?
+            .as_array()?
+            .iter()
+            .filter_map(|entry| {
+                Some(UsageEntry {
+                    task: text(entry, "task")?,
+                    provider: text(entry, "provider")?,
+                    model: text(entry, "model")?,
+                    requests: number(entry, "requests"),
+                    input_tokens: number(entry, "inputTokens"),
+                    cached_input_tokens: number(entry, "cachedInputTokens"),
+                    output_tokens: number(entry, "outputTokens"),
+                    reasoning_tokens: number(entry, "reasoningTokens"),
+                    estimated_cost: entry.get("estimatedCost").and_then(Value::as_f64).filter(|cost| cost.is_finite() && *cost >= 0.0),
+                    prices_as_of: text(entry, "pricesAsOf"),
+                })
+            })
+            .collect::<Vec<_>>();
+        let summed: f64 = entries.iter().filter_map(|entry| entry.estimated_cost).sum();
+        Some(Self {
+            month: text(body, "month")?,
+            currency: text(body, "currency").unwrap_or_else(|| "USD".to_owned()),
+            estimated_cost: body.get("estimatedCost").and_then(Value::as_f64).filter(|cost| cost.is_finite() && *cost >= 0.0).unwrap_or(summed),
+            entries,
+        })
+    }
+}
+
 /// The parts of the gateway's `/v2/status` the panel shows. Nothing in it is secret.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct GatewayStatus {
@@ -99,7 +194,9 @@ pub struct GatewayStatus {
     /// `(limit, remaining, unit)` of the daily quota, when there is one.
     pub quota: Option<(u64, u64, String)>,
     pub quota_reset: Option<String>,
-    pub tasks: Vec<(String, String, String)>,
+    pub tasks: Vec<TaskStatus>,
+    /// `None` from a gateway without the counters, or when it answers `usage: null`.
+    pub usage: Option<Usage>,
 }
 
 impl GatewayStatus {
@@ -112,8 +209,14 @@ impl GatewayStatus {
                 tasks
                     .iter()
                     .map(|(task, value)| {
-                        let field = |name: &str| value.get(name).and_then(Value::as_str).unwrap_or("").to_owned();
-                        (task.clone(), field("provider"), field("model"))
+                        let field = |name: &str| value.get(name).and_then(Value::as_str).map(str::to_owned);
+                        TaskStatus {
+                            task: task.clone(),
+                            provider: field("provider").unwrap_or_default(),
+                            model: field("model").unwrap_or_default(),
+                            reasoning: field("reasoning"),
+                            schema_dialect: field("schemaDialect"),
+                        }
                     })
                     .collect()
             })
@@ -125,7 +228,12 @@ impl GatewayStatus {
             }),
             quota_reset: quota.and_then(|quota| quota.get("resetAt")).and_then(Value::as_str).map(str::to_owned),
             tasks,
+            usage: body.get("usage").and_then(Usage::parse),
         }
+    }
+
+    pub fn task(&self, task: &str) -> Option<&TaskStatus> {
+        self.tasks.iter().find(|status| status.task == task)
     }
 
     /// Less than a tenth of the day's quota left.
@@ -226,6 +334,17 @@ pub struct Overview {
     pub tailscale: Option<TailscaleStatus>,
     pub gpu: Option<GpuStatus>,
     pub update_timer: Option<TimerStatus>,
+    /// When each service was started in the last ten minutes, from the journal.
+    pub recent_starts: RecentStarts,
+}
+
+/// Start times (seconds since the epoch) of the two services in the last ten minutes, read from
+/// systemd's "Starting …" journal entries. `None` when the journal could not be read (the user is
+/// not in `systemd-journal`), so the restart watch stays quiet instead of guessing.
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
+pub struct RecentStarts {
+    pub gateway: Option<Vec<u64>>,
+    pub pianissimo: Option<Vec<u64>>,
 }
 
 impl Overview {
@@ -363,8 +482,35 @@ mod tests {
             "tasks": {"ask": {"provider": "groq", "model": "qwen/qwen3.8-27b"}}});
         let status = GatewayStatus::parse(&body);
         assert!(status.quota_is_low());
-        assert_eq!(status.tasks, [("ask".to_owned(), "groq".to_owned(), "qwen/qwen3.8-27b".to_owned())]);
+        assert_eq!(status.tasks, [TaskStatus::new("ask", "groq", "qwen/qwen3.8-27b")]);
+        // A gateway older than the post-grilling contract: no reasoning, dialect or usage.
+        assert_eq!((status.tasks[0].reasoning_label(), status.usage.as_ref()), (None, None));
         assert!(!GatewayStatus::parse(&json!({"quota": null})).quota_is_low());
+    }
+
+    #[test]
+    fn reasoning_dialect_and_usage_follow_the_contract() {
+        // Made-up values in the shape of docs/DATAMODELL.md, "Kontrakt efter grillningen".
+        let body = json!({"tasks": {
+                "ask": {"provider": "mistral", "model": "small", "reasoning": "off", "schemaDialect": "strict-json-schema"},
+                "lesson": {"provider": "mistral", "model": "large", "reasoning": "high", "schemaDialect": "json-schema"}},
+            "usage": {"month": "2026-11", "currency": "USD", "estimatedCost": 3.42, "entries": [
+                {"task": "ask", "provider": "groq", "model": "qwen", "requests": 4, "inputTokens": 900, "cachedInputTokens": 0,
+                 "outputTokens": 100, "reasoningTokens": 0, "estimatedCost": null, "pricesAsOf": null},
+                {"task": "lesson", "provider": "mistral", "model": "large", "requests": 12, "inputTokens": 40000, "cachedInputTokens": 0,
+                 "outputTokens": 21000, "reasoningTokens": 9000, "estimatedCost": 0.0721, "pricesAsOf": "2026-11-20"},
+                {"task": "broken"}]}});
+        let status = GatewayStatus::parse(&body);
+        let lesson = status.task("lesson").unwrap();
+        assert_eq!((lesson.reasoning_label().as_deref(), lesson.schema_dialect.as_deref()), (Some("Resonerar (hög)"), Some("json-schema")));
+        assert_eq!(status.task("ask").unwrap().reasoning_label().as_deref(), Some("Resonerar inte"));
+        let usage = status.usage.unwrap();
+        assert_eq!((usage.month.as_str(), usage.estimated_cost, usage.entries.len()), ("2026-11", 3.42, 2));
+        assert_eq!((usage.entries[0].estimated_cost, usage.entries[1].estimated_cost, usage.entries[1].reasoning_tokens), (None, Some(0.0721), 9000));
+        // `usage: null` (an unknown counter file) and a missing total.
+        assert_eq!(GatewayStatus::parse(&json!({"usage": null})).usage, None);
+        let summed = Usage::parse(&json!({"month": "2026-11", "entries": [{"task": "ask", "provider": "p", "model": "m", "estimatedCost": 0.5}]})).unwrap();
+        assert_eq!((summed.estimated_cost, summed.currency.as_str()), (0.5, "USD"));
     }
 
     fn healthy() -> Overview {
@@ -377,6 +523,7 @@ mod tests {
             tailscale: Some(TailscaleStatus { installed: true, logged_in: true, ..Default::default() }),
             gpu: None,
             update_timer: None,
+            recent_starts: RecentStarts::default(),
         }
     }
 

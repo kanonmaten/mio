@@ -24,7 +24,9 @@ Panelen läser repot den byggdes i (för uppdateringar och verifiering), så fly
 
 Kom igång är en guide för en ny dator. Den kontrollerar NVIDIA-drivrutinen, Rust och Tailscale, installerar gatewayen och Pianissimo i Konsole, ställer in Tailscale serve och visar parningskoden. Steg som redan är klara hoppas över, men alla går att köra igen.
 
-Under AI väljer du leverantör och modell, för alla uppgifter eller per uppgift (`ask`, `everyday`, `lesson`), ändrar gränserna och byter nyckel. Varje ändring visas som före och efter innan du sparar. Ett par som inte är granskat går inte att spara. Mistral och NVIDIA blir valbara först när du har tryckt Prova och modellen klarat ett kort påhittat anrop per uppgift; det anropet går till leverantören och kostar som ett vanligt anrop.
+Under AI väljer du leverantör och modell, för alla uppgifter eller per uppgift (`ask`, `everyday`, `lesson`), ändrar gränserna och byter nyckel. Varje ändring visas som före och efter innan du sparar. Ett par som inte är granskat går inte att spara. Mistral och NVIDIA blir valbara först när du har tryckt Prova och modellen klarat ett kort påhittat anrop per uppgift; det anropet går till leverantören och kostar som ett vanligt anrop. Mistral står först i listan, och under varje par står vart Prova går och ungefär vad det kostar (för Mistral några tusen token, långt under en cent, med gatewayens priser eller panelens granskade priser från 2026-11-20).
+
+Sidan visar också vilken uppgift som resonerar och på vilken nivå. Bara Lektioner får resonera, så en modell som resonerar (Large 4) går bara att välja för Lektioner. Kreditmätaren överst visar token och uppskattad kostnad den här månaden per uppgift och modell, ur gatewayens `/v2/status`, mot en kreditgräns du skriver in (standard $20). Den blir gul vid 80 % och röd vid 100 %. Gränsen sparas bara i panelen och skickas aldrig till gatewayen. En äldre gateway utan räknare visar ingen mätare.
 
 Under Transkription ställer du in precision, förbehandling, talarmärkning och hur hårt egna ord ska väga, uppdaterar modellen och slår nattuppdateringen av eller på. Egna ord är en redigerare för ordlistan med räknare och varningar; Pianissimo startas om när du sparar. Orden lämnar aldrig datorn.
 
@@ -36,7 +38,7 @@ Verifiering kör samma kontroller som GitHub (`mio-verify verify`) och visar res
 
 På Datorn kan panelen hålla datorn vaken så länge den kör, starta vid inloggning och klara sig utan ikon i systemfältet. Utan ikon öppnas fönstret direkt och panelen avslutas när du stänger det. Valen sparas i `~/.config/mio-control/installningar`.
 
-Ikonens meny har Öppna, omstart av gatewayen och Pianissimo, Pausa AI på datorn (stoppar gatewayen), Visa parningskod och Avsluta. Pricken på ikonen är grön när allt kör, bärnstensfärgad när något startar, laddar eller inte är installerat eller när dagens kvot nästan är slut, och röd när en tjänst har stannat, gatewayen inte svarar eller Tailscale inte är inloggat. Stannar en tjänst kommer också en skrivbordsnotis.
+Ikonens meny har Öppna, omstart av gatewayen och Pianissimo, Pausa AI på datorn (stoppar gatewayen), Visa parningskod och Avsluta. Pricken på ikonen är grön när allt kör, bärnstensfärgad när något startar, laddar eller inte är installerat eller när dagens kvot nästan är slut, och röd när en tjänst har stannat, gatewayen inte svarar eller Tailscale inte är inloggat. Stannar en tjänst, eller startar gatewayen eller Pianissimo fler än tre gånger på tio minuter, kommer också en skrivbordsnotis. Omstarterna räknas ur systemd:s rader i journalen, så de syns bara om ditt konto får läsa den (gruppen `systemd-journal`). Samma notis kommer högst en gång på tio minuter.
 
 ## Lösenord och rättigheter
 
@@ -89,3 +91,6 @@ Inget av detta är provat. Kör det på `cachyos-pc` och för in resultatet i [s
 7. "Uppdatera allt" på en dator där något ligger efter. Konsole öppnas och stannar vid ett fel.
 8. "Håll datorn vaken" hindrar viloläge.
 9. Loggar visar journalen utan lösenord, och Verifiering kör hela grinden på datorn.
+10. Prova mot Mistral: lägg in Mistral-nyckeln under AI, tryck Prova på Mistral Small 4 och sedan Large 4. Kostnadsraden säger att anropen går till Mistral och kostar under en cent, rapporten visar ett svar per uppgift, och ett godkänt par blir valbart (Large 4 bara för Lektioner). Kontrollera i Mistrals konsol att kostnaden blev ungefär den som stod.
+11. Kreditmätaren: efter några anrop visar AI-sidan månadens token och kostnad per uppgift och modell. Skriv en gräns strax över kostnaden och se mätaren bli gul, sedan en under och se den bli röd. Starta om panelen och se att gränsen är kvar.
+12. Skrivbordsnotisen: stoppa `mio-transcription` och se en notis om att Pianissimo har stannat. Starta om `mio-gateway` fyra gånger inom tio minuter (`sudo systemctl restart mio-gateway`) och se en notis om att den startar om gång på gång, och att den inte kommer igen vid en femte omstart.

@@ -116,7 +116,7 @@ fn datorn_keeps_awake_and_saves_its_choices(cx: &mut TestAppContext) {
     });
     assert_eq!(*fakes.inhibitions.lock().unwrap(), 1);
     assert!(folder.join("autostart/app.mio.control.desktop").exists());
-    assert_eq!(Preferences::load(&folder.join("mio-control/installningar")), Preferences { keep_awake: true, tray: false });
+    assert_eq!(Preferences::load(&folder.join("mio-control/installningar")), Preferences { keep_awake: true, tray: false, ..Preferences::default() });
     step(cx, handle, |window, cx| {
         window.click("keep-awake", cx);
         window.click("autostart", cx);

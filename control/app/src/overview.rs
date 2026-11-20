@@ -180,8 +180,8 @@ pub fn gateway_card(overview: &Overview) -> StatusCard {
     }
     let mut card = StatusCard::new("gateway", IconName::Bot, "AI-gatewayen", tone, state);
     if let Some(gateway) = &overview.gateway {
-        if let Some((_, provider, model)) = gateway.tasks.first() {
-            card = card.row("Modell", format!("{model} ({provider})"));
+        if let Some(task) = gateway.tasks.first() {
+            card = card.row("Modell", format!("{} ({})", task.model, task.provider));
         }
         match &gateway.quota {
             Some((limit, remaining, unit)) => {

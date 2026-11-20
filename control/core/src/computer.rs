@@ -29,20 +29,29 @@ pub struct Preferences {
     pub keep_awake: bool,
     /// Show the tray icon. Without it the window opens at start and closing it quits the panel.
     pub tray: bool,
+    /// The credit meter's monthly limit in cents. The panel's own; never sent to the gateway.
+    pub credit_limit_cents: u64,
 }
 
 impl Default for Preferences {
     fn default() -> Self {
-        Self { keep_awake: false, tray: true }
+        Self { keep_awake: false, tray: true, credit_limit_cents: crate::credit::DEFAULT_LIMIT_CENTS }
     }
 }
 
 impl Preferences {
-    /// `håll-vaken=ja|nej` and `systemfält=ja|nej`, one per line; anything else keeps the default.
+    /// `håll-vaken=ja|nej`, `systemfält=ja|nej` and `kreditgräns=<dollar>`, one per line;
+    /// anything else keeps the default.
     pub fn parse(text: &str) -> Self {
         let mut preferences = Self::default();
         for line in text.lines() {
             let Some((key, value)) = line.split_once('=') else { continue };
+            if key.trim() == "kreditgräns" {
+                if let Some(cents) = crate::credit::parse_limit(value) {
+                    preferences.credit_limit_cents = cents;
+                }
+                continue;
+            }
             let on = match value.trim() {
                 "ja" => true,
                 "nej" => false,
@@ -59,7 +68,12 @@ impl Preferences {
 
     pub fn to_text(self) -> String {
         let word = |on: bool| if on { "ja" } else { "nej" };
-        format!("håll-vaken={}\nsystemfält={}\n", word(self.keep_awake), word(self.tray))
+        format!(
+            "håll-vaken={}\nsystemfält={}\nkreditgräns={}\n",
+            word(self.keep_awake),
+            word(self.tray),
+            crate::credit::format_limit(self.credit_limit_cents)
+        )
     }
 
     pub fn load(path: &Path) -> Self {
@@ -121,10 +135,14 @@ mod tests {
 
     #[test]
     fn preferences_round_trip_and_tolerate_noise() {
-        assert_eq!(Preferences::parse(""), Preferences { keep_awake: false, tray: true });
-        let preferences = Preferences { keep_awake: true, tray: false };
+        assert_eq!(Preferences::parse(""), Preferences { keep_awake: false, tray: true, credit_limit_cents: 2_000 });
+        let preferences = Preferences { keep_awake: true, tray: false, credit_limit_cents: 1_550 };
         assert_eq!(Preferences::parse(&preferences.to_text()), preferences);
-        assert_eq!(Preferences::parse("håll-vaken=kanske\nannat=ja\nsystemfält = nej\n"), Preferences { keep_awake: false, tray: false });
+        assert!(preferences.to_text().contains("kreditgräns=15,50\n"));
+        assert_eq!(
+            Preferences::parse("håll-vaken=kanske\nannat=ja\nsystemfält = nej\nkreditgräns=gratis\n"),
+            Preferences { keep_awake: false, tray: false, credit_limit_cents: 2_000 }
+        );
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("mio-control/installningar");
         preferences.save(&path).unwrap();
