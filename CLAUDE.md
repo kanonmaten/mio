@@ -2,7 +2,7 @@
 
 Private SwiftUI app for iOS 27+ (tested on iPhone 16 Pro, still targeting iPhone 13), used and maintained by one person, installed with SideStore. Version 0.9.1 is current and unreleased. This file is in English; everything else in the repo is Swedish.
 
-Before changing something, read the docs that cover it: [README](README.md), [decisions](docs/DECISIONS.md), [status](docs/STATUS.md), the [data model](docs/DATAMODELL.md) for storage, the [gateway](server/README.md) or [Pianissimo](transcription-server/README.md) guide for server work. [`PLAN.md`](PLAN.md) is the 0.9.0 reliability plan; never edit it. The next work is [`docs/PLAN_GRILLNING.md`](docs/PLAN_GRILLNING.md) (the user's decisions from 2026-11-19, not started): take it before other new work, phase by phase, and tick its checkboxes as you go.
+Before changing something, read the docs that cover it: [README](README.md), [decisions](docs/DECISIONS.md), [status](docs/STATUS.md), the [data model](docs/DATAMODELL.md) for storage, the [gateway](server/README.md) or [Pianissimo](transcription-server/README.md) guide for server work. [`PLAN.md`](PLAN.md) is the 0.9.0 reliability plan; never edit it. The next work is [`docs/PLAN_GRILLNING.md`](docs/PLAN_GRILLNING.md) (the user's decisions from 2026-11-19, not started): take it before other new work, phase by phase, and tick its checkboxes as you go. Exception (user's decision 2026-11-20): the faster-CI plan (`PLAN_SNABBARE_CI_v2.md`, kept outside the repo) may run before it when the user starts it.
 
 ## Rules that must hold
 
@@ -20,7 +20,7 @@ Before changing something, read the docs that cover it: [README](README.md), [de
 - Keep changes scoped and leave unrelated changes alone. Don't reorganize Swift code for looks.
 - Swedish for UI text and docs, English for identifiers and code comments. Comment the non-obvious privacy, timing and concurrency rules.
 - Update `CHANGELOG.md` for user-visible changes. Edit `docs/STATUS.md` only with checks you actually ran. Never touch the measurements in `docs/TESTRESULTAT_V0_1.md`.
-- Git: commit finished, verified work and push to `main` without asking. No branches or pull requests, even if the session assigns one; never force-push. Tags, running the IPA workflow, real model traffic and anything on Cloudflare (the old Worker, D1 and Access are still deployed) need the user's approval.
+- Git: commit finished, verified work and push to `main` without asking. No branches or pull requests, even if the session assigns one; never force-push. Run "Bygg Mio IPA" whenever it helps, without asking (user's decision 2026-11-20). Tags, real model traffic and anything on Cloudflare (the old Worker, D1 and Access are still deployed) need the user's approval.
 - Ask when a decision is the user's to make.
 - Reminder (user's request 2026-11-16, updated 2026-11-17): the GPUI control app for the PC, Mio Kontroll in `control/`, is built but not tested on the PC. At the start of work on Mio, remind the user in one line of the PC test list in `control/README.md#prov-på-datorn`. Keep doing so until the user reports it done or drops it.
 - Reminder (user's request 2026-11-19): at the start of work on Mio, also remind the user in one line that the next step is [`docs/PLAN_GRILLNING.md`](docs/PLAN_GRILLNING.md) and which phase is next (the first with unticked boxes). Keep doing so until every phase is ticked or the user drops it.
