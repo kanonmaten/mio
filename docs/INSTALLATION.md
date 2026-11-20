@@ -8,7 +8,7 @@ Telefonen behöver iOS 27.0 eller senare (först provad på iPhone 16 Pro). GitH
 
 1. Uppdatera datorn först om serverkoden ändrats: `git pull`, sedan `transcription-server/install.sh` och `server/install.sh`. Tokens behålls, så telefonen behöver inte paras om.
 2. Kontrollera att **Verifiera Mio på Linux** är grön för den commit du ska bygga.
-3. Kör **Actions → Bygg Mio IPA → Run workflow** på `main`. Den bygger Release, kör XCTest och UI-prov på en iOS 27-simulator och kontrollerar IPA:n (cirka 25 minuter).
+3. **Bygg Mio IPA** startar av sig själv vid varje push till `main` som ändrar appen, och IPA:n är klar efter ett par minuter. Annars: **Actions → Bygg Mio IPA → Run workflow** på `main`. Körningen bygger Release, kontrollerar IPA:n och kör XCTest på en iOS 27-simulator. UI-proven och concurrencydiagnostiken körs varje natt, på `v*`-taggar och när du kryssar i `uitester` och `diagnostik` vid en manuell körning.
 4. Hämta artifacten **Mio-IPA** (sparas 14 dagar) och packa upp ZIP-filen en gång. Den innehåller `Mio-unsigned.ipa` och `Mio-buildinfo.txt` med commit och SHA-256. Flytta IPA:n till Filer på telefonen.
 5. Telefonen på Wi-Fi med LocalDevVPN påslaget: **SideStore → My Apps → +** och välj IPA:n. Appen heter `app.mio.assistant`; en uppdatering behåller dina data.
 6. Slå på Tailscale igen efter LocalDevVPN, öppna Mio och kör [helhetstestet](TESTPLAN_HELHET.md).
@@ -82,6 +82,6 @@ Delstegen går att köra var för sig: `project`, `swift-core`, `capture-recover
 
 Resultatet är `PASS (Linux synthetic gates)`, `FAIL` (exitkod 1) eller `UNAVAILABLE` (exitkod 2). Med `--skip-swift` blir det `PARTIAL`, och då är Swift inte kontrollerat. `verification.json` i loggkatalogen anger commit, verktygsversioner och vilka grindar som körts; iOS och riktig modelltrafik står alltid som `NOT RUN`.
 
-iOS-koden kontrolleras bara av workflowen Bygg Mio IPA: concurrencydiagnostik, Release-bygge, XCTest med tre UI-prov och kontroll av IPA:n. På en Mac med Rust går concurrencydiagnostiken att köra direkt med `cargo run --locked --manifest-path tools/Cargo.toml -- concurrency --native --log /tmp/mio-native-concurrency.log`.
+iOS-koden kontrolleras bara av workflowen Bygg Mio IPA: Release-bygge, kontroll av IPA:n och XCTest vid varje push som ändrar appen, och dessutom UI-prov och concurrencydiagnostik varje natt, på `v*`-taggar och vid manuella körningar med `uitester` och `diagnostik`. En grön push-körning betyder alltså inte att UI-proven har körts för den commiten. På en Mac med Rust går concurrencydiagnostiken att köra direkt med `cargo run --locked --manifest-path tools/Cargo.toml -- concurrency --native --log /tmp/mio-native-concurrency.log`.
 
 Loggar får bara innehålla textfri diagnostik: aldrig källtext, frågor, svar, ljud, tokens, fulla adresser eller exporter.
