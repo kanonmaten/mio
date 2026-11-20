@@ -86,44 +86,8 @@ fn run_commands(steps: Option<&Value>) -> Result<String, ()> {
     Ok(commands.join("\n"))
 }
 
-/// The Linux gate's own container image, built by `.github/workflows/ci-image.yml`.
-pub const CI_IMAGE: &str = "ghcr.io/kanonmaten/mio/verify-linux";
-/// Where that image is defined, relative to the repository root.
-pub const CI_IMAGE_DOCKERFILE: &str = ".github/ci-image/Dockerfile";
-const LINUX_BASE_IMAGE: &str = "swift:6.3.3-noble";
-
-/// True when the Dockerfile's first `FROM` builds on the Swift image the Linux gate requires.
-fn dockerfile_uses_linux_base(dockerfile: &str) -> bool {
-    dockerfile
-        .lines()
-        .map(str::trim)
-        .find(|line| line.split_whitespace().next().is_some_and(|word| word.eq_ignore_ascii_case("FROM")))
-        .is_some_and(|line| line.split_whitespace().nth(1) == Some(LINUX_BASE_IMAGE) && line.split_whitespace().nth(2).is_none())
-}
-
-/// The verify job runs either on the Swift image directly, or on Mio's GHCR image whose
-/// Dockerfile builds on exactly that Swift image (so the Swift toolchain is the same).
-fn linux_container_ok(container: Option<&Value>, ci_dockerfile: Option<&str>) -> bool {
-    match container {
-        Some(Value::String(image)) => image == LINUX_BASE_IMAGE,
-        Some(Value::Object(container)) => {
-            let ours = container.get("image").and_then(Value::as_str).is_some_and(|image| {
-                image.strip_prefix(CI_IMAGE).is_some_and(|rest| rest.is_empty() || rest.starts_with([':', '@']))
-            });
-            ours && ci_dockerfile.is_some_and(dockerfile_uses_linux_base)
-        }
-        _ => false,
-    }
-}
-
 /// Return missing safety-critical fields for Mio's two required workflows.
 pub fn workflow_contract_issues(name: &str, workflow: &Value) -> Vec<String> {
-    workflow_contract_issues_with_image(name, workflow, None)
-}
-
-/// Like [`workflow_contract_issues`], with the text of [`CI_IMAGE_DOCKERFILE`] when it exists,
-/// so the Linux job may run in the GHCR image built from it.
-pub fn workflow_contract_issues_with_image(name: &str, workflow: &Value, ci_dockerfile: Option<&str>) -> Vec<String> {
     let Some(jobs) = workflow.get("jobs").and_then(Value::as_object).filter(|_| workflow.is_object()) else {
         return vec!["YAML-roten måste innehålla en jobs-mappning".to_owned()];
     };
@@ -179,7 +143,7 @@ pub fn workflow_contract_issues_with_image(name: &str, workflow: &Value, ci_dock
             vec![
                 (
                     job.get("runs-on").and_then(Value::as_str) == Some("ubuntu-24.04")
-                        && linux_container_ok(job.get("container"), ci_dockerfile),
+                        && job.get("container").and_then(Value::as_str) == Some("swift:6.3.3-noble"),
                     "Ubuntu 24.04 och Swift 6.3.3 Noble",
                 ),
                 (
@@ -541,8 +505,6 @@ fn structure(root: &Path, report: &mut Report) -> Result<(), Fatal> {
             report.check(parent.join(target).exists(), format!("Länk {} → {target}", relative(root, &path)));
         }
     }
-    let ci_dockerfile_path = root.join(CI_IMAGE_DOCKERFILE);
-    let ci_dockerfile = if ci_dockerfile_path.exists() { Some(read_text(&ci_dockerfile_path)?) } else { None };
     for name in ["build-unsigned-ipa.yml", "verify-linux.yml"] {
         let text = read_text(&root.join(".github/workflows").join(name))?;
         let workflow = match load_yaml(&text) {
@@ -553,7 +515,7 @@ fn structure(root: &Path, report: &mut Report) -> Result<(), Fatal> {
             }
         };
         report.check(workflow.is_object(), format!(".github/workflows/{name}: giltig YAML-mappning"));
-        let issues = workflow_contract_issues_with_image(name, &workflow, ci_dockerfile.as_deref());
+        let issues = workflow_contract_issues(name, &workflow);
         if issues.is_empty() {
             report.check(true, format!(".github/workflows/{name}: säkerhetskritiska jobbinställningar"));
         } else {

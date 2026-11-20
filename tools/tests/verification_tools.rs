@@ -2,7 +2,7 @@
 //! workflow contracts catch a missing safety-critical setting.
 
 use mio_verify::concurrency::concurrency_warnings;
-use mio_verify::project::{workflow_contract_issues, workflow_contract_issues_with_image};
+use mio_verify::project::workflow_contract_issues;
 use serde_json::{Value, json};
 
 #[test]
@@ -97,37 +97,4 @@ fn linux_workflow_requires_the_shared_gate_and_evidence_artifact() {
     ] {
         assert!(issues.iter().any(|issue| issue == expected), "{expected} missing from {issues:?}");
     }
-}
-
-#[test]
-fn linux_workflow_accepts_the_ghcr_image_only_when_built_on_the_swift_image() {
-    let mut workflow = json!({"jobs": {"verify": {
-        "runs-on": "ubuntu-24.04",
-        "container": {
-            "image": "ghcr.io/kanonmaten/mio/verify-linux:latest",
-            "credentials": {"username": "${{ github.actor }}", "password": "${{ github.token }}"},
-        },
-        "steps": [
-            {"run": r#"cargo run --locked --manifest-path "$GITHUB_WORKSPACE/tools/Cargo.toml" -- verify --logs-dir "$GITHUB_WORKSPACE/.mio-verification""#},
-            {"uses": "actions/upload-artifact@v7"},
-        ],
-    }}});
-    let ours = "# comment\nFROM swift:6.3.3-noble\nRUN true\n";
-    assert!(workflow_contract_issues_with_image("verify-linux.yml", &workflow, Some(ours)).is_empty());
-    let expected = ["Ubuntu 24.04 och Swift 6.3.3 Noble"];
-    // Without the Dockerfile, or on another base, the image proves nothing about the Swift toolchain.
-    assert_eq!(workflow_contract_issues("verify-linux.yml", &workflow), expected);
-    for dockerfile in ["FROM swift:6.2-noble\n", "FROM swift:6.3.3-noble AS base\n", "FROM ubuntu:24.04\nFROM swift:6.3.3-noble\n", ""] {
-        assert_eq!(workflow_contract_issues_with_image("verify-linux.yml", &workflow, Some(dockerfile)), expected, "{dockerfile}");
-    }
-    // Pinning by digest is fine; a look-alike repository is not.
-    workflow["jobs"]["verify"]["container"]["image"] = json!("ghcr.io/kanonmaten/mio/verify-linux@sha256:00");
-    assert!(workflow_contract_issues_with_image("verify-linux.yml", &workflow, Some(ours)).is_empty());
-    for image in ["ghcr.io/kanonmaten/mio/verify-linux-old:latest", "ghcr.io/someone/mio/verify-linux:latest", "swift:6.3.3-noble"] {
-        workflow["jobs"]["verify"]["container"]["image"] = json!(image);
-        assert_eq!(workflow_contract_issues_with_image("verify-linux.yml", &workflow, Some(ours)), expected, "{image}");
-    }
-    // The plain string form keeps working with or without the Dockerfile.
-    workflow["jobs"]["verify"]["container"] = json!("swift:6.3.3-noble");
-    assert!(workflow_contract_issues_with_image("verify-linux.yml", &workflow, Some(ours)).is_empty());
 }
