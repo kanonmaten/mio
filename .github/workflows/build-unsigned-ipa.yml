@@ -260,27 +260,11 @@ jobs:
       MINIMUM_IOS_VERSION: "27.0"
 
     steps:
-      - name: Hämta projektet
-        uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Visa byggmiljön
-        run: |
-          set -euo pipefail
-          sw_vers
-          xcode-select -p
-          xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
-          XCODE_VERSION="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
-          IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
-          test "${XCODE_VERSION%%.*}" = "27"
-          test "${IOS_SDK_VERSION%%.*}" = "$EXPECTED_IOS_MAJOR"
-
-      - name: Välj simulator
-        # Booting is deliberately left until after the compile: a simulator booting in the
-        # background kept CoreSimulator so busy that xcodebuild sat silent for 2 min 49 s (#49) and
-        # 6 min 42 s (#50) before compiling anything, longer than the boot itself.
+      - name: Starta simulatorn i bakgrunden
+        # First step of the job: a freshly booted iOS 27 simulator saturates the runner for several
+        # minutes (in #52 even the runner's own log stalled), whatever else runs. Booting before the
+        # compile overlaps that; booting after it moved the same wait into the test step (#52: test
+        # job 14 min against 9 min). simctl boot returns once booting has begun.
         run: |
           set -euo pipefail
           command -v jq
@@ -315,6 +299,24 @@ jobs:
           fi
           echo "Vald simulator: $SIMULATOR_UDID"
           echo "SIMULATOR_UDID=$SIMULATOR_UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+
+      - name: Hämta projektet
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Visa byggmiljön
+        run: |
+          set -euo pipefail
+          sw_vers
+          xcode-select -p
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          XCODE_VERSION="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
+          IOS_SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          test "${XCODE_VERSION%%.*}" = "27"
+          test "${IOS_SDK_VERSION%%.*}" = "$EXPECTED_IOS_MAJOR"
 
       - name: Kompilera enhetstester
         # One architecture for the simulator already chosen above: half the compile work of a
@@ -334,11 +336,6 @@ jobs:
             ONLY_ACTIVE_ARCH=YES \
             build-for-testing 2>&1 | tee "$RUNNER_TEMP/Mio-test-build.log"
 
-      - name: Starta simulatorn
-        # bootstatus -b boots the device if needed and returns once it is fully up.
-        timeout-minutes: 10
-        run: xcrun simctl bootstatus "$SIMULATOR_UDID" -b
-
       - name: Kör enhetstester
         # Unit tests run alone on a fresh simulator, before any UI test can wedge it (run #33:
         # a hung UI test left the simulator unresponsive and a 2 s unit test then waited 10 min).
@@ -347,6 +344,9 @@ jobs:
         timeout-minutes: 12
         run: |
           set -euo pipefail
+          # bootstatus -b boots the device if needed; a separate simctl boot on the already booted
+          # device took 82 s on a saturated runner (#50).
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
           # simctl shutdown on a wedged simulator blocked for 9 min in run #33; perl's alarm bounds it.
           trap 'perl -e "alarm 60; exec @ARGV" xcrun simctl shutdown "$SIMULATOR_UDID" || true' EXIT
           xcodebuild \
