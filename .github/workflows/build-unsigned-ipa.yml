@@ -14,7 +14,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: mio-${{ github.ref }}
+  # The event name keeps push, nightly and manual runs on main from cancelling each other.
+  group: mio-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
