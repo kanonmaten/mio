@@ -38,6 +38,17 @@ cd server && cargo test --locked && cargo clippy --locked --all-targets -- -D wa
 cd transcription-server && uv sync --locked --extra test --python 3.12 && uv run pytest tests
 ```
 
+While working, run only the checks for what the change touches; run the full `verify` before pushing:
+
+| Changed | Run |
+|---|---|
+| Swift logic (`Mio/` portable code) | `cargo run --locked --manifest-path tools/Cargo.toml -- swift-core` |
+| Project structure, plists, file layout | `cargo run --locked --manifest-path tools/Cargo.toml -- project` |
+| `tools/` | `cd tools && cargo test --locked && cargo clippy --locked --all-targets -- -D warnings` |
+| `server/` | `cd server && cargo test --locked && cargo clippy --locked --all-targets -- -D warnings` |
+| `control/` | `cargo clippy --locked --manifest-path control/Cargo.toml --workspace --all-targets -- -D warnings` and `cargo test --locked --manifest-path control/Cargo.toml --workspace` |
+| `transcription-server/` | `cd transcription-server && uv sync --locked --extra test --python 3.12 && uv run pytest tests` |
+
 The verifier (`tools/`, binary `mio-verify`) is Rust since 2026-11-17. Pianissimo and its tests stay Python (NeMo). Keep the verifier's Swedish messages unchanged: CI logs and `docs/STATUS.md` quote them. Its Swift rewrites must stay byte-identical to what they replace; the substituted Swift lives in `tools/swift/`.
 
 GitHub runs "Verifiera Mio på Linux" on every push; check it for the exact commit. "Bygg Mio IPA" (manual) builds the iOS app, runs simulator tests and makes the unsigned IPA; it is the only check of iOS-only code such as Keychain, UIKit and SwiftUI views.
