@@ -30,5 +30,9 @@ tokio = { version = "1.54.1", features = ["rt", "net", "time", "macros", "signal
 unicode-general-category = "1.1.0"
 unicode-normalization = "0.1.26"
 
+[dev-dependencies]
+# Paused time: the 180 s lesson limit is tested without waiting for it.
+tokio = { version = "1.54.1", features = ["test-util"] }
+
 [profile.release]
 strip = true

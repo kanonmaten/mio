@@ -20,6 +20,20 @@ pub const MAX_TOKENS_PER_DAY: u64 = 1_000_000;
 /// trial (Prova) and the limit is adjusted after that. Other tasks keep their own limits.
 pub const LESSON_REASONING_MAX_OUTPUT_TOKENS: u64 = 12_000;
 
+/// The longest a whole lesson call may take on a profile that reasons (contract in
+/// `docs/DATAMODELL.md`, "Tidsgräns (tillägg efter våg 2)"): up to 12,000 tokens of thinking
+/// do not fit in the 40 s every other call keeps. The app waits 200 s for lesson notes, so the
+/// gateway's own error (`upstream_timeout` and the rest) reaches it before the app gives up.
+/// The retry rule and every other limit are unchanged; they scale with the call's limit.
+pub const LESSON_REASONING_TIMEOUT_MS: u64 = 180_000;
+
+/// The limit for a whole call of `task` on `profile`, in milliseconds: `base_ms` (40 s, or
+/// lower when configured) unless a lesson runs on a profile that reasons. Keyed on the task, not
+/// the route, so every lesson route gets the same limit.
+pub fn call_limit_ms(task: &str, profile: &Profile, base_ms: u64) -> u64 {
+    if task == REASONING_TASK && profile.reasoning.reasons() { LESSON_REASONING_TIMEOUT_MS } else { base_ms }
+}
+
 /// The answer budget for `task` on `profile`: the task's own unless the profile reasons.
 pub fn output_limit(task: &str, profile: &Profile, task_limit: u64) -> u64 {
     if task == REASONING_TASK && profile.reasoning.reasons() { LESSON_REASONING_MAX_OUTPUT_TOKENS } else { task_limit }

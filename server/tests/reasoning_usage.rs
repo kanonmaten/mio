@@ -8,7 +8,8 @@ use std::sync::Arc;
 
 use common::{Link, Provider, TOKEN, Upstream, authorized, env, start};
 use mio_gateway::adapters::{Finish, build_for_profile, normalize_provider_response, response_usage};
-use mio_gateway::config::{Config, LESSON_REASONING_MAX_OUTPUT_TOKENS, load_config};
+use mio_gateway::config::{Config, LESSON_REASONING_MAX_OUTPUT_TOKENS, LESSON_REASONING_TIMEOUT_MS, load_config};
+use mio_gateway::generation::{Spent, execute_generation, trial_call};
 use mio_gateway::model_profiles::candidate_profile;
 use mio_gateway::server::Gateway;
 use mio_gateway::status::gateway_status_v2;
@@ -293,6 +294,55 @@ fn the_trial_tries_large_4_on_lessons_only() {
     assert_eq!(provider.count(), 1);
     let sent: Value = serde_json::from_str(&provider.calls.lock().unwrap()[0].body).unwrap();
     assert_eq!((sent["reasoning_effort"].clone(), sent["max_tokens"].clone()), (json!("medium"), json!(12_000)));
+}
+
+/// Runs `mode` against a provider that never answers, on paused time, and returns how long the
+/// gateway let the call run before it gave up.
+async fn deadline(config: &Config, mode: Mode, payload: &Value) -> std::time::Duration {
+    let provider = Provider::fixed(Upstream::Hang);
+    let started = tokio::time::Instant::now();
+    let error = execute_generation(config, mode, payload, &Link(provider.clone()), &mut || Ok(()), &|| NOVEMBER, &Spent::default())
+        .await.err().expect("a hanging provider never answers");
+    assert_eq!((error.status, error.code), (504, "upstream_timeout"));
+    assert_eq!(provider.count(), 1);
+    started.elapsed()
+}
+
+fn everyday_payload() -> Value {
+    json!({ "mode": "everyday", "timeZone": "Europe/Stockholm", "fragments": [{ "id": OLD, "occurredAt": "2026-09-28T08:00:00Z",
+        "text": "Jag måste ringa tandläkaren i morgon." }] })
+}
+
+/// Contract "Tidsgräns (tillägg efter våg 2)": a lesson on a profile that reasons may take 180 s;
+/// everyday, ask and a lesson on a profile that does not reason keep 40 s.
+#[tokio::test(start_paused = true)]
+async fn a_reasoning_lesson_gets_180_seconds_and_every_other_call_keeps_40() {
+    use std::time::Duration;
+    let reasoning = mistral_config();
+    assert_eq!(reasoning.upstream_timeout_ms, 40_000);
+    assert_eq!(deadline(&reasoning, Mode::Lesson, &lesson_payload()).await, Duration::from_millis(LESSON_REASONING_TIMEOUT_MS));
+    assert_eq!(LESSON_REASONING_TIMEOUT_MS, 180_000);
+    assert_eq!(deadline(&reasoning, Mode::AnalyzeV2, &everyday_payload()).await, Duration::from_secs(40));
+    let plain = load_config(&env(&mistral_env(&[("MIO_AI_TASK_PROFILES", r#"{"lesson":{"model":"mistral-small-2603"}}"#)]))).unwrap();
+    assert_eq!(resolve_task_profile(&plain, "lesson").config.unwrap().model, SMALL);
+    assert_eq!(deadline(&plain, Mode::Lesson, &lesson_payload()).await, Duration::from_secs(40));
+    // A lowered limit still lowers every call that does not reason.
+    let lowered = Config { upstream_timeout_ms: 2_000, ..reasoning };
+    assert_eq!(deadline(&lowered, Mode::AnalyzeV2, &everyday_payload()).await, Duration::from_secs(2));
+    assert_eq!(deadline(&lowered, Mode::Lesson, &lesson_payload()).await, Duration::from_secs(180));
+}
+
+/// `mio-gateway prova` gives a reasoning lesson the same 180 s and a plain lesson its 40 s.
+#[tokio::test(start_paused = true)]
+async fn the_trial_gives_a_reasoning_lesson_180_seconds_and_a_plain_one_40() {
+    use std::time::Duration;
+    for (model, limit) in [(LARGE, Duration::from_secs(180)), (SMALL, Duration::from_secs(40))] {
+        let profile = candidate_profile("mistral", model).unwrap();
+        let provider = Provider::fixed(Upstream::Hang);
+        let started = tokio::time::Instant::now();
+        let error = trial_call(profile, KEY, Mode::Lesson, &lesson_payload(), &Link(provider), &|| NOVEMBER, None).await.err().unwrap();
+        assert_eq!((error.status, error.code, started.elapsed()), (504, "upstream_timeout", limit), "{model}");
+    }
 }
 
 #[test]

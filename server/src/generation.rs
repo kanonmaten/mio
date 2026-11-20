@@ -179,12 +179,17 @@ async fn read_upstream(mut response: Box<dyn UpstreamResponse>, profile: &Profil
     }
 }
 
+/// The trial's limit for one call; a lesson on a profile that reasons gets the same longer limit
+/// as in the service (`config::call_limit_ms`).
+const TRIAL_TIMEOUT_MS: u64 = 40_000;
+
 /// One synthetic call for `mio-gateway prova`, started by the user in Mio Kontroll: the same
 /// request, reading and validation as a real call, without the service's quota counters (they
 /// live in its own process) and without the retry, so a failure shows as it is.
 pub async fn trial_call(profile: Profile, api_key: &str, mode: Mode, payload: &Value, transport: &dyn Transport,
     now: Clock<'_>, minute_budget: Option<u64>) -> Result<(Value, Normalized), RequestError> {
     let generation = fit_to_minute_budget(task_request(mode, payload, &profile), mode.task_id(), minute_budget)?;
+    let limit = Duration::from_millis(crate::config::call_limit_ms(mode.task_id(), &profile, TRIAL_TIMEOUT_MS));
     let provider = build_for_profile(profile, api_key, &generation).map_err(|_| RequestError::new(422, "task_configuration_invalid"))?;
     let request = UpstreamRequest { url: provider.url.clone(), headers: provider.headers.clone(), body: provider.body.to_string() };
     let spent = Spent::default();
@@ -195,7 +200,7 @@ pub async fn trial_call(profile: Profile, api_key: &str, mode: Mode, payload: &V
             Failure::Unclassified => RequestError::new(502, "provider_infrastructure"),
         })
     };
-    let normalized = tokio::time::timeout(Duration::from_secs(40), call).await.map_err(|_| RequestError::new(504, "upstream_timeout"))??;
+    let normalized = tokio::time::timeout(limit, call).await.map_err(|_| RequestError::new(504, "upstream_timeout"))??;
     let result = validate_task_result(mode, normalized.text.as_deref().unwrap_or(""), payload).map_err(|code| RequestError::new(502, code))?;
     Ok((result, normalized))
 }
@@ -224,7 +229,7 @@ fn task_request(mode: Mode, payload: &Value, profile: &Profile) -> Generation {
 pub async fn execute_generation(config: &Config, mode: Mode, payload: &Value, transport: &dyn Transport,
     reserve: Reserve<'_>, now: Clock<'_>, spent: &Spent) -> Result<Generated, RequestError> {
     let started = Instant::now();
-    let limit = Duration::from_millis(config.upstream_timeout_ms);
+    let limit = Duration::from_millis(call_limit(config, mode));
     let expired = RequestError::new(504, "upstream_timeout");
     match tokio::time::timeout(limit, run(config, mode, payload, transport, reserve, now, started, limit, spent)).await {
         Err(_) => Err(expired),
@@ -234,6 +239,14 @@ pub async fn execute_generation(config: &Config, mode: Mode, payload: &Value, tr
         Ok(Err(Failure::Request(error))) => Err(error),
         Ok(Err(Failure::Unclassified)) => Err(RequestError::new(502, "provider_infrastructure")),
     }
+}
+
+/// The whole call's limit for `mode` with the task's current profile. A task without a valid
+/// profile keeps the configured limit; `run` then refuses it before any provider call.
+fn call_limit(config: &Config, mode: Mode) -> u64 {
+    let task_id = mode.task_id();
+    resolve_task_profile(config, task_id).config.and_then(|selected| crate::config::profile(&selected).ok())
+        .map_or(config.upstream_timeout_ms, |profile| crate::config::call_limit_ms(task_id, &profile, config.upstream_timeout_ms))
 }
 
 #[allow(clippy::too_many_arguments)]

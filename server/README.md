@@ -73,7 +73,7 @@ Räknarna sparas i `counters.json` efter varje reservation, så en omstart nolls
 
 **Storlek per anrop (2026-11-15).** På gratisnivån släpper Groq bara igenom ett anrop om prompt + `max_tokens` ryms i minutens 8 000 token; annars svarar Groq 413, och det hjälper aldrig att vänta. Gatewayen uppskattar därför promptens storlek (tre UTF-8-byte per token, vilket överskattar svensk text) och krymper svarsutrymmet så att anropet ryms. Ryms inte ens ett kort svar avvisas anropet direkt med 413 `provider_request_too_large`, utan att kvot dras, och appen delar då underlaget i mindre delar. Samma kod används om Groq ändå svarar 413. Större vardagsbatcher (`analysis-backlog-v1`) erbjuds bara när minutgränsen är av eller minst 20 000 token.
 
-**Ett nytt försök (2026-11-15).** Gatewayen gör ett enda nytt försök med exakt samma anrop när Groq svarar 429 med en väntetid på högst 20 sekunder, eller vid ett tillfälligt serverfel eller nätfel hos leverantören, och bara om det ryms i anropets 40 sekunder. Längre väntetider skickas vidare till appen med Groqs `Retry-After`. Modell och parametrar ändras aldrig mellan försöken.
+**Ett nytt försök (2026-11-15).** Gatewayen gör ett enda nytt försök med exakt samma anrop när Groq svarar 429 med en väntetid på högst 20 sekunder, eller vid ett tillfälligt serverfel eller nätfel hos leverantören, och bara om det ryms i anropets tidsgräns (40 sekunder, 180 för en lektion på ett par som resonerar; efter väntan måste en femtedel av gränsen finnas kvar). Längre väntetider skickas vidare till appen med Groqs `Retry-After`. Modell och parametrar ändras aldrig mellan försöken.
 
 Varje anrop kräver resonemang av (hos Groq och Mistral Small 4 `reasoning_effort: "none"`), JSON-schema och inga verktyg, och temperatur 0 för varje modell som tar emot parametern. Det enda undantaget är lektioner på Mistral Large 4, som får resonera (se [Mistral](#mistral)). Svar med resonemang där det ska vara av, verktygsanrop, refusal eller avkortning avvisas, och varje svar valideras innan appen får det. Ingen tyst reserv-modell eller reserv-leverantör finns.
 
@@ -147,7 +147,7 @@ Varje uppgift i `/v2/status` har `reasoning` (`"off"`, eller `"medium"` för lek
 
 `/v2/status` svarar med `quota: {limit, remaining, resetAt, unit}` där `unit` är `tokens` eller `requests`, eller `quota: null` utan dygnsgräns. Klienter skickar den observerade revisionen som `X-Mio-Configuration-Revision`; en ändrad konfiguration ger 409 `configuration_changed` före kvot och modellanrop.
 
-Gränser: fråga högst 2 000 byte, sex utdrag och 10 000 byte kontext. Analys 1–16 fragment och högst 16 000 byte text. Body högst 40 000 byte med 5 s deadline. Hela anropet högst 40 s. Två samtidiga anrop. Svar från leverantören högst 65 536 byte.
+Gränser: fråga högst 2 000 byte, sex utdrag och 10 000 byte kontext. Analys 1–16 fragment och högst 16 000 byte text. Body högst 40 000 byte med 5 s deadline. Hela anropet högst 40 s, utom lektionsanteckningar när `lesson` står på ett par som resonerar (Mistral Large 4): då högst 180 s, oavsett lektionsrutt. Samma gränser gäller `mio-gateway prova`. `upstreamTimeoutMs` i `/v2/status` visar grundgränsen 40 000. Två samtidiga anrop. Svar från leverantören högst 65 536 byte.
 
 ## Verifiera utan modelltrafik
 
