@@ -258,6 +258,107 @@ final class MioEverydayCaptureTests: XCTestCase {
         XCTAssertEqual(again, 0)
     }
 
+    /// Pruning is maintenance (fix 2026-11-20): a "Mio, notera" queued when the phone locks is
+    /// saved, the queue's generation is untouched and a lesson start is admitted throughout.
+    @MainActor
+    func testPruningNeverCancelsQueuedWorkOrBlocksALessonStart() async throws {
+        let f = try await retentionFixture()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        var feedback: [MioDirectFeedback] = []
+        f.capture.directFeedback = { feedback.append($0) }
+        let live = MioSession(startedAt: .now.addingTimeInterval(-60),
+                              transcripts: [TranscriptSegment(text: "Mio, notera att provet gäller procent", containsMio: true)])
+        f.capture.currentSession = live
+        f.capture.onFinalizedTranscript?(live)
+        let probe = PruneProbe()
+        let prune = Task { @MainActor in
+            let deleted = await f.workflow.pruneExpiredEverydaySessions(now: .now)
+            probe.finished = true
+            return deleted
+        }
+        var checks = 0
+        while !probe.finished, checks < 20_000 {
+            XCTAssertFalse(MioMaintenanceState.shared.isDeleting, "pruning never takes the exclusive deletion")
+            // `beginLesson` is admitted exactly by this call.
+            XCTAssertTrue(MioMaintenanceState.shared.beginWrite(), "a lesson start is never refused")
+            MioMaintenanceState.shared.endWrite()
+            checks += 1
+            await Task.yield()
+        }
+        let deleted = await prune.value
+        XCTAssertEqual(deleted, 1)
+        await waitUntil { !feedback.isEmpty }
+        XCTAssertEqual(feedback, [.saved], "the queued direct note was not cancelled")
+        let items = try await f.content.loadItems()
+        XCTAssertEqual(items.map(\.title), ["Provet gäller procent"])
+        XCTAssertEqual(items.first?.direct?.destination, .mioNote)
+        let stored = try await f.sessions.loadSessions()
+        XCTAssertFalse(stored.contains { $0.id == f.old.id })
+        let document = try await f.assistant.loadDocument()
+        XCTAssertFalse(document.suggestions.contains { $0.sessionID == f.old.id }, "its pending proposals went too")
+        XCTAssertTrue(f.workflow.pendingLessonIDs.isEmpty)
+    }
+
+    @MainActor
+    func testPruningWaitsWhileALessonIsStartingAndNeverTakesAnOpenSession() async throws {
+        let f = try await retentionFixture()
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        f.capture.isSwitchingCaptureMode = true
+        let waiting = await f.workflow.pruneExpiredEverydaySessions(now: .now)
+        XCTAssertEqual(waiting, 0, "nothing runs while a lesson starts")
+        var stored = try await f.sessions.loadSessions()
+        XCTAssertTrue(stored.contains { $0.id == f.old.id })
+        f.capture.isSwitchingCaptureMode = false
+
+        // Far in the future everything has expired, but the open session is never taken.
+        let open = MioSession(startedAt: .now.addingTimeInterval(-60))
+        f.capture.currentSession = open
+        let deleted = await f.workflow.pruneExpiredEverydaySessions(now: .now.addingTimeInterval(400 * 24 * 60 * 60))
+        XCTAssertEqual(deleted, 1)
+        stored = try await f.sessions.loadSessions()
+        XCTAssertFalse(stored.contains { $0.id == f.old.id })
+        XCTAssertNotNil(f.capture.session(id: open.id))
+    }
+
+    @MainActor
+    private struct RetentionFixture {
+        let root: URL
+        let old: MioSession
+        let sessions: SessionRepository
+        let assistant: MioAssistantRepository
+        let content: MioContentRepository
+        let capture: MioViewModel
+        let workflow: MioWorkflowCoordinator
+    }
+
+    /// One everyday session that ended 40 days ago, with a pending proposal from it.
+    @MainActor
+    private func retentionFixture() async throws -> RetentionFixture {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("MioRetention-\(UUID())")
+        let sessions = SessionRepository(storageURL: root.appendingPathComponent("sessions.json"))
+        let assistantRepository = MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json"))
+        let contentRepository = MioContentRepository(storageURL: root.appendingPathComponent("content.json"), exportDirectoryURL: root)
+        let day: TimeInterval = 24 * 60 * 60
+        let old = MioSession(startedAt: .now.addingTimeInterval(-41 * day), endedAt: .now.addingTimeInterval(-40 * day),
+                             transcripts: [TranscriptSegment(text: "Mio, kom ihåg att köpa gympaskor", containsMio: true)])
+        let generation = await sessions.operationGeneration()
+        let token = try await sessions.operationToken(for: old.id, generation: generation)
+        _ = try await sessions.saveCaptureCheckpoint(old, token: token)
+        _ = try await assistantRepository.detectNewSuggestions(in: old, now: old.startedAt)
+        let capture = MioViewModel(repository: sessions)
+        let workflow = MioWorkflowCoordinator(capture: capture, content: MioContentViewModel(repository: contentRepository),
+            assistant: MioAssistantViewModel(repository: assistantRepository), analysis: MioAnalysisCoordinator(),
+            journal: MioDeletionJournal(storageURL: root.appendingPathComponent("operations.json")),
+            systemActions: MioSystemActionPort(cancel: { _ in .success }, removeAll: { .success }),
+            reminders: .unavailable,
+            pendingLessonDefaults: try XCTUnwrap(UserDefaults(suiteName: "MioRetention-\(UUID())")))
+        await workflow.bootstrap()
+        let pending = try await assistantRepository.loadDocument().suggestions
+        XCTAssertTrue(pending.contains { $0.sessionID == old.id }, "fixture: a proposal from the old session")
+        return RetentionFixture(root: root, old: old, sessions: sessions, assistant: assistantRepository,
+                                content: contentRepository, capture: capture, workflow: workflow)
+    }
+
     // MARK: Helpers
 
     @MainActor
@@ -273,6 +374,11 @@ final class MioEverydayCaptureTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("MioEverydayCaptureTests-\(UUID())")
         return (root, SessionRepository(storageURL: root.appendingPathComponent("sessions.json")))
     }
+}
+
+@MainActor
+private final class PruneProbe {
+    var finished = false
 }
 
 @MainActor

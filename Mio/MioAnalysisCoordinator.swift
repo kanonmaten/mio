@@ -277,6 +277,17 @@ final class MioAnalysisCoordinator {
         }
     }
 
+    /// 30-day retention: forgets an expired, ended everyday session like `cancel`, but leaves the
+    /// worker (and with it work and batching for other sessions) alone unless it is busy with
+    /// this very session.
+    func forgetExpired(sessionID: UUID, assistant: MioAssistantViewModel) {
+        guard activeSessionID != sessionID else { cancel(sessionID: sessionID, assistant: assistant); return }
+        deletedSessionIDs.insert(sessionID)
+        if queue.contains(where: { $0.session.id == sessionID }) { queue.removeAll { $0.session.id == sessionID } }
+        latestSessions[sessionID] = nil; eligible[sessionID] = nil; observed[sessionID] = nil
+        continuityStarts[sessionID] = nil; endingSessionIDs.remove(sessionID); endedContinuity[sessionID] = nil
+    }
+
     func observe(_ session: MioSession, assistant: MioAssistantViewModel) {
         guard enabled, !session.isLesson, !deletedSessionIDs.contains(session.id) else { return }
         latestSessions[session.id] = session

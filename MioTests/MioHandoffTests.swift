@@ -17,6 +17,18 @@ final class MioHandoffTests: XCTestCase {
         }
     }
 
+    func testProposalIDIsReadBackFromBothLinkForms() throws {
+        let session = UUID(), proposal = UUID()
+        XCTAssertEqual(MioLink.proposalID(from: try XCTUnwrap(MioLink.session(session, proposal: proposal))), proposal)
+        XCTAssertEqual(MioLink.proposalID(from: try XCTUnwrap(MioLink.proposal(proposal))), proposal)
+        for text in ["mio://session/\(session.uuidString)", "https://forslag/\(proposal.uuidString)",
+                     "mio://forslag/\(proposal.uuidString)/extra", "mio://forslag/inte-ett-id",
+                     "mio://forslag/\(proposal.uuidString)?forslag=\(proposal.uuidString)",
+                     "mio://session/\(session.uuidString)?forslag=x", "mio://lektion/\(proposal.uuidString)"] {
+            XCTAssertNil(MioLink.proposalID(from: URL(string: text)!), text)
+        }
+    }
+
     @MainActor
     func testLinkOpensOnlyAnExistingSessionAndNeverAnythingElse() {
         let navigation = MioNavigationCoordinator()

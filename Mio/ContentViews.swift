@@ -228,9 +228,10 @@ struct SessionEditorView: View {
                         }
                         .disabled(session.endedAt == nil)
                         Button("Hitta lokala Mio-förslag") {
-                            Task { _ = await assistant.detectSuggestions(in: session) }
+                            // The same path as automatic detection: direct instructions are saved at once.
+                            Task { _ = await workflow.detectDirectCommands(in: session) }
                         }
-                        Text("Bara det du sa efter ”Mio, kom ihåg” eller ”Mio, notera” blir förslag här. Granska dem under Förslag.")
+                        Text("Det du sa efter ”Mio, kom ihåg” eller ”Mio, notera” sparas direkt och kan ångras i 24 timmar. Kalenderhändelser väntar under Förslag.")
                             .font(.footnote).foregroundStyle(.secondary)
                         if let error = assistant.errorMessage { Text(error).foregroundStyle(.red) }
                     }

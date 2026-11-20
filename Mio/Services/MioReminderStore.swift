@@ -64,11 +64,18 @@ final class MioReminderStore {
         return reminder.calendarItemIdentifier
     }
 
-    /// Ångra for a direct instruction: removes the reminder Mio created. One that is already
-    /// gone (she deleted it in Reminders) counts as removed.
-    func remove(identifier: String) throws {
+    /// Ångra for a direct instruction: removes the reminder Mio created. Apple notes that
+    /// `calendarItemIdentifier` can change after a full sync, so when the stored identifier finds
+    /// nothing, the reminder is looked up by the Mio link (`url`) it got when it was saved. If
+    /// neither finds it, this throws `notFound` instead of counting it as removed: it may still
+    /// be in Reminders under an identifier Mio cannot see.
+    func remove(identifier: String, proposalID: UUID) async throws {
         guard access == .granted else { throw MioReminderError.accessDenied }
-        guard let reminder = store.calendarItem(withIdentifier: identifier) as? EKReminder else { return }
+        var found = store.calendarItem(withIdentifier: identifier) as? EKReminder
+        if found == nil, let current = await self.identifier(ofProposal: proposalID) {
+            found = store.calendarItem(withIdentifier: current) as? EKReminder
+        }
+        guard let reminder = found else { throw MioReminderError.notFound }
         do { try store.remove(reminder, commit: true) }
         catch {
             MioLog.error(.storage, "reminder removal failed")
@@ -92,6 +99,17 @@ final class MioReminderStore {
             }
         }
         return summaries.sorted { ($0.dueDate ?? .distantFuture) < ($1.dueDate ?? .distantFuture) }
+    }
+
+    /// Only plain values leave the fetch callback; the reminder itself is looked up again here.
+    private func identifier(ofProposal proposalID: UUID) async -> String? {
+        let predicate = store.predicateForReminders(in: nil)
+        return await withCheckedContinuation { continuation in
+            store.fetchReminders(matching: predicate) { reminders in
+                let match = (reminders ?? []).first { $0.url.flatMap(MioLink.proposalID(from:)) == proposalID }
+                continuation.resume(returning: match?.calendarItemIdentifier)
+            }
+        }
     }
 
     private func identifier(of url: URL) async -> String? {

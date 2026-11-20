@@ -40,6 +40,7 @@ final class MioWorkflowCoordinator {
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var endingEverydaySessionID: UUID?
     @ObservationIgnored private var bootstrapped = false
+    @ObservationIgnored private var isPruning = false
     @ObservationIgnored private var loadedPresentation = false
     private struct ExportRevision: Equatable {
         let capture: UInt64; let content: UInt64; let assistant: UInt64
@@ -349,8 +350,12 @@ final class MioWorkflowCoordinator {
             }
             guard direct.canUndo(at: now) else { return .conflict("Ångra går bara i 24 timmar. Posten finns kvar.") }
             if let handoff = item.handoff, handoff.destination == .reminders, let identifier = handoff.externalIdentifier {
-                do { try await reminders.remove(identifier) }
-                catch MioReminderError.accessDenied {
+                // The reminder's link carries this proposal ID (`MioLink`); see `MioReminderStore.remove`.
+                do { try await reminders.remove(identifier, item.id) }
+                catch MioReminderError.notFound {
+                    // Never reported as undone: the reminder may still be in Reminders. The item stays.
+                    return .failure(MioReminderError.notFound.localizedDescription)
+                } catch MioReminderError.accessDenied {
                     return .failure("Mio behöver åtkomst till Påminnelser för att ta bort påminnelsen. Tillåt det i Inställningar → Mio → Påminnelser.")
                 } catch {
                     return .failure("Påminnelsen kunde inte tas bort. Försök igen.")
@@ -412,20 +417,85 @@ final class MioWorkflowCoordinator {
         return allSaved ? .saved : .notUnderstood
     }
 
+    /// Local detection of "Mio, kom ihåg/notera" in a session, for both the automatic path after
+    /// each finalized segment and the "Hitta lokala Mio-förslag" button, so a direct instruction
+    /// is saved at once with Ångra either way instead of waiting under Förslag for a Ja.
+    func detectDirectCommands(in session: MioSession) async -> MioOperationOutcome {
+        await enqueue { [self] in
+            guard capture.session(id: session.id) != nil, !maintenance.recoveryBlocked else { return .cancelled }
+            let detection = await assistant.detectDirectCommands(in: session)
+            // Vibrate only after direct address, never for proposals AI picks up.
+            if let feedback = await saveDirectCommands(detection.direct) { capture.directFeedback(feedback) }
+            return detection.outcome
+        }
+    }
+
     /// Everyday transcripts older than 30 days are deleted (see `MioRetentionPolicy`). Runs at
     /// launch and when the app goes to the background; does nothing when nothing has expired.
+    ///
+    /// Rule (fix 2026-11-20): pruning is maintenance, never the user's deletion. It does not go
+    /// through `delete(scope:)`, so it never changes `generation`, never cancels queued or
+    /// automatic commands (a "Mio, kom ihåg" being saved, a Ja on a proposal), never clears
+    /// `endingEverydaySessionID` and never sets `isDeleting`, so `beginLesson` is never refused.
+    /// Each expired session is one ordinary, low-priority command in the queue: commands queued
+    /// meanwhile run between sessions, and its writes are ordinary admitted writes, so the user's
+    /// own deletion or export waits for the current step and then wins. It stops (and the next
+    /// launch or background transition retries) while capture or a lesson is starting or
+    /// stopping, while a question is being sent, and it never takes a session that is open,
+    /// current or awaiting lesson registration.
+    /// No deletion journal and no recovery block: the steps run in an idempotent order with the
+    /// session row last (proposals, analysis decisions and processed sources; then links from
+    /// approved items; then app-owned exports; then the transcript), so an interrupted prune
+    /// leaves the session in place and the next prune finishes it. A failure only stops this
+    /// round; it never sets the recovery block and never stops other work.
     @discardableResult
     func pruneExpiredEverydaySessions(now: Date = .now) async -> Int {
+        guard !isPruning else { return 0 }
+        isPruning = true
+        defer { isPruning = false }
         guard !maintenance.recoveryBlocked, await storesAreDurable(),
               let document = try? await assistant.latestDocument() else { return 0 }
         let expired = MioRetentionPolicy.expiredEverydaySessionIDs(capture.allSessions,
             lessonSessionIDs: Set(document.lessons.map(\.sessionID)), now: now)
         var deleted = 0
         for id in expired {
-            guard await deleteSession(id: id).isSuccess else { break }
+            let outcome = await enqueue(recordsOutcome: false) { [self] in await pruneExpiredSession(id: id, now: now) }
+            guard outcome.isSuccess else { break }
             deleted += 1
         }
         return deleted
+    }
+
+    /// Whether retention may touch stored data right now; see `pruneExpiredEverydaySessions`.
+    private var pruningMayRun: Bool {
+        !maintenance.blocksWork && !capture.isSwitchingCaptureMode && !questions.isSending
+            && ![.preparing, .stopping].contains(capture.runState)
+    }
+
+    /// One expired session, inside the command queue. Re-checks expiry against fresh state,
+    /// since the queue may have waited behind other work.
+    private func pruneExpiredSession(id: UUID, now: Date) async -> MioOperationOutcome {
+        guard pruningMayRun, !Task.isCancelled else { return .cancelled }
+        guard let session = capture.session(id: id) else { return .success } // already gone
+        let active = ![.off, .failed, .unavailable].contains(capture.runState)
+        guard session.endedAt != nil, !pendingLessonIDs.contains(id), endingEverydaySessionID != id,
+              !(active && capture.currentSession?.id == id),
+              let document = try? await assistant.latestDocument(),
+              MioRetentionPolicy.expiredEverydaySessionIDs([session],
+                  lessonSessionIDs: Set(document.lessons.map(\.sessionID)), now: now) == [id] else { return .cancelled }
+        analysis.forgetExpired(sessionID: id, assistant: assistant)
+        let steps: [@MainActor () async -> MioOperationOutcome] = [
+            { [assistant] in await assistant.deleteSessionDataOutcome(sessionID: id) },
+            { [content] in await content.unlinkSessionOutcome(id: id) },
+            { [content] in await content.removeExportsOutcome() },
+            { [capture] in await capture.deleteSessionOutcome(id: id) },
+        ]
+        for step in steps {
+            guard pruningMayRun, !Task.isCancelled else { return .cancelled }
+            let outcome = await step()
+            guard outcome.isSuccess else { return outcome }
+        }
+        return .success
     }
 
     func deferSuggestion(id: UUID) async -> MioOperationOutcome {
@@ -586,14 +656,15 @@ final class MioWorkflowCoordinator {
         }
     }
 
-    private func enqueue(isDeletion: Bool = false, _ operation: @escaping @MainActor () async -> MioOperationOutcome) async -> MioOperationOutcome {
+    private func enqueue(isDeletion: Bool = false, recordsOutcome: Bool = true,
+                         _ operation: @escaping @MainActor () async -> MioOperationOutcome) async -> MioOperationOutcome {
         let id = UUID(); let token = generation; let previous = commandTail
         queuedCommands += 1
         let task = Task { @MainActor [weak self] in
             await previous?.value
             guard let self, isDeletion || self.generation == token, !Task.isCancelled else { return MioOperationOutcome.cancelled }
             let result = await operation()
-            if isDeletion || self.generation == token { self.lastOutcome = result }
+            if recordsOutcome, isDeletion || self.generation == token { self.lastOutcome = result }
             return result
         }
         commands[id] = task
@@ -633,16 +704,7 @@ final class MioWorkflowCoordinator {
                [.listening, .stopping, .interrupted].contains(capture.runState) || endingEverydaySessionID == session.id {
                 analysis.observe(session, assistant: assistant)
             }
-            automatically { [weak self] in
-                guard let self else { return }
-                _ = await enqueue { [self] in
-                    guard self.capture.session(id: session.id) != nil, !self.maintenance.recoveryBlocked else { return .cancelled }
-                    let detection = await self.assistant.detectDirectCommands(in: session)
-                    // Vibrate only after direct address, never for proposals AI picks up.
-                    if let feedback = await self.saveDirectCommands(detection.direct) { self.capture.directFeedback(feedback) }
-                    return detection.outcome
-                }
-            }
+            automatically { [weak self] in _ = await self?.detectDirectCommands(in: session) }
         }
         capture.onLessonFinished = { [weak self] session in
             guard let self else { return }

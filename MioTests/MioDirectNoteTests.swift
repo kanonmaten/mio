@@ -140,11 +140,16 @@ final class MioDirectNoteTests: XCTestCase {
         var access: MioReminderAccess = .granted
         var saved: [MioReminderDraft] = []
         var removed: [String] = []
+        /// Reminders' current identifiers, as after a full sync; nil keeps every identifier found.
+        var known: Set<String>?
         var port: MioReminderPort {
             MioReminderPort(access: { self.access }, requestAccess: { self.access == .granted },
                 lists: { [] }, defaultListID: { nil },
                 save: { draft in self.saved.append(draft); return "reminder-\(self.saved.count)" }, upcoming: { _ in [] },
-                remove: { self.removed.append($0) })
+                remove: { identifier, _ in
+                    if let known = self.known, !known.contains(identifier) { throw MioReminderError.notFound }
+                    self.removed.append(identifier)
+                })
         }
     }
 
@@ -293,6 +298,43 @@ final class MioDirectNoteTests: XCTestCase {
         XCTAssertTrue(reminders.removed.isEmpty)
         let kept = try await f.content.loadItems()
         XCTAssertEqual(kept.map(\.id), [item.id], "the item stays")
+    }
+
+    @MainActor
+    func testAngraNeverReportsAReminderItCouldNotFindAsRemoved() async throws {
+        let reminders = FakeReminders()
+        reminders.known = []
+        let f = try await makeFixture(reminders)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let savedAt = Date.now.addingTimeInterval(-60)
+        let item = MioContentItem(kind: .task, title: "Köpa mjölk", createdAt: savedAt,
+            handoff: MioHandoff(destination: .reminders, externalIdentifier: "reminder-1", sentAt: savedAt),
+            direct: MioDirectRecord(destination: .reminders, savedAt: savedAt))
+        _ = try await f.content.upsert(item)
+        let undo = await f.workflow.undoDirect(id: item.id)
+        XCTAssertEqual(undo, .failure(MioReminderError.notFound.localizedDescription))
+        XCTAssertTrue(reminders.removed.isEmpty)
+        let kept = try await f.content.loadItems()
+        XCTAssertEqual(kept.map(\.id), [item.id], "not undone: the item stays")
+        XCTAssertEqual(MioDirectNoteTally.load(from: f.defaults).undone, 0)
+    }
+
+    @MainActor
+    func testHittaLokalaMioForslagSavesDirectInstructionsAtOnce() async throws {
+        let reminders = FakeReminders()
+        let f = try await makeFixture(reminders)
+        defer { try? FileManager.default.removeItem(at: f.root) }
+        let session = MioSession(startedAt: .now.addingTimeInterval(-600),
+                                 transcripts: [TranscriptSegment(text: "Mio, kom ihåg att ringa mormor", containsMio: true)])
+        f.capture.currentSession = session
+        // The button, without any finalized-transcript callback.
+        let outcome = await f.workflow.detectDirectCommands(in: session)
+        XCTAssertEqual(outcome, .success)
+        XCTAssertEqual(reminders.saved.map(\.title), ["Ringa mormor"])
+        let items = try await f.content.loadItems()
+        XCTAssertEqual(items.first?.direct?.destination, .reminders, "saved with Ångra, not left for a Ja")
+        let waiting = try await f.assistant.loadDocument().suggestions
+        XCTAssertTrue(waiting.isEmpty)
     }
 
     @MainActor

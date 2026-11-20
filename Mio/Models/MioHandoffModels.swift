@@ -77,6 +77,7 @@ enum MioReminderError: Error, LocalizedError, Equatable {
     case unavailable
     case saveFailed
     case removeFailed
+    case notFound
 
     var errorDescription: String? {
         switch self {
@@ -84,6 +85,7 @@ enum MioReminderError: Error, LocalizedError, Equatable {
         case .unavailable: "Påminnelser är inte tillgängligt på den här enheten."
         case .saveFailed: "Påminnelsen kunde inte sparas. Förslaget ligger kvar."
         case .removeFailed: "Påminnelsen kunde inte tas bort. Försök igen."
+        case .notFound: "Mio hittade inte påminnelsen. Om den finns kvar behöver du ta bort den i Påminnelser."
         }
     }
 }
@@ -103,9 +105,10 @@ struct MioReminderPort {
     var save: @MainActor (MioReminderDraft) async throws -> String
     /// Unfinished reminders due in the interval, plus overdue ones, for Hem.
     var upcoming: @MainActor (DateInterval) async -> [MioReminderSummary]
-    /// Ångra for a direct instruction (2026-11-20): removes the reminder Mio created. A reminder
-    /// that is already gone counts as removed.
-    var remove: @MainActor (String) async throws -> Void = { _ in throw MioReminderError.unavailable }
+    /// Ångra for a direct instruction (2026-11-20): removes the reminder Mio created, by its stored
+    /// identifier or, when Reminders changed that identifier, by the Mio link carrying the
+    /// proposal ID. Throws `notFound` when neither finds it; it is never reported as removed.
+    var remove: @MainActor (_ identifier: String, _ proposalID: UUID) async throws -> Void = { _, _ in throw MioReminderError.unavailable }
 
     static var native: Self {
         #if canImport(EventKit) && os(iOS)
@@ -113,7 +116,7 @@ struct MioReminderPort {
         return Self(access: { store.access }, requestAccess: { await store.requestAccess() },
                     lists: { store.lists() }, defaultListID: { store.defaultListID() },
                     save: { try await store.save($0) }, upcoming: { await store.upcoming(in: $0) },
-                    remove: { try store.remove(identifier: $0) })
+                    remove: { try await store.remove(identifier: $0, proposalID: $1) })
         #else
         return unavailable
         #endif
@@ -155,5 +158,24 @@ enum MioLink {
         guard query.allSatisfy({ $0.name == "forslag" && $0.value.flatMap(UUID.init(uuidString:)) != nil }),
               query.count <= 1 else { return nil }
         return id
+    }
+
+    /// The proposal a Mio link was made for: `mio://forslag/<UUID>` or the `forslag` query of a
+    /// session link. Ångra uses it to find the reminder again if Reminders changed its identifier.
+    static func proposalID(from url: URL) -> UUID? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme == scheme, components.user == nil, components.password == nil,
+              components.port == nil, components.fragment == nil else { return nil }
+        switch components.host {
+        case "forslag":
+            let parts = components.path.split(separator: "/", omittingEmptySubsequences: false)
+            guard components.query == nil, parts.count == 2, parts[0].isEmpty else { return nil }
+            return UUID(uuidString: String(parts[1]))
+        case "session":
+            guard sessionID(from: url) != nil, let query = components.queryItems, query.count == 1 else { return nil }
+            return query[0].value.flatMap(UUID.init(uuidString:))
+        default:
+            return nil
+        }
     }
 }
