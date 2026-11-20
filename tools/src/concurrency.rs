@@ -19,22 +19,34 @@ static RELEVANT: LazyLock<Regex> = LazyLock::new(|| {
 
 /// Inspect compiler warning blocks, including Swift's following explanatory notes.
 ///
-/// A block starts at every line that contains `warning:` and runs to the next such line, so the
-/// "this is an error in the Swift 6 language mode" note under a warning counts with it.
+/// A block starts at every line that contains `warning:` and runs to the next such line or the
+/// first blank line, so the "this is an error in the Swift 6 language mode" note under a warning
+/// counts with it. Swift ends each diagnostic with a blank line; without that stop, a block ran on
+/// through unrelated xcodebuild output whose temporary `mio-concurrency-*` paths matched
+/// "concurren", and iOS 27 deprecation warnings were reported as concurrency warnings (run #61).
 pub fn concurrency_warnings(output: &str) -> Vec<String> {
-    let mut starts = vec![0];
+    let mut blocks = Vec::new();
+    let mut current: Option<usize> = None;
     let mut line_start = 0;
     for line in output.split_inclusive('\n') {
-        if line_start != 0 && line.contains("warning:") {
-            starts.push(line_start);
+        let blank = line.trim().is_empty();
+        if let Some(start) = current
+            && (blank || line.contains("warning:"))
+        {
+            blocks.push(&output[start..line_start]);
+            current = None;
+        }
+        if current.is_none() && line.contains("warning:") {
+            current = Some(line_start);
         }
         line_start += line.len();
     }
-    starts.push(output.len());
-    starts
-        .windows(2)
-        .map(|pair| &output[pair[0]..pair[1]])
-        .filter(|block| block.contains("warning:") && RELEVANT.is_match(block))
+    if let Some(start) = current {
+        blocks.push(&output[start..]);
+    }
+    blocks
+        .into_iter()
+        .filter(|block| RELEVANT.is_match(block))
         .map(|block| python_strip(block).to_owned())
         .collect()
 }
@@ -173,5 +185,21 @@ mod tests {
         let warnings = concurrency_warnings(output);
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].ends_with("Swift 6 language mode"));
+    }
+
+    #[test]
+    fn a_block_ends_at_the_blank_line_after_the_diagnostic() {
+        // The shape of run #61: a deprecation warning followed by build lines whose temporary
+        // directory name contains "concurrency".
+        let output = "/x/Mio/A.swift:135:15: warning: 'installTap' was deprecated in iOS 27.0 [#DeprecatedDeclaration]\n\
+                      135 |         input.installTap(onBus: 0) { _, _ in\n\
+                      \x20   |               `- warning: 'installTap' was deprecated in iOS 27.0\n\
+                      \n\
+                      SwiftCompile normal arm64 /var/folders/T/mio-concurrency-DItLCy/Build/B.swift\n\
+                      /x/Mio/C.swift:3:1: warning: capture of 'self' with non-Sendable type in a `@Sendable` closure\n\
+                      \n";
+        let warnings = concurrency_warnings(output);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("non-Sendable"));
     }
 }
