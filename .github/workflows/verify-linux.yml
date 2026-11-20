@@ -21,18 +21,16 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     container: swift:6.3.3-noble
-    # The control panel compiles GPUI (gpui-kit); a cold cache needs most of this.
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - name: Installera Python och byggverktyg för verifieraren
         # The Swift image has no python3 or curl; uv and the Pianissimo tests use the system
         # interpreter, rustup needs curl, and the gateway's TLS library compiles C code with gcc.
-        # The rest is what gpui-kit lists for Ubuntu 24.04, for the control panel in control/.
+        # The control panel's GPUI libraries are only needed in the control job below.
         run: |
           apt-get update
           apt-get install -y --no-install-recommends python3 ca-certificates curl gcc libc6-dev \
-            g++ cmake pkg-config libfontconfig-dev libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev \
-            libssl-dev libzstd-dev libvulkan1
+            libssl-dev
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -50,15 +48,13 @@ jobs:
           "$HOME/.cargo/bin/cargo" --version
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - name: Återanvänd Rust-byggena
-        # GPUI takes minutes to compile from scratch. rust-cache keeps the dependencies of all three
-        # workspaces plus the cargo registry, drops the workspaces' own crates before saving, and keys
+        # rust-cache keeps the dependencies of both workspaces plus the cargo registry, drops the workspaces' own crates before saving, and keys
         # on the rustc version and the lockfiles. Only main saves, so one cache serves every run.
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: |
             tools -> target
             server -> target
-            control -> target
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
@@ -67,7 +63,9 @@ jobs:
           enable-cache: true
           cache-dependency-glob: transcription-server/uv.lock
       - name: Kör samma lokala verifiering
-        run: cargo run --locked --manifest-path "$GITHUB_WORKSPACE/tools/Cargo.toml" -- verify --logs-dir "$GITHUB_WORKSPACE/.mio-verification"
+        # The control panel runs in the parallel control job; the receipt records it as SKIPPED
+        # and the result as PARTIAL, so check both jobs for a commit.
+        run: cargo run --locked --manifest-path "$GITHUB_WORKSPACE/tools/Cargo.toml" -- verify --skip-control --logs-dir "$GITHUB_WORKSPACE/.mio-verification"
       - name: Spara syntetiska kontrollresultat
         if: always()
         uses: actions/upload-artifact@v7
@@ -80,3 +78,38 @@ jobs:
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 14
+
+  # Mio Kontroll (control/) in parallel with the rest: GPUI dominated the shared job's cache restore
+  # and run time. Same two commands as the verifier's control-lint and control-tests steps. Runs on
+  # the runner itself, without the Swift container, since control/ needs no Swift.
+  control:
+    name: Mio Kontroll (control/)
+    runs-on: ubuntu-24.04
+    # GPUI (gpui-kit) takes most of this to compile with a cold cache.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Installera GPUI-biblioteken
+        # What gpui-kit lists for Ubuntu 24.04 that the runner image lacks.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libfontconfig-dev libwayland-dev \
+            libxkbcommon-x11-dev libx11-xcb-dev libssl-dev libzstd-dev libvulkan1
+      - name: Installera Rust 1.100.0
+        # The same pinned toolchain as the verify job; the runner's rustup checks the download.
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal --component clippy
+          rustup default 1.100.0
+          cargo --version
+      - name: Återanvänd kontrollpanelens bygge
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: control -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Lint för kontrollpanelen
+        run: cargo clippy --locked --manifest-path control/Cargo.toml --workspace --all-targets -- -D warnings
+      - name: Tester för kontrollpanelen
+        # GPUI's UI tests run headless.
+        run: cargo test --locked --manifest-path control/Cargo.toml --workspace
