@@ -93,7 +93,8 @@ pub fn workflow_contract_issues(name: &str, workflow: &Value) -> Vec<String> {
     };
     let checks: Vec<(bool, &str)> = match name {
         "build-unsigned-ipa.yml" => {
-            // Two parallel jobs: the IPA does not wait for the simulator tests.
+            // Two parallel jobs on Xcode: the IPA does not wait for the simulator tests. A small
+            // `plan` job may choose which tests run, but the IPA job must not wait for it either.
             let mut commands = HashMap::new();
             for key in ["ipa", "test"] {
                 let steps = jobs.get(key).and_then(Value::as_object).and_then(|job| job.get("steps"));
@@ -103,7 +104,10 @@ pub fn workflow_contract_issues(name: &str, workflow: &Value) -> Vec<String> {
                 };
             }
             let (ipa, test) = (&commands["ipa"], &commands["test"]);
-            let on_xcode = jobs.len() == 2
+            let only_known_jobs = jobs.keys().all(|key| ["ipa", "test", "plan"].contains(&key.as_str()));
+            let ipa_waits = jobs.get("ipa").and_then(Value::as_object).is_some_and(|job| job.contains_key("needs"));
+            let on_xcode = only_known_jobs
+                && !ipa_waits
                 && ["ipa", "test"].iter().all(|key| {
                     jobs.get(*key)
                         .and_then(Value::as_object)

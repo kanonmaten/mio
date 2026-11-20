@@ -54,6 +54,16 @@ fn ipa_workflow_requires_parallel_ipa_and_test_jobs() {
         ]),
     }});
     assert!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow).is_empty());
+    // A plan job on Linux may choose the tests, as long as the IPA job does not wait for it.
+    workflow["jobs"]["plan"] = json!({"runs-on": "ubuntu-24.04", "steps": [{"run": "echo run=true"}]});
+    workflow["jobs"]["test"]["needs"] = json!("plan");
+    assert!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow).is_empty());
+    workflow["jobs"]["ipa"]["needs"] = json!("plan");
+    assert_eq!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow), ["IPA- och testjobb på xcode-27"]);
+    workflow["jobs"]["ipa"].as_object_mut().expect("job").remove("needs");
+    workflow["jobs"]["extra"] = job(&["true"]);
+    assert_eq!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow), ["IPA- och testjobb på xcode-27"]);
+    workflow["jobs"].as_object_mut().expect("jobs").remove("extra");
     workflow["jobs"]["test"]["steps"].as_array_mut().expect("steps").pop();
     workflow["jobs"]["ipa"]["runs-on"] = json!("macos-latest");
     workflow["jobs"]["ipa"]["steps"][0]["run"] = json!("xcodebuild -configuration Release build");
