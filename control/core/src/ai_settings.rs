@@ -22,10 +22,19 @@ pub struct Price {
 const REVIEWED_PRICES: [(&str, &str, f64, f64); 2] = [("mistral", "mistral-small", 0.15, 0.60), ("mistral", "mistral-large", 0.70, 2.10)];
 const REVIEWED_PRICES_AS_OF: &str = "2026-11-20";
 
-/// What "Prova" sends: one short made-up call per task (three calls). A rough upper bound in
-/// tokens for the estimate shown next to the button; reasoning counts as output.
-pub const TRIAL_INPUT_TOKENS: u64 = 4_500;
-pub const TRIAL_OUTPUT_TOKENS: u64 = 1_500;
+/// What "Prova" sends: one short made-up call per task the pair may serve (`mio-gateway prova`
+/// tries a pair that reasons on `lesson` alone). A rough upper bound in tokens per call for the
+/// estimate shown next to the button; reasoning counts as output.
+pub const TRIAL_INPUT_TOKENS_PER_CALL: u64 = 1_500;
+pub const TRIAL_OUTPUT_TOKENS_PER_CALL: u64 = 500;
+/// `max_tokens` for a lesson on a pair that reasons: the gateway's
+/// `LESSON_REASONING_MAX_OUTPUT_TOKENS` (`server/src/config.rs`), so the estimate covers a full
+/// answer with its thinking.
+pub const TRIAL_REASONING_OUTPUT_TOKENS: u64 = 12_000;
+
+/// `gateway.env`'s list of candidates approved after a passed trial, written only by the panel's
+/// helper: `provider=model` entries separated by commas (`server/src/config.rs`).
+pub const APPROVED_CANDIDATES_KEY: &str = "MIO_APPROVED_CANDIDATES";
 
 /// One provider and model pair from `mio-gateway granskade-modeller`.
 #[derive(Clone, Debug, PartialEq)]
@@ -35,8 +44,10 @@ pub struct Pair {
     pub secret_variable: String,
     /// `"0"`, or `"provider-default"` when the provider refuses temperature.
     pub temperature: String,
-    /// Why a candidate cannot be chosen; `None` for a reviewed pair.
+    /// Why a candidate cannot be chosen; `None` for a reviewed or approved pair.
     pub blocked: Option<String>,
+    /// A candidate listed in `MIO_APPROVED_CANDIDATES`: selectable like a reviewed pair.
+    pub approved: bool,
     /// `"off"` or the reviewed reasoning level; `None` from a gateway that does not say.
     pub reasoning: Option<String>,
     /// The tasks the pair may be chosen for; `None` means all of them.
@@ -66,6 +77,9 @@ impl Pair {
     /// "Resonerar (hög) · bara Lektioner", or `None` for a plain pair.
     pub fn note(&self) -> Option<String> {
         let mut parts = Vec::new();
+        if self.approved {
+            parts.push("godkänd efter prov".to_owned());
+        }
         if self.reasons() {
             parts.push(crate::status::reasoning_label(self.reasoning.as_deref().unwrap_or_default()));
         }
@@ -80,21 +94,40 @@ impl Pair {
         })
     }
 
+    /// The tasks "Prova" sends a call for, as `mio-gateway prova` does: those the pair may serve,
+    /// and only `lesson` for a pair that reasons.
+    fn trial_tasks(&self) -> Vec<&'static str> {
+        TASKS.iter().map(|(task, _)| *task).filter(|task| self.allows(task) && (!self.reasons() || *task == "lesson")).collect()
+    }
+
     /// What pressing "Prova" sends and costs, in one sentence for the row under the pair.
     pub fn trial_estimate(&self) -> String {
         let provider = provider_name(&self.provider);
-        let tokens = crate::format::count(TRIAL_INPUT_TOKENS + TRIAL_OUTPUT_TOKENS);
+        let tasks = self.trial_tasks();
+        let input = TRIAL_INPUT_TOKENS_PER_CALL * tasks.len() as u64;
+        let output: u64 = tasks
+            .iter()
+            .map(|task| if self.reasons() && *task == "lesson" { TRIAL_REASONING_OUTPUT_TOKENS } else { TRIAL_OUTPUT_TOKENS_PER_CALL })
+            .sum();
+        let calls = match tasks.len() {
+            1 => "ett kort påhittat anrop".to_owned(),
+            2 => "två korta påhittade anrop".to_owned(),
+            3 => "tre korta påhittade anrop".to_owned(),
+            count => format!("{count} korta påhittade anrop"),
+        };
+        let thinking = if self.reasons() { " med resonemang" } else { "" };
+        let tokens = crate::format::count(input + output);
         match &self.price {
             Some(price) => {
-                let cost = (TRIAL_INPUT_TOKENS as f64 * price.input_per_million + TRIAL_OUTPUT_TOKENS as f64 * price.output_per_million) / 1_000_000.0;
+                let cost = (input as f64 * price.input_per_million + output as f64 * price.output_per_million) / 1_000_000.0;
                 let size = if cost < 0.01 { ", under en cent" } else { "" };
                 format!(
-                    "Går till {provider}: tre korta påhittade anrop, högst cirka {tokens} token. Uppskattat {}{size} (priser {}).",
+                    "Går till {provider}: {calls}{thinking}, högst cirka {tokens} token. Uppskattat {}{size} (priser {}).",
                     crate::credit::dollars(cost),
                     price.as_of
                 )
             }
-            None => format!("Går till {provider}: tre korta påhittade anrop, högst cirka {tokens} token, debiteras som vanliga anrop."),
+            None => format!("Går till {provider}: {calls}{thinking}, högst cirka {tokens} token, debiteras som vanliga anrop."),
         }
     }
 }
@@ -117,7 +150,8 @@ pub fn provider_name(provider: &str) -> &str {
     }
 }
 
-/// The reviewed pairs (selectable) and the candidates (shown, not selectable).
+/// The reviewed pairs (selectable, with approved candidates once `with_approved` has run) and the
+/// candidates (shown, not selectable).
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Catalog {
     pub reviewed: Vec<Pair>,
@@ -145,6 +179,7 @@ impl Catalog {
                         secret_variable: text("secretVariable")?,
                         temperature: text("temperature").unwrap_or_else(|| "0".to_owned()),
                         blocked: text("blocked"),
+                        approved: false,
                         reasoning: text("reasoning"),
                         tasks: pair.get("tasks").and_then(Value::as_array).map(|tasks| tasks.iter().filter_map(Value::as_str).map(str::to_owned).collect()),
                         price: listed_price.or_else(|| reviewed_price(&provider, &model)),
@@ -155,6 +190,20 @@ impl Catalog {
                 .collect()
         };
         Some(Self { reviewed: pairs("models")?, candidates: pairs("candidates").unwrap_or_default() })
+    }
+
+    /// Moves the candidates `file` lists in `MIO_APPROVED_CANDIDATES` (passed a trial; the
+    /// gateway then accepts them, `approved_profile` in `server/src/model_profiles.rs`) to the
+    /// selectable pairs. Each keeps its `tasks`, so an approved pair that reasons stays lesson-only.
+    /// A candidate that is not listed stays unselectable.
+    pub fn with_approved(mut self, file: &GatewayFile) -> Self {
+        let approved: Vec<&str> = file.value(APPROVED_CANDIDATES_KEY).unwrap_or_default().split(',').map(str::trim).filter(|entry| !entry.is_empty()).collect();
+        let (passed, waiting): (Vec<Pair>, Vec<Pair>) = std::mem::take(&mut self.candidates)
+            .into_iter()
+            .partition(|pair| approved.iter().any(|entry| *entry == format!("{}={}", pair.provider, pair.model)));
+        self.candidates = waiting;
+        self.reviewed.extend(passed.into_iter().map(|pair| Pair { blocked: None, approved: true, ..pair }));
+        self
     }
 
     pub fn find(&self, provider: &str, model: &str) -> Option<&Pair> {
@@ -479,14 +528,92 @@ mod tests {
         let order: Vec<&str> = catalog.trial_order().iter().map(|pair| pair.model.as_str()).collect();
         assert_eq!(order, ["mistral-medium-x", "mistral-small-x", "mistral-large-x", "qwen/qwen3.8-27b", "nemotron"]);
         // The listed price wins over the reviewed constant; Small falls back to the constant.
+        // Large reasons, so it is tried on lessons alone, with room for a full answer and its
+        // thinking: 1 500 + 12 000 token, 1 500 × $0,70/M + 12 000 × $2,10/M.
         let large = catalog.find("mistral", "mistral-large-x").unwrap();
-        assert_eq!(large.trial_estimate(), "Går till Mistral: tre korta påhittade anrop, högst cirka 6\u{202F}000 token. Uppskattat $0,0063, under en cent (priser 2026-11-21).");
+        assert_eq!(large.trial_estimate(), "Går till Mistral: ett kort påhittat anrop med resonemang, högst cirka 13\u{202F}500 token. Uppskattat $0,0262 (priser 2026-11-21).");
         let small = catalog.find("mistral", "mistral-small-x").unwrap();
         assert_eq!(small.price.as_ref().map(|price| (price.input_per_million, price.as_of.as_str())), Some((0.15, "2026-11-20")));
-        assert!(small.trial_estimate().starts_with("Går till Mistral") && small.trial_estimate().contains(", under en cent (priser 2026-11-20)"));
+        assert_eq!(small.trial_estimate(), "Går till Mistral: tre korta påhittade anrop, högst cirka 6\u{202F}000 token. Uppskattat $0,0016, under en cent (priser 2026-11-20).");
         // No price known: no amount is made up.
         let groq = catalog.find("groq", "qwen/qwen3.8-27b").unwrap();
         assert_eq!(groq.trial_estimate(), "Går till Groq: tre korta påhittade anrop, högst cirka 6\u{202F}000 token, debiteras som vanliga anrop.");
+        // A plain pair limited to two tasks is tried on those two.
+        let two = Pair { tasks: Some(vec!["ask".into(), "lesson".into()]), ..groq.clone() };
+        assert_eq!(two.trial_estimate(), "Går till Groq: två korta påhittade anrop, högst cirka 4\u{202F}000 token, debiteras som vanliga anrop.");
         assert_eq!(catalog.candidates[1].price.as_ref(), None, "mistral-medium has no reviewed price");
+    }
+
+    /// The panel's model list comes from `mio-gateway granskade-modeller`, run without
+    /// `gateway.env`, so an approved candidate is still listed under `candidates`. Made-up names.
+    fn catalog_with_candidates() -> Catalog {
+        Catalog::parse(&json!({ "models": [
+                { "provider": "groq", "model": "qwen/qwen3.8-27b", "secretVariable": "GROQ_API_KEY", "reasoning": "off" }],
+            "candidates": [
+                { "provider": "mistral", "model": "mistral-small-x", "secretVariable": "MISTRAL_API_KEY", "reasoning": "off",
+                  "tasks": ["ask", "everyday", "lesson"], "blocked": "Kräver prov." },
+                { "provider": "mistral", "model": "mistral-large-x", "secretVariable": "MISTRAL_API_KEY", "reasoning": "high",
+                  "tasks": ["lesson"], "blocked": "Kräver prov." },
+                { "provider": "nvidia", "model": "nemotron-x", "secretVariable": "NVIDIA_API_KEY", "reasoning": "off", "blocked": "Kräver prov." }] }))
+        .unwrap()
+    }
+
+    fn file_with_approved(approved: &str) -> GatewayFile {
+        let mut file = file();
+        file.values.insert(APPROVED_CANDIDATES_KEY.into(), approved.into());
+        file.secrets.insert("MISTRAL_API_KEY".into(), true);
+        file.secrets.insert("NVIDIA_API_KEY".into(), true);
+        file
+    }
+
+    #[test]
+    fn an_approved_candidate_becomes_selectable_for_its_own_tasks() {
+        // The helper writes `provider=model` joined by commas; spaces are tolerated as by the gateway.
+        let file = file_with_approved("mistral=mistral-small-x, mistral=mistral-large-x");
+        let catalog = catalog_with_candidates().with_approved(&file);
+        let models = |task: Option<&str>| catalog.choices(task).iter().map(|pair| pair.model.clone()).collect::<Vec<_>>();
+        assert_eq!(models(None), ["qwen/qwen3.8-27b", "mistral-small-x"]);
+        assert_eq!(models(Some("everyday")), ["qwen/qwen3.8-27b", "mistral-small-x"]);
+        assert_eq!(models(Some("lesson")), ["qwen/qwen3.8-27b", "mistral-small-x", "mistral-large-x"]);
+        let small = catalog.find("mistral", "mistral-small-x").unwrap();
+        assert_eq!((small.blocked.as_deref(), small.approved, small.note().as_deref()), (None, true, Some("Godkänd efter prov")));
+        assert_eq!(catalog.find("mistral", "mistral-large-x").unwrap().note().as_deref(), Some("Godkänd efter prov · Resonerar (hög) · går bara att välja för Lektioner"));
+        // The unapproved candidate stays where it was and cannot be chosen.
+        assert_eq!(catalog.candidates.iter().map(|pair| pair.model.as_str()).collect::<Vec<_>>(), ["nemotron-x"]);
+        assert_eq!(catalog.find("nvidia", "nemotron-x"), None);
+
+        // A fresh install that runs Mistral: default Small, lessons on Large. Nothing to fix.
+        let mut mistral = file.clone();
+        mistral.values.insert("MIO_AI_PROVIDER".into(), "mistral".into());
+        mistral.values.insert("MIO_AI_MODEL".into(), "mistral-small-x".into());
+        mistral.values.insert("MIO_AI_TASK_PROFILES".into(), r#"{"lesson":{"provider":"mistral","model":"mistral-large-x"}}"#.into());
+        let mut form = AiForm::from_file(&mistral);
+        assert_eq!(form.problems(&catalog, &mistral), Vec::<String>::new());
+        assert!(!form.changes(&mistral).iter().any(|change| change.key == APPROVED_CANDIDATES_KEY), "the form never rewrites the approvals");
+        // Large stays lesson-only after approval.
+        form.per_task.insert("ask".into(), ("mistral".into(), "mistral-large-x".into()));
+        assert_eq!(form.problems(&catalog, &mistral), ["Frågor: Mistral · mistral-large-x går bara att välja för en annan uppgift."]);
+    }
+
+    #[test]
+    fn an_unapproved_candidate_still_cannot_be_chosen() {
+        // A Groq install switching to Mistral before any passed trial, or with another pair approved.
+        for approved in ["", "nvidia=nemotron-x", "mistral=mistral-small", "mistral-small-x", "groq=mistral-small-x"] {
+            let file = file_with_approved(approved);
+            let catalog = catalog_with_candidates().with_approved(&file);
+            assert_eq!(catalog.find("mistral", "mistral-small-x"), None, "{approved:?}");
+            let mut form = AiForm::from_file(&file);
+            form.default_pair = ("mistral".into(), "mistral-small-x".into());
+            let problems = form.problems(&catalog, &file);
+            assert_eq!(problems.len(), 3, "{approved:?}");
+            assert!(problems[0].contains("inte en granskad modell"));
+        }
+        // Without the setting at all (an older gateway.env), nothing moves.
+        assert_eq!(catalog_with_candidates().with_approved(&file()), catalog_with_candidates());
+        // Once approved, the same switch from Groq is accepted.
+        let file = file_with_approved("mistral=mistral-small-x");
+        let mut form = AiForm::from_file(&file);
+        form.default_pair = ("mistral".into(), "mistral-small-x".into());
+        assert!(form.problems(&catalog_with_candidates().with_approved(&file), &file).is_empty());
     }
 }

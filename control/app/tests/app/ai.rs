@@ -2,6 +2,7 @@
 //! list of changes, save; the credit meter and reasoning levels from a made-up `/v2/status`.
 //! Nothing reaches a real helper, gateway or provider.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use gpui_kit::test::TestWindowExt as _;
@@ -23,6 +24,15 @@ fn settings() -> Value {
         "values": { "MIO_AI_PROVIDER": "groq", "MIO_AI_MODEL": "qwen/qwen3.8-27b", "MIO_REQUESTS_PER_MINUTE": "10",
             "MIO_TOKENS_PER_MINUTE": "8000", "MIO_TOKENS_PER_DAY": "190000", "MIO_LESSON_INTERVAL_SECONDS": "60", "PORT": "8787" },
         "secrets": { "GROQ_API_KEY": true, "ANTHROPIC_API_KEY": true, "MIO_GATEWAY_TOKEN": true } })
+}
+
+/// `gateway.env` after a passed Prova of Mistral Small: the helper has added the pair to
+/// `MIO_APPROVED_CANDIDATES` (and the user has added a Mistral key).
+fn settings_after_trial() -> Value {
+    let mut settings = settings();
+    settings["values"]["MIO_APPROVED_CANDIDATES"] = json!("mistral=mistral-small-2603");
+    settings["secrets"]["MISTRAL_API_KEY"] = json!(true);
+    settings
 }
 
 fn catalog() -> Value {
@@ -58,13 +68,19 @@ fn open_with(cx: &mut TestAppContext, gateway: Option<GatewayStatus>) -> (gpui_k
     cx.update(mio_control::theme::init);
     let calls: Calls = Arc::default();
     let recorded = calls.clone();
+    // Like the real helper, a passed trial of a candidate approves it in `gateway.env`.
+    let approved = Arc::new(AtomicBool::new(false));
     cx.update(|cx| {
         cx.set_global(Backend {
             helper: Arc::new(move |command: &Command, stdin: Option<&[u8]>| {
                 recorded.lock().unwrap().push((command.clone(), stdin.map(<[u8]>::to_vec)));
                 Ok(match command {
+                    Command::ReadSettings(SettingsFile::Gateway) if approved.load(Ordering::SeqCst) => settings_after_trial().to_string().into_bytes(),
                     Command::ReadSettings(SettingsFile::Gateway) => settings().to_string().into_bytes(),
-                    Command::TrialModel { .. } => json!({ "passed": true, "tasks": [{ "task": "ask", "ok": true, "milliseconds": 900 }] }).to_string().into_bytes(),
+                    Command::TrialModel { .. } => {
+                        approved.store(true, Ordering::SeqCst);
+                        json!({ "passed": true, "tasks": [{ "task": "ask", "ok": true, "milliseconds": 900 }] }).to_string().into_bytes()
+                    }
                     _ => b"{}".to_vec(),
                 })
             }),
@@ -276,6 +292,10 @@ fn mistral_is_first_to_try_with_its_cost_and_large_is_offered_only_for_lessons(c
         let cost = cost.label().unwrap();
         assert!(cost.starts_with("Går till Mistral: tre korta påhittade anrop"), "{cost}");
         assert!(cost.contains("under en cent (priser 2026-11-20)"), "{cost}");
+        // Large reasons and may only serve lessons: one call, with room for its thinking, priced
+        // with the panel's reviewed Large price. Not under a cent.
+        let large = window.find("trial-cost-mistral-mistral-large-test");
+        assert_eq!(large.label(), Some("Går till Mistral: ett kort påhittat anrop med resonemang, högst cirka 13\u{202F}500 token. Uppskattat $0,0262 (priser 2026-11-20)."));
         // Lessons: same, Groq, Anthropic, Mistral Large; the last one is only here.
         window.click("ai-task-lesson", cx);
         window.press("down", cx);
@@ -292,4 +312,50 @@ fn mistral_is_first_to_try_with_its_cost_and_large_is_offered_only_for_lessons(c
     .unwrap();
     // Seeing the cost sends nothing; only Prova does.
     assert!(!calls.lock().unwrap().iter().any(|(command, _)| matches!(command, Command::TrialModel { .. })));
+}
+
+#[gpui_kit::test]
+fn a_candidate_that_passes_prova_can_be_chosen_without_restarting_the_panel(cx: &mut TestAppContext) {
+    let (handle, _, calls) = open(cx);
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("edit-ai", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    // Before the trial the candidate is not offered (the core tests cover why); press Prova.
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("try-mistral-mistral-small-2603", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    {
+        let calls = calls.lock().unwrap();
+        let reads = calls.iter().filter(|(command, _)| matches!(command, Command::ReadSettings(SettingsFile::Gateway))).count();
+        assert_eq!(reads, 2, "the file is read again after the passed trial");
+    }
+    // The same page, read again: Mistral Small is now the third choice for the default.
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(window.find("trial-report").label(), Some("Provet godkänt"));
+        window.click("ai-default", cx);
+        window.press("down", cx);
+        window.press("down", cx);
+        window.press("enter", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(window.find("changes").label(), Some("2 ändringar"), "provider and model");
+        window.click("save-ai", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    let calls = calls.lock().unwrap();
+    let (_, stdin) = calls.iter().find(|(command, _)| matches!(command, Command::WriteSettings(SettingsFile::Gateway))).expect("an approved pair can be saved");
+    let request: Value = serde_json::from_slice(stdin.as_ref().unwrap()).unwrap();
+    assert_eq!((&request["set"]["MIO_AI_PROVIDER"], &request["set"]["MIO_AI_MODEL"]), (&json!("mistral"), &json!("mistral-small-2603")));
+    assert!(request["set"].get("MIO_APPROVED_CANDIDATES").is_none(), "the panel never writes approvals itself");
 }

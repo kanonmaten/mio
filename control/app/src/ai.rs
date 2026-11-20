@@ -132,6 +132,9 @@ impl AiPage {
     }
 
     fn build_editor(&mut self, file: GatewayFile, catalog: Catalog, window: &mut Window, cx: &mut Context<Self>) -> Editor {
+        // A candidate that passed "Prova" is listed in the file the helper just read, so it is
+        // offered here at once, without restarting the panel.
+        let catalog = catalog.with_approved(&file);
         let form = AiForm::from_file(&file);
         // Each select offers only the pairs allowed where it applies: a pair reviewed for lessons
         // only (Large 4, which reasons) is never offered for the default, Frågor or Vardag.
@@ -257,7 +260,8 @@ impl AiPage {
         .detach();
     }
 
-    /// Real provider traffic, started only by the user: one synthetic Swedish call per task.
+    /// Real provider traffic, started only by the user: one synthetic Swedish call per task the
+    /// pair may serve.
     fn try_pair(&mut self, pair: Pair, window: &mut Window, cx: &mut Context<Self>) {
         if self.trying.is_some() {
             return;
@@ -275,7 +279,8 @@ impl AiPage {
                     Ok(output) => trial_report(&label, &output),
                     Err(error) => TrialReport { label: label.clone(), passed: false, lines: vec![error.to_string()] },
                 });
-                // A passed candidate is now selectable; read the list again.
+                // A passed candidate is now in `MIO_APPROVED_CANDIDATES`; reading the file again
+                // makes it selectable (`Catalog::with_approved`).
                 if this.trial.as_ref().is_some_and(|trial| trial.passed) {
                     this.open_editor(window, cx);
                 }
@@ -445,7 +450,7 @@ impl AiPage {
             )
             .child(section("Prova modellerna"))
             .child(div().text_sm().text_color(theme.muted_foreground).child(
-                "Ett kort, påhittat svenskt anrop per uppgift med din nyckel, till leverantören som står vid modellen. Det enda som skickar något till en leverantör från panelen, och det kostar som vanliga anrop. En kandidat som klarar provet blir valbar. Mistral står först.",
+                "Ett kort, påhittat svenskt anrop per uppgift som paret får användas till, med din nyckel, till leverantören som står vid modellen. Det enda som skickar något till en leverantör från panelen, och det kostar som vanliga anrop. En kandidat som klarar provet blir valbar. Mistral står först.",
             ))
             .children(editor.catalog.trial_order().into_iter().map(|pair| {
                 let label = pair.label();
