@@ -49,13 +49,17 @@ jobs:
           sh "$RUNNER_TEMP/rustup-init.sh" -y --profile minimal --component clippy --default-toolchain 1.100.0
           "$HOME/.cargo/bin/cargo" --version
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-      - name: Återanvänd kontrollpanelens bygge
-        # GPUI takes minutes to compile from scratch; the cache only holds build output.
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Återanvänd Rust-byggena
+        # GPUI takes minutes to compile from scratch. rust-cache keeps the dependencies of all three
+        # workspaces plus the cargo registry, drops the workspaces' own crates before saving, and keys
+        # on the rustc version and the lockfiles. Only main saves, so one cache serves every run.
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: control/target
-          key: control-target-${{ runner.os }}-rust-1.100.0-${{ hashFiles('control/Cargo.lock') }}
-          restore-keys: control-target-${{ runner.os }}-rust-1.100.0-
+          workspaces: |
+            tools -> target
+            server -> target
+            control -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
           version: '0.12.22'
