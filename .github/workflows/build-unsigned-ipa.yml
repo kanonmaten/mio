@@ -3,12 +3,12 @@ name: Bygg Mio IPA
 run-name: "Bygg Mio IPA #${{ github.run_number }}"
 
 on:
-  # Every push to main that touches the app makes an installable IPA. tools/ is listed because the
-  # diagnostics step runs the verifier. Path filters are not evaluated for tag pushes.
-  push:
+  # Every pull request and every push to main that touches the app makes an installable IPA, so a
+  # PR can be tried on the phone before merge. tools/ is listed because the diagnostics step runs
+  # the verifier. Path filters are not evaluated for tag pushes.
+  pull_request:
     branches: [main]
-    tags: ['v*']
-    paths:
+    paths: &app-paths
       - 'Mio/**'
       - 'MioWidgets/**'
       - 'MioTests/**'
@@ -16,6 +16,10 @@ on:
       - 'Mio.xcodeproj/**'
       - 'tools/**'
       - '.github/workflows/build-unsigned-ipa.yml'
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths: *app-paths
   # Nightly UI tests and strict concurrency diagnostics against main. GitHub turns scheduled
   # workflows off in public repos after 60 days without activity; re-enable it under Actions.
   schedule:
@@ -232,8 +236,9 @@ jobs:
 
       - name: Meddela att IPA:n är klar
         # Only the run number and link: the topic is public to anyone who knows it, so no commit
-        # text. Skips itself until the user adds the NTFY_TOPIC secret.
-        if: ${{ success() }}
+        # text. Skips itself until the user adds the NTFY_TOPIC secret, and on pull requests, whose
+        # IPA is for trying a change before merge, not a new build of main.
+        if: ${{ success() && github.event_name != 'pull_request' }}
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
