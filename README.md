@@ -8,7 +8,7 @@ Aktuell version är 0.10.0. Den är byggd och testad i simulatorn men inte släp
 
 - Fånga skriver ut tal via Tailscale till Pianissimo på datorn. Mikrofonen startar om efter ett samtal eller annat avbrott, men aldrig efter att du själv pausat eller stoppat. Nekar iOS omstarten får du notisen "Tryck för att fortsätta lyssna" eller trycker Fortsätt i Fånga ([användarguiden](docs/ANVANDNING.md)).
 - Lektioner är ett eget läge. Efter lektionen skriver AI en anteckning som börjar med "Viktigt till provet", föreslår ämne och läxor och öppnar ett granskningsark.
-- Förslag samlar det AI hittat i vardagen. Inget sparas förrän du säger Ja. En att göra-post hamnar då i Påminnelser och en anteckning i Anteckningar via dela-arket; en kalenderhändelse öppnar Kalenders ruta, och den sparas först när du trycker Lägg till där. "Mio, kom ihåg …" och "Mio, notera …" sparas direkt och kan ångras i 24 timmar.
+- Förslag samlar det AI hittat i vardagen. Inget sparas förrän du säger Ja. En att göra-post hamnar då i Påminnelser och en anteckning i Anteckningar via dela-arket; en kalenderhändelse öppnar Kalenders ruta, och den sparas först när du trycker Lägg till där. "Mio, kom ihåg …" sparas direkt i Påminnelser och "Mio, notera …" som en Mio-anteckning, och båda kan ångras i 24 timmar. Säger du både en tid och en plats blir det i stället ett kalenderförslag under Förslag, som du bekräftar i Kalenders ruta.
 - Hem visar veckan, nästa sak att göra och nedräkning till prov.
 - Inställningarna ligger i ett enda ark. "Kontrollera allt" visar vad som fungerar och vad du behöver göra annars.
 - Telefonen skickar en krypterad säkerhetskopia till datorn varje natt när den laddar.

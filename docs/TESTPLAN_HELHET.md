@@ -1,6 +1,6 @@
 # Testa hela Mio
 
-Gäller 0.9.0 och 0.10.0. Alla telefonprov nedan är instruktioner, inte körresultat. Vilka prov som återstår står i [Linear](https://linear.app/kanonmaten) med etiketten Prov, och varje ärende länkar hit för hur provet går till. Kör först [verifieringen](INSTALLATION.md#verifiera-före-bygge). Använd syntetiska uppgifter och röster från personer som samtycker; lagra inte testljud i projektet. Registrera resultat i [status](STATUS.md) för exakt revision, med commit, IPA-hash, build, iPhone, iOS samt gatewayrelease/modell och Pianissimo-revision. Äldre mätningar finns i [TESTRESULTAT_V0_1](arkiv/TESTRESULTAT_V0_1.md) och gäller bara sin historiska revision.
+Gäller helhetsbygget 0.9.0; avsnittet [Efter grillningen](#efter-grillningen--nya-prov-ej-körda-på-iphone) gäller 0.10.0, och äldre prov som nämner flikarna Kalender och Anteckningar behöver skrivas om för 0.10.0 innan de körs. Alla telefonprov nedan är instruktioner, inte körresultat. Vilka prov som återstår står i [Linear](https://linear.app/kanonmaten) med etiketten Prov, och varje ärende länkar hit för hur provet går till. Kör först [verifieringen](INSTALLATION.md#verifiera-före-bygge). Använd syntetiska uppgifter och röster från personer som samtycker; lagra inte testljud i projektet. Registrera resultat i [status](STATUS.md) för exakt revision, med commit, IPA-hash, build, iPhone, iOS samt gatewayrelease/modell och Pianissimo-revision. Äldre mätningar finns i [TESTRESULTAT_V0_1](arkiv/TESTRESULTAT_V0_1.md) och gäller bara sin historiska revision.
 
 ## Före installation
 
