@@ -1,6 +1,8 @@
 # Ändringslogg
 
-## 0.9.1 (pågår)
+## 0.10.0 (pågår)
+
+Hette 0.9.1 fram till 2026-11-21. Från och med nu har appen, gatewayen, Mio Kontroll och Pianissimo samma versionsnummer ([beslut](docs/DECISIONS.md#en-version-för-hela-repot-2026-11-21)); Inställningar → Avancerat → Version visar 0.10.0 och körningens nummer.
 
 Apples appar äger det Mio fångar ([plan](docs/PLAN_APPLEAPPAR.md), del B).
 

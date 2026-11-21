@@ -1,6 +1,6 @@
 [project]
 name = "mio-transcription"
-version = "1.0.0"
+version = "0.10.0"
 requires-python = ">=3.12,<3.14"
 dependencies = ["fastapi==0.135.1", "numpy==2.5.3", "uvicorn==0.42.0"]
 

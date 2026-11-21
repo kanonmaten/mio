@@ -443,9 +443,34 @@ fn structure(root: &Path, report: &mut Report) -> Result<(), Fatal> {
         project.matches("PRODUCT_BUNDLE_IDENTIFIER = app.mio.assistant;").count() == 2,
         "Appidentiteten app.mio.assistant i Debug och Release",
     );
+    // One version for the whole repo (user's decision 2026-11-21): VERSION is the source, and the
+    // app, the widgets, the gateway, Mio Kontroll, the verifier and Pianissimo must all carry it.
+    let version = read_text(&root.join("VERSION"))?.trim().to_owned();
     report.check(
-        project.matches("MARKETING_VERSION = 0.9.1;").count() == 4,
-        "Version 0.9.1 i appens och widgettilläggets Debug och Release",
+        pattern(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$").is_match(&version),
+        format!("VERSION är X.Y.Z ({version})"),
+    );
+    report.check(
+        project.matches(&format!("MARKETING_VERSION = {version};")).count() == 4
+            && project.matches("MARKETING_VERSION = ").count() == 4,
+        format!("Version {version} i appens och widgettilläggets Debug och Release"),
+    );
+    let manifest_version = pattern(r#"(?m)^version = "([^"]+)""#);
+    let mut stale = Vec::new();
+    for manifest in ["server/Cargo.toml", "control/Cargo.toml", "tools/Cargo.toml", "transcription-server/pyproject.toml"] {
+        let text = read_text(&root.join(manifest))?;
+        let found = manifest_version.captures(&text).map(|captures| captures[1].to_owned());
+        if found.as_deref() != Some(version.as_str()) {
+            stale.push(format!("{manifest} ({})", found.unwrap_or_else(|| "saknas".to_owned())));
+        }
+    }
+    report.check(
+        stale.is_empty(),
+        if stale.is_empty() {
+            format!("Version {version} i gatewayen, Mio Kontroll, verifieraren och Pianissimo")
+        } else {
+            format!("Version {version} saknas i {}", stale.join(", "))
+        },
     );
     let mut targets: Vec<&str> = pattern(r"IPHONEOS_DEPLOYMENT_TARGET = ([^;]+);")
         .captures_iter(&project)
