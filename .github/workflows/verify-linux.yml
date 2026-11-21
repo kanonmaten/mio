@@ -1,8 +1,11 @@
 name: Verifiera Mio på Linux
 
-# No pull_request: the project works on main without branches or pull requests.
-# The nightly run keeps the cache warm and catches toolchain or dependency drift.
+# Every change reaches main through a pull request (2026-11-21), so the PR run is the check
+# before merge and the push run checks the merged result. The nightly run keeps the cache warm
+# and catches toolchain or dependency drift.
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
