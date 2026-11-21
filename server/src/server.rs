@@ -31,8 +31,11 @@ use crate::time::next_utc_midnight;
 
 const MAX_BODY_BYTES: usize = 40_000;
 const MAX_CONCURRENT: u32 = 2;
-/// The backup route's own deadline for waiting its turn and receiving the export.
+/// The backup routes' own deadline for waiting their turn and, for an upload, receiving the export.
 const BACKUP_BODY_TIMEOUT_MS: u64 = 120_000;
+/// No connection lives longer than this, whatever its route: the longest route is 180 s, and a
+/// client that stops reading a 32 MB download would otherwise hold the download permit for good.
+const CONNECTION_LIMIT: Duration = Duration::from_secs(600);
 const MINUTE_MS: i64 = 60_000;
 const DAY_MS: i64 = 86_400_000;
 
@@ -57,9 +60,27 @@ struct Inner {
     /// `None` without a state directory (tests, a manual start): backups then fail with 507 and
     /// status reports none.
     backups: Option<Arc<BackupStore>>,
-    /// One backup request at a time, held from before its body is read until the copy is stored
-    /// or read back, so at most one export (32 MB) is in memory under the unit's 128 MB cap.
+    /// One upload at a time, held from before its body is read until the copy is stored, so at
+    /// most one received export (32 MB) is in memory.
     backup_turn: tokio::sync::Mutex<()>,
+    /// One download at a time, held from before the copy is read until its response body has been
+    /// sent or the connection is gone (the permit travels inside the body's bytes). Together with
+    /// `backup_turn` at most two exports (64 MB) are in memory under the unit's 128 MB cap.
+    downloads: Arc<tokio::sync::Semaphore>,
+    /// How long a backup request may wait for its turn (and an upload receive its body).
+    backup_deadline_ms: u64,
+}
+
+/// A decrypted export on its way to the client, with the download permit it holds.
+struct Download {
+    export: Vec<u8>,
+    _permit: tokio::sync::OwnedSemaphorePermit,
+}
+
+impl AsRef<[u8]> for Download {
+    fn as_ref(&self) -> &[u8] {
+        &self.export
+    }
 }
 
 #[derive(Clone)]
@@ -279,12 +300,18 @@ impl Gateway {
         Ok(Self { inner: Arc::new(Inner { config: Arc::new(move || config.clone()), transport,
             clock: Arc::new(system_clock), store, usage_store: Arc::new(MemoryUsageStore::default()),
             state: Mutex::new(State { counters, active: 0, usage: Some(Ledger::default()) }),
-            backups: None, backup_turn: tokio::sync::Mutex::new(()) }) })
+            backups: None, backup_turn: tokio::sync::Mutex::new(()), downloads: Arc::new(tokio::sync::Semaphore::new(1)),
+            backup_deadline_ms: BACKUP_BODY_TIMEOUT_MS }) })
     }
 
     /// Stores the nightly backups and their key in `store`'s directory (`/var/lib/mio-gateway`).
     pub fn with_backup_store(self, store: Arc<BackupStore>) -> Self {
         self.rebuild(|inner| inner.backups = Some(store))
+    }
+
+    /// Shortens the backup routes' 120 s deadline (tests).
+    pub fn with_backup_deadline_ms(self, deadline_ms: u64) -> Self {
+        self.rebuild(|inner| inner.backup_deadline_ms = deadline_ms)
     }
 
     fn rebuild(self, change: impl FnOnce(&mut Inner)) -> Self {
@@ -378,8 +405,11 @@ impl Gateway {
             }
             let mut status = gateway_status_v2(&config, inner.quota_snapshot(&config).as_ref());
             status["usage"] = inner.usage_report();
-            // Always present on this gateway; an app or panel without it sees an older one.
-            status["backup"] = inner.backups.as_ref().map_or_else(|| crate::backup::summary(&[]), |store| store.summary());
+            // Present only when a backup directory is configured: the app schedules the nightly
+            // copy only when it sees the field (contract "Säkerhetskopian").
+            if let Some(store) = &inner.backups {
+                status["backup"] = store.summary();
+            }
             return reply(&headers, 200, &status, 60);
         }
         if parts.method == Method::GET && target == "/health" {
@@ -471,7 +501,7 @@ impl Gateway {
                 }
                 let reserve = declared.filter(|length| *length >= 0.0).map_or(0, |length| length as usize);
                 let started = std::time::Instant::now();
-                let deadline = Duration::from_millis(BACKUP_BODY_TIMEOUT_MS);
+                let deadline = Duration::from_millis(inner.backup_deadline_ms);
                 let Ok(turn) = tokio::time::timeout(deadline, inner.backup_turn.lock()).await else {
                     return reply(headers, 408, &json!({ "error": "request_timeout" }), 60);
                 };
@@ -508,13 +538,19 @@ impl Gateway {
                 let Some(store) = inner.backups.clone() else {
                     return reply(headers, 404, &json!({ "error": "backup_not_found" }), 60);
                 };
-                let turn = inner.backup_turn.lock().await;
+                // Queued within the deadline, then refused: a second download never holds a
+                // second 32 MB copy while the first is still being sent.
+                let deadline = Duration::from_millis(inner.backup_deadline_ms);
+                let Ok(Ok(permit)) = tokio::time::timeout(deadline, inner.downloads.clone().acquire_owned()).await else {
+                    return reply(headers, 429, &json!({ "error": "backup_busy" }), 30);
+                };
                 let read = tokio::task::spawn_blocking(move || store.read(&id)).await;
-                drop(turn);
                 match read {
                     Ok(Ok(export)) => {
                         let mut response = reply(headers, 200, &Value::Null, 60);
-                        *response.body_mut() = Full::new(Bytes::from(export));
+                        // The permit is released when hyper drops the bytes: sent, or the
+                        // connection closed.
+                        *response.body_mut() = Full::new(Bytes::from_owner(Download { export, _permit: permit }));
                         response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
                         response
                     }
@@ -542,9 +578,10 @@ impl Gateway {
                 });
                 // A client that goes away mid-request ends the connection, which drops the
                 // handler and with it the provider call and the concurrency slot.
-                let _ = hyper::server::conn::http1::Builder::new().keep_alive(false).max_buf_size(8_192)
+                let connection = hyper::server::conn::http1::Builder::new().keep_alive(false).max_buf_size(8_192)
                     .timer(TokioTimer::new()).header_read_timeout(Duration::from_secs(5))
-                    .serve_connection(TokioIo::new(stream), service).await;
+                    .serve_connection(TokioIo::new(stream), service);
+                let _ = tokio::time::timeout(CONNECTION_LIMIT, connection).await;
             });
         }
     }

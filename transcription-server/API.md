@@ -75,9 +75,9 @@ Valfri, på som standard när modellen kan laddas (`MIO_SPEAKER_LABELS=0` stäng
 Additiv (från 2026-11-20, [kontraktet](../docs/DATAMODELL.md#egna-ord-från-telefonen)). Lägger till ett eget ord som hon har sagt Ja till i appen. Samma Bearer-token som transkriptionen.
 
 - `Content-Type: application/json`, ingen content-encoding, kropp högst 1024 byte inom 10 s: `{"phrase": "Åsa Lindqvist"}`. Okända fält avvisas.
-- `phrase` trimmas (inre mellanrum slås ihop som i ordlistan) och måste sedan vara 1–100 byte UTF-8 utan radbrytningar eller andra kontrolltecken, och får inte börja med `#`.
+- `phrase` trimmas (inre mellanrum slås ihop som i ordlistan) och måste sedan vara 1–100 byte giltig UTF-8 (ett ensamt surrogat som `\ud800` avvisas) utan radbrytningar eller andra kontrolltecken, och får inte börja med `#`.
 - Ordet läggs sist i `/var/lib/mio-transcription/vocabulary-phone.txt` (0600, tjänstens egen katalog; `MIO_PHONE_VOCABULARY_FILE` ändrar sökvägen) om det inte redan finns där eller i `/etc/mio-transcription-vocabulary.txt`, exakt jämförelse. Servern läser båda filerna, `/etc`-filen först, och använder högst 500 rader sammanlagt.
-- Listan laddas om på inferenstråden direkt före nästa transkription, utan omstart, med samma uppvärmning som vid start. Misslyckas omladdningen behålls avkodningen som fungerade, en rad skrivs i journalen och transkriptionen fortsätter.
+- Listan laddas om på inferenstråden direkt före nästa transkription, utan omstart, med samma uppvärmning som vid start. Omladdningen är ett eget steg med en egen gräns på 15 s och räknas inte mot transkriptionens 45 s, så en långsam omladdning startar aldrig om tjänsten mitt i en transkription. Misslyckas omladdningen, eller blir den klar först efter 15 s, behålls avkodningen som fungerade, en rad med bara feltypen skrivs i journalen och transkriptionen fortsätter. En omladdning som inte är klar efter 15 s ger delen 503 `vocabulary_reloading` med `Retry-After: 5`, och nästa försök får 429 tills inferenstråden är ledig; appen skickar delen igen. Den försenade omladdningen görs inte om före varje del; nästa tillagda ord eller en omstart provar igen. Bara om inferenstråden fortfarande är upptagen efter 300 s (samma gräns som modellens laddning) startar tjänsten om, och då pågår ingen transkription.
 
 | Svar | Betydelse |
 |---|---|
@@ -97,7 +97,7 @@ Valfri för klienten och additiv. Bearer-token krävs. Raderar sessionens talarc
 
 ## Fel och återhämtning
 
-Felkropp: `{"error":"machine_readable_code"}` utan ljud, text, token eller traceback. 400 fel metadata/header; 422 ogiltig WAV/längd; 401 token; 409 krock; 413 storlek; 415 format; 429 upptagen; 503 modell inte redo; 502 ogiltigt modellsvar. 408 vid långsam upload. 429/503 anger `Retry-After: 5`. Uvicorns yttre samtidighetsgräns kan ge ett generiskt 503 utan JSON; klienten tolkar HTTP-status före kroppen.
+Felkropp: `{"error":"machine_readable_code"}` utan ljud, text, token eller traceback. 400 fel metadata/header; 422 ogiltig WAV/längd; 401 token; 409 krock; 413 storlek; 415 format; 429 upptagen; 503 modell inte redo eller `vocabulary_reloading` (egna ord laddas om, skicka delen igen); 502 ogiltigt modellsvar. 408 vid långsam upload. 429/503 anger `Retry-After: 5`. Uvicorns yttre samtidighetsgräns kan ge ett generiskt 503 utan JSON; klienten tolkar HTTP-status före kroppen.
 
 Aktiv appsession försöker igen vid nätfel och 408/429/500/502/503/504 med jitter och fördröjning upp till 30 s. Nätbyte/foreground väcker återförsök. Fel token, inkompatibelt kontrakt eller ogiltigt svar kräver åtgärd och pausar mikrofonen. Kö/inflight förfaller när äldsta medföljande ljudsample är 60 s gammalt; förlust markeras som lucka och sen text ignoreras. Slutdränering får högst 15 s och kan avbrytas. Ingen diskbaserad offlinekö.
 

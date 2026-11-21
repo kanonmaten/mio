@@ -49,7 +49,7 @@ def default_diarizer():
 
 def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._exit, cache_ttl=90,
                diarizer=None, preprocessing=None, speaker_ttl=600, speaker_clock=time.monotonic,
-               vocabulary=None):
+               vocabulary=None, reload_timeout=15, reload_limit=300):
     token = token if token is not None else os.environ.get("MIO_TRANSCRIPTION_TOKEN", "")
     if not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", token):
         raise ValueError("Set a 32-256 character MIO_TRANSCRIPTION_TOKEN")
@@ -175,14 +175,6 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
                 if not state["preprocess_warned"]:
                     state["preprocess_warned"] = True
                     log.warning("Förbehandling misslyckades (%s); originalljudet används.", type(error).__name__)
-        # A word added from the phone takes effect here, before this transcription and without
-        # a restart. Own words are an enhancement: a failing reload never stops the transcription.
-        reload = getattr(backend, "reload_vocabulary_if_requested", None)
-        if reload:
-            try:
-                reload()
-            except Exception as error:
-                log.warning("Egna ord kunde inte laddas om (%s); ordlistan är som förut.", type(error).__name__)
         asr_started = time.monotonic()
         words = validate_backend_words(backend.transcribe(model_pcm), len(pcm) // 2)
         asr_ms = (time.monotonic() - asr_started) * 1_000
@@ -194,9 +186,51 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
                   (time.monotonic() - started) * 1_000, preprocess_ms, asr_ms, speaker_ms, len(pcm) // 2)
         return words
 
-    async def infer(key, fingerprint, chunk, pcm):
+    def run_reload(reload):
+        """A word added from the phone takes effect here, on the inference thread (so it never
+        races a transcription) and without a restart. Own words are an enhancement: a failing
+        reload never stops the transcription, and the journal line has the type name only."""
         try:
-            words = await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(
+            reload(timeout=reload_timeout)
+        except Exception as error:
+            log.warning("Egna ord kunde inte laddas om (%s); ordlistan är som förut.", type(error).__name__)
+
+    def hold_until_reloaded(loop, pending):
+        """A reload past its own limit: the chunk is answered 503 so the phone sends it again,
+        and the service stays busy until the inference thread is free. Only a thread still
+        blocked after `reload_limit` (as long as model loading may take) restarts the service,
+        and then no transcription is running."""
+        log.warning("Egna ord laddades inte om i tid (TimeoutError); delen skickas om efteråt.")
+
+        def stuck():
+            state["status"] = "failed"
+            log.warning("Omladdningen av egna ord hänger (TimeoutError); tjänsten startas om.")
+            fatal_exit(1)
+
+        watchdog = loop.call_later(reload_limit, stuck)
+
+        def reloaded(_):
+            watchdog.cancel()
+            state["busy"] = False
+
+        pending.add_done_callback(reloaded)
+
+    async def infer(key, fingerprint, chunk, pcm):
+        release_busy = True
+        try:
+            loop = asyncio.get_running_loop()
+            # The reload runs as its own job before the transcription, with its own shorter
+            # limit, so it never counts against the inference limit below: a slow reload must
+            # never be what restarts the service in the middle of a transcription.
+            reload = getattr(backend, "reload_vocabulary_if_requested", None)
+            if reload:
+                pending = loop.run_in_executor(executor, run_reload, reload)
+                done, _ = await asyncio.wait({pending}, timeout=reload_timeout)
+                if not done:
+                    release_busy = False
+                    hold_until_reloaded(loop, pending)
+                    raise RequestError(503, "vocabulary_reloading")
+            words = await asyncio.wait_for(loop.run_in_executor(
                 executor, run_inference, chunk, pcm), inference_timeout)
             result = {"apiVersion": 1, "sessionID": chunk.session_id, "chunkID": chunk.chunk_id,
                       "sequence": chunk.sequence, "startSample": chunk.start_sample,
@@ -223,7 +257,8 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
             fatal_exit(1)
             raise RequestError(503, "model_failed") from None
         finally:
-            state["busy"] = False
+            if release_busy:
+                state["busy"] = False
 
     async def read_audio(request):
         data = bytearray()

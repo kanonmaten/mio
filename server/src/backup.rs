@@ -214,15 +214,20 @@ impl BackupStore {
         }
         let entry = Entry { id: id.clone(), created_at: created_at(&id), bytes: export.len() as u64 };
         drop(export);
-        let kept = self.prune();
+        let kept = self.prune(&id);
         Ok((entry, kept))
     }
 
     /// Deletes copies beyond the newest 14 and temporary files left by an interrupted write.
     /// Only names this module writes are touched. Returns the number of copies kept.
-    fn prune(&self) -> usize {
+    ///
+    /// Ids sort by the PC's clock at the time of writing. `just_written` is never deleted here, so
+    /// a clock that once stood far ahead cannot make every new copy vanish right after its 201:
+    /// the 13 newest others by id are kept beside it.
+    fn prune(&self, just_written: &str) -> usize {
         let entries = self.list();
-        for old in entries.iter().skip(KEPT) {
+        let others = entries.iter().filter(|entry| entry.id != just_written);
+        for old in others.skip(KEPT - 1) {
             let _ = std::fs::remove_file(self.backups().join(format!("{}{EXTENSION}", old.id)));
         }
         if let Ok(listing) = std::fs::read_dir(self.backups()) {

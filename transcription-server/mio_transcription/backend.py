@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 from typing import Protocol
 
 from .core import normalize_words, parse_vocabulary
@@ -129,23 +130,35 @@ class Pianissimo:
         """A word was added from the phone; the lists are read again before the next transcription."""
         self.reload_requested = True
 
-    def reload_vocabulary_if_requested(self):
+    def reload_vocabulary_if_requested(self, timeout=None):
         """Runs on the inference thread right before a transcription, so it never races one.
 
         Any failure keeps the decoder that worked before, with one journal line (type name only,
-        never a phrase), and transcription goes on.
+        never a phrase), and transcription goes on. With `timeout`, a step that ends after it
+        counts as a failure (TimeoutError): a native step cannot be interrupted, so the check runs
+        between steps, and the late result is rolled back rather than half used. The request is
+        not repeated, so a slow list cannot slow every following chunk; the next added word or a
+        restart tries again.
         """
         if not self.reload_requested or self.model is None or self.plain_decoding is None:
             return
         self.reload_requested = False
         import copy
+        started = time.monotonic()
+
+        def in_time():
+            if timeout is not None and time.monotonic() - started > timeout:
+                raise TimeoutError()
+
         previous = copy.deepcopy(self.model.cfg.decoding)
         try:
             phrases = read_merged(self.vocabulary_path, self.phone_vocabulary_path)
             boosted = apply_vocabulary(self.model, phrases, self.vocabulary_boost)
             if not boosted and self.vocabulary:
                 self.model.change_decoding_strategy(copy.deepcopy(self.plain_decoding))
+            in_time()
             self.transcribe(bytes(16_000 * 2))
+            in_time()
             self.vocabulary = len(phrases) if boosted else 0
         except Exception as error:
             log.warning("Egna ord kunde inte laddas om (%s); ordlistan är som förut.", type(error).__name__)

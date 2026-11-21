@@ -38,7 +38,7 @@ def read_merged(path, phone_path):
 def normalize_phrase(value):
     """The phrase as it will be stored, or None when it breaks the contract.
 
-    Trimmed; 1-100 UTF-8 bytes; no line breaks or other control characters (C0, DEL, C1,
+    Trimmed; 1-100 UTF-8 bytes (a lone surrogate is not UTF-8); no line breaks or other control characters (C0, DEL, C1,
     U+2028/U+2029); not a comment. Inner runs of spaces are collapsed, as the list reader does.
     """
     if not isinstance(value, str):
@@ -48,7 +48,13 @@ def normalize_phrase(value):
            for character in phrase):
         return None
     phrase = " ".join(phrase.split())
-    if not phrase or phrase.startswith("#") or len(phrase.encode("utf-8")) > MAX_PHRASE_BYTES:
+    try:
+        # JSON can carry a lone surrogate ("\ud800"), which is not valid UTF-8: refused like any
+        # other broken phrase, and never echoed (the exception would carry the text).
+        encoded = phrase.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    if not phrase or phrase.startswith("#") or len(encoded) > MAX_PHRASE_BYTES:
         return None
     return phrase
 

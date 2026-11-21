@@ -128,7 +128,7 @@ sudo systemctl restart mio-transcription
 - Rader som börjar med `#` hoppas över. Högst 500 rader används, högst 100 byte per rad.
 - `check.sh` och Mio (Inställningar → Transkription) visar `"vocabulary"`: antalet ord som är aktiva.
 
-**Från telefonen.** När hon rättar ett ord i Mio frågar appen om det ska bli ett eget ord. Vid Ja skickas ordet via Tailscale till Pianissimo ([`POST /v1/vocabulary`](API.md#post-v1vocabulary)), som lägger det sist i `/var/lib/mio-transcription/vocabulary-phone.txt`. Den filen är tjänstens egen (0600); `/etc`-filen ägs av root och kan inte skrivas av tjänsten. Pianissimo läser `/etc`-listan först och sedan telefonens, högst 500 rader sammanlagt, och laddar om listan före nästa transkription utan omstart. Ett ord som redan finns i någon av filerna läggs inte till igen. Vill du ta bort ett ord från telefonen:
+**Från telefonen.** När hon rättar ett ord i Mio frågar appen om det ska bli ett eget ord. Vid Ja skickas ordet via Tailscale till Pianissimo ([`POST /v1/vocabulary`](API.md#post-v1vocabulary)), som lägger det sist i `/var/lib/mio-transcription/vocabulary-phone.txt`. Den filen är tjänstens egen (0600); `/etc`-filen ägs av root och kan inte skrivas av tjänsten. Pianissimo läser `/etc`-listan först och sedan telefonens, högst 500 rader sammanlagt, och laddar om listan före nästa transkription utan omstart. Omladdningen har en egen gräns på 15 s och räknas inte mot transkriptionens 45 s; tar den längre tid behålls förra ordlistan och delen skickas om ([API](API.md#post-v1vocabulary)). Ett ord som redan finns i någon av filerna läggs inte till igen. Vill du ta bort ett ord från telefonen:
 
 ```bash
 sudo nano /var/lib/mio-transcription/vocabulary-phone.txt

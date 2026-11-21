@@ -3,6 +3,7 @@ import copy
 import logging
 import os
 import stat
+import threading
 import time
 
 from fastapi.testclient import TestClient
@@ -21,8 +22,11 @@ WORD = "Åsa Lindqvist"
 
 class ReloadingBackend(Backend):
     """Records when the app asks for a reload and when it happens relative to transcription."""
-    def __init__(self, store, fail_reload=False):
+    def __init__(self, store, fail_reload=False, reload_seconds=0, gate=None):
         super().__init__()
+        self.reload_seconds = reload_seconds
+        self.gate = gate
+        self.timeouts = []
         self.store = store
         self.requested = False
         self.events = []
@@ -32,11 +36,15 @@ class ReloadingBackend(Backend):
         return self.active
     def request_vocabulary_reload(self):
         self.requested = True
-    def reload_vocabulary_if_requested(self):
+    def reload_vocabulary_if_requested(self, timeout=None):
         if not self.requested:
             return
         self.requested = False
+        self.timeouts.append(timeout)
         self.events.append("reload")
+        time.sleep(self.reload_seconds)
+        if self.gate:
+            self.gate.wait(5)
         if self.fail_reload:
             raise RuntimeError("decoder failed")
         self.active = len(self.store.phrases())
@@ -58,9 +66,10 @@ def phone(files, tmp_path):
     return files
 
 
-def client_for(backend, store):
-    client = TestClient(create_app(backend, TOKEN, fatal_exit=lambda _: None, diarizer=None,
-                                   preprocessing=False, vocabulary=store))
+def client_for(backend, store, **options):
+    options.setdefault("fatal_exit", lambda _: None)
+    client = TestClient(create_app(backend, TOKEN, diarizer=None, preprocessing=False, vocabulary=store,
+                                   **options))
     return client
 
 
@@ -103,7 +112,7 @@ def test_a_word_is_appended_once_and_reloaded_before_the_next_transcription(phon
 @pytest.mark.parametrize("body", [
     {"phrase": ""}, {"phrase": "   "}, {"phrase": "rad\nbrytning"}, {"phrase": "tab\tbort"},
     {"phrase": "nul\x00"}, {"phrase": "c1\x85x"}, {"phrase": "rad sep"}, {"phrase": "# kommentar"},
-    {"phrase": "å" * 51}, {"phrase": 12}, {"phrase": None}, {"phrase": WORD, "extra": 1}, {}, [WORD], WORD,
+    {"phrase": "å" * 51}, {"phrase": "ab\ud800cd"}, {"phrase": "\udfff"}, {"phrase": 12}, {"phrase": None}, {"phrase": WORD, "extra": 1}, {}, [WORD], WORD,
     b"{not json", b"\xff\xfe",
 ])
 def test_invalid_phrases_are_refused_and_the_list_is_unchanged(phone, body):
@@ -226,3 +235,79 @@ def test_a_failing_reload_keeps_the_previous_decoder(monkeypatch, tmp_path, capl
     assert service.vocabulary_size() == 1
     assert service.model.cfg.decoding.greedy.boosting_tree["key_phrases_list"] == ["Klang AI"]
     assert "RuntimeError" in caplog.text and "Åsa" not in caplog.text
+
+
+def test_a_lone_surrogate_is_refused_and_never_logged(phone, caplog):
+    backend = ReloadingBackend(phone)
+    body = b'{"phrase":"Hemligt\\ud800ord"}'
+    with caplog.at_level(logging.DEBUG), client_for(backend, phone) as client:
+        response = post(client, body)
+    assert response.status_code == 400 and response.json() == {"error": "invalid_phrase"}
+    assert "Hemligt" not in caplog.text and not [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert not os.path.exists(phone.phone_path) and not backend.requested
+    assert normalize_phrase("ab\ud800cd") is None
+
+
+def test_a_slow_reload_does_not_count_against_the_inference_limit(phone):
+    exits = []
+    backend = ReloadingBackend(phone, reload_seconds=.3)
+    with client_for(backend, phone, inference_timeout=.2, reload_timeout=2, fatal_exit=exits.append) as client:
+        ready(client)
+        assert post(client, {"phrase": WORD}).status_code == 200
+        response = client.post("/v1/transcribe", content=audio(), headers=headers())
+        assert response.status_code == 200 and response.json()["words"][0]["text"] == "Hej"
+    assert exits == [], "a reload longer than the inference limit never restarts the service"
+    assert backend.events == ["reload", "transcribe"] and backend.timeouts == [2]
+
+
+def test_a_reload_past_its_own_limit_defers_the_chunk_without_a_restart(phone, caplog):
+    exits = []
+    backend = ReloadingBackend(phone, reload_seconds=.4)
+    with caplog.at_level(logging.WARNING, logger="mio_transcription"), \
+            client_for(backend, phone, reload_timeout=.05, fatal_exit=exits.append) as client:
+        ready(client)
+        assert post(client, {"phrase": WORD}).status_code == 200
+        deferred = client.post("/v1/transcribe", content=audio(), headers=headers())
+        assert deferred.status_code == 503 and deferred.json() == {"error": "vocabulary_reloading"}
+        assert deferred.headers["retry-after"] == "5"
+        # The inference thread is still busy with the reload: no second job is queued behind it.
+        assert client.post("/v1/transcribe", content=audio(), headers=headers()).status_code == 429
+        time.sleep(.6)
+        again = client.post("/v1/transcribe", content=audio(), headers=headers())
+        assert again.status_code == 200 and again.json()["words"][0]["text"] == "Hej"
+        assert client.get("/health", headers=headers()).status_code == 200
+    assert exits == [] and backend.events == ["reload", "transcribe"]
+    assert "TimeoutError" in caplog.text and "Åsa" not in caplog.text
+
+
+def test_only_an_inference_thread_stuck_past_the_reload_limit_restarts_the_service(phone, caplog):
+    exits = []
+    gate = threading.Event()
+    backend = ReloadingBackend(phone, gate=gate)
+    try:
+        with caplog.at_level(logging.WARNING, logger="mio_transcription"), \
+                client_for(backend, phone, reload_timeout=.05, reload_limit=.3, fatal_exit=exits.append) as client:
+            ready(client)
+            assert post(client, {"phrase": WORD}).status_code == 200
+            assert client.post("/v1/transcribe", content=audio(), headers=headers()).status_code == 503
+            assert exits == [], "a reload past its own limit alone never restarts the service"
+            time.sleep(.5)
+            assert exits == [1]
+            gate.set()
+    finally:
+        gate.set()
+    assert "Åsa" not in caplog.text
+
+
+def test_a_reload_that_ends_after_its_limit_keeps_the_previous_decoder(monkeypatch, tmp_path, caplog):
+    service, own = pianissimo(monkeypatch, tmp_path, Decoding())
+    own.write_text(f"{WORD}\n", encoding="utf-8")
+    plain = service.transcribe
+    service.transcribe = lambda pcm: (time.sleep(.1), plain(pcm))[1]
+    service.request_vocabulary_reload()
+    with caplog.at_level(logging.WARNING, logger="mio_transcription"):
+        service.reload_vocabulary_if_requested(timeout=.05)
+    assert service.vocabulary_size() == 1
+    assert service.model.cfg.decoding.greedy.boosting_tree["key_phrases_list"] == ["Klang AI"]
+    assert "TimeoutError" in caplog.text and "Åsa" not in caplog.text
+    assert not service.reload_requested, "a late reload is not repeated before every chunk"

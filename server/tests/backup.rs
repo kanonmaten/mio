@@ -91,6 +91,34 @@ fn only_the_14_newest_copies_are_kept() {
 }
 
 #[test]
+fn a_clock_that_once_stood_ahead_never_deletes_the_new_copy() {
+    let directory = scratch("future-clock");
+    let store = BackupStore::new(&directory);
+    // A first real copy creates the key and the directory; then 14 made-up copies from 2099.
+    let (first, _) = store.save(export("first"), NOVEMBER).unwrap();
+    let backups = directory.join("backups");
+    let future: Vec<String> = (0..KEPT).map(|index| format!("20990101T0000{index:02}Z-0000000{:x}", index % 16)).collect();
+    for id in &future {
+        std::fs::write(backups.join(format!("{id}.mio-backup")), vec![0u8; 100]).unwrap();
+    }
+    let (entry, kept) = store.save(export("today"), NOVEMBER + 86_400_000).unwrap();
+    assert_eq!(kept, KEPT);
+    let listed: Vec<String> = store.list().into_iter().map(|entry| entry.id).collect();
+    assert_eq!(listed.len(), KEPT);
+    assert!(listed.contains(&entry.id), "the copy just written survives its own pruning");
+    assert_eq!(store.read(&entry.id).unwrap(), export("today"));
+    // The oldest by id go: the real November copy and the earliest made-up one.
+    assert!(!listed.contains(&first.id));
+    assert!(!listed.contains(&future[0]));
+    assert!(listed.contains(&future[KEPT - 1]));
+    // The next night the previous copy may go, but never the one just written.
+    let (next, _) = store.save(export("tomorrow"), NOVEMBER + 2 * 86_400_000).unwrap();
+    let listed: Vec<String> = store.list().into_iter().map(|entry| entry.id).collect();
+    assert!(listed.contains(&next.id) && !listed.contains(&entry.id));
+    assert_eq!(listed.len(), KEPT);
+}
+
+#[test]
 fn a_wrong_key_or_a_damaged_file_is_unreadable_and_never_overwritten() {
     let directory = scratch("damaged");
     let store = BackupStore::new(&directory);
@@ -223,7 +251,8 @@ async fn an_export_just_under_the_limit_is_stored_and_one_over_is_refused() {
 async fn a_gateway_without_a_backup_directory_reports_none_and_refuses_with_507() {
     let provider = Provider::fixed(Upstream::Fail);
     let server = common::serve(common::config(), &provider).await;
-    assert_eq!(server.status_v2().await["backup"], json!({ "latestAt": null, "count": 0, "bytes": 0 }));
+    let status = server.status_v2().await;
+    assert!(status.get("backup").is_none(), "no directory: the field is absent, so the app schedules no copy");
     let refused = put(&server, &export("a")).await;
     assert_eq!((refused.status, refused.error().as_str()), (507, "backup_storage_failed"));
     assert_eq!(server.get("/v2/backups", &authorized()).await.json(), json!({ "backups": [] }));
@@ -242,4 +271,72 @@ async fn a_damaged_copy_answers_500_without_details() {
     assert_eq!(reply.json(), json!({ "error": "backup_unreadable" }));
     assert_eq!(reply.status, 500);
     let _: Value = reply.json();
+}
+
+/// A large synthetic export, so its response cannot fit in the loopback socket buffers.
+fn large_export(bytes: usize) -> Vec<u8> {
+    let prefix = br#"{"schemaVersion":2,"exportedAt":"2026-11-20T03:00:00Z","fill":""#;
+    let mut body = prefix.to_vec();
+    body.resize(bytes - 2, b'a');
+    body.extend_from_slice(b"\"}");
+    body
+}
+
+async fn start_download(server: &Server, id: &str) -> tokio::net::TcpStream {
+    use tokio::io::AsyncWriteExt;
+    let mut stream = server.connect().await;
+    let head = format!("GET /v2/backups/{id} HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {}\r\n\r\n", common::TOKEN);
+    stream.write_all(head.as_bytes()).await.unwrap();
+    stream
+}
+
+#[tokio::test]
+async fn only_one_download_holds_a_copy_until_its_body_is_sent() {
+    let directory = scratch("downloads");
+    let provider = Provider::fixed(Upstream::Fail);
+    let gateway = Gateway::new(common::config(), Arc::new(common::Link(provider.clone()))).unwrap()
+        .with_clock(|| NOVEMBER).with_backup_store(Arc::new(BackupStore::new(&directory)))
+        .with_backup_deadline_ms(1_500);
+    let server = start(gateway).await;
+    let body = large_export(MAX_BACKUP_BYTES);
+    let id = put(&server, &body).await.json()["id"].as_str().unwrap().to_owned();
+    // The first download is accepted but not read, so its body stays unsent.
+    let mut first = start_download(&server, &id).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    // A second one waits its turn and is refused at the deadline.
+    let waiting = std::time::Instant::now();
+    let refused = server.get(&format!("/v2/backups/{id}"), &authorized()).await;
+    assert_eq!((refused.status, refused.error().as_str()), (429, "backup_busy"));
+    assert_eq!(refused.header("retry-after"), Some("30"));
+    assert!(waiting.elapsed() >= std::time::Duration::from_millis(1_400), "queued until the deadline");
+    // An upload has its own turn and is not held up by the download.
+    assert_eq!(put(&server, &export("b")).await.status, 201);
+    // Once the first body has been read in full, the next download goes through.
+    let first_reply = common::read_reply(&mut first).await;
+    assert_eq!(first_reply.status, 200);
+    assert_eq!(first_reply.body.len(), body.len());
+    let second = server.get(&format!("/v2/backups/{id}"), &authorized()).await;
+    assert_eq!((second.status, second.body.len()), (200, body.len()));
+}
+
+#[tokio::test]
+async fn a_queued_download_starts_when_the_first_one_has_been_sent() {
+    let directory = scratch("download-queue");
+    let provider = Provider::fixed(Upstream::Fail);
+    let gateway = Gateway::new(common::config(), Arc::new(common::Link(provider.clone()))).unwrap()
+        .with_clock(|| NOVEMBER).with_backup_store(Arc::new(BackupStore::new(&directory)));
+    let server = start(gateway).await;
+    let body = large_export(MAX_BACKUP_BYTES);
+    let id = put(&server, &body).await.json()["id"].as_str().unwrap().to_owned();
+    let mut first = start_download(&server, &id).await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let mut second = start_download(&server, &id).await;
+    // While the first body is unsent, the second gets no answer at all.
+    let mut byte = [0u8; 1];
+    use tokio::io::AsyncReadExt;
+    let early = tokio::time::timeout(std::time::Duration::from_millis(500), second.read(&mut byte)).await;
+    assert!(early.is_err(), "the second download waits for the first");
+    assert_eq!(common::read_reply(&mut first).await.status, 200);
+    let reply = common::read_reply(&mut second).await;
+    assert_eq!((reply.status, reply.body.len()), (200, body.len()));
 }
