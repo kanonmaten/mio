@@ -179,11 +179,11 @@ Läs först `control/README.md`, `control/DESIGN.md` och lärdomarna om [gpui-ki
 
 - [x] Rita ikonen: hela ordet "mio" i rundade gemener, o:et som en ring med en liten ljudvåg, i Mios blå ton (aldrig violett). Separata lager för bakgrund, ord och ljudvåg, så att iOS 27 ritar glas samt mörkt och tonat läge. Icon Composer är ett Mac-program och går inte att köra här, så bygg `.icon`-filen för hand (lagren som SVG och filens JSON) enligt Apples dokumentation. Huvudsessionen lägger in den i `project.pbxproj` efter våg 4, och "Bygg Mio IPA" visar om `actool` godtar den. Godtas den inte efter två försök: märk punkten `(hoppad: <felet>)` och låt användaren göra filen i Icon Composer.
 - [x] Behåll PNG-filerna i `Mio/Assets.xcassets/AppIcon.appiconset` som reserv och byt ut dem mot samma motiv.
-- [ ] Hämta skärmbilderna från "Bygg Mio IPA" (`gh run download`) och granska dem i ljust, mörkt och tonat läge.
+- [x] Hämta skärmbilderna från "Bygg Mio IPA" (`gh run download`) och granska dem i ljust, mörkt och tonat läge.
 
 ## Sist: överlämning
 
-- [ ] [CHANGELOG.md](../CHANGELOG.md) för det som syns för användaren, och [STATUS.md](STATUS.md) bara med kontroller som faktiskt körts.
+- [x] [CHANGELOG.md](../CHANGELOG.md) för det som syns för användaren, och [STATUS.md](STATUS.md) bara med kontroller som faktiskt körts.
 - [ ] Kör "Bygg Mio IPA" för sista commiten med `uitester` och `diagnostik` på, och vänta tills den är grön.
 - [ ] Skriv överlämningen till användaren: vad som ändrats, vilka commitar som är provade och var, och vad användaren själv gör. Det är `./server/install.sh` på datorn, Prova för Mistral i Mio Kontroll (och gränsen för `lesson` efter mätningen), att stänga av träning på API-data i Mistrals konsol, provet av Mio Kontroll på datorn, telefonproven nedan, och de antaganden som gjorts.
 - [x] Lägg till telefonprov i [helhetstestet](TESTPLAN_HELHET.md): en hel lektion med provtips och läxor, en skoldag med vardagsfångst och låg batterinivå (lektionen fortsätter), direkt anteckning med Ångra, signeringsnotisen och en återställning från säkerhetskopian.

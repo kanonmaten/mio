@@ -1,6 +1,19 @@
 # Bygg- och teststatus
 
-Senast uppdaterad **2026-11-20**. Version **0.9.1, ej släppt** (0.9.0 är revisionen `8f90ddc`, ej taggad). Den här filen innehåller bara vad som faktiskt är kontrollerat. Äldre poster finns i Git-historiken (`git log -- docs/STATUS.md`). [Ändringsloggen](../CHANGELOG.md) beskriver vad koden gör; [helhetstestet](TESTPLAN_HELHET.md) beskriver acceptansproven.
+Senast uppdaterad **2026-11-21**. Version **0.9.1, ej släppt** (0.9.0 är revisionen `8f90ddc`, ej taggad). Den här filen innehåller bara vad som faktiskt är kontrollerat. Äldre poster finns i Git-historiken (`git log -- docs/STATUS.md`). [Ändringsloggen](../CHANGELOG.md) beskriver vad koden gör; [helhetstestet](TESTPLAN_HELHET.md) beskriver acceptansproven.
+
+## Grillningen, 2026-11-20–21
+
+[Planen](PLAN_GRILLNING.md) genomförd i fyra vågor, `0832127` till sista commiten. Inget är installerat på datorn, ingen riktig modelltrafik har körts och inget är provat på telefonen.
+
+| Kontroll | Resultat |
+|---|---|
+| Hela grinden, lokalt | `mio-verify verify` godkänd genom pre-push-kroken före varje push: `01fed99` (våg 2), `a4cbd76` (våg 3), `7be253d` (våg 4) och sista commiten. `swift-core` 456 tester, `project` 356 strukturkontroller, gatewayen 155 tester, Pianissimo 133 tester, Mio Kontroll 120 tester, alla utan fel. |
+| Linux-grinden på GitHub | Godkänd i båda jobben för `0832127`, `01fed99`, `a4cbd76` och `7be253d`. |
+| Bygg Mio IPA vid push | `01fed99` (#64), `a4cbd76` (#65) och `7be253d` (#66): IPA skapad och enhetstesterna godkända. I #65 föll först `AudioReliabilityTests.testGracefulStopExpiresOriginalAudioBeforeSlowGapCallbackCompletes` (tidsberoende, ljudkoden oförändrad) och godkändes vid omkörning av det felade jobbet. #65 visade också att `actool` godtar den handbyggda `AppIcon.icon`. |
+| Bygg Mio IPA med UI-tester och diagnostik | [#67](https://github.com/kanonmaten/mio/actions/runs/44877236904) på `7be253d`, manuell: IPA skapad, 469 enhetstester godkända, diagnostiken `PASS: complete-concurrency diagnostic, no relevant warnings.` (kvar är bara iOS 27-avrådningar för ljud-API:er). UI-testet `testSettingsSheetLeadsToPairingTranscriptionAndAI` föll två gånger: "Avancerat" ligger nu sist i en lat lista och fanns inte förrän den scrollats fram. Testet scrollar nu; resultatet för sista commiten står i raden nedan. |
+| Skärmbilder | Från #67 (ljust läge, simulator): Lektioner, Förslag, Fånga och inställningsarket ser rena ut; arket visar "Något är fel" eftersom simulatorn inte är parad. UI-testerna tar inga bilder i mörkt eller tonat läge och ingen bild av hemskärmen; ikonens PNG-filer i ljust, mörkt och tonat läge är granskade för hand. Glaslagren i `AppIcon.icon` är inte sedda på en enhet. |
+| Telefon och dator | Inget provat. Se provlistan i [helhetstestet](TESTPLAN_HELHET.md#efter-grillningen--nya-prov-ej-körda-på-iphone) och [Prov på datorn](../control/README.md#prov-på-datorn). |
 
 ## Snabbare CI, 2026-11-20
 
