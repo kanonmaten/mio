@@ -166,6 +166,7 @@ Skrivna 2026-11-20 i fas 0 av [planen](PLAN_GRILLNING.md), efter [besluten](DECI
 - `MioSession.subject` (valfritt, 1–40 tecken, bara på en avslutad lektionssession; tomt tar bort det), `MioAnalysisRecord.examHints` och `subjectSuggestion` ligger i radernas JSON. `MioAnalysisFragment.speakerRole` skickas bara till `/v2/lesson-notes`. SwiftData-schemat är oförändrat.
 - Notisrutten `lessonReview` med `userInfo` `{"mioRoute":"lessonReview","mioSessionID":"<UUID>"}` (extra nycklar avvisas), notis-ID `app.mio.lesson.notes-ready.<UUID>` och generell text. Öppnar Lektioner och granskningsarket, eller Hem om lektionen är borta.
 - `mio.lesson.notesLatency.v1` (sessions-ID, sekunder och tid, högst 30) och `mio.vocabulary.asked.v1` (64-bitars FNV-1a-hashar av normaliserade fraser, aldrig orden) i UserDefaults. Båda nollställs vid fullständig radering.
+- `mio.lesson.notesReadyAnnounced.v1`: UUID:n för lektioner som redan fått granskningsarket eller notisen, högst 200 (äldsta först ut), nollställs vid fullständig radering. Citat i `examHints`, `sections`, `candidates` och huvudpunkter får vara upp till 2 400 byte i appen, samma som gatewayen. Kastas provtips får delen en textfri osäkerhet om hur många som inte visas.
 
 ### `/v2/status`: resonemang, schema och användning
 
