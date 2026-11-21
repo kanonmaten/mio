@@ -49,6 +49,11 @@ final class MioSystemServices {
     @ObservationIgnored private let notificationCenter = UNUserNotificationCenter.current()
     @ObservationIgnored private var notificationDelegate: MioNotificationDelegate?
     @ObservationIgnored private let alarmManager = AlarmManager.shared
+    /// Daily planning runs one at a time (review of fas 5). Turning a notification off bumps the
+    /// generation at once, so a planning already running adds nothing more and removes what it
+    /// added after the change; the next planning in the chain then removes the rest.
+    @ObservationIgnored private var dailyTail: Task<Void, Never>?
+    @ObservationIgnored private var dailyGeneration: UInt64 = 0
     @ObservationIgnored private var knownAlarmIDs: Set<UUID> = Set(
         (UserDefaults.standard.stringArray(forKey: "mio.alarm.identities") ?? []).compactMap(UUID.init(uuidString:))
     )
@@ -164,9 +169,32 @@ final class MioSystemServices {
     /// Turns a daily notification off: its time, the repeating request and every planned day.
     func cancelDailyReminder(_ kind: MioDailyReminder) async {
         UserDefaults.standard.removeObject(forKey: MioDailyDigest.timeKey(kind.id))
-        await removeDaily(kind)
+        dailyGeneration &+= 1
+        await serializedDaily { [weak self] in
+            guard let self else { return }
+            await self.removeDaily(kind)
+            await self.planDailyNotices(now: .now)
+        }
         await refresh()
         statusMessage = "Notisen är avstängd."
+    }
+
+    /// "Radera all data": the daily settings go first and the generation moves, so a planning
+    /// that is running cannot add notifications back after they are removed below.
+    private func stopDailyForDeletion() {
+        MioDailyDigest.resetSettings(in: .standard)
+        dailyGeneration &+= 1
+    }
+
+    /// Chains daily work so that planning, turning off and deletion never interleave.
+    private func serializedDaily(_ work: @escaping @MainActor @Sendable () async -> Void) async {
+        let previous = dailyTail
+        let task = Task { @MainActor in
+            await previous?.value
+            await work()
+        }
+        dailyTail = task
+        await task.value
     }
 
     /// What today's and the coming days' texts are built from. Supplied by the app, read when planning.
@@ -176,12 +204,22 @@ final class MioSystemServices {
     /// background, after the night's backup and when proposals or approved items change. Never asks
     /// for permission and never adds anything without it.
     func replanDailyNotices(now: Date = .now) async {
+        await serializedDaily { [weak self] in await self?.planDailyNotices(now: now) }
+    }
+
+    /// One planning, only inside `serializedDaily`. Every add is checked against the generation
+    /// read at the start; an add that lands after a change is taken back at once.
+    private func planDailyNotices(now: Date) async {
+        let generation = dailyGeneration
         let status = await notificationCenter.notificationSettings().authorizationStatus
         notificationStatus = status
         let pending = await notificationCenter.pendingNotificationRequests()
         let defaults = UserDefaults.standard
-        // Before fas 5 only the repeating request held the time; keep it as the stored time.
-        for kind in MioDailyReminder.allCases where defaults.object(forKey: MioDailyDigest.timeKey(kind.id)) == nil {
+        // Before fas 5 only the repeating request held the time; keep it as the stored time. Never
+        // after a change during this planning: `pending` may then still list a request that was
+        // turned off, and its time must not come back.
+        for kind in MioDailyReminder.allCases where dailyGeneration == generation
+            && defaults.object(forKey: MioDailyDigest.timeKey(kind.id)) == nil {
             if let trigger = pending.first(where: { $0.identifier == kind.id })?.trigger as? UNCalendarNotificationTrigger,
                let hour = trigger.dateComponents.hour {
                 defaults.set(hour * 60 + (trigger.dateComponents.minute ?? 0), forKey: MioDailyDigest.timeKey(kind.id))
@@ -189,6 +227,8 @@ final class MioSystemServices {
         }
         guard status == .authorized || status == .provisional else { return }
         let snapshot = await dailyContent?() ?? MioDailyContentSnapshot()
+        // Turned off or deleted meanwhile: the work queued behind this planning removes the rest.
+        guard dailyGeneration == generation else { return }
         let calendar = Calendar.current
         for kind in MioDailyReminder.allCases {
             guard let minutes = defaults.object(forKey: MioDailyDigest.timeKey(kind.id)) as? Int else {
@@ -203,7 +243,8 @@ final class MioSystemServices {
                 let content = notificationContent(body: route.notificationBody, route: route)
                 let trigger = UNCalendarNotificationTrigger(dateMatching: DateComponents(hour: minutes / 60, minute: minutes % 60),
                                                             repeats: true)
-                try? await notificationCenter.add(UNNotificationRequest(identifier: kind.id, content: content, trigger: trigger))
+                guard await addDaily(UNNotificationRequest(identifier: kind.id, content: content, trigger: trigger),
+                                     generation: generation) else { return }
                 continue
             }
             let plan = MioDailyDigest.plan(base: kind.id, minutes: minutes, now: now, calendar: calendar) { day, isToday in
@@ -223,8 +264,9 @@ final class MioSystemServices {
             for notice in plan {
                 let trigger = UNCalendarNotificationTrigger(dateMatching: notice.components, repeats: false)
                 // Adding with the same identifier replaces the earlier text for that day.
-                try? await notificationCenter.add(UNNotificationRequest(identifier: notice.id,
-                    content: notificationContent(body: notice.body, route: route), trigger: trigger))
+                guard await addDaily(UNNotificationRequest(identifier: notice.id,
+                    content: notificationContent(body: notice.body, route: route), trigger: trigger),
+                                     generation: generation) else { return }
             }
         }
         await refresh()
@@ -256,6 +298,18 @@ final class MioSystemServices {
         }
         guard notificationStatus == .authorized || notificationStatus == .provisional else {
             errorMessage = "Mio får inte visa notiser. Tillåt dem i iPhones Inställningar → Mio → Notiser."
+            return false
+        }
+        return true
+    }
+
+    /// Adds one daily request unless the settings changed since the planning began. Returns false
+    /// when the planning must stop; a request that landed after the change is removed again.
+    private func addDaily(_ request: UNNotificationRequest, generation: UInt64) async -> Bool {
+        guard dailyGeneration == generation else { return false }
+        try? await notificationCenter.add(request)
+        guard dailyGeneration == generation else {
+            notificationCenter.removePendingNotificationRequests(withIdentifiers: [request.identifier])
             return false
         }
         return true
@@ -360,6 +414,8 @@ final class MioSystemServices {
         errorMessage = nil
         statusMessage = nil
         defer { isBusy = false }
+        // Before anything is removed, so no planning puts the daily notifications back.
+        stopDailyForDeletion()
         do {
             if alarmManager.authorizationState == .authorized {
                 let currentAlarms = try alarmManager.alarms

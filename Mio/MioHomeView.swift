@@ -185,7 +185,8 @@ struct MioHomeView: View {
     }
 
     private var canStartListening: Bool {
-        [.off, .failed, .unavailable].contains(model.runState) && !server.isEmpty
+        // While a chosen backup copy waits for the restart, Fånga explains why nothing starts.
+        [.off, .failed, .unavailable].contains(model.runState) && !server.isEmpty && !workflow.restorePending
     }
 
     /// A reminder as Reminders shows it; Mio does not change or complete it.

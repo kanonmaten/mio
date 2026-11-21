@@ -43,7 +43,9 @@ final class MioStoreResolver: Sendable {
             // repository opens, so nothing can write beside it. Never into legacy or temporary stores.
             let deletionPending = FileManager.default.fileExists(
                 atPath: files.directory.appendingPathComponent("operations-v1.json").path)
-            let restored = await MioBackupRestore.applyPending(files: files, target: target, deletionPending: deletionPending)
+            // Any deletion begun after the copy was chosen refuses it, even one that has finished.
+            let restored = await MioBackupRestore.applyPending(files: files, target: target, deletionPending: deletionPending,
+                deletionGeneration: MioBackupRestore.deletionGeneration(in: .standard))
             return stores(container: container, message: [message, restored].compactMap { $0 }.joined(separator: "\n\n").nilIfEmpty)
         case let .useLegacyFiles(message):
             return .legacyFiles(message: message)

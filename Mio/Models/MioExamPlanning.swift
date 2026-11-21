@@ -29,26 +29,46 @@ struct MioExamRecord: Codable, Hashable, Sendable {
     }
 }
 
-/// Local word rules, no AI: a title reads as an exam when a word is "prov" or ends in "prov" or
-/// "provet" ("Biologiprov", "glosprovet"), or is a hearing or test word. "Prova", "provat" and
-/// "prover" do not count, so "prova klänningen" is never an exam.
+/// Local word rules, no AI: a title reads as an exam when a word is "prov" or ends in "prov",
+/// "provet" or "proven" ("Biologiprov", "glosprovet"), or is a hearing or test word. "Prova",
+/// "provat" and "prover" do not count, so "prova klänningen" is never an exam. Neither do the
+/// everyday samples and tests that are not school exams ("blodprov", "stickprov", "covid-prov"):
+/// a hyphenated compound is read as one word, and a compound whose first part is in
+/// `nonSchoolStems` is never an exam.
 enum MioExamDetector {
     private static let exactWords: Set<String> = [
         "prov", "provet", "proven", "förhör", "förhöret", "läxförhör", "läxförhöret", "tenta", "tentan",
         "skrivning", "skrivningen", "provskrivning", "provskrivningen", "np"
     ]
+    private static let provSuffixes = ["provet", "proven", "prov"]
+
+    /// First parts of "-prov" compounds that are samples or medical, product or work tests, never
+    /// a school exam (review of fas 5, 2026-11-21). Kept small and common; a miss only means one
+    /// plan without a countdown, never a lost plan.
+    static let nonSchoolStems: Set<String> = [
+        "blod", "stick", "urin", "smak", "prov", "alkohol", "drog", "narkotika", "covid", "corona", "pcr",
+        "saliv", "cell", "vävnads", "avförings", "allergi", "graviditets", "dna", "hår", "hud", "vatten",
+        "jord", "luft", "varu", "gratis", "parfym", "doft", "färg", "tyg", "material", "arbets", "snabb",
+        "antigen", "antikropps", "sekret", "svalg", "näs", "gen", "mögel", "radon", "mjölk", "foder"
+    ]
 
     static func looksLikeExam(_ text: String) -> Bool {
         words(in: text).contains { word in
-            exactWords.contains(word) || (word.count > 4 && (word.hasSuffix("prov") || word.hasSuffix("provet")))
-                || word.hasSuffix("förhör") || word.hasSuffix("förhöret")
+            if let suffix = provSuffixes.first(where: { word.hasSuffix($0) }) {
+                let stem = String(word.dropLast(suffix.count))
+                if stem.isEmpty { return true }
+                return word.count > 4 && !nonSchoolStems.contains(stem)
+            }
+            return exactWords.contains(word) || word.hasSuffix("förhör") || word.hasSuffix("förhöret")
         }
     }
 
+    /// Lowercased words; a hyphen inside a word joins its parts ("covid-prov" is "covidprov").
     static func words(in text: String) -> [String] {
         text.lowercased(with: MioExamSubjects.swedish)
-            .split { !$0.isLetter }
-            .map(String.init)
+            .split { !$0.isLetter && $0 != "-" }
+            .map { $0.split(separator: "-").joined() }
+            .filter { !$0.isEmpty }
     }
 }
 

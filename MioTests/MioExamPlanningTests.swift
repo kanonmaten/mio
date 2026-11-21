@@ -39,6 +39,17 @@ final class MioExamPlanningTests: XCTestCase {
         }
     }
 
+    func testSamplesAndOtherNonSchoolTestsAreNotExams() {
+        for title in ["Blodprov på vårdcentralen", "Stickprov i lagret", "Lämna urinprov", "Smakprov på ost",
+                      "Provprov", "Alkoholprov", "Drogprov på jobbet", "Covidprov", "Covid-prov i morgon",
+                      "Salivprovet", "Cellprov hos barnmorskan", "Arbetsprov till ansökan", "Blodproven är klara"] {
+            XCTAssertFalse(MioExamDetector.looksLikeExam(title), title)
+        }
+        for title in ["Biologi-prov", "Prov - kemi", "Glosproven", "Matteprov och blodprov"] {
+            XCTAssertTrue(MioExamDetector.looksLikeExam(title), title)
+        }
+    }
+
     func testAnExamRecordNeedsADateAndAnExamTitleAndMatchesAKnownSubject() {
         XCTAssertNil(MioExamRecord.make(kind: .plan, title: "Biologiprov", date: nil, isAllDay: true, subject: nil))
         XCTAssertNil(MioExamRecord.make(kind: .plan, title: "Fika", date: date(5), isAllDay: true, subject: nil))

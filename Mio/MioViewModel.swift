@@ -80,6 +80,9 @@ final class MioViewModel {
     @ObservationIgnored var onSilenceNotice: ((MioSilenceNotice) -> Void)?
     /// Two short or one long vibration after "Mio, kom ihåg/notera"; the app sets the native player.
     @ObservationIgnored var directFeedback: @MainActor (MioDirectFeedback) -> Void = { _ in }
+    /// A sentence when no capture or lesson may start, or nil. Set by the workflow: while a chosen
+    /// backup copy waits for the restart, anything recorded would be replaced at the next launch.
+    @ObservationIgnored var captureBlocker: @MainActor () -> String? = { nil }
     /// Level, charging and Low Power Mode; the app sets the native reader.
     @ObservationIgnored var batteryStatus: @MainActor () -> MioBatteryStatus = { .unknown }
     /// Why Mio paused everyday capture by itself; cleared when she starts, pauses or stops.
@@ -246,6 +249,11 @@ final class MioViewModel {
             abandonUnstartedLesson()
             return
         }
+        if let blocked = captureBlocker() {
+            errorMessage = blocked
+            abandonUnstartedLesson()
+            return
+        }
         guard !isSwitchingCaptureMode else { return }
         if currentSession?.isLesson == true, currentSession?.endedAt != nil { returnToEveryday() }
         guard runState == .off
@@ -274,6 +282,7 @@ final class MioViewModel {
     func beginLesson(title: String) async {
         guard !isSwitchingCaptureMode, !isLessonActive,
               [.off, .paused, .listening, .interrupted, .failed, .unavailable].contains(runState) else { return }
+        if let blocked = captureBlocker() { errorMessage = blocked; return }
         guard MioMaintenanceState.shared.beginWrite() else { return }
         isSwitchingCaptureMode = true
         errorMessage = nil

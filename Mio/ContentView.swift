@@ -108,7 +108,10 @@ struct ContentView: View {
             model.handleScenePhase(newPhase)
             if newPhase == .background, storesLoaded { Task { await workflow.pruneExpiredEverydaySessions() } }
             if newPhase != .inactive { replanNotices() }
-            if newPhase == .active { day.refresh(); followDayPhase(); resolveNotificationRoute(); resolveLink(); resumeAI() }
+            if newPhase == .active {
+                day.refresh(); followDayPhase(); resolveNotificationRoute(); resolveLink(); resumeAI()
+                if storesLoaded { workflow.refreshRestorePending() }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in day.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange).receive(on: RunLoop.main)) { _ in day.refresh() }
@@ -127,6 +130,13 @@ struct ContentView: View {
             resumeAI()
         }
         .onChange(of: assistant.stateRevision) { _, _ in workflow.invalidateExportIfSourcesChanged() }
+        // A pending restore removed by a deletion or by its 24-hour limit is said once.
+        .alert("Återställningen", isPresented: Binding(get: { workflow.restoreNotice != nil && !showSettings },
+                                                       set: { if !$0 { workflow.dismissRestoreNotice() } })) {
+            Button("OK", role: .cancel) { workflow.dismissRestoreNotice() }
+        } message: {
+            Text(workflow.restoreNotice ?? "")
+        }
         .onChange(of: assistant.pendingCount) { _, _ in replanNotices() }
         // The nightly copy is scheduled only once the PC's status shows that it takes copies.
         .onChange(of: discovery.lastStatus?.backup) { _, _ in
@@ -394,14 +404,20 @@ private struct StatusHeader: View {
 
 private struct ControlsCard: View {
     let model: MioViewModel
+    @Environment(MioWorkflowCoordinator.self) private var workflow
 
     var body: some View {
         GlassEffectContainer(spacing: 16) {
             VStack(spacing: 12) {
                 switch model.runState {
                 case .off, .failed, .unavailable:
-                    PrimaryActionButton(title: "Starta Mio", symbol: "mic.fill", color: MioTheme.tint) {
-                        model.beginListening()
+                    // A chosen backup copy replaces everything at the next launch: nothing starts.
+                    if workflow.restorePending {
+                        MioRestorePendingNotice()
+                    } else {
+                        PrimaryActionButton(title: "Starta Mio", symbol: "mic.fill", color: MioTheme.tint) {
+                            model.beginListening()
+                        }
                     }
 
                 case .preparing:

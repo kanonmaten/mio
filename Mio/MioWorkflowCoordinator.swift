@@ -45,7 +45,21 @@ final class MioWorkflowCoordinator {
     @ObservationIgnored private var automatic: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var endingEverydaySessionID: UUID?
-    @ObservationIgnored private var bootstrapped = false
+    /// The one launch bootstrap; later callers (the nightly backup) wait for the same run.
+    @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
+    @ObservationIgnored private var bootstrapFinished = false
+    /// Where a chosen backup copy waits for the restart (fas 6). Nil in tests that do not opt in.
+    @ObservationIgnored private let restoreFiles: MioLegacyStoreFiles?
+    /// Whether a chosen copy waits for the restart. While it does, no capture or lesson starts:
+    /// anything recorded would be replaced at the next launch.
+    private(set) var restorePending = false
+    /// One sentence when a pending restore was removed without her asking (a deletion, or the
+    /// 24-hour limit). Cleared by `dismissRestoreNotice()`.
+    private(set) var restoreNotice: String?
+    /// Called after "Radera all data" succeeded, for state outside the portable core (the
+    /// scheduled backup request and its in-memory attempt).
+    @ObservationIgnored var onAllDataDeleted: (@MainActor () -> Void)?
+    static let restorePendingCaptureMessage = "En återställning väntar – starta om Mio eller avbryt den."
     @ObservationIgnored private var isPruning = false
     @ObservationIgnored private var loadedPresentation = false
     private struct ExportRevision: Equatable {
@@ -67,8 +81,10 @@ final class MioWorkflowCoordinator {
          reminders: MioReminderPort? = nil, removesLegacyItems: Bool = false,
          clearCredentials: (@MainActor () throws -> Void)? = nil,
          pendingLessonDefaults: UserDefaults = .standard, metrics: MioMetricArchive = .shared,
+         restoreFiles: MioLegacyStoreFiles? = nil,
          storesAreDurable: @escaping @MainActor () async -> Bool = { true }) {
         self.storesAreDurable = storesAreDurable
+        self.restoreFiles = restoreFiles
         self.pendingLessonDefaults = pendingLessonDefaults
         self.reminders = reminders ?? .native
         let systemActions = systemActions ?? .native
@@ -124,18 +140,78 @@ final class MioWorkflowCoordinator {
                 catch { return .failure("Kunde inte radera diagnostikjournalen. Försök igen.") }
             }
         }, storesAreDurable: storesAreDurable)
+        restorePending = restoreFiles.map(MioBackupRestore.hasPending) ?? false
+        capture.captureBlocker = { [weak self] in
+            self?.restorePending == true ? Self.restorePendingCaptureMessage : nil
+        }
     }
 
+    /// Runs once per launch: deletion recovery first, then the stored data. A second caller, such
+    /// as the nightly backup started by iOS before any view exists, waits for the same run.
     func bootstrap() async {
-        guard !bootstrapped else { return }
-        bootstrapped = true
-        installCaptureRouting()
-        let recovered = await resumeDeletion()
-        guard recovered.isSuccess else { return }
-        await loadPresentationIfNeeded()
-        if removesLegacyItems { await removeLegacyItemsOnce() }
-        resumePendingLessons()
-        observeAnalysisAvailability()
+        if let bootstrapTask { await bootstrapTask.value; return }
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            installCaptureRouting()
+            let recovered = await resumeDeletion()
+            if recovered.isSuccess {
+                await loadPresentationIfNeeded()
+                if removesLegacyItems { await removeLegacyItemsOnce() }
+                resumePendingLessons()
+                observeAnalysisAvailability()
+            }
+            // The launch has applied or refused any copy by now (the stores are resolved).
+            refreshRestorePending()
+            bootstrapFinished = true
+        }
+        bootstrapTask = task
+        await task.value
+    }
+
+    /// Whether background work may read or plan from stored data: the launch bootstrap has run,
+    /// no deletion is blocked or unfinished, and the data is loaded from durable stores.
+    func readyForBackgroundWork() async -> Bool {
+        await bootstrap()
+        guard bootstrapFinished, loadedPresentation, !maintenance.recoveryBlocked,
+              deletion.pendingOperationID == nil else { return false }
+        return await storesAreDurable()
+    }
+
+    /// Re-reads the pending restore. A copy older than 24 hours is removed with a notice.
+    func refreshRestorePending(now: Date = .now) {
+        guard let restoreFiles else { restorePending = false; return }
+        if MioBackupRestore.hasPending(in: restoreFiles),
+           let metadata = MioBackupRestore.readMetadata(in: restoreFiles),
+           let refused = MioBackupRestore.refusal(for: metadata,
+               deletionGeneration: MioBackupRestore.deletionGeneration(in: pendingLessonDefaults), now: now) {
+            if (try? MioBackupRestore.cancel(in: restoreFiles)) != nil { restoreNotice = refused }
+        }
+        restorePending = MioBackupRestore.hasPending(in: restoreFiles)
+    }
+
+    /// "Avbryt återställningen", from settings or from the notice on Fånga and lesson start.
+    @discardableResult
+    func cancelPendingRestore() -> Bool {
+        guard let restoreFiles else { return true }
+        let removed = (try? MioBackupRestore.cancel(in: restoreFiles)) != nil
+        restorePending = MioBackupRestore.hasPending(in: restoreFiles)
+        return removed
+    }
+
+    func dismissRestoreNotice() { restoreNotice = nil }
+
+    /// Removes a pending restore when a deletion begins and bumps the deletion generation, so a
+    /// copy chosen before the deletion can never bring the deleted data back at the next launch
+    /// (review of fas 6). Returns false only when the copy is still on disk.
+    private func abandonPendingRestoreForDeletion() -> Bool {
+        MioBackupRestore.noteDeletion(in: pendingLessonDefaults)
+        guard let restoreFiles, MioBackupRestore.hasPending(in: restoreFiles) else { return true }
+        let removed = (try? MioBackupRestore.cancel(in: restoreFiles)) != nil
+        restorePending = MioBackupRestore.hasPending(in: restoreFiles)
+        if removed {
+            restoreNotice = "Återställningen avbröts, eftersom du raderade data efter att du valde kopian."
+        }
+        return removed
     }
 
     /// 0.9.1 (user decision 2026-10-13): local notes, tasks, plans and memories from before the
@@ -554,10 +630,19 @@ final class MioWorkflowCoordinator {
 
     /// The nightly copy (fas 6): the same consistent snapshot as the export, read in the command
     /// queue behind an exclusive snapshot, without diagnostics. Runs only while nothing is being
-    /// captured (a paused capture is allowed, see `checkpointForBackup`).
+    /// captured (a paused capture is allowed, see `checkpointForBackup`), and only after the
+    /// launch bootstrap and deletion recovery succeeded: data an unfinished deletion would remove
+    /// is never sent. Cancelling the caller (iOS ending the background task) reaches the queued
+    /// operation through `enqueue`'s cancellation handler and gives `.timeout`, never data.
     func backupExport() async -> Result<Data, MioBackupError> {
+        guard await readyForBackgroundWork() else { return .failure(.dataBusy) }
+        guard !Task.isCancelled else { return .failure(.timeout) }
         let produced = MioBackupResultBox()
         _ = await enqueue(recordsOutcome: false) { [self] in
+            guard !Task.isCancelled else { produced.value = .failure(.timeout); return .cancelled }
+            guard !maintenance.recoveryBlocked, deletion.pendingOperationID == nil else {
+                produced.value = .failure(.dataBusy); return .conflict("")
+            }
             guard [.off, .failed, .unavailable, .paused].contains(capture.runState) else {
                 produced.value = .failure(.capturing); return .conflict("")
             }
@@ -569,23 +654,42 @@ final class MioWorkflowCoordinator {
                 guard checkpoint.isSuccess else { produced.value = .failure(.localData); return checkpoint }
                 let export = MioLocalExport(content: try await content.latestItems(), sessions: try await capture.latestSessions(),
                                             assistant: try await assistant.latestDocument())
-                produced.value = .success(try MioBackupService.encode(export))
+                try Task.checkCancellation()
+                // The JSON encoding can take seconds for a large export: off the main actor.
+                let data = try await Task.detached(priority: .utility) { try MioBackupService.encode(export) }.value
+                try Task.checkCancellation()
+                produced.value = .success(data)
                 return .success
             } catch is CancellationError {
-                produced.value = .failure(.dataBusy); return .cancelled
+                produced.value = .failure(.timeout); return .cancelled
             } catch {
                 produced.value = .failure(.localData); return .failure("")
             }
         }
+        if Task.isCancelled { return .failure(.timeout) }
         return produced.value
     }
 
     /// Restoring (fas 6) is refused while capture runs or a deletion waits; the copy itself is
     /// applied at the next launch (`MioBackupRestore`), before any repository opens.
     var restoreBlocker: MioBackupError? {
-        if ![.off, .failed, .unavailable].contains(capture.runState) { return .capturing }
+        if ![.off, .failed, .unavailable].contains(capture.runState) || capture.isSwitchingCaptureMode { return .capturing }
         if maintenance.blocksWork { return .dataBusy }
         return nil
+    }
+
+    /// The deletion generation a restore is chosen under; see `MioBackupRestore.stage`.
+    var restoreDeletionGeneration: Int { MioBackupRestore.deletionGeneration(in: pendingLessonDefaults) }
+
+    /// Writes a downloaded copy as the pending restore, refusing it while capture runs, while a
+    /// data operation blocks work, or when a deletion began after `deletionGeneration` was read.
+    func stageRestore(_ data: Data, deletionGeneration: Int, now: Date = .now) throws -> Date {
+        if let restoreBlocker { throw restoreBlocker }
+        guard let restoreFiles else { throw MioBackupError.localData }
+        let exportedAt = try MioBackupRestore.stage(data, files: restoreFiles, deletionGeneration: deletionGeneration,
+                                                    defaults: pendingLessonDefaults, now: now)
+        restorePending = MioBackupRestore.hasPending(in: restoreFiles)
+        return exportedAt
     }
 
     func deleteAll() async -> MioOperationOutcome { await delete(scope: .all, targetID: nil) }
@@ -700,6 +804,11 @@ final class MioWorkflowCoordinator {
             guard !maintenance.recoveryBlocked else { return .conflict("Slutför den väntande raderingen med Försök igen innan du gör andra ändringar.") }
             guard await maintenance.beginExclusive(deleting: true) else { return .conflict("En dataåtgärd pågår redan.") }
             defer { maintenance.endExclusive() }
+            // Before any intent is written: a pending restore is a full unencrypted copy that the
+            // next launch would apply, bringing back what she deletes now.
+            guard abandonPendingRestoreForDeletion() || scope != .all else {
+                return .failure("Den väntande återställningen kunde inte tas bort. Försök igen.")
+            }
             let outcome = await deletion.begin(scope: scope, targetID: targetID)
             maintenance.setRecoveryBlocked(!outcome.isSuccess)
             if outcome.isSuccess {
@@ -710,6 +819,9 @@ final class MioWorkflowCoordinator {
                     MioLessonNotesReadyLog.reset(in: pendingLessonDefaults)
                     MioVocabularyAskedLog.reset(in: capture.vocabularyDefaults)
                     MioBackupAttempt.clear(in: pendingLessonDefaults)
+                    // Morning and evening notifications are off again, as before fas 5.
+                    MioDailyDigest.resetSettings(in: pendingLessonDefaults)
+                    onAllDataDeleted?()
                 }
                 else if scope == .session, let targetID { clearLessonPending(targetID) }
                 // Invalidation cancelled queued automatic work; surviving lessons are retried.

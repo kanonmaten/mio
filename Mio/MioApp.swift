@@ -31,6 +31,7 @@ struct MioApp: App {
         })
         let workflow = MioWorkflowCoordinator(capture: capture, content: content,
                                               assistant: assistant, analysis: analysis, removesLegacyItems: true,
+                                              restoreFiles: .standard,
                                               storesAreDurable: { await !MioStoreResolver.shared.stores().isTemporary })
         _model = State(initialValue: capture)
         _contentModel = State(initialValue: content)

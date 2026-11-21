@@ -166,48 +166,190 @@ final class MioBackupTests: XCTestCase {
         return MioLegacyStoreFiles(directory: directory)
     }
 
+    private func defaults() throws -> UserDefaults {
+        try XCTUnwrap(UserDefaults(suiteName: "mio.backup.test.\(UUID().uuidString)"))
+    }
+
+    private let stagedAt = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func stage(_ data: Data, _ files: MioLegacyStoreFiles, _ defaults: UserDefaults, at date: Date? = nil) throws {
+        _ = try MioBackupRestore.stage(data, files: files, deletionGeneration: MioBackupRestore.deletionGeneration(in: defaults),
+                                       defaults: defaults, now: date ?? stagedAt)
+    }
+
+    private func apply(_ files: MioLegacyStoreFiles, _ target: FakeTarget, _ defaults: UserDefaults,
+                       deletionPending: Bool = false, hoursLater: Double = 1) async -> String? {
+        await MioBackupRestore.applyPending(files: files, target: target, deletionPending: deletionPending,
+                                            deletionGeneration: MioBackupRestore.deletionGeneration(in: defaults),
+                                            now: stagedAt.addingTimeInterval(hoursLater * 3_600))
+    }
+
     func testAStagedCopyIsAppliedOnceInOneReplacementAndCanBeCancelledBefore() async throws {
         let files = try files()
+        let defaults = try defaults()
         let item = MioContentItem(kind: .note, title: "Återställd")
-        _ = try MioBackupRestore.stage(export(content: [item]), files: files)
+        try stage(export(content: [item]), files, defaults)
         XCTAssertTrue(MioBackupRestore.hasPending(in: files))
+        XCTAssertEqual(MioBackupRestore.readMetadata(in: files)?.stagedAt, stagedAt)
         try MioBackupRestore.cancel(in: files)
         XCTAssertFalse(MioBackupRestore.hasPending(in: files))
+        XCTAssertNil(MioBackupRestore.readMetadata(in: files))
         let target = FakeTarget()
-        let none = await MioBackupRestore.applyPending(files: files, target: target, deletionPending: false)
+        let none = await apply(files, target, defaults)
         XCTAssertNil(none)
 
-        _ = try MioBackupRestore.stage(export(content: [item]), files: files)
-        let message = await MioBackupRestore.applyPending(files: files, target: target, deletionPending: false)
+        try stage(export(content: [item]), files, defaults)
+        let message = await apply(files, target, defaults)
         XCTAssertTrue(message?.hasPrefix("Återställningen är klar.") == true)
         let replaced = await target.replaced
         XCTAssertEqual(replaced?.content.map(\.id), [item.id])
         XCTAssertFalse(MioBackupRestore.hasPending(in: files))
+        XCTAssertNil(MioBackupRestore.readMetadata(in: files))
     }
 
-    func testAFailedReplacementKeepsTheCopyAndARefusedOneIsRemoved() async throws {
+    func testAFailedReplacementIsTriedOnceMoreThenGivenUpAndARefusedOneIsRemoved() async throws {
         let files = try files()
-        _ = try MioBackupRestore.stage(export(), files: files)
+        let defaults = try defaults()
+        try stage(export(), files, defaults)
         let target = FakeTarget()
         await target.failNext()
-        let failed = await MioBackupRestore.applyPending(files: files, target: target, deletionPending: false)
+        let failed = await apply(files, target, defaults)
         XCTAssertTrue(failed?.contains("dina data är som förut") == true)
         XCTAssertTrue(MioBackupRestore.hasPending(in: files), "The next launch tries once more")
+        let again = await apply(files, target, defaults)
+        XCTAssertTrue(again?.contains("borttagen") == true, again ?? "")
+        XCTAssertFalse(MioBackupRestore.hasPending(in: files), "Never retried at every launch")
 
-        let blocked = await MioBackupRestore.applyPending(files: files, target: FakeTarget(), deletionPending: true)
+        try stage(export(), files, defaults)
+        let blocked = await apply(files, FakeTarget(), defaults, deletionPending: true)
         XCTAssertTrue(blocked?.contains("radering") == true)
         XCTAssertFalse(MioBackupRestore.hasPending(in: files))
 
+        try stage(export(), files, defaults)
         try Data("{\"schemaVersion\":9}".utf8).write(to: MioBackupRestore.pendingURL(in: files))
-        let refused = await MioBackupRestore.applyPending(files: files, target: FakeTarget(), deletionPending: false)
+        let refused = await apply(files, FakeTarget(), defaults)
         XCTAssertTrue(refused?.contains("ingenting ändrades") == true)
         XCTAssertFalse(MioBackupRestore.hasPending(in: files))
     }
 
     func testStagingRefusesAnUnknownSchemaWithoutWritingAnything() throws {
         let files = try files()
-        XCTAssertThrowsError(try MioBackupRestore.stage(Data("{\"schemaVersion\":3,\"exportedAt\":\"2026-11-21T02:00:00Z\"}".utf8), files: files))
+        let defaults = try defaults()
+        XCTAssertThrowsError(try stage(Data("{\"schemaVersion\":3,\"exportedAt\":\"2026-11-21T02:00:00Z\"}".utf8), files, defaults))
         XCTAssertFalse(MioBackupRestore.hasPending(in: files))
+    }
+
+    func testADeletionAfterTheCopyWasChosenRefusesItEvenWhenTheFileSurvived() async throws {
+        let files = try files()
+        let defaults = try defaults()
+        try stage(export(), files, defaults)
+        // The file stayed (removal failed), but a deletion began and finished after it was written.
+        MioBackupRestore.noteDeletion(in: defaults)
+        let target = FakeTarget()
+        let message = await apply(files, target, defaults)
+        XCTAssertTrue(message?.contains("raderade data") == true, message ?? "")
+        let replaced = await target.replaced
+        XCTAssertNil(replaced, "Deleted data never comes back")
+        XCTAssertFalse(MioBackupRestore.hasPending(in: files))
+
+        // A deletion while the copy downloaded refuses the staging itself.
+        let before = MioBackupRestore.deletionGeneration(in: defaults)
+        MioBackupRestore.noteDeletion(in: defaults)
+        XCTAssertThrowsError(try MioBackupRestore.stage(export(), files: files, deletionGeneration: before, defaults: defaults))
+        XCTAssertFalse(MioBackupRestore.hasPending(in: files))
+    }
+
+    func testAPendingCopyIsValidForADayAndNeedsItsMetadata() async throws {
+        let files = try files()
+        let defaults = try defaults()
+        try stage(export(), files, defaults)
+        let expired = await apply(files, FakeTarget(), defaults, hoursLater: 25)
+        XCTAssertTrue(expired?.contains("mer än ett dygn") == true, expired ?? "")
+        XCTAssertFalse(MioBackupRestore.hasPending(in: files))
+
+        try stage(export(), files, defaults)
+        try FileManager.default.removeItem(at: MioBackupRestore.metadataURL(in: files))
+        let target = FakeTarget()
+        let missing = await apply(files, target, defaults)
+        XCTAssertTrue(missing?.contains("saknade sina uppgifter") == true, missing ?? "")
+        let replaced = await target.replaced
+        XCTAssertNil(replaced)
+        XCTAssertFalse(MioBackupRestore.hasPending(in: files))
+        XCTAssertNil(MioBackupRestore.refusal(for: .init(stagedAt: stagedAt, deletionGeneration: 0),
+                                              deletionGeneration: 0, now: stagedAt.addingTimeInterval(23 * 3_600)))
+    }
+
+    private actor MismatchTarget: MioStoreMigrationTarget {
+        var replacements = 0
+        func replaceAll(with snapshot: MioLegacyStoreSnapshot) throws { replacements += 1 }
+        func removeAll() throws {}
+        func counts() throws -> MioStoreCounts { MioStoreCounts(snapshot: MioLegacyStoreSnapshot(sessions: [], content: [MioContentItem(kind: .note, title: "x")], assistant: MioAssistantStoreDocument())) }
+    }
+
+    func testAReplacementThatCannotBeVerifiedIsNotRetriedAtEveryLaunch() async throws {
+        let files = try files()
+        let defaults = try defaults()
+        try stage(export(), files, defaults)
+        let target = MismatchTarget()
+        let message = await MioBackupRestore.applyPending(files: files, target: target, deletionPending: false,
+            deletionGeneration: MioBackupRestore.deletionGeneration(in: defaults), now: stagedAt.addingTimeInterval(60))
+        XCTAssertTrue(message?.contains("kunde inte kontrolleras") == true, message ?? "")
+        XCTAssertFalse(MioBackupRestore.hasPending(in: files))
+        _ = await MioBackupRestore.applyPending(files: files, target: target, deletionPending: false,
+            deletionGeneration: MioBackupRestore.deletionGeneration(in: defaults), now: stagedAt.addingTimeInterval(120))
+        let replacements = await target.replacements
+        XCTAssertEqual(replacements, 1)
+    }
+
+    func testTheNightlyScheduleRetriesOnlyNetworkFailuresAndTimeoutsAFewTimes() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let hour: TimeInterval = 3_600
+        XCTAssertEqual(MioBackupSchedule.nextBegin(after: nil, now: now), now.addingTimeInterval(15 * 60))
+        let success = MioBackupAttempt(at: now, failure: nil)
+        XCTAssertEqual(MioBackupSchedule.nextBegin(after: success, now: now), now.addingTimeInterval(20 * hour))
+        for permanent in [MioBackupError.invalidBackup, .storageFull, .unauthorized, .tooLarge, .localData, .keychainLocked, .dataBusy, .capturing] {
+            let attempt = MioBackupAttempt(at: now, failure: permanent.code)
+            XCTAssertEqual(MioBackupSchedule.nextBegin(after: attempt, now: now), now.addingTimeInterval(20 * hour), permanent.code)
+        }
+        XCTAssertNil(MioBackupSchedule.nextBegin(after: MioBackupAttempt(at: now, failure: "unsupported"), now: now))
+        XCTAssertNil(MioBackupSchedule.nextBegin(after: MioBackupAttempt(at: now, failure: "not_paired"), now: now))
+
+        // Network: retries after 15 min, 45 min and 2 h, then the next night. Never every 15 minutes.
+        var previous: MioBackupAttempt?
+        var clock = now
+        var waits: [TimeInterval] = []
+        for _ in 0..<5 {
+            let retry = MioBackupSchedule.retryIndex(previous: previous, now: clock)
+            let attempt = MioBackupAttempt(at: clock, failure: MioBackupError.network.code, retry: retry)
+            let next = try XCTUnwrap(MioBackupSchedule.nextBegin(after: attempt, now: clock))
+            waits.append(next.timeIntervalSince(clock))
+            previous = attempt
+            clock = next
+        }
+        XCTAssertEqual(waits, [15 * 60, 45 * 60, 2 * hour, 20 * hour, 15 * 60], "A new night starts a new count")
+        let timeout = MioBackupAttempt(at: now, failure: MioBackupError.timeout.code, retry: 1)
+        XCTAssertEqual(MioBackupSchedule.nextBegin(after: timeout, now: now), now.addingTimeInterval(45 * 60))
+        // A retry never runs sooner than iOS's minimum lead, even when the wait has passed.
+        XCTAssertEqual(MioBackupSchedule.nextBegin(after: timeout, now: now.addingTimeInterval(3 * hour)),
+                       now.addingTimeInterval(3 * hour + 15 * 60))
+    }
+
+    func testALockedKeychainIsItsOwnOutcomeAndNeverNotPaired() throws {
+        XCTAssertEqual(MioBackupError.from(connectionError: MioCloudError.keychain), .keychainLocked)
+        XCTAssertEqual(MioBackupError.from(connectionError: MioCloudError.notPaired), .notPaired)
+        XCTAssertEqual(MioBackupError.from(connectionError: MioCloudError.invalidServer), .notPaired)
+        XCTAssertEqual(MioBackupError.from(connectionError: MioBackupError.timeout), .timeout)
+        let message = try XCTUnwrap(MioBackupError.keychainLocked.errorDescription)
+        XCTAssertTrue(message.contains("Lås upp telefonen"))
+        XCTAssertFalse(message.contains("Para"), "A locked phone never asks her to pair again")
+        XCTAssertEqual(MioBackupError.described(code: "keychain_locked"), message)
+        // The stored attempt keeps a retry number only when there is one.
+        let defaults = try defaults()
+        MioBackupAttempt(at: Date(timeIntervalSince1970: 10), failure: "network", retry: 2).save(to: defaults)
+        XCTAssertEqual(MioBackupAttempt.load(from: defaults)?.retry, 2)
+        MioBackupAttempt(at: Date(timeIntervalSince1970: 10), failure: "network", retry: 0).save(to: defaults)
+        let stored = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(defaults.data(forKey: MioBackupAttempt.key))) as? [String: Any])
+        XCTAssertEqual(Set(stored.keys), ["at", "failure"])
     }
 
     @MainActor
@@ -247,5 +389,129 @@ final class MioBackupTests: XCTestCase {
         let changed = try await content.loadItems().first { $0.id == exam.id }
         XCTAssertEqual(changed?.exam?.subject, "Kemi")
         XCTAssertEqual(changed?.handoff, saved.handoff)
+    }
+
+    @MainActor
+    private func workflowFixture(_ root: URL, defaults: UserDefaults, restoreFiles: MioLegacyStoreFiles?)
+        -> (workflow: MioWorkflowCoordinator, capture: MioViewModel, content: MioContentViewModel) {
+        let capture = MioViewModel(repository: SessionRepository(storageURL: root.appendingPathComponent("sessions.json")))
+        let content = MioContentViewModel(repository: MioContentRepository(storageURL: root.appendingPathComponent("content.json"),
+                                                                           exportDirectoryURL: root))
+        let workflow = MioWorkflowCoordinator(capture: capture, content: content,
+            assistant: MioAssistantViewModel(repository: MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json"))),
+            analysis: MioAnalysisCoordinator(), journal: MioDeletionJournal(storageURL: root.appendingPathComponent("operations.json")),
+            diagnostics: MioDiagnosticsRepository(storageURL: root.appendingPathComponent("diagnostics.json")),
+            systemActions: MioSystemActionPort(cancel: { _ in .success }, removeAll: { .success }),
+            clearCredentials: {}, pendingLessonDefaults: defaults,
+            metrics: MioMetricArchive(storageURL: root.appendingPathComponent("metrickit.json")),
+            restoreFiles: restoreFiles)
+        return (workflow, capture, content)
+    }
+
+    @MainActor
+    func testEveryDeletionRemovesAPendingRestoreAndAllDataTurnsTheDailyNoticesOff() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("MioBackupTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = try defaults()
+        let files = try files()
+        let fixture = workflowFixture(root, defaults: defaults, restoreFiles: files)
+        let workflow = fixture.workflow
+        var deletedAll = 0
+        workflow.onAllDataDeleted = { deletedAll += 1 }
+        await workflow.bootstrap()
+        for (key, value) in [("mio.daily.morning.minutes", 420), ("mio.daily.evening.minutes", 1_200)] { defaults.set(value, forKey: key) }
+        defaults.set(true, forKey: MioDailyDigest.morningDetailKey)
+        defaults.set(true, forKey: "mio.daily.future.setting")
+
+        _ = try workflow.stageRestore(export(), deletionGeneration: workflow.restoreDeletionGeneration)
+        XCTAssertTrue(workflow.restorePending)
+        // Nothing she records now would survive the restart, so nothing starts.
+        fixture.capture.beginListening()
+        XCTAssertEqual(fixture.capture.errorMessage, MioWorkflowCoordinator.restorePendingCaptureMessage)
+        XCTAssertEqual(fixture.capture.runState, .off)
+        await fixture.capture.beginLesson(title: "Biologi")
+        XCTAssertFalse(fixture.capture.isLessonActive)
+
+        // A single post's deletion removes the pending copy too and says so.
+        let saved = await fixture.content.save(kind: .memory, title: "En post", body: "", scheduledAt: .now, isCompleted: false, sessionID: nil)
+        XCTAssertTrue(saved)
+        let item = try XCTUnwrap(fixture.content.items.first)
+        let deleted = await workflow.deleteContent(id: item.id)
+        XCTAssertEqual(deleted, .success)
+        XCTAssertFalse(workflow.restorePending)
+        XCTAssertFalse(MioBackupRestore.hasPending(in: files))
+        XCTAssertNotNil(workflow.restoreNotice)
+        workflow.dismissRestoreNotice()
+
+        // "Radera all data" removes the unencrypted copy at once and the daily settings.
+        _ = try workflow.stageRestore(export(), deletionGeneration: workflow.restoreDeletionGeneration)
+        let generation = workflow.restoreDeletionGeneration
+        let all = await workflow.deleteAll()
+        XCTAssertEqual(all, .success)
+        XCTAssertFalse(MioBackupRestore.hasPending(in: files))
+        XCTAssertNil(MioBackupRestore.readMetadata(in: files))
+        XCTAssertGreaterThan(workflow.restoreDeletionGeneration, generation, "Never reset: a surviving copy stays refused")
+        XCTAssertEqual(deletedAll, 1)
+        for key in ["mio.daily.morning.minutes", "mio.daily.evening.minutes", MioDailyDigest.morningDetailKey, "mio.daily.future.setting"] {
+            XCTAssertNil(defaults.object(forKey: key), key)
+        }
+        // With nothing pending, capture may start again (it fails later only for lack of a server).
+        XCTAssertNil(fixture.capture.captureBlocker())
+    }
+
+    @MainActor
+    func testACopyOlderThanADayIsRemovedWithANotice() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("MioBackupTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = try defaults()
+        let files = try files()
+        let workflow = workflowFixture(root, defaults: defaults, restoreFiles: files).workflow
+        await workflow.bootstrap()
+        _ = try workflow.stageRestore(export(), deletionGeneration: workflow.restoreDeletionGeneration, now: stagedAt)
+        workflow.refreshRestorePending(now: stagedAt.addingTimeInterval(3_600))
+        XCTAssertTrue(workflow.restorePending)
+        XCTAssertNil(workflow.restoreNotice)
+        workflow.refreshRestorePending(now: stagedAt.addingTimeInterval(25 * 3_600))
+        XCTAssertFalse(workflow.restorePending)
+        XCTAssertTrue(workflow.restoreNotice?.contains("mer än ett dygn") == true)
+        XCTAssertTrue(workflow.cancelPendingRestore())
+    }
+
+    @MainActor
+    func testTheBackupWaitsForTheLaunchAndSendsNothingWhenBlockedOrCancelled() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("MioBackupTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        defer { MioMaintenanceState.shared.setRecoveryBlocked(false) }
+        let fixture = workflowFixture(root, defaults: try defaults(), restoreFiles: nil)
+        // iOS started Mio only for the task: the export runs the same bootstrap itself first.
+        guard case .success(let data) = await fixture.workflow.backupExport() else { return XCTFail("No backup") }
+        XCTAssertNoThrow(try MioBackupRestore.snapshot(from: data))
+        let ready = await fixture.workflow.readyForBackgroundWork()
+        XCTAssertTrue(ready)
+
+        // iOS ending the task before or while the export is queued gives no data.
+        let cancelled = Task { @MainActor in await fixture.workflow.backupExport() }
+        cancelled.cancel()
+        let result = await cancelled.value
+        XCTAssertEqual(try? result.get(), nil)
+        if case .failure(let error) = result { XCTAssertEqual(error, .timeout) }
+
+        // A blocked deletion recovery sends nothing.
+        MioMaintenanceState.shared.setRecoveryBlocked(true)
+        let blocked = await fixture.workflow.backupExport()
+        XCTAssertEqual(try? blocked.get(), nil)
+        let notReady = await fixture.workflow.readyForBackgroundWork()
+        XCTAssertFalse(notReady)
+    }
+
+    func testResettingTheDailySettingsRemovesOnlyThem() throws {
+        let defaults = try defaults()
+        defaults.set(420, forKey: "mio.daily.morning.minutes")
+        defaults.set(true, forKey: "mio.daily.morning.detail")
+        defaults.set("x", forKey: "mio.cloud.server")
+        MioDailyDigest.resetSettings(in: defaults)
+        XCTAssertNil(defaults.object(forKey: "mio.daily.morning.minutes"))
+        XCTAssertNil(defaults.object(forKey: "mio.daily.morning.detail"))
+        XCTAssertEqual(defaults.string(forKey: "mio.cloud.server"), "x")
     }
 }

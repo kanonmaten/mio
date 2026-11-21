@@ -3,10 +3,20 @@ import UIKit
 
 struct LessonStartButton: View {
     let model: MioViewModel
+    @Environment(MioWorkflowCoordinator.self) private var workflow
     @State private var showTitle = false
     @State private var title = ""
 
     var body: some View {
+        // A chosen backup copy replaces everything at the next launch: no lesson starts.
+        if workflow.restorePending, !model.isLessonActive {
+            MioRestorePendingNotice()
+        } else {
+            startButton
+        }
+    }
+
+    private var startButton: some View {
         Button { showTitle = true } label: {
             Label("Starta lektion", systemImage: "book.fill")
                 .frame(maxWidth: .infinity, minHeight: 44)

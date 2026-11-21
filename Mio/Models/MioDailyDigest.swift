@@ -26,6 +26,20 @@ enum MioDailyDigest {
     /// Minutes after midnight for `mio.daily.<kind>`, so one-day notifications can be replanned.
     static func timeKey(_ base: String) -> String { "\(base).minutes" }
 
+    /// Every setting of the daily notifications lives under this prefix in UserDefaults.
+    static let settingsPrefix = "mio.daily."
+
+    /// "Radera all data" turns the morning and evening notifications off again, as before fas 5:
+    /// the stored times, the detail switch and any later `mio.daily.*` setting are removed, so
+    /// the next replanning removes the notifications instead of adding them back.
+    static func resetSettings(in defaults: UserDefaults) {
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(settingsPrefix) {
+            defaults.removeObject(forKey: key)
+        }
+        for base in ["mio.daily.morning", "mio.daily.evening"] { defaults.removeObject(forKey: timeKey(base)) }
+        defaults.removeObject(forKey: morningDetailKey)
+    }
+
     // MARK: Morning
 
     /// Reminders due on `day` that are homework: one Mio sent from a lesson, or one whose title says

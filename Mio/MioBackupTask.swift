@@ -7,21 +7,37 @@ import os
 /// iOS runs it while the phone charges, usually at night. It sends the versioned export through
 /// Tailscale to the gateway on the PC, which encrypts it and keeps 14 copies. Never to the cloud.
 /// Only the time and the result of the latest attempt are kept (`MioBackupAttempt`).
+///
+/// Timing rules (review of fas 6, 2026-11-21): when the next attempt runs follows
+/// `MioBackupSchedule` (a few growing retries the same night only after a network failure or a
+/// timeout, otherwise the next night). A run started by iOS before any view exists waits for the
+/// same launch bootstrap and deletion recovery as the app and sends nothing unless both
+/// succeeded. iOS ending the task cancels the export and skips the replanning, and
+/// `setTaskCompleted` is called exactly once. The scheduled request is cancelled after
+/// "Radera all data" and whenever the pairing is forgotten or replaced.
 /// **Ej verifierat** on the phone: when iOS actually starts the task.
 @MainActor @Observable
 final class MioBackupTask {
     /// Listed in Info.plist under BGTaskSchedulerPermittedIdentifiers.
     nonisolated static let identifier = "app.mio.assistant.backup"
-    /// A copy at most once in this many hours; iOS decides the exact time.
-    private static let interval: TimeInterval = 20 * 60 * 60
 
     private(set) var lastAttempt: MioBackupAttempt? = MioBackupAttempt.load(from: .standard)
     private(set) var isRunning = false
     @ObservationIgnored private let workflow: MioWorkflowCoordinator
     @ObservationIgnored private let logger = Logger(subsystem: "app.mio.assistant", category: "backup")
     @ObservationIgnored private var registered = false
+    @ObservationIgnored private var pairingObserver: NSObjectProtocol?
 
-    init(workflow: MioWorkflowCoordinator) { self.workflow = workflow }
+    init(workflow: MioWorkflowCoordinator) {
+        self.workflow = workflow
+        workflow.onAllDataDeleted = { [weak self] in self?.forgetAfterDeletion() }
+        // Posted when the pairing is saved (also a new PC) and when it is forgotten. A new
+        // pairing schedules again once its status shows `backup`.
+        pairingObserver = NotificationCenter.default.addObserver(forName: MioCloudSettings.didResetNotification,
+                                                                 object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.cancelScheduled() }
+        }
+    }
 
     /// Must run before the app finishes launching; iOS refuses a later registration.
     func register() {
@@ -43,39 +59,67 @@ final class MioBackupTask {
     func schedule(status: MioGatewayStatusV2, now: Date = .now) {
         guard registered else { return }
         guard status.backup != nil, MioCloudSettings.isPaired else {
-            BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.identifier)
+            cancelScheduled()
             return
         }
-        submit(now: now)
+        // A status with `backup` means the PC takes copies now, whatever an older attempt said.
+        let stopping: Set<String> = [MioBackupError.unsupported.code, MioBackupError.notPaired.code]
+        let attempt = lastAttempt.flatMap { last in last.failure.map { stopping.contains($0) } == true ? nil : last }
+        submit(earliest: MioBackupSchedule.nextBegin(after: attempt, now: now))
     }
 
-    private func submit(now: Date = .now) {
+    private func submit(earliest: Date?) {
+        guard let earliest else {
+            cancelScheduled()
+            return
+        }
         let request = BGProcessingTaskRequest(identifier: Self.identifier)
         request.requiresExternalPower = true
         request.requiresNetworkConnectivity = true
-        let last = lastAttempt.flatMap { $0.succeeded ? $0.at : nil } ?? .distantPast
-        request.earliestBeginDate = max(now.addingTimeInterval(15 * 60), last.addingTimeInterval(Self.interval))
+        request.earliestBeginDate = earliest
         do { try BGTaskScheduler.shared.submit(request) }
         catch { logger.error("Backup request failed: \(String(describing: error), privacy: .public)") }
     }
 
+    private func cancelScheduled() {
+        guard registered else { return }
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.identifier)
+    }
+
+    /// After "Radera all data": no scheduled copy and no remembered attempt, in memory or stored.
+    private func forgetAfterDeletion() {
+        cancelScheduled()
+        MioBackupAttempt.clear(in: .standard)
+        lastAttempt = nil
+    }
+
     private func run(_ task: BGProcessingTask) {
-        let work = Task { @MainActor [weak self] in
-            guard let self else { return nil as MioBackupAttempt? }
+        // The work is one task, so cancelling it reaches the export: `backupExport` runs its
+        // operation in the command queue behind a cancellation handler that cancels it there.
+        let work = Task { @MainActor [weak self] () -> MioBackupAttempt? in
+            guard let self else { return nil }
+            // iOS may launch Mio only for this task. Nothing is read, sent or planned before the
+            // same bootstrap and deletion recovery as the app have succeeded.
+            guard await self.workflow.readyForBackgroundWork(), !Task.isCancelled else { return nil }
             let attempt = await self.backUpNow()
-            // The night's run also replans the morning and evening texts for the coming days.
-            await MioSystemServices.shared.replanDailyNotices()
+            // The night's run also replans the morning and evening texts, never after iOS ended it.
+            if !Task.isCancelled { await MioSystemServices.shared.replanDailyNotices() }
             return attempt
         }
         task.expirationHandler = { work.cancel() }
         Task { @MainActor [weak self] in
             let attempt = await work.value
+            // The only call, whether the work finished, failed, was skipped or was cancelled.
             task.setTaskCompleted(success: attempt?.succeeded == true)
-            // A relaunch in the background has no status yet. The task only exists because a
-            // status with `backup` scheduled it, so the next night follows unless the PC said it
-            // no longer takes copies.
-            guard let self, attempt?.failure != MioBackupError.unsupported.code else { return }
-            self.submit()
+            guard let self else { return }
+            // A relaunch in the background has no status yet. The task exists only because a
+            // status with `backup` scheduled it, so it follows `MioBackupSchedule`. A skipped run
+            // (bootstrap or deletion recovery did not succeed) tries again the next night.
+            if let attempt {
+                self.submit(earliest: MioBackupSchedule.nextBegin(after: attempt, now: .now))
+            } else if MioCloudSettings.isPaired {
+                self.submit(earliest: Date.now.addingTimeInterval(MioBackupSchedule.interval))
+            }
         }
     }
 
@@ -85,11 +129,16 @@ final class MioBackupTask {
         guard !isRunning else { return lastAttempt ?? MioBackupAttempt(at: now, failure: MioBackupError.dataBusy.code) }
         isRunning = true
         defer { isRunning = false }
+        let retry = MioBackupSchedule.retryIndex(previous: lastAttempt, now: now)
         let failure: MioBackupError?
         do {
-            let connection = try MioCloudSettings.connection()
+            // A Keychain that cannot be read (locked phone) is its own outcome, never "Para datorn".
+            let connection: MioCloudConnection
+            do { connection = try MioCloudSettings.connection() }
+            catch { throw MioBackupError.from(connectionError: error) }
             switch await workflow.backupExport() {
             case .success(let data):
+                try Task.checkCancellation()
                 _ = try await MioBackupService.upload(data, connection: connection, transport: MioBackupTransport.native)
                 failure = nil
             case .failure(let error):
@@ -100,9 +149,9 @@ final class MioBackupTask {
         } catch is CancellationError {
             failure = .timeout
         } catch {
-            failure = .notPaired
+            failure = .server
         }
-        let attempt = MioBackupAttempt(at: now, failure: failure?.code)
+        let attempt = MioBackupAttempt(at: now, failure: failure?.code, retry: failure?.isTransient == true ? retry : nil)
         attempt.save(to: .standard)
         lastAttempt = attempt
         if let failure { logger.notice("Backup failed: \(failure.code, privacy: .public)") }
@@ -114,16 +163,17 @@ final class MioBackupTask {
         try await MioBackupService.list(connection: try connection(), transport: MioBackupTransport.native)
     }
 
-    /// Downloads, validates and stages a copy; it replaces the data at the next launch.
+    /// Downloads, validates and stages a copy; it replaces the data at the next launch. A deletion
+    /// that begins while the copy downloads refuses it (`MioBackupRestore.stage`).
     func stageRestore(id: String) async throws -> Date {
         if let blocker = workflow.restoreBlocker { throw blocker }
+        let generation = workflow.restoreDeletionGeneration
         let data = try await MioBackupService.download(id: id, connection: try connection(), transport: MioBackupTransport.native)
-        if let blocker = workflow.restoreBlocker { throw blocker }
-        return try MioBackupRestore.stage(data, files: .standard)
+        return try workflow.stageRestore(data, deletionGeneration: generation)
     }
 
     private func connection() throws -> MioCloudConnection {
-        do { return try MioCloudSettings.connection() } catch { throw MioBackupError.notPaired }
+        do { return try MioCloudSettings.connection() } catch { throw MioBackupError.from(connectionError: error) }
     }
 }
 

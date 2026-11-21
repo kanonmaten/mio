@@ -58,8 +58,11 @@ struct MioBackupReceipt: Equatable, Sendable {
 
 /// Every failure as one sentence and one thing to do, in plain Swedish (fas 6). `code` is the
 /// text-free name kept for the last attempt and the error report.
-enum MioBackupError: Error, Equatable, LocalizedError {
+enum MioBackupError: Error, Equatable, LocalizedError, CaseIterable {
     case notPaired
+    /// The Keychain could not be read, usually because the phone is locked. Never "not paired":
+    /// the pairing and AI stay as they are (CLAUDE.md: a locked Keychain never turns AI off).
+    case keychainLocked
     case unsupported
     case capturing
     case dataBusy
@@ -80,6 +83,7 @@ enum MioBackupError: Error, Equatable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notPaired: "Datorn är inte parad. Para den under Inställningar → Avancerat → Parning."
+        case .keychainLocked: "Mio kunde inte läsa parningen eftersom telefonen var låst. Lås upp telefonen och försök igen; parningen och AI är som förut."
         case .unsupported: "Datorn tar inte emot säkerhetskopior än. Uppdatera Mio på datorn med install.sh."
         case .capturing: "Mio lyssnar just nu. Stoppa lyssningen och försök igen."
         case .dataBusy: "Mio arbetar med dina data just nu. Vänta en stund och försök igen."
@@ -102,6 +106,7 @@ enum MioBackupError: Error, Equatable, LocalizedError {
     var code: String {
         switch self {
         case .notPaired: "not_paired"
+        case .keychainLocked: "keychain_locked"
         case .unsupported: "unsupported"
         case .capturing: "capturing"
         case .dataBusy: "data_busy"
@@ -125,10 +130,56 @@ enum MioBackupError: Error, Equatable, LocalizedError {
 extension MioBackupError {
     /// The sentence for a stored `code`; an unknown code gets a general one.
     static func described(code: String?) -> String {
-        let all: [MioBackupError] = [.notPaired, .unsupported, .capturing, .dataBusy, .unauthorized, .network, .timeout, .busy,
-                                     .tooLarge, .invalidBackup, .storageFull, .unreadable, .notFound, .unknownSchema,
-                                     .invalidResponse, .server, .localData]
-        return all.first { $0.code == code }?.errorDescription ?? "Kopian kunde inte skickas. Försök igen."
+        allCases.first { $0.code == code }?.errorDescription ?? "Kopian kunde inte skickas. Försök igen."
+    }
+
+    /// The pairing read from the Keychain failed. Only a missing or invalid pairing is
+    /// `.notPaired`; a Keychain that cannot be read (locked phone) is its own outcome.
+    static func from(connectionError error: Error) -> MioBackupError {
+        if let error = error as? MioBackupError { return error }
+        if case .keychain? = error as? MioCloudError { return .keychainLocked }
+        return .notPaired
+    }
+
+    /// Network failures and timeouts may clear the same night; every other failure waits a night.
+    var isTransient: Bool { self == .network || self == .timeout }
+}
+
+/// When the nightly copy runs next (review of fas 6, 2026-11-21). A copy at most once per
+/// `interval`. After a network failure or a timeout a few more tries the same night with a
+/// growing wait; after any other failure, or when those tries are used up, the next night.
+/// `.unsupported` and `.notPaired` stop scheduling until the status or pairing changes.
+enum MioBackupSchedule {
+    static let interval: TimeInterval = 20 * 60 * 60
+    /// The earliest start iOS is asked for when nothing else applies.
+    static let minimumLead: TimeInterval = 15 * 60
+    /// Waits before the 1st, 2nd and 3rd retry after a network failure or timeout.
+    static let retryDelays: [TimeInterval] = [15 * 60, 45 * 60, 2 * 60 * 60]
+    /// A failure older than this starts a new night's count.
+    static let retryWindow: TimeInterval = 8 * 60 * 60
+
+    /// The retry number for an attempt starting now: 0 for the night's first attempt, otherwise
+    /// one more than the previous attempt when that was a recent network failure or timeout.
+    static func retryIndex(previous: MioBackupAttempt?, now: Date) -> Int {
+        guard let previous, let failure = previous.failure,
+              MioBackupError.allCases.first(where: { $0.code == failure })?.isTransient == true,
+              now.timeIntervalSince(previous.at) >= 0, now.timeIntervalSince(previous.at) < retryWindow else { return 0 }
+        return (previous.retry ?? 0) + 1
+    }
+
+    /// The earliest begin date to ask iOS for after `attempt`, or nil to schedule nothing.
+    static func nextBegin(after attempt: MioBackupAttempt?, now: Date) -> Date? {
+        let soonest = now.addingTimeInterval(minimumLead)
+        guard let attempt else { return soonest }
+        let error = attempt.failure.flatMap { code in MioBackupError.allCases.first { $0.code == code } }
+        if error == .unsupported || error == .notPaired { return nil }
+        let retry = attempt.retry ?? 0
+        if let error, error.isTransient, retry < retryDelays.count {
+            return max(soonest, attempt.at.addingTimeInterval(retryDelays[retry]))
+        }
+        // A copy that worked, any other failure, or the night's tries used up: the next night.
+        // An attempt dated in the future (a clock change) never pushes the copy further away.
+        return max(soonest, min(attempt.at, now).addingTimeInterval(interval))
     }
 }
 
@@ -140,6 +191,15 @@ struct MioBackupAttempt: Codable, Equatable, Sendable {
     let at: Date
     /// Nil when the copy was stored; otherwise `MioBackupError.code`.
     let failure: String?
+    /// Which retry of the night this was (additive, absent for the night's first attempt). Only
+    /// a number, never content; see `MioBackupSchedule`.
+    var retry: Int? = nil
+
+    init(at: Date, failure: String?, retry: Int? = nil) {
+        self.at = at
+        self.failure = failure
+        self.retry = retry == 0 ? nil : retry
+    }
 
     var succeeded: Bool { failure == nil }
 
@@ -170,6 +230,7 @@ enum MioBackupService {
     }
 
     /// The export as JSON, without diagnostics: a copy of her data, not of the phone's logs.
+    /// Pure and free of actor state, so the caller runs it off the main actor (it may take seconds).
     static func encode(_ export: MioLocalExport) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -275,11 +336,44 @@ enum MioBackupService {
 /// as a pending file; the next launch replaces every row in one SwiftData transaction before any
 /// repository opens, so no capture, AI or other write can run beside it. A failed transaction
 /// leaves the current rows untouched, and "Avbryt" before the restart removes the pending file.
+///
+/// Privacy rules (review of fas 6, 2026-11-21): the pending file is a full unencrypted copy, so
+/// every deletion (all data, a session or a post) removes it at once and bumps a deletion
+/// generation. The pending copy records the generation it was chosen under, and a launch refuses
+/// it when any deletion has begun since, even if removing the file failed. It is valid for at
+/// most 24 hours, and a replacement that cannot be verified is not retried at every launch.
 enum MioBackupRestore {
     static let pendingFileName = "restore-pending.json"
+    static let metadataFileName = "restore-pending-meta.json"
+    /// Counts deletions that have begun. Never reset, not even by "Radera all data".
+    static let deletionGenerationKey = "mio.restore.deletionGeneration.v1"
+    /// How long a chosen copy may wait for the restart.
+    static let validity: TimeInterval = 24 * 60 * 60
+    /// Launches that may try a replacement before the pending copy is given up.
+    static let maximumAttempts = 2
+
+    /// What is known about the pending copy, without any of its content.
+    struct Metadata: Codable, Equatable, Sendable {
+        static let currentSchemaVersion = 1
+        var schemaVersion = Self.currentSchemaVersion
+        let stagedAt: Date
+        let deletionGeneration: Int
+        var failedAttempts = 0
+    }
 
     static func pendingURL(in files: MioLegacyStoreFiles) -> URL {
         files.directory.appendingPathComponent(pendingFileName, isDirectory: false)
+    }
+
+    static func metadataURL(in files: MioLegacyStoreFiles) -> URL {
+        files.directory.appendingPathComponent(metadataFileName, isDirectory: false)
+    }
+
+    static func deletionGeneration(in defaults: UserDefaults) -> Int { defaults.integer(forKey: deletionGenerationKey) }
+
+    /// Called when any deletion begins, before its first step.
+    static func noteDeletion(in defaults: UserDefaults) {
+        defaults.set(deletionGeneration(in: defaults) &+ 1, forKey: deletionGenerationKey)
     }
 
     /// Decodes and validates a copy. Only a known export schema (1 or 2) and the assistant
@@ -307,10 +401,16 @@ enum MioBackupRestore {
         return (snapshot, export.exportedAt)
     }
 
-    /// Validates first, then writes the pending file. The current data is not touched here.
-    static func stage(_ data: Data, files: MioLegacyStoreFiles) throws -> Date {
+    /// Validates first, then writes the metadata and the pending file. The current data is not
+    /// touched here. `deletionGeneration` is the generation read before the copy was downloaded;
+    /// a deletion since then refuses the copy instead of bringing deleted data back.
+    static func stage(_ data: Data, files: MioLegacyStoreFiles, deletionGeneration: Int,
+                      defaults: UserDefaults, now: Date = .now) throws -> Date {
         let exportedAt = try snapshot(from: data).exportedAt
+        guard self.deletionGeneration(in: defaults) == deletionGeneration else { throw MioBackupError.dataBusy }
         try files.prepareOwnedDirectory(files.directory)
+        let metadata = Metadata(stagedAt: now, deletionGeneration: deletionGeneration)
+        try MioProtectedFileWriter.write(encodeMetadata(metadata), to: metadataURL(in: files))
         try MioProtectedFileWriter.write(data, to: pendingURL(in: files))
         return exportedAt
     }
@@ -319,43 +419,95 @@ enum MioBackupRestore {
         FileManager.default.fileExists(atPath: pendingURL(in: files).path)
     }
 
+    /// Removes the pending copy and its metadata. Throws only when the copy itself is still there.
     static func cancel(in files: MioLegacyStoreFiles) throws {
+        try? FileManager.default.removeItem(at: metadataURL(in: files))
         let url = pendingURL(in: files)
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         try FileManager.default.removeItem(at: url)
     }
 
+    static func readMetadata(in files: MioLegacyStoreFiles) -> Metadata? {
+        guard let data = try? Data(contentsOf: metadataURL(in: files)) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let metadata = try? decoder.decode(Metadata.self, from: data),
+              metadata.schemaVersion == Metadata.currentSchemaVersion else { return nil }
+        return metadata
+    }
+
+    private static func encodeMetadata(_ metadata: Metadata) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(metadata)
+    }
+
+    /// Why the pending copy may no longer be applied, or nil when it may: it must have usable
+    /// metadata, be chosen under the current deletion generation and less than 24 hours ago (a
+    /// date in the future, after a clock change, is not trusted either).
+    static func refusal(for metadata: Metadata?, deletionGeneration: Int, now: Date) -> String? {
+        guard let metadata else {
+            return "Den väntande återställningen saknade sina uppgifter och togs bort. Dina data är som förut. Välj kopian igen under Säkerhetskopia."
+        }
+        guard metadata.deletionGeneration == deletionGeneration else {
+            return "Återställningen gjordes inte, eftersom du raderade data efter att du valde kopian. Dina data är som förut."
+        }
+        let age = now.timeIntervalSince(metadata.stagedAt)
+        guard age < validity, age > -5 * 60 else {
+            return "Den valda kopian väntade i mer än ett dygn och togs bort. Dina data är som förut. Välj kopian igen under Säkerhetskopia om du vill återställa."
+        }
+        return nil
+    }
+
     /// Run at launch before the repositories open. Returns the one message to show, or nil when
-    /// nothing was pending. The pending file is removed after a verified replacement and after a
-    /// refused copy; it stays only when the store could not be written, so the next launch tries
-    /// once more without a loop inside this launch.
+    /// nothing was pending. The pending file is removed after a verified replacement, after a
+    /// refused or expired copy, and after a replacement whose result could not be verified. It
+    /// stays only when the store could not be written, and then for at most `maximumAttempts`
+    /// launches, so a failure is never retried at every start.
     static func applyPending(files: MioLegacyStoreFiles, target: any MioStoreMigrationTarget,
-                             deletionPending: Bool) async -> String? {
+                             deletionPending: Bool, deletionGeneration: Int, now: Date = .now) async -> String? {
         let url = pendingURL(in: files)
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            try? FileManager.default.removeItem(at: metadataURL(in: files))
+            return nil
+        }
         guard !deletionPending else {
-            try? FileManager.default.removeItem(at: url)
+            try? cancel(in: files)
             return "Återställningen gjordes inte, eftersom en radering inte hade slutförts. Dina data är som förut."
+        }
+        let metadata = readMetadata(in: files)
+        if let refused = refusal(for: metadata, deletionGeneration: deletionGeneration, now: now) {
+            try? cancel(in: files)
+            return refused
         }
         let decoded: (snapshot: MioLegacyStoreSnapshot, exportedAt: Date)
         do {
             decoded = try snapshot(from: Data(contentsOf: url))
         } catch {
-            try? FileManager.default.removeItem(at: url)
+            try? cancel(in: files)
             return "Kopian kunde inte läsas, så ingenting ändrades. Välj en annan kopia under Säkerhetskopia."
         }
         do {
             try await target.replaceAll(with: decoded.snapshot)
-            guard try await target.counts() == MioStoreCounts(snapshot: decoded.snapshot) else {
-                // The transaction committed but the count differs: keep the file to try again.
-                MioLog.error(.storage, "restore count mismatch")
-                return "Återställningen kunde inte kontrolleras. Starta om Mio för att försöka igen."
-            }
         } catch {
             MioLog.error(.storage, "restore transaction failed")
+            var failed = metadata ?? Metadata(stagedAt: now, deletionGeneration: deletionGeneration)
+            failed.failedAttempts += 1
+            guard failed.failedAttempts < maximumAttempts,
+                  (try? MioProtectedFileWriter.write(encodeMetadata(failed), to: metadataURL(in: files))) != nil else {
+                try? cancel(in: files)
+                return "Återställningen misslyckades igen och den valda kopian är borttagen. Dina data är som förut. Välj kopian igen under Säkerhetskopia om du vill försöka på nytt."
+            }
             return "Återställningen misslyckades och dina data är som förut. Starta om Mio för att försöka igen."
         }
-        try? FileManager.default.removeItem(at: url)
+        let verified = (try? await target.counts()) == MioStoreCounts(snapshot: decoded.snapshot)
+        // The transaction has committed either way, so the copy is never applied again.
+        try? cancel(in: files)
+        guard verified else {
+            MioLog.error(.storage, "restore count mismatch")
+            return "Återställningen kunde inte kontrolleras, och den valda kopian är borttagen. Kontrollera dina data, och välj kopian igen under Säkerhetskopia om något saknas."
+        }
         let date = decoded.exportedAt.formatted(date: .long, time: .shortened)
         return "Återställningen är klar. Mio visar nu kopian från \(date)."
     }
