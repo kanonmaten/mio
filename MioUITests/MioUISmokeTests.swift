@@ -78,11 +78,22 @@ final class MioUISmokeTests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
         XCTAssertTrue(app.buttons["mio.settings.done"].waitForExistence(timeout: 5))
+        // Avancerat is the last section of a lazy List: its row only exists once it is scrolled into view.
         let advanced = app.descendants(matching: .any)["mio.settings.advanced"].firstMatch
+        var swipes = 0
+        while !advanced.waitForExistence(timeout: 1) && swipes < 6 {
+            app.descendants(matching: .any)["mio.settings.panel"].firstMatch.swipeUp()
+            swipes += 1
+        }
         XCTAssertTrue(advanced.waitForExistence(timeout: 5), "Missing Avancerat")
         advanced.tap()
         for (row, title) in [("Parning", "Parning"), ("Transkription", "Transkription"), ("AI", "AI")] {
             let link = app.staticTexts[row].firstMatch
+            var rowSwipes = 0
+            while !(link.waitForExistence(timeout: 1) && link.isHittable) && rowSwipes < 6 {
+                app.descendants(matching: .any)["mio.settings.panel"].firstMatch.swipeUp()
+                rowSwipes += 1
+            }
             XCTAssertTrue(link.waitForExistence(timeout: 5), "Missing settings row: \(row)")
             link.tap()
             let bar = app.navigationBars[title]
