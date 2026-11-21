@@ -184,8 +184,8 @@ Läs först `control/README.md`, `control/DESIGN.md` och lärdomarna om [gpui-ki
 ## Sist: överlämning
 
 - [x] [CHANGELOG.md](../CHANGELOG.md) för det som syns för användaren, och [STATUS.md](STATUS.md) bara med kontroller som faktiskt körts.
-- [ ] Kör "Bygg Mio IPA" för sista commiten med `uitester` och `diagnostik` på, och vänta tills den är grön.
-- [ ] Skriv överlämningen till användaren: vad som ändrats, vilka commitar som är provade och var, och vad användaren själv gör. Det är `./server/install.sh` på datorn, Prova för Mistral i Mio Kontroll (och gränsen för `lesson` efter mätningen), att stänga av träning på API-data i Mistrals konsol, provet av Mio Kontroll på datorn, telefonproven nedan, och de antaganden som gjorts.
+- [x] Kör "Bygg Mio IPA" för sista commiten med `uitester` och `diagnostik` på, och vänta tills den är grön.
+- [x] Skriv överlämningen till användaren: vad som ändrats, vilka commitar som är provade och var, och vad användaren själv gör. Det är `./server/install.sh` på datorn, Prova för Mistral i Mio Kontroll (och gränsen för `lesson` efter mätningen), att stänga av träning på API-data i Mistrals konsol, provet av Mio Kontroll på datorn, telefonproven nedan, och de antaganden som gjorts.
 - [x] Lägg till telefonprov i [helhetstestet](TESTPLAN_HELHET.md): en hel lektion med provtips och läxor, en skoldag med vardagsfångst och låg batterinivå (lektionen fortsätter), direkt anteckning med Ångra, signeringsnotisen och en återställning från säkerhetskopian.
 
 ## Öppna frågor
@@ -200,3 +200,21 @@ Användaren valde att inte gå igenom dem 2026-11-19. Ingen av dem stoppar goal-
 6. Om skolan tillåter att lektioner spelas in, och om Mio ska påminna om att fråga läraren.
 7. Mikrofon i klassrummet (telefonen på bänken eller en extern mikrofon).
 8. ~~Mätning av Pianissimo i FP16 på RTX 4060 Ti innan hon börjar.~~ Besvarad 2026-11-17: FP16 är standard utan mätning först (se DECISIONS).
+
+## Överlämning, 2026-11-21
+
+Planen är genomförd i fyra vågor, `0832127` till sista commiten. Varje våg granskades av en subagent, och de bekräftade felen rättades i samma våg. Vad som ändrats står i [ändringsloggen](../CHANGELOG.md), valen och antagandena i [besluten](DECISIONS.md#grillningen-2026-11-19), kontrakten i [datamodellen](DATAMODELL.md#kontrakt-efter-grillningen) och kontrollerna i [status](STATUS.md#grillningen-2026-11-20-21).
+
+**Provat:** hela `verify` lokalt och Linux-grinden på GitHub för varje våg; "Bygg Mio IPA" vid push för varje våg (IPA och enhetstester); manuellt med UI-tester och diagnostik på `7be253d` (#67) och på sista commiten (resultatet står i överlämningen i chatten). **Inte provat:** något på datorn, mot Mistral eller på telefonen.
+
+**Det här gör du själv:**
+1. Kör `./server/install.sh` och `transcription-server/install.sh` på datorn (nya rutter, säkerhetskopian, egna ord från telefonen). En befintlig Groq-installation lämnas orörd, med samma token.
+2. Skapa en Mistral-nyckel och stäng av träning på API-data i Mistrals admin-konsol.
+3. Tryck Prova för Mistral Small 4 och Large 4 i Mio Kontroll och byt till Mistral där. Large 4 provas bara för Lektion. Se efter hur många token och sekunder lektionsprovet tar, och säg till om gränsen på 12 000 token eller 180 s ska justeras.
+4. Gå igenom [Prov på datorn](../control/README.md#prov-på-datorn) (punkt 1–13) för Mio Kontroll.
+5. Installera IPA:n med SideStore och gör telefonproven G1–G8 i [helhetstestet](TESTPLAN_HELHET.md#efter-grillningen--nya-prov-ej-körda-på-iphone).
+
+**Antaganden som gäller tills du säger annat:** ämnet per lektion föreslås av AI och bekräftas i granskningsarket; Mio Kontroll varnar inte när ingen säkerhetskopia finns än; ett prov är en godkänd plan eller påminnelse vars rubrik säger prov, förhör, tenta, skrivning eller NP (inte blodprov och liknande); nattkopian väntar ett dygn efter fel som inte beror på nätet.
+
+**Öppna frågor** (oförändrade, se ovan): språklektioner med en svensk talmodell, vilken telefon hon har, om du själv ska använda Mio mot samma dator, vad som händer när Vibe Pro-provet tar slut, om skolan tillåter inspelning, och mikrofonen i klassrummet.
+
