@@ -189,6 +189,21 @@ Dessa prov gäller den aktuella arbetskopian. Förena verkliga repositories/work
 
 För Linux-/native-kommandon, se [verifieringen](INSTALLATION.md#verifiera-före-bygge); för mätning, se [mätprotokollet](#mätprotokoll-och-resultatmall) nedan. Modellverktyg, genererad streaming, automatisk handling, råljudsfiler, cloud STT, Apple-/CPU-fallback och tyst mikrofonåterstart ingår inte och ska inte markeras som implementerade funktioner.
 
+## Efter grillningen — nya prov, ej körda på iPhone
+
+Byggda 2026-11-20–21 enligt [planen](PLAN_GRILLNING.md). Kräver att gatewayen och Pianissimo är installerade om på datorn (`./server/install.sh`, `transcription-server/install.sh`) och att Mistral-paren är godkända med Prova i Mio Kontroll.
+
+| Prov | Gör så här | Godkänt när |
+|---|---|---|
+| G1 Hel lektion | Starta lektion, låt läraren tala en hel lektion med minst ett "det här kommer på provet" och en läxa, stoppa. | Lugna vyn visar tid, prick och antal; transkriptet nås med ett tryck. Granskningsarket eller notisen "Anteckningarna från lektionen är klara." kommer inom fem minuter (Diagnostik visar tiden). Anteckningen börjar med "Viktigt till provet" med citat, ämnet föreslås, läraren heter "Lärare". Läxan får sitt datum och hamnar i Påminnelser vid Ja. |
+| G2 Skoldag med lågt batteri | Vardagsfångst en skoldag med en lektion mitt i; låt batteriet gå under 20 % eller slå på strömsparläge under lektionen. | Vardagsfångsten pausas med "Pausad, lågt batteri" och kan startas igen direkt; **lektionen fortsätter** tills du stoppar den. Efter 20 minuter tystnad kommer "Lyssnar Mio fortfarande?", och utan svar pausar Mio efter fem minuter till utan att starta igen. Notera batteri och värme. |
+| G3 Direkt anteckning med Ångra | Säg "Mio, kom ihåg att ta med gympakläder i morgon" och "Mio, notera att mötet flyttas" med låst skärm. Säg "Mio, kom ihåg" följt av något obegripligt. | Två korta vibrationer per sparad sak, en lång för den obegripliga. Påminnelsen finns i Påminnelser och anteckningen i Mio under "Sparat med rösten". Ångra tar bort påminnelsen ur Påminnelser. Inget hamnar i Kalender utan att du tryckt Lägg till. |
+| G4 Eget ord | Rätta ett felstavat namn i en avslutad session och svara Ja. | Ordet hamnar i `/var/lib/mio-transcription/vocabulary-phone.txt` på datorn och stavas rätt i nästa transkription. Ordet syns inte i journalen. |
+| G5 Signeringsnotisen | Installera med SideStore och vänta till dagen innan signeringen går ut (eller jämför med SideStores datum). | Inställningarna visar rätt antal dagar. Notisen kommer 24 timmar före med de fyra stegen, och stegen fungerar. |
+| G6 Säkerhetskopia och återställning | Ladda telefonen över natten med Mio parad. Återställ sedan en kopia under Inställningar → Säkerhetskopia och starta om Mio. | Mio Kontroll visar kopian från natten. Efter omstarten är innehållet det från kopian. Avbryt återställningen före omstart lämnar allt orört. |
+| G7 Prov och notiser | Godkänn ett prov fem dagar fram, slå på morgonnotisens detaljer och vänta på morgon och kväll. | Hem visar nedräkningen; "Inför provet" kopierar ämnets provtips och anteckningar. Morgonnotisen visar bara ämne och prov/läxa; kvällsnotisen antalet förslag och öppnar Förslag. |
+| G8 Kontrollera allt | Stäng av Tailscale och öppna Inställningar. | Raden säger "Något är fel"; "Kontrollera allt" visar Tailscale och datorn röda med en åtgärd. Felrapporten innehåller ingen text. |
+
 ## Mätprotokoll och resultatmall
 
 Provenance, nativegränser, svensk referens, ljudavbrott och långprov. Inga resultat här; endast instruktioner.

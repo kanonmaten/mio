@@ -162,23 +162,23 @@ Läs först `control/README.md`, `control/DESIGN.md` och lärdomarna om [gpui-ki
 
 ## Fas 5: Hem, notiser och prov
 
-- [ ] Ämne per lektion. Hon ville inte ha ett schema. **Antagande** för goal-körningen: AI föreslår ämnet efter lektionen och hon bekräftar eller ändrar det i granskningsarket. Skriv antagandet i DECISIONS. Nedräkningen och provpaketet bygger på det här.
-- [ ] Hem: nedräkning till prov från godkända provplaner, synlig från en vecka före.
-- [ ] "Inför provet": en knapp i provförslaget och på Hem som kopierar ämnets provtips och lektionsanteckningar sedan förra provet.
-- [ ] Morgonnotis med dagens prov och läxor, avstängd tills hon slår på den (texten syns på låsskärmen). Kvällsnotis med antal förslag att granska, som öppnar Förslag.
+- [x] Ämne per lektion. Hon ville inte ha ett schema. **Antagande** för goal-körningen: AI föreslår ämnet efter lektionen och hon bekräftar eller ändrar det i granskningsarket. Skriv antagandet i DECISIONS. Nedräkningen och provpaketet bygger på det här.
+- [x] Hem: nedräkning till prov från godkända provplaner, synlig från en vecka före.
+- [x] "Inför provet": en knapp i provförslaget och på Hem som kopierar ämnets provtips och lektionsanteckningar sedan förra provet.
+- [x] Morgonnotis med dagens prov och läxor, avstängd tills hon slår på den (texten syns på låsskärmen). Kvällsnotis med antal förslag att granska, som öppnar Förslag.
 
 ## Fas 6: enkelhet för henne
 
-- [ ] Inställningsarket: överst notiser, tider, AI-paus, lagring, säkerhetskopia och en rad "Allt fungerar" eller "Något är fel". Parning, kvot, release och diagnostik under ett ihopfällt Avancerat. Fortfarande ett enda ark (befintlig regel).
-- [ ] Gå igenom alla feltexter i appen: en mening och en åtgärd, på vanlig svenska, utan HTTP-koder eller engelska. Knappen "Skicka felrapport" öppnar dela-arket med textfri diagnostik.
-- [ ] Sidan "Kontrollera allt": mikrofon, notiser, Påminnelser, Tailscale, datorn, Pianissimo och AI, en grön eller röd rad var med en åtgärd.
-- [ ] Signeringens slut: läs `ExpirationDate` ur `embedded.mobileprovision` i appen och visa antal dagar kvar i inställningarna. En lokal notis 24 timmar före med stegen: 1. Stäng av Tailscale. 2. Öppna SideStore och slå på LocalDevVPN. 3. Tryck Uppdatera vid Mio. 4. Stäng av LocalDevVPN och slå på Tailscale igen. **Ej verifierat** tills det är provat med en SideStore-installation.
-- [ ] Säkerhetskopia varje natt under laddning (`BGProcessingTask`): den versionsmärkta JSON-exporten skickas via Tailscale till datorn, krypteras där och sparas i 14 kopior. Återställning i inställningarna. Aldrig till molnet. Mio Kontroll visar senaste kopian.
+- [x] Inställningsarket: överst notiser, tider, AI-paus, lagring, säkerhetskopia och en rad "Allt fungerar" eller "Något är fel". Parning, kvot, release och diagnostik under ett ihopfällt Avancerat. Fortfarande ett enda ark (befintlig regel).
+- [x] Gå igenom alla feltexter i appen: en mening och en åtgärd, på vanlig svenska, utan HTTP-koder eller engelska. Knappen "Skicka felrapport" öppnar dela-arket med textfri diagnostik.
+- [x] Sidan "Kontrollera allt": mikrofon, notiser, Påminnelser, Tailscale, datorn, Pianissimo och AI, en grön eller röd rad var med en åtgärd.
+- [x] Signeringens slut: läs `ExpirationDate` ur `embedded.mobileprovision` i appen och visa antal dagar kvar i inställningarna. En lokal notis 24 timmar före med stegen: 1. Stäng av Tailscale. 2. Öppna SideStore och slå på LocalDevVPN. 3. Tryck Uppdatera vid Mio. 4. Stäng av LocalDevVPN och slå på Tailscale igen. **Ej verifierat** tills det är provat med en SideStore-installation.
+- [x] Säkerhetskopia varje natt under laddning (`BGProcessingTask`): den versionsmärkta JSON-exporten skickas via Tailscale till datorn, krypteras där och sparas i 14 kopior. Återställning i inställningarna. Aldrig till molnet. Mio Kontroll visar senaste kopian.
 
 ## Fas 7: ikonen
 
-- [ ] Rita ikonen: hela ordet "mio" i rundade gemener, o:et som en ring med en liten ljudvåg, i Mios blå ton (aldrig violett). Separata lager för bakgrund, ord och ljudvåg, så att iOS 27 ritar glas samt mörkt och tonat läge. Icon Composer är ett Mac-program och går inte att köra här, så bygg `.icon`-filen för hand (lagren som SVG och filens JSON) enligt Apples dokumentation. Huvudsessionen lägger in den i `project.pbxproj` efter våg 4, och "Bygg Mio IPA" visar om `actool` godtar den. Godtas den inte efter två försök: märk punkten `(hoppad: <felet>)` och låt användaren göra filen i Icon Composer.
-- [ ] Behåll PNG-filerna i `Mio/Assets.xcassets/AppIcon.appiconset` som reserv och byt ut dem mot samma motiv.
+- [x] Rita ikonen: hela ordet "mio" i rundade gemener, o:et som en ring med en liten ljudvåg, i Mios blå ton (aldrig violett). Separata lager för bakgrund, ord och ljudvåg, så att iOS 27 ritar glas samt mörkt och tonat läge. Icon Composer är ett Mac-program och går inte att köra här, så bygg `.icon`-filen för hand (lagren som SVG och filens JSON) enligt Apples dokumentation. Huvudsessionen lägger in den i `project.pbxproj` efter våg 4, och "Bygg Mio IPA" visar om `actool` godtar den. Godtas den inte efter två försök: märk punkten `(hoppad: <felet>)` och låt användaren göra filen i Icon Composer.
+- [x] Behåll PNG-filerna i `Mio/Assets.xcassets/AppIcon.appiconset` som reserv och byt ut dem mot samma motiv.
 - [ ] Hämta skärmbilderna från "Bygg Mio IPA" (`gh run download`) och granska dem i ljust, mörkt och tonat läge.
 
 ## Sist: överlämning
@@ -186,7 +186,7 @@ Läs först `control/README.md`, `control/DESIGN.md` och lärdomarna om [gpui-ki
 - [ ] [CHANGELOG.md](../CHANGELOG.md) för det som syns för användaren, och [STATUS.md](STATUS.md) bara med kontroller som faktiskt körts.
 - [ ] Kör "Bygg Mio IPA" för sista commiten med `uitester` och `diagnostik` på, och vänta tills den är grön.
 - [ ] Skriv överlämningen till användaren: vad som ändrats, vilka commitar som är provade och var, och vad användaren själv gör. Det är `./server/install.sh` på datorn, Prova för Mistral i Mio Kontroll (och gränsen för `lesson` efter mätningen), att stänga av träning på API-data i Mistrals konsol, provet av Mio Kontroll på datorn, telefonproven nedan, och de antaganden som gjorts.
-- [ ] Lägg till telefonprov i [helhetstestet](TESTPLAN_HELHET.md): en hel lektion med provtips och läxor, en skoldag med vardagsfångst och låg batterinivå (lektionen fortsätter), direkt anteckning med Ångra, signeringsnotisen och en återställning från säkerhetskopian.
+- [x] Lägg till telefonprov i [helhetstestet](TESTPLAN_HELHET.md): en hel lektion med provtips och läxor, en skoldag med vardagsfångst och låg batterinivå (lektionen fortsätter), direkt anteckning med Ångra, signeringsnotisen och en återställning från säkerhetskopian.
 
 ## Öppna frågor
 

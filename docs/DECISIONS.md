@@ -63,6 +63,18 @@ Användaren gick igenom Mio med Claude 2026-11-19 och kompletterade 2026-11-20. 
 - Egna ord: Mio frågar bara när en rättning byter en ordföljd mot en annan (inte borttagning, versaler, skiljetecken eller Återställ original). Ja och Nej räknas båda som att hon fått frågan. Frågade ord sparas bara som 64-bitars hashar.
 - Mio Kontroll varnar inte när ingen kopia finns än, eftersom telefonen kanske inte haft sin första natt. Tas upp med användaren i överlämningen.
 
+**Genomfört i våg 4 (2026-11-21).** Ämne per lektion följer antagandet i tabellen ovan. Appens val:
+
+- **Provets datum lagras i Mio** (`MioContentItem.exam`), det enda undantaget från att posten saknar text och datum. Mio läser aldrig Kalender, så nedräkningen följer dagen hon sa Ja till. Bortvalt: läsa Kalender (avböjt i grillningen).
+- **Vad som är ett prov:** en plan, eller en påminnelse med datum, vars rubrik har "prov" (även sammansatt, som "biologiprovet"), förhör, tenta, skrivning eller NP; inte "prova", "provat" eller "prover". Ämnet tas i ordningen: hennes val, lektionens bekräftade ämne, ett känt ämne i rubriken. "Sedan förra provet" räknas från förra godkända provet i samma ämne.
+- **Läxa** är en påminnelse Mio skickat från en lektion, eller en vars rubrik har "läx", "inlämning" eller "lämna in". Påminnelser läses bara när en notis planeras.
+- **Notiserna planeras per dag, 14 dagar framåt,** och planeras om vid start, i bakgrunden, när förslag ändras och efter nattens kopia.
+- **Säkerhetskopian** körs inte under fångst men gärna medan lyssnandet är pausat (tystnadspausen kan lämna Mio pausad hela natten). Diagnostiken följer inte med. Den schemaläggs bara när gatewayen har `backup` i sin status.
+- **Återställningen görs vid nästa start:** kopian kontrolleras med repositoriernas laddregler (export 1–2, assistent 1), sparas som väntande fil och ersätter alla rader i en SwiftData-transaktion innan något repository öppnas. Bortvalt: ersätta data under körning, eftersom de tre repositorierna har egna kontexter och cachar.
+- **"Kontrollera allt" och statusraden** använder samma modell och läser det Mio redan vet; nya nätanrop bara med "Kontrollera igen". Det som inte är kontrollerat räknas inte som fel.
+- **Feltexter:** Mios egna svenska meningar visas, allt annat blir "Försök igen, och skicka en felrapport …". Parningens tekniska texter under Avancerat står kvar.
+- **Ikonen** gjordes för hand som `AppIcon.icon` (bakgrunden som dokumentets fyllning, ord och ljudvåg som glaslager) och godtogs av `actool` i "Bygg Mio IPA" #65. PNG-filerna i `AppIcon.appiconset` har samma motiv och finns kvar som reserv.
+
 Reglerna i `CLAUDE.md` ändrades samtidigt: Mistral är standard i `install.sh`, strikt schema gäller där leverantören har det, resonemang är tillåtet bara för `lesson`, och en direkt instruktion räknas som Ja för Påminnelser och Mio-anteckningar. [Produktvisionen](PRODUKTVISION.md) har samma ändringar. Kontrakten mellan gatewayen, Pianissimo, Mio Kontroll och appen står i [datamodellen](DATAMODELL.md#kontrakt-efter-grillningen).
 
 Källor (lästa 2026-11-19 och 2026-11-20): Mistral om [resonemang](https://docs.mistral.ai/inference/conversations/reasoning.md), [strukturerad utdata](https://docs.mistral.ai/inference/conversations/structured-output/custom.md), [Large 4](https://docs.mistral.ai/models/mistral-large-4-0), [Small 4](https://docs.mistral.ai/models/mistral-small-4-0-26-03) och [priser](https://docs.mistral.ai/inference/pricing).

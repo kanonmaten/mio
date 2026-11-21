@@ -168,6 +168,14 @@ Skrivna 2026-11-20 i fas 0 av [planen](PLAN_GRILLNING.md), efter [besluten](DECI
 - `mio.lesson.notesLatency.v1` (sessions-ID, sekunder och tid, högst 30) och `mio.vocabulary.asked.v1` (64-bitars FNV-1a-hashar av normaliserade fraser, aldrig orden) i UserDefaults. Båda nollställs vid fullständig radering.
 - `mio.lesson.notesReadyAnnounced.v1`: UUID:n för lektioner som redan fått granskningsarket eller notisen, högst 200 (äldsta först ut), nollställs vid fullständig radering. Citat i `examHints`, `sections`, `candidates` och huvudpunkter får vara upp till 2 400 byte i appen, samma som gatewayen. Kastas provtips får delen en textfri osäkerhet om hur många som inte visas.
 
+### Prov, notiser, signering och säkerhetskopia i appen (våg 4, 2026-11-21)
+
+- `MioContentItem.exam` är valfritt och additivt: `{date, isAllDay, subject?}`, och sätts bara när en godkänd plan eller påminnelse ser ut som ett prov och har ett datum. SwiftData-schemat är oförändrat.
+- UserDefaults: `mio.daily.morning.detail` (Bool, saknas = av), `mio.daily.morning.minutes` och `mio.daily.evening.minutes` (sparad tid), `mio.backup.lastAttempt.v1` (`{at, failure}`, utan innehåll, nollställs vid fullständig radering).
+- Notis-ID: `mio.daily.<kind>.ÅÅÅÅMMDD` (en per dag, 14 dagar framåt; den upprepade `mio.daily.morning` står kvar när detaljreglaget är av) och `app.mio.signing.renew` (utan `userInfo`). Rutten `evening` öppnar nu Förslag, med den generella texten "Granska dagens förslag i Mio."
+- `BGTaskSchedulerPermittedIdentifiers` har `app.mio.assistant.backup`, och `UIBackgroundModes` har `processing`.
+- En vald kopia att återställa ligger som `Mio/restore-pending.json` till nästa start. Den tas bort av "Avbryt återställningen", och när en ofullbordad radering finns.
+
 ### `/v2/status`: resonemang, schema och användning
 
 Varje post under `tasks` får två fält:
