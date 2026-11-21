@@ -68,8 +68,16 @@ struct ContentView: View {
         }
         .environment(maintenance)
         .safeAreaInset(edge: .top) {
-            if maintenance.recoveryBlocked {
-                WorkflowRecoveryBanner(workflow: workflow)
+            VStack(spacing: 8) {
+                if maintenance.recoveryBlocked {
+                    WorkflowRecoveryBanner(workflow: workflow)
+                }
+                // Notes that finished while she was busy: offered here, opened only by her tap.
+                if let id = navigation.readyLessonReviewID, model.session(id: id)?.isLesson == true, !maintenance.blocksWork {
+                    MioLessonNotesReadyRow(
+                        open: { navigation.openReadyLessonReview(lessonExists: { model.session(id: $0)?.isLesson == true }) },
+                        dismiss: { navigation.dismissReadyLessonReview() })
+                }
             }
         }
         .overlay {
@@ -148,6 +156,37 @@ struct ContentView: View {
         if showSettings { showSettings = false; return }
         navigation.resolvePending(using: notificationDestination,
                                   lessonExists: { model.session(id: $0)?.isLesson == true })
+    }
+}
+
+/// A discreet glass row instead of a sheet that would cover what she is doing.
+private struct MioLessonNotesReadyRow: View {
+    let open: () -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button(action: open) {
+                Label("Anteckningarna är klara – granska", systemImage: "checkmark.circle")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityHint("Öppnar granskningen av lektionens förslag")
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Inte nu")
+            .accessibilityHint("Granskningen finns kvar i lektionen")
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 2)
+        .mioGlass(radius: 18)
+        .padding(.horizontal)
     }
 }
 

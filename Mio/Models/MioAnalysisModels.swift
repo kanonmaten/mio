@@ -199,7 +199,7 @@ struct MioLessonHighlight: Codable, Hashable, Sendable {
 struct MioAnalysisResult: Codable, Hashable, Sendable {
     let candidates: [MioAnalysisCandidate]
     let highlights: [MioLessonHighlight]
-    let uncertainties: [String]
+    var uncertainties: [String]
     var sections: [MioLessonSection]? = nil
     var metadata: MioAnalysisMetadata? = nil
     /// Lesson notes version 2: the teacher's explicit exam hints ("Viktigt till provet").
@@ -208,10 +208,25 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
     var subjectSuggestion: String? = nil
 
     static let maximumExamHints = 8
+    /// The longest exact quote the app accepts, the same for every grounded item (candidates,
+    /// highlights, sections, exam hints). It is the gateway's limit: it passes an exact source
+    /// quote up to 2 400 bytes and caps only quotes it repairs at 600. The prompt asks for at
+    /// most 600, but nothing in the app needs that, and a quote is never shortened, because it
+    /// must stay an exact substring of the source.
+    static let maximumEvidenceBytes = 2_400
+    /// Added to the part's uncertainties when exam hints were dropped, so the note shows that
+    /// something fell away. Carries no transcript or model text, only a count (1–8).
+    static func droppedExamHintsNotice(_ count: Int) -> String {
+        "\(count) provtips från AI visas inte, eftersom citatet inte gick att kontrollera mot texten."
+    }
+    static func isDroppedExamHintsNotice(_ text: String) -> Bool {
+        (1...maximumExamHints).contains { droppedExamHintsNotice($0) == text }
+    }
 
     /// Drops exam hints that break the contract (1–300 characters, 1–4 sources from the
     /// request, an exact quote from one of them) and a subject that is not 1–40 characters on
-    /// one line. The rest of the answer stands, as in the gateway.
+    /// one line. The rest of the answer stands, as in the gateway; dropped hints are counted
+    /// in a text-free uncertainty.
     func droppingInvalidLessonExtras(for request: MioAnalysisRequest) -> Self {
         var result = self
         let sources = Dictionary(uniqueKeysWithValues: request.allFragments.map { ($0.id, $0.text) })
@@ -220,9 +235,16 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
                 let text = hint.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 return !text.isEmpty && hint.text.count <= 300 && (1...4).contains(hint.sourceIDs.count)
                     && Set(hint.sourceIDs).count == hint.sourceIDs.count && hint.sourceIDs.allSatisfy { sources[$0] != nil }
-                    && !hint.evidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && hint.evidence.utf8.count <= 600
+                    && !hint.evidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    && hint.evidence.utf8.count <= Self.maximumEvidenceBytes
                     && hint.sourceIDs.contains { sources[$0]?.contains(hint.evidence) == true }
             }
+        }
+        let dropped = (examHints?.count ?? 0) - (result.examHints?.count ?? 0)
+        if dropped > 0 {
+            // At most one notice per part; it sits beside the model's own (at most six).
+            result.uncertainties = uncertainties.filter { !Self.isDroppedExamHintsNotice($0) }
+                + [Self.droppedExamHintsNotice(min(dropped, Self.maximumExamHints))]
         }
         result.subjectSuggestion = subjectSuggestion.flatMap { value in
             MioLessonSubject.clean(value) == value ? value : nil
@@ -248,7 +270,7 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
             !ids.isEmpty && ids.count <= 8 && Set(ids).count == ids.count
                 && ids.allSatisfy { sources[$0] != nil }
                 && !evidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                && evidence.utf8.count <= 600 && ids.contains { sources[$0]?.contains(evidence) == true }
+                && evidence.utf8.count <= Self.maximumEvidenceBytes && ids.contains { sources[$0]?.contains(evidence) == true }
         }
         let newIDs = Set(request.fragments.map(\.id))
         func validReplacement(_ candidate: MioAnalysisCandidate) -> Bool {
@@ -262,7 +284,10 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
         }
         let replacements = candidates.compactMap(\.replacesID)
         guard Set(replacements).count == replacements.count,
-              candidates.count <= 6, highlights.count <= 8, uncertainties.count <= 6,
+              candidates.count <= 6, highlights.count <= 8,
+              // The model's own six, plus the app's one notice about dropped exam hints.
+              uncertainties.filter({ !Self.isDroppedExamHintsNotice($0) }).count <= 6,
+              uncertainties.filter(Self.isDroppedExamHintsNotice).count <= 1,
               uncertainties.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 500 }),
               request.mode == .lesson || highlights.isEmpty,
               candidates.allSatisfy({ candidate in

@@ -250,7 +250,7 @@ struct SessionEditorView: View {
                     }
                     Button("Avbryt", role: .cancel) { renamingSpeaker = nil }
                 } message: {
-                    Text("Namnet visas bara på telefonen; AI ser bara \(MioSpeakerLabel.defaultName(renamingSpeaker ?? 1)). Lämna tomt för att återgå.")
+                    Text(MioSpeakerLabel.renameNote(speaker: renamingSpeaker ?? 1, isLesson: session.isLesson))
                 }
                 .alert("Ska ”\(sessionModel.vocabularyOffer?.phrase ?? "")” bli ett eget ord?", isPresented: vocabularyOfferIsPresented) {
                     Button("Ja, lägg till") { sessionModel.respondToVocabularyOffer(accept: true) }

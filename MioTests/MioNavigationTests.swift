@@ -23,6 +23,62 @@ final class MioNavigationTests: XCTestCase {
     }
 
     @MainActor
+    func testFinishedNotesNeverCloseASheetChangeTheTabOrInterruptCapture() {
+        let navigation = MioNavigationCoordinator()
+        let lesson = UUID()
+        // A plain screen: the review opens over the tab she is on, which stays as it is.
+        navigation.selectedTab = .proposals
+        navigation.lessonNotesReady(lesson, otherSheetOpen: false, capturing: false)
+        XCTAssertEqual(navigation.presentedLessonReview?.id, lesson)
+        XCTAssertEqual(navigation.selectedTab, .proposals)
+        XCTAssertNil(navigation.readyLessonReviewID)
+        navigation.presentedLessonReview = nil
+
+        // Settings or another screen's sheet is up: only the offer, nothing is closed.
+        navigation.lessonNotesReady(lesson, otherSheetOpen: true, capturing: false)
+        XCTAssertNil(navigation.presentedLessonReview)
+        XCTAssertEqual(navigation.readyLessonReviewID, lesson)
+        XCTAssertEqual(navigation.selectedTab, .proposals)
+        navigation.dismissReadyLessonReview()
+
+        // A post or session the coordinator shows stays open.
+        let post = MioPresentedPost(id: UUID())
+        navigation.presentedSession = post
+        navigation.lessonNotesReady(lesson, otherSheetOpen: false, capturing: false)
+        XCTAssertEqual(navigation.presentedSession, post)
+        XCTAssertNil(navigation.presentedLessonReview)
+        XCTAssertEqual(navigation.readyLessonReviewID, lesson)
+        navigation.presentedSession = nil
+        navigation.dismissReadyLessonReview()
+
+        // Capturing on Fånga: no sheet over the capture screen. Elsewhere it may open.
+        navigation.selectedTab = .capture
+        navigation.lessonNotesReady(lesson, otherSheetOpen: false, capturing: true)
+        XCTAssertNil(navigation.presentedLessonReview)
+        XCTAssertEqual(navigation.selectedTab, .capture)
+        // Her tap on the row opens it without changing the tab.
+        navigation.openReadyLessonReview { $0 == lesson }
+        XCTAssertEqual(navigation.presentedLessonReview?.id, lesson)
+        XCTAssertEqual(navigation.selectedTab, .capture)
+        XCTAssertNil(navigation.readyLessonReviewID)
+        navigation.presentedLessonReview = nil
+
+        // A deleted lesson's offer opens nothing.
+        navigation.lessonNotesReady(lesson, otherSheetOpen: true, capturing: false)
+        navigation.openReadyLessonReview { _ in false }
+        XCTAssertNil(navigation.presentedLessonReview)
+        XCTAssertNil(navigation.readyLessonReviewID)
+
+        // Her tap on the notification still navigates, and answers the waiting offer.
+        navigation.lessonNotesReady(lesson, otherSheetOpen: true, capturing: true)
+        navigation.receive(.lessonReview(lesson))
+        navigation.resolvePending(using: { _ in nil }, lessonExists: { $0 == lesson })
+        XCTAssertEqual(navigation.selectedTab, .lessons)
+        XCTAssertEqual(navigation.presentedLessonReview?.id, lesson)
+        XCTAssertNil(navigation.readyLessonReviewID)
+    }
+
+    @MainActor
     func testNotificationWaitsForLoadedStoreBeforeResolvingThePost() async {
         let id = UUID()
         let navigation = MioNavigationCoordinator()

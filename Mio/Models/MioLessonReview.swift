@@ -127,6 +127,30 @@ struct MioLessonNotesLatencyLog: Codable, Equatable, Sendable {
     }
 }
 
+/// Lessons that already got the review sheet, the offer row or the notification, so finished
+/// notes are announced once per lesson whether or not the time was measured (the latency log
+/// skips implausible times and keeps only 30). Only lesson identities, newest last, bounded;
+/// cleared with "Radera all data".
+enum MioLessonNotesReadyLog {
+    static let key = "mio.lesson.notesReadyAnnounced.v1"
+    static let maximumEntries = 200
+
+    static func load(from defaults: UserDefaults) -> [UUID] {
+        (defaults.stringArray(forKey: key) ?? []).compactMap(UUID.init(uuidString:))
+    }
+
+    /// True the first time for a lesson, and records it; false when it was already announced.
+    static func claim(_ sessionID: UUID, in defaults: UserDefaults) -> Bool {
+        var ids = load(from: defaults)
+        guard !ids.contains(sessionID) else { return false }
+        ids.append(sessionID)
+        defaults.set(ids.suffix(maximumEntries).map(\.uuidString), forKey: key)
+        return true
+    }
+
+    static func reset(in defaults: UserDefaults) { defaults.removeObject(forKey: key) }
+}
+
 /// What the review sheet after a lesson shows: the lesson's proposals waiting for Ja or Nej, and
 /// the AI's subject suggestion next to the subject she confirmed (fas 5 builds on the latter).
 struct MioLessonReviewContent: Sendable {

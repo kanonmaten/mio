@@ -31,8 +31,9 @@ final class MioWorkflowCoordinator {
     static let lessonNotesKey = "mio.workflow.lessonNotesInProgress"
     /// Called after the user's own action queued lesson notes (iOS continued processing).
     @ObservationIgnored var onLessonNotesStarted: ((UUID) -> Void)?
-    /// Called once when a lesson's notes are done; the app opens the review sheet in the
-    /// foreground or posts "Anteckningarna från lektionen är klara" (notification route `lessonReview`).
+    /// Called once when a lesson's notes are done; in the foreground the app opens the review
+    /// sheet or, when she is busy, offers it in a row (`MioNavigationCoordinator.lessonNotesReady`),
+    /// otherwise it posts "Anteckningarna från lektionen är klara" (notification route `lessonReview`).
     @ObservationIgnored var onLessonNotesReady: (@MainActor (UUID) -> Void)?
     /// The last measured time from lesson end to finished notes, for tests and diagnostics.
     private(set) var lastLessonNotesLatency: MioLessonNotesLatencyLog.Entry?
@@ -653,6 +654,7 @@ final class MioWorkflowCoordinator {
                     pendingLessonIDs = []; storePendingLessons(); storeLessonNotes([])
                     MioDirectNoteTally.reset(in: pendingLessonDefaults)
                     MioLessonNotesLatencyLog.reset(in: pendingLessonDefaults)
+                    MioLessonNotesReadyLog.reset(in: pendingLessonDefaults)
                     MioVocabularyAskedLog.reset(in: capture.vocabularyDefaults)
                 }
                 else if scope == .session, let targetID { clearLessonPending(targetID) }
@@ -725,12 +727,14 @@ final class MioWorkflowCoordinator {
     }
 
     /// Measures the time from lesson end to finished notes once per lesson (no text) and
-    /// hands the lesson to the review sheet. Notes finished again later are not reported again.
+    /// hands the lesson to the review sheet. Notes finished again later are not reported again:
+    /// `MioLessonNotesReadyLog` decides that, independent of whether the time was measured.
     func lessonNotesCompleted(_ session: MioSession, now: Date = .now) {
         guard session.isLesson, let endedAt = session.endedAt, capture.session(id: session.id) != nil else { return }
         storeLessonNotes(storedLessonNotes().filter { $0 != session.id })
-        guard !MioLessonNotesLatencyLog.load(from: pendingLessonDefaults).entries.contains(where: { $0.sessionID == session.id })
-        else { return }
+        // Lessons measured before the ready log existed were already announced.
+        let measuredBefore = MioLessonNotesLatencyLog.load(from: pendingLessonDefaults).entries.contains { $0.sessionID == session.id }
+        guard MioLessonNotesReadyLog.claim(session.id, in: pendingLessonDefaults), !measuredBefore else { return }
         // Nil for an implausible time (a clock change, notes finished a week later): not measured.
         lastLessonNotesLatency = MioLessonNotesLatencyLog.record(sessionID: session.id, endedAt: endedAt, completedAt: now,
                                                                  in: pendingLessonDefaults)

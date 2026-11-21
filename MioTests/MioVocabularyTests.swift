@@ -130,6 +130,32 @@ final class MioVocabularyTests: XCTestCase {
         XCTAssertFalse(resent)
         XCTAssertEqual(failing.uploaded.count, 2)
     }
+
+    @MainActor
+    func testAJaWhileAnotherWordIsSentWaitsItsTurnInsteadOfVanishing() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("MioVocabulary-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "MioVocabularyTests-\(UUID())"))
+        let transport = VocabularyTransport(upload: true)
+        let (capture, session) = try await makeCapture(root: root, transport: transport, defaults: defaults)
+        let first = session.transcripts[0].id, second = UUID()
+        transport.hold = true
+        let running = Task { await capture.sendVocabulary(segmentID: first, phrase: "Lindqvist") }
+        for _ in 0..<1_000 where transport.uploaded.isEmpty { await Task.yield() }
+        XCTAssertEqual(capture.vocabularySendingSegmentID, first)
+        // The second Ja arrives while the first word is on its way.
+        let queued = await capture.sendVocabulary(segmentID: second, phrase: "mitokondrie")
+        XCTAssertFalse(queued, "not sent yet")
+        XCTAssertEqual(capture.vocabularyMessage?.segmentID, second)
+        XCTAssertEqual(transport.uploaded, ["Lindqvist"], "never two calls at once")
+        transport.hold = false
+        let sent = await running.value
+        XCTAssertTrue(sent)
+        XCTAssertEqual(transport.uploaded, ["Lindqvist", "mitokondrie"], "each Ja is one call, in order")
+        XCTAssertNil(capture.vocabularySendingSegmentID)
+        XCTAssertEqual(capture.vocabularyMessage?.text, "”mitokondrie” finns nu i ordlistan på datorn.")
+        XCTAssertTrue(capture.vocabularyFailures.isEmpty)
+    }
 }
 
 private final class VocabularyTransport: TranscriptionTransport, @unchecked Sendable {
@@ -138,7 +164,13 @@ private final class VocabularyTransport: TranscriptionTransport, @unchecked Send
     private let failure: MioVocabularyError?
     private var _uploaded: [String] = []
     private var _healthChecks = 0
+    private var _hold = false
     var uploaded: [String] { lock.withLock { _uploaded } }
+    /// While true, an upload is recorded but does not answer yet.
+    var hold: Bool {
+        get { lock.withLock { _hold } }
+        set { lock.withLock { _hold = newValue } }
+    }
     var healthChecks: Int { lock.withLock { _healthChecks } }
 
     init(upload: Bool, failure: MioVocabularyError? = nil) { supportsUpload = upload; self.failure = failure }
@@ -155,6 +187,7 @@ private final class VocabularyTransport: TranscriptionTransport, @unchecked Send
     func cancel() { }
     func uploadVocabulary(_ phrase: String) async throws -> MioVocabularyReply {
         lock.withLock { _uploaded.append(phrase) }
+        while hold { try await Task.sleep(nanoseconds: 1_000_000) }
         if let failure { throw failure }
         return MioVocabularyReply(added: true, vocabulary: 1)
     }

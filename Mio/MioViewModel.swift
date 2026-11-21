@@ -36,6 +36,9 @@ final class MioViewModel {
     private(set) var vocabularyFailures: [UUID: String] = [:]
     /// One sentence about the last word sent, shown next to the correction.
     private(set) var vocabularyMessage: (segmentID: UUID, text: String)?
+    /// Words she said Ja to while another word was on its way. Each is sent once, in order,
+    /// right after the one before; a Ja is never dropped. Memory only, like the failures.
+    @ObservationIgnored private var vocabularyQueue: [(segmentID: UUID, phrase: String)] = []
     /// Where the hashes of words already asked about are kept (`MioVocabularyAskedLog`).
     @ObservationIgnored var vocabularyDefaults: UserDefaults = .standard
     /// The check started after the latest correction; tests await it.
@@ -694,12 +697,32 @@ final class MioViewModel {
     }
 
     /// One call per tap. A failure leaves one sentence and a way to send it again from the
-    /// correction; there is no automatic repetition. The word is not logged.
+    /// correction; there is no automatic repetition. The word is not logged. While another word
+    /// is being sent, this one waits in `vocabularyQueue` and goes right after it (still one
+    /// call); the return value is then false because it has not been sent yet.
     @discardableResult
     func sendVocabulary(segmentID: UUID, phrase: String) async -> Bool {
-        guard vocabularySendingSegmentID == nil, let phrase = MioVocabulary.validPhrase(phrase) else { return false }
-        vocabularySendingSegmentID = segmentID
+        guard let phrase = MioVocabulary.validPhrase(phrase) else { return false }
+        guard vocabularySendingSegmentID == nil else {
+            if !vocabularyQueue.contains(where: { $0.segmentID == segmentID && $0.phrase == phrase }) {
+                vocabularyQueue.append((segmentID, phrase))
+            }
+            vocabularyMessage = (segmentID, "”\(phrase)” skickas till datorn när det förra ordet är klart.")
+            return false
+        }
+        // The sending marker stays set across the queue, so a Ja meanwhile joins it instead of
+        // starting a second call alongside.
         defer { vocabularySendingSegmentID = nil }
+        let sent = await uploadVocabulary(segmentID: segmentID, phrase: phrase)
+        while !vocabularyQueue.isEmpty {
+            let next = vocabularyQueue.removeFirst()
+            _ = await uploadVocabulary(segmentID: next.segmentID, phrase: next.phrase)
+        }
+        return sent
+    }
+
+    private func uploadVocabulary(segmentID: UUID, phrase: String) async -> Bool {
+        vocabularySendingSegmentID = segmentID
         do {
             let transport = try vocabularyTransport()
             defer { transport.cancel() }

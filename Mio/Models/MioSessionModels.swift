@@ -408,6 +408,15 @@ enum MioSpeakerLabel {
 
     static func defaultName(_ speaker: Int) -> String { "Talare \(speaker)" }
 
+    /// The rename dialog's promise. AI gets the neutral number in the text and, for lesson notes
+    /// version 2, the role (teacher or student) as `speakerRole`; never the name she types.
+    static func renameNote(speaker: Int, isLesson: Bool) -> String {
+        let label = defaultName(speaker)
+        let ai = isLesson ? "AI ser bara ”\(label)” och om det är läraren eller en elev, aldrig namnet."
+                          : "AI ser bara ”\(label)”, aldrig namnet."
+        return "Namnet visas bara på telefonen. \(ai) Lämna tomt för att återgå."
+    }
+
     static func displayName(for speaker: Int, names: [Int: String]?) -> String {
         names?[speaker] ?? defaultName(speaker)
     }

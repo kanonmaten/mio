@@ -117,6 +117,7 @@ struct MioLessonReviewSheet: View {
     let content: MioContentViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(MioAssistantViewModel.self) private var assistant
+    @Environment(MioNavigationCoordinator.self) private var navigation
     @State private var subject = ""
     @State private var subjectError: String?
     @State private var loadedSubject = false
@@ -166,7 +167,11 @@ struct MioLessonReviewSheet: View {
             .navigationTitle("Granska lektionen")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Klar") { dismiss() } } }
-            .onAppear { MioSystemServices.shared.withdrawLessonNotesReady(sessionID: sessionID) }
+            .onAppear {
+                MioSystemServices.shared.withdrawLessonNotesReady(sessionID: sessionID)
+                // Opened from the lesson: the waiting offer for the same lesson is answered too.
+                if navigation.readyLessonReviewID == sessionID { navigation.dismissReadyLessonReview() }
+            }
         }
     }
 

@@ -48,11 +48,14 @@ struct MioApp: App {
         _liveActivity = State(initialValue: liveActivity)
         _lessonNotes = State(initialValue: lessonNotes)
         workflow.onLessonNotesStarted = { lessonNotes.begin(sessionID: $0) }
-        // Finished notes open the review sheet at once in the foreground; in the background a
-        // notification with a generic text does, when she opens it (fas 3).
+        // In the foreground finished notes never take over what she is doing: the review sheet
+        // opens only when no other sheet is up and she is not capturing on Fånga, otherwise a
+        // small row offers it. In the background a notification with a generic text is posted;
+        // her tap on it navigates as before (fas 3).
         workflow.onLessonNotesReady = { id in
             if UIApplication.shared.applicationState == .active {
-                navigation.receive(.lessonReview(id))
+                navigation.lessonNotesReady(id, otherSheetOpen: Self.isPresentingOverContent(),
+                                            capturing: MioListeningBar.isShown(for: capture.runState))
             } else {
                 Task { await MioSystemServices.shared.postLessonNotesReady(sessionID: id) }
             }
@@ -73,6 +76,16 @@ struct MioApp: App {
         }
         capture.batteryStatus = { MioDeviceSignals.batteryStatus() }
         capture.directFeedback = { MioDirectHaptics.play($0) }
+    }
+
+    /// Whether any sheet, alert or dialog is up in a foreground window. SwiftUI presents them
+    /// from the window's root controller, so this also sees sheets owned by single screens.
+    private static func isPresentingOverContent() -> Bool {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .filter { $0.activationState == .foregroundActive }
+            .flatMap(\.windows)
+            .contains { $0.rootViewController?.presentedViewController != nil }
     }
 
     var body: some Scene {

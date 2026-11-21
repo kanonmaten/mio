@@ -112,6 +112,7 @@ final class MioLessonNotesV2Tests: XCTestCase {
                                             observedConfigurationRevision: revision)
         let result = try await MioCloudService.analyze(request, connection: connection, transport: { try await transport.send($0) })
         XCTAssertEqual(result.examHints?.map { $0.text }, ["Mitokondrien är cellens kraftverk"])
+        XCTAssertEqual(result.uncertainties, [MioAnalysisResult.droppedExamHintsNotice(2)], "the note shows that hints fell away")
         XCTAssertNil(result.subjectSuggestion)
         XCTAssertEqual(result.sections?.count, 1)
         XCTAssertNoThrow(try result.validate(against: request))
@@ -345,6 +346,107 @@ final class MioLessonNotesV2Tests: XCTestCase {
         var legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(saved)) as! [String: Any]
         legacy["subject"] = nil
         XCTAssertNil(try JSONDecoder().decode(MioSession.self, from: JSONSerialization.data(withJSONObject: legacy)).subject)
+    }
+
+    func testExamHintsKeepLongExactQuotesUpToTheGatewayLimitAndCountWhatIsDropped() throws {
+        // A long teacher passage: the gateway passes exact quotes up to 2 400 bytes.
+        let long = String(repeating: "Kom ihåg att cellen delar sig. ", count: 100)
+        let session = lesson([segment(long, speaker: 1)])
+        let fragment = try XCTUnwrap(MioAnalysisFragment.lessonFragments(in: session).first)
+        var request = MioAnalysisRequest(mode: .lesson, timeZone: "Europe/Stockholm", fragments: [fragment])
+        request.usesLessonNotesV2 = true
+        func quote(bytes: Int) -> String {
+            var text = ""
+            for character in fragment.text {
+                guard text.utf8.count + String(character).utf8.count <= bytes else { break }
+                text.append(character)
+            }
+            return text
+        }
+        let seven = quote(bytes: 700), limit = quote(bytes: 2_400)
+        XCTAssertGreaterThan(seven.utf8.count, 600)
+        XCTAssertTrue(fragment.text.contains(limit))
+        let overLimit = quote(bytes: 2_500)
+        XCTAssertEqual(MioAnalysisFragment.lessonFragments(in: session).count, 1, "one fragment holds the whole passage")
+        XCTAssertGreaterThan(overLimit.utf8.count, 2_400)
+        let section = MioLessonSection(heading: "Cellen", body: "Delning.", sourceIDs: [fragment.id], evidence: seven)
+        let result = MioAnalysisResult(candidates: [], highlights: [], uncertainties: ["Ett ord hördes otydligt."],
+            sections: [section], metadata: metadata,
+            examHints: [MioLessonHighlight(text: "Celldelning", sourceIDs: [fragment.id], evidence: seven),
+                        MioLessonHighlight(text: "Hela genomgången", sourceIDs: [fragment.id], evidence: limit),
+                        MioLessonHighlight(text: "För långt", sourceIDs: [fragment.id], evidence: overLimit)])
+            .droppingInvalidLessonExtras(for: request)
+        // Quotes are never shortened: the long exact ones stay whole, the one over the limit goes.
+        XCTAssertEqual(result.examHints?.map(\.evidence), [seven, limit])
+        XCTAssertEqual(result.uncertainties, ["Ett ord hördes otydligt.", MioAnalysisResult.droppedExamHintsNotice(1)])
+        XCTAssertFalse(result.uncertainties.last?.contains("cellen") ?? true, "the notice carries no transcript text")
+        // Sections and candidates follow the same limit, and the notice is valid beside six model uncertainties.
+        XCTAssertNoThrow(try result.validate(against: request))
+        var full = result
+        full.uncertainties = (1...6).map { "Osäkerhet \($0)" } + [MioAnalysisResult.droppedExamHintsNotice(1)]
+        XCTAssertNoThrow(try full.validate(against: request))
+        full.uncertainties.append(MioAnalysisResult.droppedExamHintsNotice(2))
+        XCTAssertThrowsError(try full.validate(against: request), "one notice per part")
+        // Cleaning twice adds nothing more.
+        XCTAssertEqual(result.droppingInvalidLessonExtras(for: request).uncertainties, result.uncertainties)
+        let tooLongSection = MioLessonSection(heading: "Cellen", body: "Delning.", sourceIDs: [fragment.id], evidence: overLimit)
+        let rejected = MioAnalysisResult(candidates: [], highlights: [], uncertainties: [], sections: [tooLongSection], metadata: metadata,
+                                         examHints: [], subjectSuggestion: nil)
+        XCTAssertThrowsError(try rejected.validate(against: request))
+    }
+
+    @MainActor
+    func testFinishedNotesAreAnnouncedOnceEvenWhenTheTimeIsNotMeasured() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("MioReadyOnce-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "MioLessonNotesV2Tests-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let repository = SessionRepository(storageURL: root.appendingPathComponent("sessions.json"))
+        // Ended more than a week ago: the latency log refuses the time, so it cannot tell.
+        let ended = Date(timeIntervalSinceNow: -10 * 86_400)
+        let session = MioSession(startedAt: ended.addingTimeInterval(-600), endedAt: ended,
+                                 transcripts: [segment("Det här kommer på provet.", speaker: 1)], title: "Biologi", captureMode: .lesson)
+        let token = try await repository.operationToken(for: session.id, generation: await repository.operationGeneration())
+        _ = try await repository.saveCaptureCheckpoint(session, token: token)
+        let capture = MioViewModel(repository: repository)
+        let assistant = MioAssistantViewModel(repository: MioAssistantRepository(storageURL: root.appendingPathComponent("assistant.json")))
+        let content = MioContentViewModel(repository: MioContentRepository(storageURL: root.appendingPathComponent("content.json")))
+        let workflow = MioWorkflowCoordinator(capture: capture, content: content, assistant: assistant, analysis: MioAnalysisCoordinator(),
+            journal: MioDeletionJournal(storageURL: root.appendingPathComponent("operations.json")),
+            diagnostics: MioDiagnosticsRepository(storageURL: root.appendingPathComponent("diagnostics.json")),
+            systemActions: MioSystemActionPort(cancel: { _ in .success }, removeAll: { .success }),
+            clearCredentials: {}, pendingLessonDefaults: defaults)
+        await workflow.bootstrap()
+        var announced: [UUID] = []
+        workflow.onLessonNotesReady = { announced.append($0) }
+        workflow.lessonNotesCompleted(session)
+        workflow.lessonNotesCompleted(session)
+        XCTAssertEqual(announced, [session.id], "notes finished again are not announced again")
+        XCTAssertNil(workflow.lastLessonNotesLatency, "an implausible time is not measured")
+        XCTAssertTrue(MioLessonNotesLatencyLog.load(from: defaults).entries.isEmpty)
+        XCTAssertEqual(MioLessonNotesReadyLog.load(from: defaults), [session.id])
+        XCTAssertEqual(defaults.stringArray(forKey: MioLessonNotesReadyLog.key), [session.id.uuidString], "only the identity")
+    }
+
+    func testTheReadyLogIsBoundedAndResets() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "MioLessonNotesV2Tests-\(UUID())"))
+        let first = UUID()
+        XCTAssertTrue(MioLessonNotesReadyLog.claim(first, in: defaults))
+        XCTAssertFalse(MioLessonNotesReadyLog.claim(first, in: defaults))
+        for _ in 0..<MioLessonNotesReadyLog.maximumEntries { _ = MioLessonNotesReadyLog.claim(UUID(), in: defaults) }
+        let ids = MioLessonNotesReadyLog.load(from: defaults)
+        XCTAssertEqual(ids.count, MioLessonNotesReadyLog.maximumEntries)
+        XCTAssertFalse(ids.contains(first), "the oldest goes first")
+        MioLessonNotesReadyLog.reset(in: defaults)
+        XCTAssertTrue(MioLessonNotesReadyLog.load(from: defaults).isEmpty)
+    }
+
+    func testTheRenameDialogSaysWhatAISees() {
+        XCTAssertEqual(MioSpeakerLabel.renameNote(speaker: 2, isLesson: true),
+                       "Namnet visas bara på telefonen. AI ser bara ”Talare 2” och om det är läraren eller en elev, aldrig namnet. Lämna tomt för att återgå.")
+        XCTAssertEqual(MioSpeakerLabel.renameNote(speaker: 1, isLesson: false),
+                       "Namnet visas bara på telefonen. AI ser bara ”Talare 1”, aldrig namnet. Lämna tomt för att återgå.")
     }
 
     func testCalmViewCountsExamHintsAndHomeworkLocally() {
