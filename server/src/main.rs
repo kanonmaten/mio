@@ -1,6 +1,7 @@
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use mio_gateway::backup::BackupStore;
 use mio_gateway::config::load_config;
 use mio_gateway::server::Gateway;
 use mio_gateway::state_store::FileCounterStore;
@@ -21,6 +22,13 @@ fn serve() -> Result<(), &'static str> {
     // MIO_USAGE_FILE keeps the monthly usage counter for Mio Kontroll's credit meter.
     if let Some(path) = std::env::var_os("MIO_USAGE_FILE").filter(|path| !path.is_empty()) {
         gateway = gateway.with_usage_store(Arc::new(FileUsageStore::new(path)));
+    }
+    // The nightly backup from the phone: copies and key in the state directory. MIO_BACKUP_DIRECTORY
+    // wins; otherwise systemd's STATE_DIRECTORY (StateDirectory=mio-gateway) is used.
+    let backup_directory = ["MIO_BACKUP_DIRECTORY", "STATE_DIRECTORY"].iter()
+        .find_map(|name| std::env::var_os(name).filter(|path| !path.is_empty()));
+    if let Some(directory) = backup_directory {
+        gateway = gateway.with_backup_store(Arc::new(BackupStore::new(directory)));
     }
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|_| START)?;
     runtime.block_on(async {

@@ -40,16 +40,21 @@ fn expand(value: &Value, shared: &[Value]) -> Value {
 }
 
 /// `/v2/status` without the fields added after the recording (grilling contract 2026-11-20:
-/// `reasoning` and `schemaDialect` per task, `usage` at the top). Node never had them, so the
+/// `reasoning` and `schemaDialect` per task, `usage` and `backup` at the top, and the
+/// `lesson-notes-v2` capability of `lesson`). Node never had them, so the
 /// recording stays as Node wrote it and everything Node did publish is still compared byte for
 /// byte; the new fields have their own tests (tests/reasoning_usage.rs).
 fn without_additions(mut status: Value) -> Value {
     if let Some(map) = status.as_object_mut() {
         map.shift_remove("usage");
+        map.shift_remove("backup");
         for task in map.get_mut("tasks").and_then(Value::as_object_mut).into_iter().flat_map(|tasks| tasks.values_mut()) {
             if let Some(task) = task.as_object_mut() {
                 task.shift_remove("reasoning");
                 task.shift_remove("schemaDialect");
+                if let Some(capabilities) = task.get_mut("capabilities").and_then(Value::as_array_mut) {
+                    capabilities.retain(|capability| capability != "lesson-notes-v2");
+                }
             }
         }
     }

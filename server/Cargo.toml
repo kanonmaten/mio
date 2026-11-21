@@ -14,6 +14,7 @@ name = "mio-gateway"
 path = "src/main.rs"
 
 [dependencies]
+chacha20poly1305 = { version = "0.11.0", default-features = false }
 getrandom = "0.4.3"
 http-body-util = "0.1.5"
 hyper = { version = "1.12.0", features = ["http1", "server"] }
@@ -23,6 +24,7 @@ jiff = { version = "1.0.0", default-features = false, features = ["std", "tzdb-b
 # No proxy support, no HTTP/2, no compression: one fixed HTTPS endpoint.
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+serde = { version = "1.0.229", default-features = false, features = ["std"] }
 # preserve_order: the approved payload reaches the model with its keys in the order the app sent them.
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 sha2 = "0.11.1"

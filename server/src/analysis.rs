@@ -87,6 +87,19 @@ pub fn lesson_format() -> Value {
     ]))
 }
 
+/// Lesson notes v2 (contract after the grilling): exam hints first, then the subject suggestion,
+/// then everything v1 has, in v1's shape.
+pub fn lesson_v2_format() -> Value {
+    format("mio_lesson_notes_v2", object(vec![
+        ("examHints", list_of(object(vec![("text", string()), ("sourceIDs", string_list()), ("evidence", string())]))),
+        ("subject", json!({ "type": ["string", "null"] })),
+        ("candidates", list_of(object(candidate_properties(&["plan", "task"], false)))),
+        ("sections", list_of(object(vec![("heading", string()), ("body", string()),
+            ("sourceIDs", string_list()), ("evidence", string())]))),
+        ("uncertainties", string_list()),
+    ]))
+}
+
 // ---- Request payloads ---------------------------------------------------------------------------
 
 /// The question the user approved and at most six chosen excerpts. Unknown fields are refused.
@@ -145,6 +158,25 @@ fn text_bytes(fragments: &[Value]) -> usize {
 pub fn validate_lesson_payload(value: &Value) -> Checked<()> {
     validate_analysis_payload(value)?;
     ensure(value["mode"] == "lesson" && text_bytes(value["fragments"].as_array().ok_or(Invalid)?) <= 3_500)
+}
+
+/// v1's lesson payload, where each fragment may also carry `speakerRole` (`teacher` or
+/// `student`; absent when the speaker is unknown). The role goes to the model with the rest of
+/// the payload so the teacher's words weigh most; no speaker names are ever sent.
+pub fn validate_lesson_v2_payload(value: &Value) -> Checked<()> {
+    let fields = exact_keys(value, &["mode", "timeZone", "fragments"]).ok_or(Invalid)?;
+    let fragments = fields["fragments"].as_array().ok_or(Invalid)?;
+    let mut stripped = Vec::with_capacity(fragments.len());
+    for fragment in fragments {
+        let mut fragment = fragment.as_object().ok_or(Invalid)?.clone();
+        if let Some(role) = fragment.shift_remove("speakerRole") {
+            ensure(matches!(role.as_str(), Some("teacher" | "student")))?;
+        }
+        stripped.push(Value::Object(fragment));
+    }
+    let mut plain = value.clone();
+    plain["fragments"] = Value::Array(stripped);
+    validate_lesson_payload(&plain)
 }
 
 fn is_uuid(value: &str) -> bool {
@@ -429,20 +461,64 @@ pub fn validate_ask_result(value: &Value) -> Checked<Value> {
 
 pub fn validate_lesson_result(value: &Value, payload: &Value) -> Checked<Value> {
     let fields = exact_keys(value, &["candidates", "sections", "uncertainties"]).ok_or(Invalid)?;
-    let sections = fields["sections"].as_array().filter(|sections| sections.len() <= 12).ok_or(Invalid)?;
     let sources = sources_of(fragments_of(payload, "fragments"));
-    let checked = check_analysis(&fields["candidates"], &[], &fields["uncertainties"], &sources,
+    check_lesson(fields, &sources, payload)
+}
+
+/// The part v1 and v2 share: candidates, sections and uncertainties, checked exactly as v1 does.
+fn check_lesson(fields: &Map<String, Value>, sources: &Sources, payload: &Value) -> Checked<Value> {
+    let sections = fields["sections"].as_array().filter(|sections| sections.len() <= 12).ok_or(Invalid)?;
+    let checked = check_analysis(&fields["candidates"], &[], &fields["uncertainties"], sources,
         time_zone_of(payload), true, &CANDIDATE_KEYS, &mut |_| true)?;
     // Sections are the notes themselves: one that cannot be grounded rejects the part, and the
     // app retries or splits it. Homework candidates are extras and are dropped one by one.
     let sections = sections.iter().map(|section| {
         let item = exact_keys(section, &["heading", "body", "sourceIDs", "evidence"]).ok_or(Invalid)?;
         ensure(text(item.get("heading"), 240, false).is_some() && text(item.get("body"), 8_000, false).is_some())?;
-        Ok(with_grounding(item, ground(item, &sources).ok_or(Invalid)?))
+        Ok(with_grounding(item, ground(item, sources).ok_or(Invalid)?))
     }).collect::<Checked<Vec<_>>>()?;
     let candidates: Vec<_> = checked.candidates.into_iter()
         .filter(|item| matches!(item["kind"].as_str(), Some("plan" | "task"))).collect();
     Ok(json!({ "candidates": candidates, "sections": sections, "uncertainties": checked.uncertainties }))
+}
+
+/// At most eight exam hints, each grounded in one to four of the request's fragments.
+const MAX_EXAM_HINTS: usize = 8;
+const MAX_HINT_SOURCES: usize = 4;
+
+/// One exam hint with an exact quote, or `None`. A hint that cannot be proved is dropped and the
+/// rest of the answer stands: hints are an extra on top of the notes, like homework candidates.
+fn clean_exam_hint(item: &Value, sources: &Sources) -> Option<Map<String, Value>> {
+    let item = exact_keys(item, &["text", "sourceIDs", "evidence"])?;
+    let hint = item.get("text")?.as_str()?;
+    if is_blank(hint) || hint.chars().count() > 300 {
+        return None;
+    }
+    let (mut ids, quote) = ground(item, sources)?;
+    if ids.len() > MAX_HINT_SOURCES {
+        // Keep the sources that hold the exact quote, so the evidence stays provable.
+        ids.retain(|id| sources.iter().any(|(known, source)| known == id && source.contains(quote.as_str())));
+        ids.truncate(MAX_HINT_SOURCES);
+    }
+    Some(with_grounding(item, (ids, quote)))
+}
+
+/// The subject the model suggests (1-40 characters after trimming), or null. Only a suggestion:
+/// anything else becomes null instead of rejecting the notes.
+fn clean_subject(value: &Value) -> Value {
+    let Some(subject) = value.as_str().map(trim) else { return Value::Null };
+    let length = subject.chars().count();
+    if (1..=40).contains(&length) && !subject.chars().any(char::is_control) { json!(subject) } else { Value::Null }
+}
+
+pub fn validate_lesson_v2_result(value: &Value, payload: &Value) -> Checked<Value> {
+    let fields = exact_keys(value, &["examHints", "subject", "candidates", "sections", "uncertainties"]).ok_or(Invalid)?;
+    let hints = fields["examHints"].as_array().ok_or(Invalid)?;
+    let sources = sources_of(fragments_of(payload, "fragments"));
+    let notes = check_lesson(fields, &sources, payload)?;
+    let hints: Vec<_> = hints.iter().filter_map(|item| clean_exam_hint(item, &sources)).take(MAX_EXAM_HINTS).collect();
+    Ok(json!({ "examHints": hints, "subject": clean_subject(&fields["subject"]),
+        "candidates": notes["candidates"], "sections": notes["sections"], "uncertainties": notes["uncertainties"] }))
 }
 
 pub fn validate_analysis_v2_result(value: &Value, payload: &Value) -> Checked<Value> {

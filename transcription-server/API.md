@@ -14,13 +14,14 @@ API:t är oberoende av modell/NeMo-version. HTTPS via Tailscale Serve, Bearer-to
   "metadata": {"model": "KlangAI/pianissimo-sv", "revision": "full-model-commit", "backend": "nemo-pytorch-cuda"},
   "sampleRate": 16000, "channels": 1, "encoding": "pcm_s16le_wav",
   "maxSeconds": 24, "maxBytes": 1048576,
-  "preprocessing": true, "speakerLabels": "ready", "vocabulary": 0, "precision": "fp16"
+  "preprocessing": true, "speakerLabels": "ready", "vocabulary": 0, "precision": "fp16",
+  "vocabularyUpload": true
 }
 ```
 
 Klienten kräver API 1, redo, giltig metadata, exakt ljudformat och kapacitet för sin största del: med pausstyrda delar (se nedan) minst 24 sekunder/768044 byte; den äldre klienten med fasta 20 s krävde 22 sekunder/704044 byte. Fler additiva fält accepteras.
 
-Additiva fält (från 2026-10-11, valfria för klienten): `preprocessing` är `true` när serverns förbehandling är på. `speakerLabels` är `loading` medan talarmodellen laddas, `ready` när ord får talare och `off` när talarmärkning är avstängd eller modellen inte kunde laddas. `vocabulary` (från 2026-11-15) är antalet egna ord som är aktiva i modellens avkodning, 0–500; 0 betyder ingen ordlista eller att den inte kunde aktiveras. Ordlistan ligger i en fil på servern och skickas aldrig av appen. `precision` (från 2026-11-17) är `fp16` (standard) eller `fp32` enligt `MIO_PRECISION` på datorn; appen läser inte fältet. Transkriptionen är redo oberoende av talarmodellen; `status` påverkas aldrig av den. Brytande ändringar ska få nytt API-kontrakt; behåll v1 under migrationen. Modellnamn eller revision väljs aldrig av appen.
+Additiva fält (från 2026-10-11, valfria för klienten): `preprocessing` är `true` när serverns förbehandling är på. `speakerLabels` är `loading` medan talarmodellen laddas, `ready` när ord får talare och `off` när talarmärkning är avstängd eller modellen inte kunde laddas. `vocabulary` (från 2026-11-15) är antalet egna ord som är aktiva i modellens avkodning, 0–500; 0 betyder ingen ordlista eller att den inte kunde aktiveras. Ordlistan ligger i filer på servern; appen läser den aldrig och skickar bara enskilda ord hon har sagt Ja till. `vocabularyUpload` (från 2026-11-20) är `true` när servern tar emot egna ord från telefonen ([POST /v1/vocabulary](#post-v1vocabulary)); appen frågar bara om ett eget ord när fältet finns. `precision` (från 2026-11-17) är `fp16` (standard) eller `fp32` enligt `MIO_PRECISION` på datorn; appen läser inte fältet. Transkriptionen är redo oberoende av talarmodellen; `status` påverkas aldrig av den. Brytande ändringar ska få nytt API-kontrakt; behåll v1 under migrationen. Modellnamn eller revision väljs aldrig av appen.
 
 ## POST /v1/transcribe
 
@@ -68,6 +69,27 @@ Om både förbehandling och talarmärkning är avstängda gör servern ingen PCM
 ## Talarmärkning
 
 Valfri, på som standard när modellen kan laddas (`MIO_SPEAKER_LABELS=0` stänger av). NVIDIA Streaming Sortformer `nvidia/diar_streaming_sortformer_4spk-v2` (NeMo, CUDA, högst fyra talare, låst commit i `MIO_DIARIZATION_REVISION`). Bara varje dels ägda område matas in i modellens strömmande talarcache, så kontextsekunder räknas inte två gånger. Cachen hålls per `X-Mio-Session-ID` enbart i processens RAM: aldrig disk, logg eller svar. Den raderas när klienten avslutar sessionen, efter 10 minuter utan ny del, när fler än fyra sessioner är aktiva (äldsta först) och vid omstart. Modellen är främst tränad på engelska; svensk kvalitet och den faktiska NeMo-körningen är **ej verifierade** på GPU.
+
+## POST /v1/vocabulary
+
+Additiv (från 2026-11-20, [kontraktet](../docs/DATAMODELL.md#egna-ord-från-telefonen)). Lägger till ett eget ord som hon har sagt Ja till i appen. Samma Bearer-token som transkriptionen.
+
+- `Content-Type: application/json`, ingen content-encoding, kropp högst 1024 byte inom 10 s: `{"phrase": "Åsa Lindqvist"}`. Okända fält avvisas.
+- `phrase` trimmas (inre mellanrum slås ihop som i ordlistan) och måste sedan vara 1–100 byte UTF-8 utan radbrytningar eller andra kontrolltecken, och får inte börja med `#`.
+- Ordet läggs sist i `/var/lib/mio-transcription/vocabulary-phone.txt` (0600, tjänstens egen katalog; `MIO_PHONE_VOCABULARY_FILE` ändrar sökvägen) om det inte redan finns där eller i `/etc/mio-transcription-vocabulary.txt`, exakt jämförelse. Servern läser båda filerna, `/etc`-filen först, och använder högst 500 rader sammanlagt.
+- Listan laddas om på inferenstråden direkt före nästa transkription, utan omstart, med samma uppvärmning som vid start. Misslyckas omladdningen behålls avkodningen som fungerade, en rad skrivs i journalen och transkriptionen fortsätter.
+
+| Svar | Betydelse |
+|---|---|
+| 200 `{"added": true, "vocabulary": 37}` | Sparat. `added: false` om ordet redan fanns. `vocabulary` är samma värde som i `/health` just då, alltså de ord som är aktiva; ett nytt ord räknas in först efter nästa transkription |
+| 400 `invalid_phrase` | Ogiltig JSON, okända fält eller ett ord som bryter mot reglerna ovan |
+| 401 `unauthorized` | Fel token |
+| 409 `vocabulary_full` | 500 rader används redan |
+| 413 `body_too_large` | Kroppen är större än 1024 byte |
+| 415 `json_required` | Inte `application/json` |
+| 507 `vocabulary_storage_failed` | Filen gick inte att skriva; ordlistan är som förut |
+
+Ordet skrivs aldrig i loggen och skickas aldrig vidare, varken till gatewayen eller till en AI-leverantör. Journalraden vid fel innehåller bara feltypen.
 
 ## DELETE /v1/sessions/{sessionID}
 

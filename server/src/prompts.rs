@@ -3,6 +3,8 @@
 
 pub const PROMPT_VERSION: &str = "2026-10-13.2";
 pub const ANALYSIS_V2_PROMPT_VERSION: &str = "2026-10-13.2";
+/// Lesson notes v2 (`/v2/lesson-notes`): exam hints, speaker roles and a subject suggestion.
+pub const LESSON_V2_PROMPT_VERSION: &str = "2026-11-20.1";
 
 pub const ASK_SYSTEM: &str = r###"
 ROLL
@@ -68,6 +70,29 @@ Högst sex uncertainties om otydliga ord, saknade beräkningssteg eller motsäge
 Anta inte att du sett hela lektionen. Skapa inte presentationer, frågekort, quiz, studieplaner
 eller nya undervisningsupplägg. Inga personliga minnen, diagnoser eller utförda åtgärder.
 "###;
+
+/// Appended to [`LESSON_SYSTEM`] for lesson notes v2. The v1 prompt stays byte for byte as it
+/// was, because `/v1/lesson-notes` is covered by the recorded parity tests.
+pub const LESSON_V2_ADDITION: &str = r###"
+VERSION 2: PROVTIPS, TALARROLLER OCH ÄMNE
+Ett fragment kan ha speakerRole: "teacher" är läraren (den som talar mest i lektionen), "student" är någon annan.
+Saknas speakerRole är talaren okänd. Lärarens ord väger tyngst: bygg anteckningarna och provtipsen främst på
+det läraren säger, och återge elevers frågor och svar bara när läraren bekräftar eller förklarar dem.
+Rollen är en gissning från ljudet; skriv inga namn och påstå inte vem som sa något.
+examHints kommer först i anteckningen och är högst åtta. Ta bara med sådant som läraren uttryckligen pekar ut
+som viktigt till provet eller att komma ihåg, till exempel "det här kommer på provet", "kom ihåg",
+"viktigt", "det här ska ni kunna", "skriv upp det här" eller "det här frågar jag om". Gissa aldrig vad som
+kan komma på provet utifrån ämnet. Hellre för få provtips än gissningar; returnera en tom lista när läraren
+inte pekar ut något. text är en kort mening om vad som ska kunnas (högst 300 tecken). Varje provtips har
+1–4 sourceIDs från underlaget och ett kort exakt evidence-citat ur ett av dem, där läraren pekar ut det.
+Upprepa gärna provtipset i sections så att anteckningen är komplett.
+subject är skolämnet som lektionen tydligt handlar om, med ett kort svenskt namn som "Biologi",
+"Matematik" eller "Historia" (högst 40 tecken). Är ämnet oklart: null. Gissa inte.
+"###;
+
+pub fn lesson_v2_system() -> String {
+    format!("{LESSON_SYSTEM}{LESSON_V2_ADDITION}")
+}
 
 /// Appended to [`ANALYSIS_SYSTEM`] for the everyday context contract (v2).
 pub const ANALYSIS_V2_ADDITION: &str = r###"

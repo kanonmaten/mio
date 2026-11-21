@@ -13,6 +13,8 @@ EnvironmentFile=/etc/mio-gateway/gateway.env
 Environment=MIO_STATE_FILE=/var/lib/mio-gateway/counters.json
 # Monthly token counts per task and model for the credit meter in Mio Kontroll. Numbers only.
 Environment=MIO_USAGE_FILE=/var/lib/mio-gateway/usage.json
+# The phone's nightly backup: backup.key and backups/ (14 encrypted copies), never sent anywhere.
+Environment=MIO_BACKUP_DIRECTORY=/var/lib/mio-gateway
 ExecStart=/opt/mio-gateway/mio-gateway
 Restart=on-failure
 RestartSec=5
@@ -46,7 +48,9 @@ SystemCallFilter=@system-service
 SystemCallFilter=~@privileged
 # Deny a filtered call quietly instead of killing the service.
 SystemCallErrorNumber=EPERM
-# The Rust gateway uses about 6 MB; the cap only stops a runaway.
+# The Rust gateway uses about 6 MB; the cap only stops a runaway. A backup (at most 32 MiB) is
+# held in memory once and encrypted in place, one backup request at a time, so it peaks well
+# below the cap.
 MemoryMax=128M
 TasksMax=64
 

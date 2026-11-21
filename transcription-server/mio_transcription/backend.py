@@ -4,6 +4,7 @@ import re
 from typing import Protocol
 
 from .core import normalize_words, parse_vocabulary
+from .vocabulary import DEFAULT_PHONE_FILE, read_merged
 
 log = logging.getLogger("mio_transcription")
 
@@ -72,6 +73,10 @@ class Pianissimo:
         # The user's own names and terms (see README "Egna ord"). Strength 1.0 gave the best
         # trade-off in KlangAI's measurements: more names right, other text almost unchanged.
         self.vocabulary_path = os.getenv("MIO_VOCABULARY_FILE", "/etc/mio-transcription-vocabulary.txt")
+        # Words she adds from the phone (POST /v1/vocabulary), read after the /etc list.
+        self.phone_vocabulary_path = os.getenv("MIO_PHONE_VOCABULARY_FILE", "").strip() or DEFAULT_PHONE_FILE
+        self.reload_requested = False
+        self.plain_decoding = None
         boost = os.getenv("MIO_VOCABULARY_BOOST", "").strip() or "1.0"
         if not re.fullmatch(r"[0-2](\.[0-9]{1,2})?", boost) or float(boost) > 2:
             raise ValueError("MIO_VOCABULARY_BOOST must be 0-2")
@@ -102,7 +107,9 @@ class Pianissimo:
     def _load_vocabulary(self):
         """Own words are an enhancement: any failure falls back to the model's plain decoder."""
         import copy
-        phrases = read_vocabulary(self.vocabulary_path)
+        phrases = read_merged(self.vocabulary_path, self.phone_vocabulary_path)
+        # The model's own decoder, the base a later reload falls back to.
+        self.plain_decoding = copy.deepcopy(self.model.cfg.decoding)
         original = copy.deepcopy(self.model.cfg.decoding) if phrases else None
         boosted = False
         try:
@@ -117,6 +124,35 @@ class Pianissimo:
             self.model.change_decoding_strategy(original)
             self.transcribe(bytes(16_000 * 2))
         self.vocabulary = len(phrases) if boosted else 0
+
+    def request_vocabulary_reload(self):
+        """A word was added from the phone; the lists are read again before the next transcription."""
+        self.reload_requested = True
+
+    def reload_vocabulary_if_requested(self):
+        """Runs on the inference thread right before a transcription, so it never races one.
+
+        Any failure keeps the decoder that worked before, with one journal line (type name only,
+        never a phrase), and transcription goes on.
+        """
+        if not self.reload_requested or self.model is None or self.plain_decoding is None:
+            return
+        self.reload_requested = False
+        import copy
+        previous = copy.deepcopy(self.model.cfg.decoding)
+        try:
+            phrases = read_merged(self.vocabulary_path, self.phone_vocabulary_path)
+            boosted = apply_vocabulary(self.model, phrases, self.vocabulary_boost)
+            if not boosted and self.vocabulary:
+                self.model.change_decoding_strategy(copy.deepcopy(self.plain_decoding))
+            self.transcribe(bytes(16_000 * 2))
+            self.vocabulary = len(phrases) if boosted else 0
+        except Exception as error:
+            log.warning("Egna ord kunde inte laddas om (%s); ordlistan är som förut.", type(error).__name__)
+            try:
+                self.model.change_decoding_strategy(previous)
+            except Exception as restore_error:
+                log.warning("Avkodningen kunde inte återställas (%s).", type(restore_error).__name__)
 
     def vocabulary_size(self):
         return self.vocabulary

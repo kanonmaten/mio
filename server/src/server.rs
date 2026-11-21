@@ -15,12 +15,13 @@ use hyper_util::rt::{TokioIo, TokioTimer};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 
-use crate::analysis::{validate_analysis_payload, validate_analysis_v2_payload, validate_ask_payload, validate_lesson_payload};
+use crate::analysis::{validate_analysis_payload, validate_analysis_v2_payload, validate_ask_payload, validate_lesson_payload, validate_lesson_v2_payload};
+use crate::backup::{BackupError, BackupStore, MAX_BACKUP_BYTES, is_valid_export};
 use crate::config::{Config, ConfigError, validate_config};
 use crate::error::RequestError;
 use crate::adapters::Usage;
 use crate::generation::{Spent, Transport, execute_generation, generation_metadata_headers};
-use crate::prompts::{ANALYSIS_V2_PROMPT_VERSION, PROMPT_VERSION};
+use crate::prompts::{ANALYSIS_V2_PROMPT_VERSION, LESSON_V2_PROMPT_VERSION, PROMPT_VERSION};
 use crate::state_store::{CounterStore, Counters, MemoryCounterStore};
 use crate::status::{QuotaObservation, authenticated, configuration_revision, gateway_status, gateway_status_v2, is_revision, metadata_headers};
 use crate::task_profiles::task_configuration_identifiers;
@@ -30,6 +31,8 @@ use crate::time::next_utc_midnight;
 
 const MAX_BODY_BYTES: usize = 40_000;
 const MAX_CONCURRENT: u32 = 2;
+/// The backup route's own deadline for waiting its turn and receiving the export.
+const BACKUP_BODY_TIMEOUT_MS: u64 = 120_000;
 const MINUTE_MS: i64 = 60_000;
 const DAY_MS: i64 = 86_400_000;
 
@@ -51,6 +54,12 @@ struct Inner {
     store: Arc<dyn CounterStore>,
     usage_store: Arc<dyn UsageStore>,
     state: Mutex<State>,
+    /// `None` without a state directory (tests, a manual start): backups then fail with 507 and
+    /// status reports none.
+    backups: Option<Arc<BackupStore>>,
+    /// One backup request at a time, held from before its body is read until the copy is stored
+    /// or read back, so at most one export (32 MB) is in memory under the unit's 128 MB cap.
+    backup_turn: tokio::sync::Mutex<()>,
 }
 
 #[derive(Clone)]
@@ -195,16 +204,22 @@ fn failure(headers: &Headers, error: &RequestError) -> Reply {
 }
 
 async fn read_body(body: &mut Incoming, declared: Option<f64>, timeout_ms: u64) -> Result<Vec<u8>, RequestError> {
+    read_limited(body, declared, timeout_ms, MAX_BODY_BYTES, 0).await
+}
+
+/// The body, at most `limit` bytes within `timeout_ms`. `reserve` preallocates from the declared
+/// length (backups), so a 32 MB export is not copied while the vector grows.
+async fn read_limited(body: &mut Incoming, declared: Option<f64>, timeout_ms: u64, limit: usize, reserve: usize) -> Result<Vec<u8>, RequestError> {
     let too_large = RequestError::new(413, "request_too_large");
-    if declared.is_some_and(|length| length > MAX_BODY_BYTES as f64) {
+    if declared.is_some_and(|length| length > limit as f64) {
         return Err(too_large);
     }
     let collect = async {
-        let mut bytes = Vec::new();
+        let mut bytes = Vec::with_capacity(reserve.min(limit));
         while let Some(frame) = body.frame().await {
             let frame = frame.map_err(|_| RequestError::new(400, "invalid_json"))?;
             if let Some(data) = frame.data_ref() {
-                if bytes.len() + data.len() > MAX_BODY_BYTES {
+                if bytes.len() + data.len() > limit {
                     return Err(too_large.clone());
                 }
                 bytes.extend_from_slice(data);
@@ -225,6 +240,7 @@ fn parse_payload(bytes: &[u8], mode: Mode) -> Result<Value, RequestError> {
         Mode::Analyze => validate_analysis_payload(&value).map_err(|_| invalid)?,
         Mode::AnalyzeV2 => validate_analysis_v2_payload(&value).map_err(|_| invalid)?,
         Mode::Lesson => validate_lesson_payload(&value).map_err(|_| invalid)?,
+        Mode::LessonV2 => validate_lesson_v2_payload(&value).map_err(|_| invalid)?,
     }
     Ok(value)
 }
@@ -240,6 +256,21 @@ fn loaded_usage(store: &dyn UsageStore) -> Option<Ledger> {
     }
 }
 
+enum BackupRoute {
+    Put,
+    List,
+    Get(String),
+}
+
+fn backup_route(method: &Method, target: &str) -> Option<BackupRoute> {
+    match (method, target) {
+        (&Method::PUT, "/v2/backup") => Some(BackupRoute::Put),
+        (&Method::GET, "/v2/backups") => Some(BackupRoute::List),
+        (&Method::GET, _) => target.strip_prefix("/v2/backups/").map(|id| BackupRoute::Get(id.to_owned())),
+        _ => None,
+    }
+}
+
 impl Gateway {
     pub fn new(config: Config, transport: Arc<dyn Transport>) -> Result<Self, ConfigError> {
         validate_config(&config)?;
@@ -247,7 +278,13 @@ impl Gateway {
         let counters = store.load();
         Ok(Self { inner: Arc::new(Inner { config: Arc::new(move || config.clone()), transport,
             clock: Arc::new(system_clock), store, usage_store: Arc::new(MemoryUsageStore::default()),
-            state: Mutex::new(State { counters, active: 0, usage: Some(Ledger::default()) }) }) })
+            state: Mutex::new(State { counters, active: 0, usage: Some(Ledger::default()) }),
+            backups: None, backup_turn: tokio::sync::Mutex::new(()) }) })
+    }
+
+    /// Stores the nightly backups and their key in `store`'s directory (`/var/lib/mio-gateway`).
+    pub fn with_backup_store(self, store: Arc<BackupStore>) -> Self {
+        self.rebuild(|inner| inner.backups = Some(store))
     }
 
     fn rebuild(self, change: impl FnOnce(&mut Inner)) -> Self {
@@ -318,10 +355,16 @@ impl Gateway {
             "/v1/analyze" => Some(Mode::Analyze),
             "/v2/analyze" => Some(Mode::AnalyzeV2),
             "/v1/lesson-notes" => Some(Mode::Lesson),
+            "/v2/lesson-notes" => Some(Mode::LessonV2),
             _ => None,
         };
         let is_status = matches!(target.as_str(), "/v1/status" | "/v2/status");
-        let prompt_version = if is_status || mode == Some(Mode::AnalyzeV2) { ANALYSIS_V2_PROMPT_VERSION } else { PROMPT_VERSION };
+        let prompt_version = match mode {
+            _ if is_status => ANALYSIS_V2_PROMPT_VERSION,
+            Some(Mode::AnalyzeV2) => ANALYSIS_V2_PROMPT_VERSION,
+            Some(Mode::LessonV2) => LESSON_V2_PROMPT_VERSION,
+            _ => PROMPT_VERSION,
+        };
         let (provider, model) = task_configuration_identifiers(&config, mode.map_or("everyday", Mode::task_id));
         headers.0 = metadata_headers(&provider, &model, prompt_version, Some(&revision));
         let authorized = authenticated(header(&AUTHORIZATION), &config.gateway_token);
@@ -335,10 +378,18 @@ impl Gateway {
             }
             let mut status = gateway_status_v2(&config, inner.quota_snapshot(&config).as_ref());
             status["usage"] = inner.usage_report();
+            // Always present on this gateway; an app or panel without it sees an older one.
+            status["backup"] = inner.backups.as_ref().map_or_else(|| crate::backup::summary(&[]), |store| store.summary());
             return reply(&headers, 200, &status, 60);
         }
         if parts.method == Method::GET && target == "/health" {
             return reply(&headers, 200, &json!({ "status": "ok" }), 60);
+        }
+        if let Some(route) = backup_route(&parts.method, &target) {
+            if !authorized {
+                return reply(&headers, 401, &unauthorized, 60);
+            }
+            return self.backup(route, parts, body, finished, &headers).await;
         }
         let Some(mode) = mode.filter(|_| parts.method == Method::POST) else {
             return reply(&headers, 404, &json!({ "error": "not_found" }), 60);
@@ -392,13 +443,87 @@ impl Gateway {
             headers.set(name, value);
         }
         let mut result = generated.result;
-        if mode == Mode::Lesson && let Some(notes) = result.as_object_mut() {
+        if matches!(mode, Mode::Lesson | Mode::LessonV2) && let Some(notes) = result.as_object_mut() {
             notes.insert("metadata".to_owned(), json!({ "provider": generated.config.provider, "model": generated.config.model,
                 "promptVersion": generated.prompt_version,
                 "lessonIntervalSeconds": config.lesson_interval_seconds.unwrap_or(60).max(60) }));
         }
         drop(slot);
         reply(&headers, 200, &result, 60)
+    }
+
+    /// The backup routes: outside the AI quota, the token budget and the two generation slots,
+    /// and never in contact with a provider. Nothing about the export is logged.
+    async fn backup(&self, route: BackupRoute, parts: &hyper::http::request::Parts, body: &mut Incoming,
+        finished: &mut bool, headers: &Headers) -> Reply {
+        let inner = &self.inner;
+        let storage_failed = || reply(headers, 507, &json!({ "error": "backup_storage_failed" }), 60);
+        match route {
+            BackupRoute::Put => {
+                let header = |name: &HeaderName| parts.headers.get(name).and_then(|value| value.to_str().ok());
+                let media_type = header(&CONTENT_TYPE).and_then(|value| value.split(';').next()).map(|kind| crate::js::trim(kind).to_lowercase());
+                if media_type.as_deref() != Some("application/json") || parts.headers.get(CONTENT_ENCODING).is_some_and(|value| !value.is_empty()) {
+                    return reply(headers, 415, &json!({ "error": "json_required" }), 60);
+                }
+                let declared = header(&CONTENT_LENGTH).and_then(|length| length.trim().parse::<f64>().ok());
+                if declared.is_some_and(|length| length > MAX_BACKUP_BYTES as f64) {
+                    return reply(headers, 413, &json!({ "error": "request_too_large" }), 60);
+                }
+                let reserve = declared.filter(|length| *length >= 0.0).map_or(0, |length| length as usize);
+                let started = std::time::Instant::now();
+                let deadline = Duration::from_millis(BACKUP_BODY_TIMEOUT_MS);
+                let Ok(turn) = tokio::time::timeout(deadline, inner.backup_turn.lock()).await else {
+                    return reply(headers, 408, &json!({ "error": "request_timeout" }), 60);
+                };
+                let remaining = deadline.saturating_sub(started.elapsed()).as_millis() as u64;
+                let export = match read_limited(body, declared, remaining.max(1), MAX_BACKUP_BYTES, reserve).await {
+                    Ok(export) => export,
+                    Err(error) if error.code == "invalid_json" => return reply(headers, 400, &json!({ "error": "invalid_backup" }), 60),
+                    Err(error) => return failure(headers, &error),
+                };
+                *finished = true;
+                if !is_valid_export(&export) {
+                    return reply(headers, 400, &json!({ "error": "invalid_backup" }), 60);
+                }
+                let Some(store) = inner.backups.clone() else { return storage_failed() };
+                let now = (inner.clock)();
+                // Encryption and disk writes run off the request thread; the turn is held until done.
+                let saved = tokio::task::spawn_blocking(move || store.save(export, now)).await;
+                drop(turn);
+                match saved {
+                    Ok(Ok((entry, kept))) => {
+                        let mut created = entry.to_json();
+                        created["kept"] = json!(kept);
+                        reply(headers, 201, &created, 60)
+                    }
+                    _ => storage_failed(),
+                }
+            }
+            BackupRoute::List => {
+                let entries = inner.backups.as_ref().map(|store| store.list()).unwrap_or_default();
+                let listed: Vec<Value> = entries.iter().map(crate::backup::Entry::to_json).collect();
+                reply(headers, 200, &json!({ "backups": listed }), 60)
+            }
+            BackupRoute::Get(id) => {
+                let Some(store) = inner.backups.clone() else {
+                    return reply(headers, 404, &json!({ "error": "backup_not_found" }), 60);
+                };
+                let turn = inner.backup_turn.lock().await;
+                let read = tokio::task::spawn_blocking(move || store.read(&id)).await;
+                drop(turn);
+                match read {
+                    Ok(Ok(export)) => {
+                        let mut response = reply(headers, 200, &Value::Null, 60);
+                        *response.body_mut() = Full::new(Bytes::from(export));
+                        response.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+                        response
+                    }
+                    Ok(Err(BackupError::NotFound)) => reply(headers, 404, &json!({ "error": "backup_not_found" }), 60),
+                    Ok(Err(BackupError::Unreadable)) => reply(headers, 500, &json!({ "error": "backup_unreadable" }), 60),
+                    _ => storage_failed(),
+                }
+            }
+        }
     }
 
     /// Serves until the future is dropped. Every connection carries one request and is closed.

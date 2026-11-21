@@ -61,6 +61,7 @@ def loaded(monkeypatch, tmp_path, model, text="Klang AI\nPianissimo\n", fail_tra
         path.write_text(text, encoding="utf-8")
     monkeypatch.setenv("MIO_MODEL_REVISION", "a" * 40)
     monkeypatch.setenv("MIO_VOCABULARY_FILE", str(path))
+    monkeypatch.setenv("MIO_PHONE_VOCABULARY_FILE", str(tmp_path / "missing-phone.txt"))
     service = Pianissimo()
     service.model = model
     warmups = []

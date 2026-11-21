@@ -177,8 +177,15 @@ pub fn gateway_status_v2(config: &Config, quota: Option<&QuotaObservation>) -> V
     for task in TASK_IDS {
         let selected = resolve_task_profile(config, task);
         let (provider, model) = task_configuration_identifiers(config, task);
+        let mut capabilities = task_capabilities(task, config);
+        // Contract after the grilling: `/v2/lesson-notes` beside v1. Published here only, not in
+        // the configuration revision, so the revision of an unchanged configuration stays the
+        // same across this upgrade (the recorded parity cases cover it).
+        if task == "lesson" {
+            capabilities.push("lesson-notes-v2");
+        }
         let mut entry = json!({ "configured": selected.configured, "provider": provider, "model": model,
-            "promptVersion": task_prompt_version(task), "capabilities": task_capabilities(task, config),
+            "promptVersion": task_prompt_version(task), "capabilities": capabilities,
             "configurationError": selected.configuration_error });
         let profile = selected.config.as_ref().and_then(|config| crate::config::profile(config).ok());
         // A reviewed model whose provider refuses temperature runs without it; that is never silent

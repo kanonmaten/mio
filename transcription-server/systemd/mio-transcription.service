@@ -25,6 +25,8 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+# The only writable place besides PrivateTmp under ProtectSystem=strict: the model cache and
+# vocabulary-phone.txt (own words from the phone, POST /v1/vocabulary). install.sh never deletes it.
 StateDirectory=mio-transcription
 StateDirectoryMode=0700
 

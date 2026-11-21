@@ -1,6 +1,6 @@
 # Mios privata AI-gateway
 
-Gatewayen tar emot frågor, vardagsutdrag och lektionsdelar från appen och skickar dem till en granskad AI-modell, som standard Mistral (Groq fram till 2026-11-20). Den är ett enda Rust-program (`mio-gateway`) utan Node eller annan körmiljö. Den kör på din CachyOS-dator bredvid [Pianissimo](../transcription-server/README.md) och nås bara via Tailscale. Ljud skickas aldrig hit och ingen text sparas: gatewayen skriver bara två filer med siffror, en räknare för minut och dygn och en räknare för månadens användning.
+Gatewayen tar emot frågor, vardagsutdrag och lektionsdelar från appen och skickar dem till en granskad AI-modell, som standard Mistral (Groq fram till 2026-11-20). Den är ett enda Rust-program (`mio-gateway`) utan Node eller annan körmiljö. Den kör på din CachyOS-dator bredvid [Pianissimo](../transcription-server/README.md) och nås bara via Tailscale. Ljud skickas aldrig hit och ingen text från AI-anropen sparas: gatewayen skriver bara två filer med siffror, en räknare för minut och dygn och en räknare för månadens användning. Den tar också emot telefonens nattliga säkerhetskopia och sparar den krypterad (se [Säkerhetskopian](#säkerhetskopian)).
 
 Beslut 2026-10-11: gatewayen flyttade från Cloudflare till datorn. Beslut 2026-11-17: fler leverantörer kan väljas per uppgift i [Mio Kontroll](../control/README.md), men bara granskade par av leverantör och modell (se [Leverantörer](#leverantörer)). Beslut 2026-11-16: gatewayen skrevs om från Node till Rust med samma beteende mot appen. Den gamla Cloudflare- och Node-koden finns kvar i Git-historiken.
 
@@ -43,6 +43,8 @@ Kör `./server/install.sh` igen för att uppdatera; nycklar, vald leverantör, t
 | `/etc/mio-gateway/gateway.env` | Leverantörsnycklar, gatewaytoken, modeller och gränser; root, 0600 |
 | `/var/lib/mio-gateway/counters.json` | Minut- och dygnsräknare (bara heltal); 0600 |
 | `/var/lib/mio-gateway/usage.json` | Månadens token per uppgift och modell för kreditmätaren (bara siffror och modellnamn, innevarande och förra månaden); 0600. Har filen ett okänt `schemaVersion` skrivs den aldrig över |
+| `/var/lib/mio-gateway/backup.key` | Nyckeln till säkerhetskopiorna: 32 slumpade byte, 0600, skapas vid första kopian och byts aldrig ut. Se [Säkerhetskopian](#säkerhetskopian) |
+| `/var/lib/mio-gateway/backups/` | Telefonens nattliga säkerhetskopior, krypterade, högst 14 (`<ÅÅÅÅMMDDTHHMMSSZ-8hex>.mio-backup`, 0600) |
 | `/etc/systemd/system/mio-gateway.service` | Härdad tjänst: ingen root, skrivskyddat system, högst 128 MB minne (använder cirka 6 MB) |
 | `/usr/local/bin/mio-pair` | Visar QR-koden för parning; sparar ingenting |
 
@@ -142,12 +144,40 @@ Alla genereringsrutter kräver `Authorization: Bearer <gatewaytoken>` och JSON u
 | `POST /v1/analyze` | Äldre analyskontrakt → grundade candidates/highlights/uncertainties |
 | `POST /v2/analyze` | Vardagsutdrag med kontext → candidates med `replacesID` |
 | `POST /v1/lesson-notes` | Högst 3 500 byte källtext → plan/task-kandidater och detaljerade sections med citat |
+| `POST /v2/lesson-notes` | Som v1, och varje fragment får ha `speakerRole` (`teacher` eller `student`) → `examHints` (högst 8 provtips med citat), `subject` (ämnesförslag eller `null`), sedan candidates, sections och uncertainties som v1. Schemat `mio_lesson_notes_v2`, egen promptversion |
+| `PUT /v2/backup` | Appens versionsmärkta export (`schemaVersion` 2 och `exportedAt`, högst 32 MB, 120 s) → 201 `{id, createdAt, bytes, kept}`. Utanför AI-kvoten och tokenbudgeten; skickas aldrig till en leverantör |
+| `GET /v2/backups` | `{"backups": [{id, createdAt, bytes}]}`, nyaste först |
+| `GET /v2/backups/<id>` | Den dekrypterade exporten som `application/json` |
+
+Lektionsuppgiften i `/v2/status` har förmågan `lesson-notes-v2` bredvid `lesson-notes-v1`; appen använder v2 när den finns. `/v1/lesson-notes` är oförändrad byte för byte. I v2 bygger prompten anteckningarna främst på lärarens ord, och provtipsen tas bara med när läraren själv pekar ut något ("det här kommer på provet", "kom ihåg", "viktigt" och liknande), hellre för få än gissningar. Ett provtips utan citat ur källan, med fler än 300 tecken eller med fel form kastas och resten av svaret står kvar; ett ämne som inte är 1–40 tecken blir `null`. Samma tidsgräns och svarsutrymme som v1 gäller, också 180 s och 12 000 token när lektionen står på ett par som resonerar.
 
 Varje uppgift i `/v2/status` har `reasoning` (`"off"`, eller `"medium"` för lektioner på Large 4) och `schemaDialect` (`"strict-json-schema"`, `"json-schema"` eller `null` utan giltig konfiguration). På toppnivån finns `usage`: månadens token och uppskattade kostnad per uppgift och modell, enligt [kontraktet](../docs/DATAMODELL.md#v2status-resonemang-schema-och-användning); `null` om `usage.json` har ett okänt format. Kapacitetslistan står kvar som äldre appar väntar sig den.
 
-`/v2/status` svarar med `quota: {limit, remaining, resetAt, unit}` där `unit` är `tokens` eller `requests`, eller `quota: null` utan dygnsgräns. Klienter skickar den observerade revisionen som `X-Mio-Configuration-Revision`; en ändrad konfiguration ger 409 `configuration_changed` före kvot och modellanrop.
+`/v2/status` svarar med `quota: {limit, remaining, resetAt, unit}` där `unit` är `tokens` eller `requests`, eller `quota: null` utan dygnsgräns. `backup: {latestAt, count, bytes}` visar senaste säkerhetskopian (`latestAt: null`, `count: 0` utan kopior); fältet finns alltid hos den här gatewayen. Klienter skickar den observerade revisionen som `X-Mio-Configuration-Revision`; en ändrad konfiguration ger 409 `configuration_changed` före kvot och modellanrop.
 
 Gränser: fråga högst 2 000 byte, sex utdrag och 10 000 byte kontext. Analys 1–16 fragment och högst 16 000 byte text. Body högst 40 000 byte med 5 s deadline. Hela anropet högst 40 s, utom lektionsanteckningar när `lesson` står på ett par som resonerar (Mistral Large 4): då högst 180 s, oavsett lektionsrutt. Samma gränser gäller `mio-gateway prova`. `upstreamTimeoutMs` i `/v2/status` visar grundgränsen 40 000. Två samtidiga anrop. Svar från leverantören högst 65 536 byte.
+
+## Säkerhetskopian
+
+Beslut 2026-11-19 ([kontraktet](../docs/DATAMODELL.md#säkerhetskopian)). Varje natt under laddning skickar Mio sin versionsmärkta JSON-export hit via Tailscale, med samma token som AI-anropen. Kopian går aldrig till molnet eller till en AI-leverantör, räknas inte mot AI-kvoten och loggas inte.
+
+- Gatewayen kontrollerar bara att kroppen är ett JSON-objekt med `schemaVersion` 2 och `exportedAt`; innehållet tolkas inte. Högst 32 MB (32 MiB) och 120 s.
+- Kopian krypteras med XChaCha20-Poly1305 (RustCrypto `chacha20poly1305`) under nyckeln i `/var/lib/mio-gateway/backup.key` och skrivs till en temporär fil som döps om när den är klar. Bara de 14 senaste sparas; äldre raderas efter en lyckad skrivning. Filer som gatewayen inte själv har skrivit rörs aldrig.
+- Nyckeln ligger på samma krypterade disk som kopiorna. Krypteringen skyddar kopior som flyttas eller säkerhetskopieras vidare från katalogen, inte mot den som redan är root på datorn. Tar du bort nyckeln går de befintliga kopiorna inte längre att läsa; en nyckelfil med fel storlek stoppar nya kopior i stället för att skrivas över.
+- **Minne:** tjänsten har `MemoryMax=128M`. En kopia hålls i minnet en gång och krypteras eller dekrypteras på plats, och bara en kopia åt gången tas emot, krypteras eller dekrypteras. Toppen blir därför runt 32 MB utöver de cirka 6 MB gatewayen annars använder, och högst omkring 64 MB om en hämtad kopia fortfarande skickas när nästa läses. Kroppen strömmas inte till disk, eftersom den måste kontrolleras och krypteras innan något skrivs.
+- Fel: 400 `invalid_backup`, 401, 413 `request_too_large`, 415 `json_required` (inte JSON), 507 `backup_storage_failed` (disken eller nyckeln gick inte att använda), 404 `backup_not_found` och 500 `backup_unreadable` (fel nyckel eller trasig fil).
+- Mio Kontroll visar senaste kopian ur `backup` i `/v2/status`. Återställningen görs i Mios inställningar.
+
+**Hämta en kopia för hand.** Gatewayen dekrypterar själv, så det räcker att fråga den på datorn. Kommandona fungerar i både bash och fish; token läses ur `gateway.env` och syns inte på skärmen:
+
+```bash
+sudo sed -n 's/^MIO_GATEWAY_TOKEN=/Authorization: Bearer /p' /etc/mio-gateway/gateway.env \
+    | curl -sf -H @- http://127.0.0.1:8787/v2/backups
+sudo sed -n 's/^MIO_GATEWAY_TOKEN=/Authorization: Bearer /p' /etc/mio-gateway/gateway.env \
+    | curl -sf -H @- -o mio-export.json http://127.0.0.1:8787/v2/backups/20261120T030000Z-1a2b3c4d
+```
+
+Den första raden listar kopiorna, den andra sparar en av dem som `mio-export.json`. Filen är hela exporten i klartext: lägg den inte i molnet och ta bort den (`gio trash mio-export.json`) när du är klar. Formatet på disken, om gatewayen inte går att starta: `MIOBAK01` (8 byte, också associerad data), 24 byte nonce, chiffertexten och 16 byte tagg, XChaCha20-Poly1305 med nyckeln i `backup.key`.
 
 ## Verifiera utan modelltrafik
 
@@ -157,4 +187,4 @@ Rust 1.88 eller senare. Beroendena är låsta i `Cargo.lock`.
 cd server && cargo test --locked && cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Testerna använder en syntetisk transport; ingen nyckel eller riktig modelltrafik behövs. `tests/reasoning_usage.rs` prövar Mistral: att tankedelen kastas för lektioner och avvisas för vardag, att Large 4 inte går att välja för `ask` eller `everyday`, och användningsräknaren. `tests/parity.rs` spelar upp cirka 2 600 indata och 86 hela HTTP-utbyten som spelades in från den sista Node-versionen (`tests/golden/node-parity.json`) och kräver samma svar, inklusive exakt samma bytes till modellen. Fälten som kom till efter inspelningen (`reasoning`, `schemaDialect` och `usage` i `/v2/status`) tas bort före jämförelsen och prövas i egna tester. Ett riktigt prov mot Groq med syntetisk svensk text görs först när gatewayen kör på datorn.
+Testerna använder en syntetisk transport; ingen nyckel eller riktig modelltrafik behövs. `tests/reasoning_usage.rs` prövar Mistral: att tankedelen kastas för lektioner och avvisas för vardag, att Large 4 inte går att välja för `ask` eller `everyday`, och användningsräknaren. `tests/parity.rs` spelar upp cirka 2 600 indata och 86 hela HTTP-utbyten som spelades in från den sista Node-versionen (`tests/golden/node-parity.json`) och kräver samma svar, inklusive exakt samma bytes till modellen. Fälten som kom till efter inspelningen (`reasoning`, `schemaDialect`, `usage` och `backup` i `/v2/status`, och förmågan `lesson-notes-v2`) tas bort före jämförelsen och prövas i egna tester. `tests/lesson_v2.rs` prövar lektionsanteckningar version 2 och `tests/backup.rs` säkerhetskopian med syntetiska exporter i en tillfällig katalog: kryptering och dekryptering, 14-gränsen, fel nyckel, trasig fil och statusfältet. Ett riktigt prov mot Groq med syntetisk svensk text görs först när gatewayen kör på datorn.

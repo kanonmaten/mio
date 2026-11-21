@@ -3,6 +3,7 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 import hmac
+import json
 import logging
 import os
 import re
@@ -15,6 +16,9 @@ from .core import (Chunk, MAX_BYTES, MAX_RESPONSE_BYTES, RATE, RequestError, dec
                    validate_backend_words, validate_backend_metadata)
 from .preprocess import float_to_pcm, pcm_to_float, preprocess
 from .speakers import SpeakerLabeler, strip_speakers
+from .vocabulary import PhoneVocabulary, VocabularyFull, normalize_phrase
+
+MAX_VOCABULARY_BODY = 1_024
 
 log = logging.getLogger("mio_transcription")
 
@@ -44,7 +48,8 @@ def default_diarizer():
 
 
 def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._exit, cache_ttl=90,
-               diarizer=None, preprocessing=None, speaker_ttl=600, speaker_clock=time.monotonic):
+               diarizer=None, preprocessing=None, speaker_ttl=600, speaker_clock=time.monotonic,
+               vocabulary=None):
     token = token if token is not None else os.environ.get("MIO_TRANSCRIPTION_TOKEN", "")
     if not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", token):
         raise ValueError("Set a 32-256 character MIO_TRANSCRIPTION_TOKEN")
@@ -54,6 +59,7 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
         backend = Pianissimo()
         if diarizer is None:
             diarizer = default_diarizer()
+    vocabulary = vocabulary if vocabulary is not None else PhoneVocabulary()
     labeler = SpeakerLabeler(diarizer, ttl=speaker_ttl, clock=speaker_clock) if diarizer else None
     executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="inference")
     # Speaker model loading must never delay or block transcription readiness.
@@ -146,7 +152,8 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
                              "metadata": metadata(), "sampleRate": RATE, "channels": 1,
                              "encoding": "pcm_s16le_wav", "maxSeconds": 24, "maxBytes": MAX_BYTES,
                              "preprocessing": preprocessing, "vocabulary": vocabulary_size(),
-                             "precision": precision(), "speakerLabels": labeler.status if labeler else "off"},
+                             "precision": precision(), "speakerLabels": labeler.status if labeler else "off",
+                             "vocabularyUpload": True},
                             status_code=200 if ready() else 503,
                             headers={"Cache-Control": "no-store"})
 
@@ -168,6 +175,14 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
                 if not state["preprocess_warned"]:
                     state["preprocess_warned"] = True
                     log.warning("Förbehandling misslyckades (%s); originalljudet används.", type(error).__name__)
+        # A word added from the phone takes effect here, before this transcription and without
+        # a restart. Own words are an enhancement: a failing reload never stops the transcription.
+        reload = getattr(backend, "reload_vocabulary_if_requested", None)
+        if reload:
+            try:
+                reload()
+            except Exception as error:
+                log.warning("Egna ord kunde inte laddas om (%s); ordlistan är som förut.", type(error).__name__)
         asr_started = time.monotonic()
         words = validate_backend_words(backend.transcribe(model_pcm), len(pcm) // 2)
         asr_ms = (time.monotonic() - asr_started) * 1_000
@@ -258,6 +273,51 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
         finally:
             if not handed_off:
                 state["busy"] = False
+
+    async def read_small_body(request, limit):
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > limit:
+            raise RequestError(413, "body_too_large")
+        data = bytearray()
+        async for part in request.stream():
+            if len(data) + len(part) > limit:
+                raise RequestError(413, "body_too_large")
+            data.extend(part)
+        return bytes(data)
+
+    @app.post("/v1/vocabulary")
+    async def add_vocabulary(request: Request):
+        """One own word she said Yes to on the phone. The word is never logged or passed on."""
+        authenticate(request)
+        if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json" \
+                or request.headers.get("content-encoding"):
+            raise RequestError(415, "json_required")
+        try:
+            body = await asyncio.wait_for(read_small_body(request, MAX_VOCABULARY_BODY), 10)
+        except asyncio.TimeoutError:
+            raise RequestError(408, "body_timeout") from None
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            raise RequestError(400, "invalid_phrase") from None
+        if not isinstance(payload, dict) or set(payload) != {"phrase"}:
+            raise RequestError(400, "invalid_phrase")
+        phrase = normalize_phrase(payload["phrase"])
+        if phrase is None:
+            raise RequestError(400, "invalid_phrase")
+        try:
+            added = vocabulary.add(phrase)
+        except VocabularyFull:
+            raise RequestError(409, "vocabulary_full") from None
+        except OSError as error:
+            # The list stays as it was; transcription is unaffected. Type name only, never the word.
+            log.warning("Ett eget ord kunde inte sparas (%s); ordlistan är som förut.", type(error).__name__)
+            raise RequestError(507, "vocabulary_storage_failed") from None
+        if added:
+            request_reload = getattr(backend, "request_vocabulary_reload", None)
+            if request_reload:
+                request_reload()
+        return JSONResponse({"added": added, "vocabulary": vocabulary_size()}, headers={"Cache-Control": "no-store"})
 
     @app.delete("/v1/sessions/{session_id}")
     async def end_session(session_id: str, request: Request):

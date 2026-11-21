@@ -13,6 +13,8 @@ pub enum Mode {
     Analyze,
     AnalyzeV2,
     Lesson,
+    /// `/v2/lesson-notes`: exam hints, speaker roles and a subject suggestion.
+    LessonV2,
 }
 
 impl Mode {
@@ -22,6 +24,7 @@ impl Mode {
             "analyze" => Some(Self::Analyze),
             "analyze-v2" => Some(Self::AnalyzeV2),
             "lesson" => Some(Self::Lesson),
+            "lesson-v2" => Some(Self::LessonV2),
             _ => None,
         }
     }
@@ -30,7 +33,7 @@ impl Mode {
     pub const fn task_id(self) -> &'static str {
         match self {
             Self::Ask => "ask",
-            Self::Lesson => "lesson",
+            Self::Lesson | Self::LessonV2 => "lesson",
             Self::Analyze | Self::AnalyzeV2 => "everyday",
         }
     }
@@ -39,7 +42,7 @@ impl Mode {
     pub const fn result_error(self) -> &'static str {
         match self {
             Self::Ask => "invalid_upstream_answer",
-            Self::Lesson => "invalid_lesson_result",
+            Self::Lesson | Self::LessonV2 => "invalid_lesson_result",
             Self::Analyze | Self::AnalyzeV2 => "invalid_analysis_result",
         }
     }
@@ -53,6 +56,8 @@ pub fn create_task_request(mode: Mode, payload: &Value) -> Generation {
         Mode::Analyze => (prompts::ANALYSIS_SYSTEM.to_owned(), analysis::analysis_format(), 1_500, prompts::PROMPT_VERSION),
         Mode::AnalyzeV2 => (prompts::analysis_v2_system(), analysis::analysis_v2_format(), 1_500, prompts::ANALYSIS_V2_PROMPT_VERSION),
         Mode::Lesson => (prompts::LESSON_SYSTEM.to_owned(), analysis::lesson_format(), 3_000, prompts::PROMPT_VERSION),
+        // Up to eight short exam hints on top of v1's notes.
+        Mode::LessonV2 => (prompts::lesson_v2_system(), analysis::lesson_v2_format(), 3_500, prompts::LESSON_V2_PROMPT_VERSION),
     };
     Generation {
         messages: vec![Message { role: "system".to_owned(), content: system },
@@ -69,5 +74,6 @@ pub fn validate_task_result(mode: Mode, text: &str, payload: &Value) -> Result<V
         Mode::Analyze => analysis::validate_analysis_result(&value, payload),
         Mode::AnalyzeV2 => analysis::validate_analysis_v2_result(&value, payload),
         Mode::Lesson => analysis::validate_lesson_result(&value, payload),
+        Mode::LessonV2 => analysis::validate_lesson_v2_result(&value, payload),
     }.map_err(|_| mode.result_error())
 }
