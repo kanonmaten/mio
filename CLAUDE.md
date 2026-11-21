@@ -1,6 +1,6 @@
 # Mio: instructions for Claude Code
 
-Private SwiftUI app for iOS 27+ (tested on iPhone 16 Pro, still targeting iPhone 13), used and maintained by one person, installed with SideStore. Version 0.9.1 is current and unreleased. This file is in English; everything else in the repo is Swedish.
+Private SwiftUI app for iOS 27+ (tested on iPhone 16 Pro, still targeting iPhone 13), used and maintained by one person, installed with SideStore. Version 0.10.0 is current and unreleased (called 0.9.1 until 2026-11-21; older comments and docs that say 0.9.1 mean this work). One SemVer version in `VERSION` covers the whole repo; the verifier checks that the Xcode project, the Cargo manifests and `transcription-server/pyproject.toml` match it. This file is in English; everything else in the repo is Swedish.
 
 Before changing something, read the docs that cover it: [README](README.md), [decisions](docs/DECISIONS.md), [status](docs/STATUS.md), the [data model](docs/DATAMODELL.md) for storage, the [gateway](server/README.md) or [Pianissimo](transcription-server/README.md) guide for server work. [`PLAN.md`](PLAN.md) is the 0.9.0 reliability plan; never edit it. [`docs/PLAN_GRILLNING.md`](docs/PLAN_GRILLNING.md) (the user's decisions from 2026-11-19) was finished 2026-11-21; leave it as it is.
 

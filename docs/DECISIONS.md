@@ -2,6 +2,19 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## En version för hela repot, 2026-11-21
+
+Användarens val 2026-11-21 ([KAN-23](https://linear.app/kanonmaten/issue/KAN-23)).
+
+| Val | Varför | Bortvalt |
+|---|---|---|
+| [SemVer](https://semver.org) `X.Y.Z` i filen `VERSION`, samma för appen, widgetarna, gatewayen, Mio Kontroll, verifieraren och Pianissimo | Delarna släpps och provas tillsammans, och installationsskripten sparar redan vilken commit de installerade. Ett nummer säger vilken helhet något hör till. iOS kräver ändå tre heltal i `CFBundleShortVersionString` ([Apple](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)). Före 1.0 höjs Y för nya funktioner och Z för rättelser. | Egen version per del (0.1.0, 0.9.1 och 1.0.0 samtidigt sa ingenting); datumversioner som 2026.11.0 (säger när, inte hur stor ändringen är) |
+| Det ej släppta 0.9.1 blir 0.10.0 | Det innehåller nya funktioner (Apples appar, allt från grillningen), inte bara rättelser. Ingen 0.9.1 är installerad på en telefon. | Behålla 0.9.1 |
+| Byggnumret är körningens nummer i "Bygg Mio IPA", som sedan 2026-10-13 | Varje IPA motsvarar en körning och en commit. Projektfilens `CURRENT_PROJECT_VERSION = 5` gäller bara lokala byggen. | |
+| Verifieraren läser `VERSION` och kräver samma nummer i projektfilen (fyra ställen), `server/`, `control/`, `tools/` och `transcription-server/pyproject.toml` | Ett missat ställe syns i `project`-steget i stället för i en installerad app. | Ett skript som skriver numret överallt (en sak till att komma ihåg) |
+| En tagg `vX.Y.Z` per släpp, efter telefonprov | En tagg kör UI-tester och diagnostik. Taggar kräver användarens ja. 1.0.0 när Mio används varje dag utan att något behöver lagas. | |
+| Gatewayens `RELEASE` (`2026-11-15.1`) och lagringsnyckeln `mio.upgrade.0.9.1.legacyItemsRemoved` ändras inte | `RELEASE` är API-utgåvan som appen visar och paritetstesterna jämför, inte produktversionen. Nyckeln är sparad på telefoner; byter den namn körs uppgraderingen igen. Kodkommentarer som säger 0.9.1 betyder det som nu är 0.10.0. | |
+
 ## Linear och pull requests, 2026-11-21
 
 Användarens val 2026-11-21 ([KAN-24](https://linear.app/kanonmaten/issue/KAN-24)).

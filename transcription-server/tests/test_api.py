@@ -1,6 +1,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
+from pathlib import Path
 import threading
 import time
 from uuid import uuid4
@@ -71,6 +72,8 @@ def test_health_reports_contract_without_audio(service):
     assert response.status_code == 200
     assert response.json()["metadata"]["revision"] == "a" * 40
     assert response.json()["encoding"] == "pcm_s16le_wav"
+    root = Path(__file__).resolve().parents[2]
+    assert response.json()["serverVersion"] == (root / "VERSION").read_text().strip()
     assert response.headers["cache-control"] == "no-store"
     assert backend.calls == 0
     assert response.json()["vocabulary"] == 0

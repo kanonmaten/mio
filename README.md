@@ -2,9 +2,9 @@
 
 Privat SwiftUI-app för iOS 27+ (första testtelefon iPhone 16 Pro, senare även iPhone 13): privat svensk transkription via Pianissimo på egen CachyOS-dator, anteckningar, planering och en diskret vardagsassistent. Ingen App Store-distribution.
 
-**Aktuell version: 0.9.1 — ej släppt och inte provad på telefonen.** 0.9.0 är revisionen `8f90ddc` med rättningarna efter provet 2026-10-13; 0.9.1 lägger till att Apples appar äger posterna ([plan](docs/PLAN_APPLEAPPAR.md)). Båda är byggda och testade i simulatorn, ingen är installerad eller provad på telefonen. Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
+**Aktuell version: 0.10.0 — ej släppt och inte provad på telefonen.** Den hette 0.9.1 fram till 2026-11-21 ([versioner](docs/DECISIONS.md#en-version-för-hela-repot-2026-11-21)). 0.9.0 är revisionen `8f90ddc` med rättningarna efter provet 2026-10-13; 0.10.0 lägger till att Apples appar äger posterna ([plan](docs/PLAN_APPLEAPPAR.md)) och allt från grillningen. Båda är byggda och testade i simulatorn, ingen är installerad eller provad på telefonen. Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
 
-**Nästa steg** är [planen efter grillningen](docs/PLAN_GRILLNING.md) (2026-11-19, inte påbörjad). [Planen för tillförlitlighet](PLAN.md) styr 0.9.0 och [planen för Apples appar](docs/PLAN_APPLEAPPAR.md) 0.9.1; [status](docs/STATUS.md) visar verifierat läge och återstående acceptansprov.
+**Nästa steg** är att installera och prova 0.10.0 på datorn och telefonen; proven och det som återstår finns som ärenden i [Linear](https://linear.app/kanonmaten/project/mio-0100-pa-telefonen-a0b66e78ebf9). [Planen för tillförlitlighet](PLAN.md) styrde 0.9.0 och [planen för Apples appar](docs/PLAN_APPLEAPPAR.md) en del av 0.10.0; [status](docs/STATUS.md) visar verifierat läge.
 
 ## Funktioner
 

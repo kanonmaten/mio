@@ -3,6 +3,7 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 import hmac
+from importlib.metadata import PackageNotFoundError, version as package_version
 import json
 import logging
 import os
@@ -21,6 +22,16 @@ from .vocabulary import PhoneVocabulary, VocabularyFull, normalize_phrase
 MAX_VOCABULARY_BODY = 1_024
 
 log = logging.getLogger("mio_transcription")
+
+
+def server_version():
+    # One version for the whole repo (2026-11-21): uv sync installs this package, so /health
+    # reports the version in pyproject.toml, which the verifier keeps equal to VERSION.
+    try:
+        return package_version("mio-transcription")
+    except PackageNotFoundError:
+        return "okänd"
+
 
 
 def env_flag(name, default):
@@ -148,7 +159,7 @@ def create_app(backend=None, token=None, inference_timeout=45, fatal_exit=os._ex
     @app.get("/health")
     async def health(request: Request):
         authenticate(request)
-        return JSONResponse({"apiVersion": 1, "serverVersion": "1.0.0", "status": state["status"],
+        return JSONResponse({"apiVersion": 1, "serverVersion": server_version(), "status": state["status"],
                              "metadata": metadata(), "sampleRate": RATE, "channels": 1,
                              "encoding": "pcm_s16le_wav", "maxSeconds": 24, "maxBytes": MAX_BYTES,
                              "preprocessing": preprocessing, "vocabulary": vocabulary_size(),
