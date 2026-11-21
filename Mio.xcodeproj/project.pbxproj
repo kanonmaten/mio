@@ -45,6 +45,7 @@
 		5E7700000000000000000016 /* MioAnalysisScheduleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7700000000000000000006 /* MioAnalysisScheduleTests.swift */; };
 		5E7700000000000000000015 /* MioPairingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7700000000000000000005 /* MioPairingTests.swift */; };
 		ED26335892804000AAB10002 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ED26335892804000AAB10001 /* Assets.xcassets */; };
+		1C0A7C0A7C0A7C0A7C0A7002 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 1C0A7C0A7C0A7C0A7C0A7001 /* AppIcon.icon */; };
 		FDEAE468A9D0E2963EBB439A /* MioAnalysisModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AA777B6D2D5C06F62DFF3D3 /* MioAnalysisModels.swift */; };
 		3814826E9154155841DCF3FC /* MioAnalysisCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8176C1E54D96C9B75DA141FB /* MioAnalysisCoordinator.swift */; };
 		5D2BCAEF461598A056EA31C7 /* MioIntelligenceViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED186F304655079D8F88FE48 /* MioIntelligenceViews.swift */; };
@@ -206,6 +207,7 @@
 		5E7700000000000000000006 /* MioAnalysisScheduleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioAnalysisScheduleTests.swift; sourceTree = "<group>"; };
 		5E7700000000000000000005 /* MioPairingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioPairingTests.swift; sourceTree = "<group>"; };
 		ED26335892804000AAB10001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1C0A7C0A7C0A7C0A7C0A7001 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		1AA777B6D2D5C06F62DFF3D3 /* MioAnalysisModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioAnalysisModels.swift; sourceTree = "<group>"; };
 		8176C1E54D96C9B75DA141FB /* MioAnalysisCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioAnalysisCoordinator.swift; sourceTree = "<group>"; };
 		ED186F304655079D8F88FE48 /* MioIntelligenceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioIntelligenceViews.swift; sourceTree = "<group>"; };
@@ -355,6 +357,7 @@
 				710000000000000000000003 /* Models */,
 				710000000000000000000004 /* Services */,
 				ED26335892804000AAB10001 /* Assets.xcassets */,
+				1C0A7C0A7C0A7C0A7C0A7001 /* AppIcon.icon */,
 				F1000000000000000000000A /* Info.plist */,
 				F1000000000000000000000F /* PrivacyInfo.xcprivacy */,
 			);
@@ -608,6 +611,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				ED26335892804000AAB10002 /* Assets.xcassets in Resources */,
+				1C0A7C0A7C0A7C0A7C0A7002 /* AppIcon.icon in Resources */,
 				B1000000000000000000000C /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
