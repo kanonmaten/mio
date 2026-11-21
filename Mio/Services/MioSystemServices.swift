@@ -15,6 +15,16 @@ enum MioDailyReminder: String, CaseIterable, Identifiable {
     var defaultHour: Int { self == .morning ? 7 : 20 }
 }
 
+/// What the daily texts are built from, read from the app's models when planning (fas 5).
+struct MioDailyContentSnapshot {
+    var exams: [MioExamPlan] = []
+    var items: [MioContentItem] = []
+    var sessions: [MioSession] = []
+    /// Unfinished reminders for the planning horizon, read from Reminders and never stored.
+    var reminders: [MioReminderSummary] = []
+    var pendingCount = 0
+}
+
 struct MioPendingReminder: Identifiable {
     let id: String
     let title: String
@@ -80,7 +90,7 @@ final class MioSystemServices {
         let requests = await notificationCenter.pendingNotificationRequests()
         reminders = requests.filter { $0.identifier.hasPrefix("mio.") }.map { request in
             let trigger = request.trigger as? UNCalendarNotificationTrigger
-            let daily = MioDailyReminder.allCases.first { $0.id == request.identifier }
+            let daily = MioDailyReminder.allCases.first { MioDailyDigest.belongs(request.identifier, to: $0.id) }
             return MioPendingReminder(
                 id: request.identifier,
                 title: daily?.title ?? "Påminnelse om en Mio-post",
@@ -101,7 +111,7 @@ final class MioSystemServices {
                 alarms = current.sorted { $0.id.uuidString < $1.id.uuidString }
                 rememberAlarmIDs(Set(alarms.map(\.id)))
             } catch {
-                errorMessage = "Kunde inte läsa Mios alarm: \(error.localizedDescription)"
+                errorMessage = "Kunde inte läsa Mios alarm. \(MioErrorText.action(for: error))"
             }
         } else {
             alarms = []
@@ -131,17 +141,140 @@ final class MioSystemServices {
             statusMessage = "Alarmet är borttaget."
             return true
         } catch {
-            errorMessage = "Kunde inte ta bort alarmet: \(error.localizedDescription)"
+            errorMessage = "Kunde inte ta bort alarmet. \(MioErrorText.action(for: error))"
             return false
         }
     }
 
+    /// Fas 5: saves the chosen time and plans the notification. The morning one repeats with the
+    /// generic text unless she turned on "Visa prov och läxor"; the evening one is planned per day
+    /// so that today's text can count the proposals (see `MioDailyDigest`).
     @discardableResult
     func scheduleDailyReminder(_ kind: MioDailyReminder, time: Date) async -> Bool {
         // Hour/minute without a fixed timezone follows the device's local day.
         let components = Calendar.current.dateComponents([.hour, .minute], from: time)
-        let route = kind == .morning ? MioNotificationRoute.morning : .evening
-        return await saveReminder(id: kind.id, route: route, components: components, repeats: true)
+        let minutes = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+        guard await prepareDailyPermission() else { return false }
+        UserDefaults.standard.set(minutes, forKey: MioDailyDigest.timeKey(kind.id))
+        await replanDailyNotices()
+        statusMessage = "Notisen är sparad. Notiser följer iPhones ljud- och fokusinställningar."
+        return true
+    }
+
+    /// Turns a daily notification off: its time, the repeating request and every planned day.
+    func cancelDailyReminder(_ kind: MioDailyReminder) async {
+        UserDefaults.standard.removeObject(forKey: MioDailyDigest.timeKey(kind.id))
+        await removeDaily(kind)
+        await refresh()
+        statusMessage = "Notisen är avstängd."
+    }
+
+    /// What today's and the coming days' texts are built from. Supplied by the app, read when planning.
+    @ObservationIgnored var dailyContent: (@MainActor () async -> MioDailyContentSnapshot)?
+
+    /// Replans the daily notifications from the stored times. Run when Mio starts, goes to the
+    /// background, after the night's backup and when proposals or approved items change. Never asks
+    /// for permission and never adds anything without it.
+    func replanDailyNotices(now: Date = .now) async {
+        let status = await notificationCenter.notificationSettings().authorizationStatus
+        notificationStatus = status
+        let pending = await notificationCenter.pendingNotificationRequests()
+        let defaults = UserDefaults.standard
+        // Before fas 5 only the repeating request held the time; keep it as the stored time.
+        for kind in MioDailyReminder.allCases where defaults.object(forKey: MioDailyDigest.timeKey(kind.id)) == nil {
+            if let trigger = pending.first(where: { $0.identifier == kind.id })?.trigger as? UNCalendarNotificationTrigger,
+               let hour = trigger.dateComponents.hour {
+                defaults.set(hour * 60 + (trigger.dateComponents.minute ?? 0), forKey: MioDailyDigest.timeKey(kind.id))
+            }
+        }
+        guard status == .authorized || status == .provisional else { return }
+        let snapshot = await dailyContent?() ?? MioDailyContentSnapshot()
+        let calendar = Calendar.current
+        for kind in MioDailyReminder.allCases {
+            guard let minutes = defaults.object(forKey: MioDailyDigest.timeKey(kind.id)) as? Int else {
+                await removeDaily(kind)
+                continue
+            }
+            let route = kind == .morning ? MioNotificationRoute.morning : .evening
+            if kind == .morning && !defaults.bool(forKey: MioDailyDigest.morningDetailKey) {
+                // The generic text needs no daily planning; one repeating request is the most robust.
+                let stale = pending.map(\.identifier).filter { MioDailyDigest.belongs($0, to: kind.id) && $0 != kind.id }
+                notificationCenter.removePendingNotificationRequests(withIdentifiers: stale)
+                let content = notificationContent(body: route.notificationBody, route: route)
+                let trigger = UNCalendarNotificationTrigger(dateMatching: DateComponents(hour: minutes / 60, minute: minutes % 60),
+                                                            repeats: true)
+                try? await notificationCenter.add(UNNotificationRequest(identifier: kind.id, content: content, trigger: trigger))
+                continue
+            }
+            let plan = MioDailyDigest.plan(base: kind.id, minutes: minutes, now: now, calendar: calendar) { day, isToday in
+                switch kind {
+                case .morning:
+                    MioDailyDigest.morningBody(exams: MioDailyDigest.exams(on: day, in: snapshot.exams, calendar: calendar),
+                                               homework: MioDailyDigest.homework(on: day, reminders: snapshot.reminders,
+                                                                                 items: snapshot.items, sessions: snapshot.sessions,
+                                                                                 calendar: calendar))
+                case .evening:
+                    MioDailyDigest.eveningBody(pendingCount: snapshot.pendingCount, isToday: isToday)
+                }
+            }
+            let planned = Set(plan.map(\.id))
+            let stale = pending.map(\.identifier).filter { MioDailyDigest.belongs($0, to: kind.id) && !planned.contains($0) }
+            notificationCenter.removePendingNotificationRequests(withIdentifiers: stale)
+            for notice in plan {
+                let trigger = UNCalendarNotificationTrigger(dateMatching: notice.components, repeats: false)
+                // Adding with the same identifier replaces the earlier text for that day.
+                try? await notificationCenter.add(UNNotificationRequest(identifier: notice.id,
+                    content: notificationContent(body: notice.body, route: route), trigger: trigger))
+            }
+        }
+        await refresh()
+    }
+
+    /// The signing reminder (fas 6): 24 hours before SideStore's signature runs out, with the steps.
+    /// Replaced at each launch; removed when the date is unknown or the moment has passed.
+    func planSigningReminder(expiration: Date?, now: Date = .now) async {
+        notificationCenter.removePendingNotificationRequests(withIdentifiers: [MioSigning.reminderID])
+        guard let expiration, let fireAt = MioSigning.reminderDate(expiration: expiration, now: now) else { return }
+        let status = await notificationCenter.notificationSettings().authorizationStatus
+        guard status == .authorized || status == .provisional else { return }
+        let content = UNMutableNotificationContent()
+        content.title = MioSigning.reminderTitle
+        content.body = MioSigning.reminderBody
+        content.sound = .default
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fireAt)
+        try? await notificationCenter.add(UNNotificationRequest(identifier: MioSigning.reminderID, content: content,
+            trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false)))
+    }
+
+    private func prepareDailyPermission() async -> Bool {
+        errorMessage = nil
+        statusMessage = nil
+        notificationStatus = await notificationCenter.notificationSettings().authorizationStatus
+        if notificationStatus == .notDetermined {
+            _ = try? await notificationCenter.requestAuthorization(options: [.alert, .sound, .badge])
+            notificationStatus = await notificationCenter.notificationSettings().authorizationStatus
+        }
+        guard notificationStatus == .authorized || notificationStatus == .provisional else {
+            errorMessage = "Mio får inte visa notiser. Tillåt dem i iPhones Inställningar → Mio → Notiser."
+            return false
+        }
+        return true
+    }
+
+    private func removeDaily(_ kind: MioDailyReminder) async {
+        let pending = await notificationCenter.pendingNotificationRequests().map(\.identifier)
+        let ids = pending.filter { MioDailyDigest.belongs($0, to: kind.id) }
+        notificationCenter.removePendingNotificationRequests(withIdentifiers: ids)
+    }
+
+    /// Only the planned text and the route leave the app; nothing else is attached.
+    private func notificationContent(body: String, route: MioNotificationRoute) -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = "Mio"
+        content.body = body
+        content.userInfo = route.userInfo
+        content.sound = .default
+        return content
     }
 
     func cancelReminder(id: String) async {
@@ -193,7 +326,7 @@ final class MioSystemServices {
             await refresh()
             return true
         } catch {
-            errorMessage = "Kunde inte ta bort postens alarm. Posten har inte raderats: \(error.localizedDescription)"
+            errorMessage = "Kunde inte ta bort postens alarm. Posten har inte raderats. \(MioErrorText.action(for: error))"
             return false
         }
     }
@@ -244,7 +377,7 @@ final class MioSystemServices {
             statusMessage = "Mios alarm och påminnelser är borttagna."
             return true
         } catch {
-            errorMessage = "Alla alarm kunde inte tas bort. Kontrollera listan och försök igen: \(error.localizedDescription)"
+            errorMessage = "Alla alarm kunde inte tas bort. Kontrollera listan och försök igen. \(MioErrorText.action(for: error))"
             await refresh()
             return false
         }
@@ -427,7 +560,7 @@ final class MioSystemServices {
             statusMessage = "Påminnelsen är sparad. Notiser följer iPhones ljud- och fokusinställningar."
             return true
         } catch {
-            errorMessage = "Kunde inte spara påminnelsen: \(error.localizedDescription)"
+            errorMessage = "Kunde inte spara påminnelsen. \(MioErrorText.action(for: error))"
             return false
         }
     }

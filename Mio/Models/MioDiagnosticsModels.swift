@@ -394,6 +394,10 @@ struct MioGatewayStatusV2: Decodable, Sendable {
     let configurationRevision: String
     let tasks: MioGatewayTasksStatus
     let quota: MioGatewayQuota?
+    /// The nightly backup's state on the PC (contract "Säkerhetskopian"). Nil at a gateway without
+    /// backups; the app then neither shows nor schedules the copy.
+    private(set) var backup: MioGatewayBackupStatus? = nil
+    private enum CodingKeys: String, CodingKey { case protocolVersion, release, configurationRevision, tasks, quota }
     /// Room for the additive `usage` entries (one per task, provider and model this month).
     static let maxResponseBytes = 32_768
     /// Required keys, plus additive ones a newer gateway sends (contract 2026-11-20). Any other
@@ -424,12 +428,13 @@ struct MioGatewayStatusV2: Decodable, Sendable {
               ["ask", "everyday", "lesson"].allSatisfy({ allowing(tasks[$0], taskKeys, optional: optionalTaskKeys) }),
               root["quota"] is NSNull || exact(root["quota"], ["limit", "remaining", "resetAt"])
                 || exact(root["quota"], ["limit", "remaining", "resetAt", "unit"]),
-              let value = try? JSONDecoder().decode(Self.self, from: data), value.protocolVersion == 2,
+              var value = try? JSONDecoder().decode(Self.self, from: data), value.protocolVersion == 2,
               MioGatewayMetadata.identifier(value.release) != nil,
               MioGatewayMetadata.revision(value.configurationRevision) != nil,
               MioAITaskID.allCases.allSatisfy({ value.tasks[$0].isValid }),
               value.quota == nil || value.quota!.isValid
         else { throw MioCloudError.incompatibleGateway }
+        value.backup = MioGatewayBackupStatus(json: root["backup"])
         return value
     }
 

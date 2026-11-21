@@ -282,6 +282,8 @@ struct SuggestionReviewView: View {
     @State private var busy = false
     @State private var showCalendar = false
     @State private var showShare = false
+    /// Fas 5: the exam's subject, prefilled from the lesson or a known subject in the title.
+    @State private var examSubject = ""
 
     init(suggestion: MioSuggestion, contentModel: MioContentViewModel, sessionModel: MioViewModel) {
         self.suggestion = suggestion
@@ -321,6 +323,22 @@ struct SuggestionReviewView: View {
                     Picker("Lista", selection: $listID) {
                         ForEach(lists) { list in Text(list.title).tag(Optional(list.id)) }
                     }
+                }
+            }
+            if isExam {
+                Section {
+                    TextField("Ämne, till exempel Biologi", text: $examSubject)
+                    let known = MioExamSubjects.known(in: sessionModel.allSessions)
+                    if !known.isEmpty {
+                        Picker("Välj bland dina ämnen", selection: $examSubject) {
+                            if !known.contains(examSubject) { Text(examSubject.isEmpty ? "Inget valt" : examSubject).tag(examSubject) }
+                            ForEach(known, id: \.self) { Text($0).tag($0) }
+                        }
+                    }
+                    MioExamPrepButton(subject: examSubject, exam: nil, sessions: sessionModel.allSessions,
+                                      items: contentModel.items, records: assistant.analyses)
+                } header: { Text("Prov") } footer: {
+                    Text("Mio räknar ner till provet på Hem från en vecka före. Inför provet kopierar ämnets provtips och lektionsanteckningar sedan förra provet.")
                 }
             }
             if let evidence = reviewedSuggestion.evidence {
@@ -391,7 +409,14 @@ struct SuggestionReviewView: View {
         .navigationBarTitleDisplayMode(.inline)
         .disabled(busy)
         .navigationBarBackButtonHidden(busy)
-        .task { loadLists() }
+        .task {
+            loadLists()
+            if examSubject.isEmpty {
+                let session = suggestion.sessionID.flatMap { sessionModel.session(id: $0) }
+                examSubject = (session?.isLesson == true ? session?.subject : nil)
+                    ?? MioExamSubjects.match(title: title, known: MioExamSubjects.known(in: sessionModel.allSessions)) ?? ""
+            }
+        }
         .sheet(isPresented: $showCalendar) {
             CalendarHandoffComposer(draft: eventDraft) { saved in
                 guard saved else { return }
@@ -421,6 +446,8 @@ struct SuggestionReviewView: View {
     }
 
     private var showsDate: Bool { kind == .plan || (kind == .task && hasDueDate) }
+    private var isExam: Bool { showsDate && MioExamDetector.looksLikeExam(title) }
+    private var chosenExamSubject: String? { isExam ? MioLessonSubject.clean(examSubject) : nil }
     private var dateComponents: DatePickerComponents { isAllDay ? .date : [.date, .hourAndMinute] }
     /// Calendar's editor shows the date itself; a reminder is created directly, so its AI date is
     /// confirmed here first.
@@ -484,7 +511,7 @@ struct SuggestionReviewView: View {
         busy = true
         defer { busy = false }
         let result = await workflow.sendToReminders(id: suggestion.id, expectedRevision: reviewedRevision, title: title, notes: text,
-            dueDate: hasDueDate ? date : nil, hasTime: hasDueDate && !isAllDay, listID: listID)
+            dueDate: hasDueDate ? date : nil, hasTime: hasDueDate && !isAllDay, listID: listID, examSubject: chosenExamSubject)
         outcome = result
         if lists.isEmpty { loadLists() }
         if result.isSuccess { MioFeedback.success(); dismiss() }
@@ -494,7 +521,10 @@ struct SuggestionReviewView: View {
         Task {
             busy = true
             defer { busy = false }
-            let result = await workflow.recordHandoff(id: suggestion.id, kind: kind, title: title, destination: destination)
+            // Only Calendar gets the exam's day: it is the day she approved in the editor's draft.
+            let result = await workflow.recordHandoff(id: suggestion.id, kind: kind, title: title, destination: destination,
+                                                      examDate: destination == .calendar && kind == .plan ? (date: date, allDay: isAllDay) : nil,
+                                                      examSubject: chosenExamSubject)
             outcome = result
             if result.isSuccess { MioFeedback.success(); dismiss() }
         }

@@ -64,7 +64,7 @@ final class MioQuestionWorkflow {
         }
         do { _ = try request.validatedData(); try Task.checkCancellation() }
         catch is CancellationError { return MioQuestionResult(outcome: .cancelled, answer: nil) }
-        catch { return MioQuestionResult(outcome: .failure(error.localizedDescription), answer: nil) }
+        catch { return MioQuestionResult(outcome: .failure(MioErrorText.sentence(for: error)), answer: nil) }
         answerDraft = nil
         let token = generation
         let task = Task { try await send(request, connection) }
@@ -100,7 +100,7 @@ final class MioQuestionWorkflow {
                     return MioQuestionResult(outcome: .cancelled, answer: nil)
                 }
                 MioConnectionDiscovery.shared.handle(error: error)
-                return MioQuestionResult(outcome: .failure(error.localizedDescription), answer: nil,
+                return MioQuestionResult(outcome: .failure(MioErrorText.sentence(for: error)), answer: nil,
                                          retryAfterSeconds: MioAnalysisSchedule.questionRetrySeconds(after: error))
             }
         } onCancel: { task.cancel() }

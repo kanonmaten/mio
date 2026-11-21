@@ -114,11 +114,13 @@ final class MioNavigationTests: XCTestCase {
         navigation.resolvePending { _ in .proposals }
         navigation.receive(.evening)
         navigation.resolvePending { _ in nil }
-        XCTAssertEqual(navigation.selectedTab, .home)
+        // Fas 5: the evening notification counts proposals to review and opens Förslag.
+        XCTAssertEqual(navigation.selectedTab, .proposals)
         XCTAssertEqual(navigation.dailyPeriod, .evening)
         XCTAssertNil(navigation.presentedPost)
         navigation.receive(.morning)
         navigation.resolvePending { _ in nil }
+        XCTAssertEqual(navigation.selectedTab, .home)
         XCTAssertEqual(navigation.dailyPeriod, .morning)
     }
 

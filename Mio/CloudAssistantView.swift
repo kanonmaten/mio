@@ -215,7 +215,7 @@ struct CloudAssistantView: View {
             _ = try request.validatedData()
             connection = try MioCloudSettings.connection()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = MioErrorText.sentence(for: error)
             return
         }
         let generation = workflow.questions.generation
@@ -243,7 +243,7 @@ struct CloudAssistantView: View {
                         guard await waitBeforeResend(seconds, requestID: requestID, generation: generation) else { return }
                         continue
                     }
-                    errorMessage = error.localizedDescription
+                    errorMessage = MioErrorText.sentence(for: error)
                     return
                 }
                 guard !Task.isCancelled, activeRequestID == requestID, workflow.questions.generation == generation else { return }

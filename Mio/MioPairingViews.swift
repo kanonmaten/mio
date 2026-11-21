@@ -84,7 +84,7 @@ struct MioComputerSection: View {
             MioQRScannerSheet { text in
                 showScanner = false
                 do { pair(try MioPairingPayload.parse(text)) }
-                catch { self.error = error.localizedDescription; message = nil }
+                catch { self.error = MioErrorText.sentence(for: error); message = nil }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: MioCloudSettings.didResetNotification)) { _ in refresh() }
@@ -132,7 +132,7 @@ struct MioComputerSection: View {
             MioFeedback.success()
             check()
         } catch {
-            self.error = error.localizedDescription
+            self.error = MioErrorText.sentence(for: error)
             message = nil
         }
     }
@@ -151,11 +151,11 @@ struct MioComputerSection: View {
             do {
                 _ = try await discovery.inspect(connection: try MioCloudSettings.connection(), forceRefresh: true)
             } catch is CancellationError { return }
-            catch { problems.append("AI: \(error.localizedDescription)") }
+            catch { problems.append("AI: \(MioErrorText.sentence(for: error))") }
             if !TranscriptionSettings.address.isEmpty {
                 do { try await model.testTranscriptionConnection() }
                 catch is CancellationError { return }
-                catch { problems.append("Transkription: \(error.localizedDescription)") }
+                catch { problems.append("Transkription: \(MioErrorText.sentence(for: error))") }
             }
             guard !Task.isCancelled else { return }
             if problems.isEmpty {
@@ -170,8 +170,8 @@ struct MioComputerSection: View {
     private func forget() {
         checkTask?.cancel()
         var failures: [String] = []
-        do { try MioCloudSettings.reset() } catch { failures.append(error.localizedDescription) }
-        do { try TranscriptionSettings.reset() } catch { failures.append(error.localizedDescription) }
+        do { try MioCloudSettings.reset() } catch { failures.append(MioErrorText.sentence(for: error)) }
+        do { try TranscriptionSettings.reset() } catch { failures.append(MioErrorText.sentence(for: error)) }
         refresh()
         message = failures.isEmpty ? "Datorn är glömd på telefonen." : nil
         error = failures.isEmpty ? nil : failures.joined(separator: "\n")
@@ -254,7 +254,7 @@ struct MioManualPairingView: View {
                         do {
                             onPair(try MioPairingPayload.manual(aiURL: aiURL, aiToken: aiToken,
                                 transcriptionURL: transcriptionURL, transcriptionToken: transcriptionToken))
-                        } catch { self.error = error.localizedDescription }
+                        } catch { self.error = MioErrorText.sentence(for: error) }
                     }
                     .disabled(aiURL.isEmpty || aiToken.isEmpty)
                 }

@@ -13,6 +13,9 @@ struct ContentView: View {
     @Environment(MioDayContext.self) private var day
     @State private var storesLoaded = false
     @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
+    @Environment(MioBackupTask.self) private var backup
+    @State private var discovery = MioConnectionDiscovery.shared
+    @State private var replanTask: Task<Void, Never>?
 
     var body: some View {
         @Bindable var navigation = navigation
@@ -98,10 +101,13 @@ struct ContentView: View {
             resolveNotificationRoute()
             resolveLink()
             resumeAI()
+            replanNotices()
+            await MioSystemServices.shared.planSigningReminder(expiration: MioSigningInfo.expiration)
         }
         .onChange(of: scenePhase) { _, newPhase in
             model.handleScenePhase(newPhase)
             if newPhase == .background, storesLoaded { Task { await workflow.pruneExpiredEverydaySessions() } }
+            if newPhase != .inactive { replanNotices() }
             if newPhase == .active { day.refresh(); followDayPhase(); resolveNotificationRoute(); resolveLink(); resumeAI() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in day.refresh() }
@@ -121,10 +127,28 @@ struct ContentView: View {
             resumeAI()
         }
         .onChange(of: assistant.stateRevision) { _, _ in workflow.invalidateExportIfSourcesChanged() }
+        .onChange(of: assistant.pendingCount) { _, _ in replanNotices() }
+        // The nightly copy is scheduled only once the PC's status shows that it takes copies.
+        .onChange(of: discovery.lastStatus?.backup) { _, _ in
+            if let status = discovery.lastStatus { backup.schedule(status: status) }
+        }
         .onChange(of: model.stateRevision) { _, _ in workflow.invalidateExportIfSourcesChanged() }
         .onChange(of: contentModel.stateRevision) { _, _ in
             workflow.invalidateExportIfSourcesChanged()
             navigation.reconcile(using: notificationDestination)
+            replanNotices()
+        }
+    }
+
+    /// Fas 5: today's evening count and the coming mornings' exams and homework. Coalesced, since
+    /// a burst of changes (a lesson's proposals) needs only one replanning.
+    private func replanNotices() {
+        guard storesLoaded else { return }
+        replanTask?.cancel()
+        replanTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            await MioSystemServices.shared.replanDailyNotices()
         }
     }
 

@@ -24,7 +24,7 @@ final class MioContentViewModel {
     func bootstrap() async {
         guard !hasBootstrapped else { return }
         do { update(try await repository.loadItems()); hasBootstrapped = true }
-        catch { errorMessage = "Kunde inte läsa lokalt innehåll: \(error.localizedDescription)" }
+        catch { errorMessage = "Kunde inte läsa lokalt innehåll. \(MioErrorText.action(for: error))" }
     }
 
     func latestItems() async throws -> [MioContentItem] { try await repository.loadItems() }
@@ -59,7 +59,7 @@ final class MioContentViewModel {
             update(try await repository.upsert(item))
             return publish(.success)
         } catch is CancellationError { return publish(.cancelled) }
-        catch { return publish(.failure("Kunde inte spara innehållet: \(error.localizedDescription)")) }
+        catch { return publish(.failure("Kunde inte spara innehållet. \(MioErrorText.action(for: error))")) }
     }
 
     func saveApproved(_ item: MioContentItem) async -> MioOperationOutcome {
@@ -70,7 +70,27 @@ final class MioContentViewModel {
             update(try await repository.saveApprovedIfAbsent(item))
             return publish(.success)
         } catch is CancellationError { return publish(.cancelled) }
-        catch { return publish(.failure("Kunde inte spara den godkända posten: \(error.localizedDescription)")) }
+        catch { return publish(.failure("Kunde inte spara den godkända posten. \(MioErrorText.action(for: error))")) }
+    }
+
+    /// Her subject for an approved exam (fas 5); an empty or invalid subject removes it. Every
+    /// other field of the record, including its handoff, stays as it was.
+    func setExamSubject(id: UUID, subject: String?) async -> MioOperationOutcome {
+        guard MioMaintenanceState.shared.beginWrite() else { return publish(.conflict("Vänta tills dataåtgärden är klar och försök igen.")) }
+        defer { MioMaintenanceState.shared.endWrite() }
+        do {
+            // An older plan kept in Mio is an exam by its title; it gets its record here.
+            guard var item = try await repository.loadItems().first(where: { $0.id == id }),
+                  var exam = item.exam ?? MioExamPlan.all(in: [item]).first?.exam else {
+                return publish(.conflict("Provet finns inte längre i Mio."))
+            }
+            exam.subject = MioLessonSubject.clean(subject)
+            item.exam = exam
+            item.updatedAt = .now
+            update(try await repository.upsert(item))
+            return publish(.success)
+        } catch is CancellationError { return publish(.cancelled) }
+        catch { return publish(.failure("Ämnet sparades inte. Försök igen.")) }
     }
 
     func delete(id: UUID) async { _ = await deleteOutcome(id: id) }
@@ -83,7 +103,7 @@ final class MioContentViewModel {
             guard cancelled.isSuccess else { return publish(cancelled) }
         }
         do { update(try await repository.delete(id: id)); return publish(.success) }
-        catch { return publish(.failure("Kunde inte radera innehållet: \(error.localizedDescription)")) }
+        catch { return publish(.failure("Kunde inte radera innehållet. \(MioErrorText.action(for: error))")) }
     }
 
     func setTaskCompleted(id: UUID, isCompleted: Bool) async {
@@ -98,7 +118,7 @@ final class MioContentViewModel {
         if !ignoreMaintenance, !MioMaintenanceState.shared.beginWrite() { return publish(.conflict("Vänta tills dataåtgärden är klar.")) }
         defer { if !ignoreMaintenance { MioMaintenanceState.shared.endWrite() } }
         do { update(try await repository.unlinkSession(id: id)); return publish(.success) }
-        catch { return publish(.failure("Kunde inte ta bort sessionskopplingar: \(error.localizedDescription)")) }
+        catch { return publish(.failure("Kunde inte ta bort sessionskopplingar. \(MioErrorText.action(for: error))")) }
     }
 
     /// Legacy callers delegate to the same snapshot writer; cross-store reads belong to the workflow.
@@ -130,19 +150,19 @@ final class MioContentViewModel {
                 errorMessage = "Exporten skapades, men diagnostikjournalen är ofullständig. Se lagringsstatus i exporten."
             }
             return result
-        } catch { return publish(.failure("Kunde inte skapa exportfilen: \(error.localizedDescription)")) }
+        } catch { return publish(.failure("Kunde inte skapa exportfilen. \(MioErrorText.action(for: error))")) }
     }
 
     func deleteAllData() async { _ = await deleteAllDataOutcome() }
 
     func deleteAllDataOutcome() async -> MioOperationOutcome {
         do { try await repository.deleteAll(); update([]); return publish(.success) }
-        catch { return publish(.failure("Kunde inte radera lokalt innehåll: \(error.localizedDescription)")) }
+        catch { return publish(.failure("Kunde inte radera lokalt innehåll. \(MioErrorText.action(for: error))")) }
     }
 
     func removeExportsOutcome() async -> MioOperationOutcome {
         do { try await repository.removeTemporaryExports(); exportURL = nil; return .success }
-        catch { return publish(.failure("Kunde inte radera tidigare exportfiler: \(error.localizedDescription)")) }
+        catch { return publish(.failure("Kunde inte radera tidigare exportfiler. \(MioErrorText.action(for: error))")) }
     }
 
     func item(id: UUID) -> MioContentItem? { items.first { $0.id == id } }

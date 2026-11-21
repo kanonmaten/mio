@@ -54,7 +54,9 @@ final class MioUISmokeTests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
         XCTAssertTrue(app.descendants(matching: .any)["mio.settings.panel"].firstMatch.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Dator"].firstMatch.exists, "The panel starts with the Dator section")
+        // Fas 6: the panel starts with whether everything works; the technical rows sit under Avancerat.
+        XCTAssertTrue(app.descendants(matching: .any)["mio.settings.health"].firstMatch.waitForExistence(timeout: 5),
+                      "The panel starts with the health line")
         let done = app.buttons["mio.settings.done"]
         XCTAssertTrue(done.exists)
         keepScreenshot("installningar")
@@ -63,7 +65,7 @@ final class MioUISmokeTests: XCTestCase {
     }
 
     /// 2026-11-15: everything about the PC, transcription and AI is reached from the one settings
-    /// sheet. Opens each page and keeps a picture; changes nothing and pairs nothing.
+    /// sheet, under Avancerat since fas 6. Opens each page and keeps a picture; changes nothing and pairs nothing.
     @MainActor
     func testSettingsSheetLeadsToPairingTranscriptionAndAI() {
         let app = XCUIApplication()
@@ -76,6 +78,9 @@ final class MioUISmokeTests: XCTestCase {
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         settings.tap()
         XCTAssertTrue(app.buttons["mio.settings.done"].waitForExistence(timeout: 5))
+        let advanced = app.descendants(matching: .any)["mio.settings.advanced"].firstMatch
+        XCTAssertTrue(advanced.waitForExistence(timeout: 5), "Missing Avancerat")
+        advanced.tap()
         for (row, title) in [("Parning", "Parning"), ("Transkription", "Transkription"), ("AI", "AI")] {
             let link = app.staticTexts[row].firstMatch
             XCTAssertTrue(link.waitForExistence(timeout: 5), "Missing settings row: \(row)")

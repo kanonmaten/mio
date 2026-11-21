@@ -1,7 +1,8 @@
 import EventKit
 import SwiftUI
 
-/// Hem: the week planner. Week number and seven days on top, then the next reminder, what
+/// Hem: the week planner. Week number and seven days on top, then the next reminder, the exam
+/// countdown (fas 5), what
 /// waits for review, the chosen day's morning or evening overview, and twelve weeks of use.
 /// From 0.9.1 tasks come from Reminders, read on demand and never stored; Calendar is not read.
 struct MioHomeView: View {
@@ -33,6 +34,9 @@ struct MioHomeView: View {
                     if isTodaySelected {
                         MioSectionTitle("Nästa")
                         nextPanel
+                    }
+                    if isTodaySelected {
+                        MioExamCountdownPanel(countdown: derived.exams, model: model, contentModel: contentModel)
                     }
                     reviewRow
                     aiStatus
@@ -410,8 +414,10 @@ struct MioHomeView: View {
         let sentToday = items.filter { item in
             item.handoff.map { day.calendar.isDate($0.sentAt, inSameDayAs: day.overviewDate) } ?? false
         }.sorted { ($0.handoff?.sentAt ?? .distantPast) < ($1.handoff?.sentAt ?? .distantPast) }
+        // Fas 5: approved exams from a week before, by the day she approved.
+        let exams = MioExamCountdown.upcoming(MioExamPlan.all(in: items, calendar: day.calendar), now: .now, calendar: day.calendar)
         derived = MioHomeDerivedSnapshot(week: week, streak: streak, latestReview: latestReview, briefing: briefing,
-                                         reminderDay: reminderDay, sentToday: sentToday)
+                                         reminderDay: reminderDay, sentToday: sentToday, exams: exams)
     }
 }
 
@@ -422,6 +428,7 @@ private struct MioHomeDerivedSnapshot: Sendable {
     let briefing: MioBriefing
     let reminderDay: MioReminderDay
     let sentToday: [MioContentItem]
+    let exams: [MioExamCountdown]
 
     static let empty = MioHomeDerivedSnapshot(
         week: MioWeekOverview(weekNumber: 0, days: []),
@@ -430,7 +437,8 @@ private struct MioHomeDerivedSnapshot: Sendable {
         briefing: MioBriefing(date: .distantPast, plans: [], tasks: [], overdueTasks: [], completedTasks: [],
                               notes: [], sessionCount: 0, lessonCount: 0),
         reminderDay: MioReminderDay(due: [], overdue: []),
-        sentToday: []
+        sentToday: [],
+        exams: []
     )
 }
 

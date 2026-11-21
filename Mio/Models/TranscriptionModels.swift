@@ -380,18 +380,18 @@ enum TranscriptionError: LocalizedError, Sendable {
     }
     var errorDescription: String? {
         switch self {
-        case .notConfigured: "Para datorn under Inställningar → Parning först."
+        case .notConfigured: "Para datorn under Inställningar → Avancerat → Parning först."
         case .invalidAddress: "Ange serverns privata HTTPS-adress som slutar med .ts.net, utan sökväg."
         case .invalidToken: "Ange en åtkomsttoken med 32–256 bokstäver, siffror, bindestreck eller understreck."
         case .keychain: "Åtkomsttoken kunde inte läsas eller sparas säkert. Lås upp telefonen och försök igen."
-        case .incompatible: "Serverns API eller ljudformat är inte kompatibelt med denna Mio-version."
-        case .invalidResponse: "Servern lämnade ett ogiltigt transkript. Sessionen har pausats."
+        case .incompatible: "Pianissimo på datorn passar inte den här versionen av Mio. Uppdatera Mio på datorn och i SideStore."
+        case .invalidResponse: "Pianissimo gav en text Mio inte kunde läsa, så lyssningen har pausats. Starta den igen."
         case let .http(status, _):
             switch status {
-            case 401, 403: "Servern nekade åtkomst. Kontrollera token och Tailscale-behörighet i Inställningar."
-            case 429: "Servern är upptagen. Mio försöker igen."
+            case 401, 403: "Datorn kände inte igen telefonen. Para om den under Inställningar → Avancerat → Parning."
+            case 429: "Datorn är upptagen. Mio försöker igen."
             case 503: "Transkriptionsmodellen är inte redo. Mio försöker igen."
-            default: "Transkriptionsservern svarade med HTTP \(status)."
+            default: "Pianissimo på datorn svarade inte som väntat. Försök igen om en stund."
             }
         }
     }

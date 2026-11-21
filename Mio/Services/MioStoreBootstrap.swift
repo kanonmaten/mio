@@ -35,10 +35,16 @@ final class MioStoreResolver: Sendable {
                 + "och ändringar under den här körningen sparas inte. Starta om Mio."
             return temporaryStores(message: message)
         }
-        let outcome = await MioStoreMigrator(files: files, target: MioSwiftDataMigrationTarget(modelContainer: container)).run()
+        let target = MioSwiftDataMigrationTarget(modelContainer: container)
+        let outcome = await MioStoreMigrator(files: files, target: target).run()
         switch outcome {
         case let .useStore(message):
-            return stores(container: container, message: message)
+            // A restore she confirmed (fas 6) replaces every row in one transaction here, before any
+            // repository opens, so nothing can write beside it. Never into legacy or temporary stores.
+            let deletionPending = FileManager.default.fileExists(
+                atPath: files.directory.appendingPathComponent("operations-v1.json").path)
+            let restored = await MioBackupRestore.applyPending(files: files, target: target, deletionPending: deletionPending)
+            return stores(container: container, message: [message, restored].compactMap { $0 }.joined(separator: "\n\n").nilIfEmpty)
         case let .useLegacyFiles(message):
             return .legacyFiles(message: message)
         case let .useTemporaryStore(message):
@@ -60,4 +66,8 @@ final class MioStoreResolver: Sendable {
                           assistant: MioSwiftDataAssistantRepository(modelContainer: container),
                           message: message, isTemporary: temporary)
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

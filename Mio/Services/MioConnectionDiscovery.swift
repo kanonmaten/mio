@@ -13,6 +13,8 @@ final class MioConnectionDiscovery {
     private(set) var lastCheckedAt: Date?
     private(set) var isChecking = false
     private(set) var errorMessage: String?
+    /// What the last check showed, for "Kontrollera allt" (fas 6). Unknown until a check finished.
+    private(set) var reachability: MioReachability = .unknown
     @ObservationIgnored private let fetchStatus: @MainActor (MioCloudConnection) async throws -> MioGatewayStatusV2
     @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored private var generation = UUID()
@@ -113,10 +115,11 @@ final class MioConnectionDiscovery {
                 prepared.observedConfigurationRevision = status.configurationRevision
                 let checkedAt = now()
                 cache = Cache(original: request.connection, prepared: prepared, status: status, checkedAt: checkedAt)
-                lastStatus = status; lastCheckedAt = checkedAt; errorMessage = nil
+                lastStatus = status; lastCheckedAt = checkedAt; errorMessage = nil; reachability = .reachable
             case .failure(let error):
                 handle(error: error)
                 if !(error is CancellationError) {
+                    reachability = Self.reachability(after: error)
                     errorMessage = (error as? MioCloudError)?.localizedDescription ?? MioCloudError.network.localizedDescription
                 }
             }
@@ -124,6 +127,17 @@ final class MioConnectionDiscovery {
         for waiter in request.waiters.values {
             if waiter.cancellation.isCancelled { waiter.continuation.resume(throwing: CancellationError()) }
             else { waiter.continuation.resume(with: result) }
+        }
+    }
+
+    /// No answer, a refusal or an answer Mio cannot use. Plain classification of the error kinds.
+    nonisolated static func reachability(after error: Error) -> MioReachability {
+        switch error as? MioCloudError {
+        case .network?, .gateway(504, _)?: .unreachable
+        case .serverStatus(let status)? where [401, 403].contains(status): .refused
+        case .serverStatus(let status)? where (300...399).contains(status): .refused
+        case nil: .unreachable
+        default: .incompatible
         }
     }
 
@@ -142,7 +156,7 @@ final class MioConnectionDiscovery {
     func invalidate() {
         let request = pending
         generation = UUID(); pending = nil; request?.task.cancel(); cache = nil
-        lastStatus = nil; lastCheckedAt = nil; errorMessage = nil; isChecking = false
+        lastStatus = nil; lastCheckedAt = nil; errorMessage = nil; isChecking = false; reachability = .unknown
         for waiter in request?.waiters.values ?? [:].values {
             waiter.continuation.resume(throwing: waiter.cancellation.isCancelled
                 ? CancellationError() : MioCloudError.changedConfiguration)

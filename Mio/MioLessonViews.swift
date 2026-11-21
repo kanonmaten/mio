@@ -220,6 +220,7 @@ private struct MioLessonReviewRow: View {
     let content: MioContentViewModel
     let sessionModel: MioViewModel
     @Environment(MioWorkflowCoordinator.self) private var workflow
+    @Environment(MioAssistantViewModel.self) private var assistant
     @State private var hasDate: Bool
     @State private var date: Date
     @State private var busy = false
@@ -242,6 +243,10 @@ private struct MioLessonReviewRow: View {
             Text(suggestion.title).font(.headline)
             if !suggestion.body.isEmpty {
                 Text(suggestion.body).font(.subheadline).foregroundStyle(.secondary).lineLimit(4)
+            }
+            if MioExamDetector.looksLikeExam(suggestion.title), let subject = lessonSubject {
+                MioExamPrepButton(subject: subject, exam: nil, sessions: sessionModel.allSessions,
+                                  items: content.items, records: assistant.analyses)
             }
             if hasDate {
                 DatePicker(isAllDay ? "Datum" : "Datum och tid", selection: $date,
@@ -282,7 +287,8 @@ private struct MioLessonReviewRow: View {
                 guard saved else { return }
                 Task {
                     busy = true
-                    outcome = await workflow.recordHandoff(id: suggestion.id, kind: .plan, title: suggestion.title, destination: .calendar)
+                    outcome = await workflow.recordHandoff(id: suggestion.id, kind: .plan, title: suggestion.title, destination: .calendar,
+                                                           examDate: (date: date, allDay: isAllDay))
                     if outcome?.isSuccess == true { MioFeedback.success() }
                     busy = false
                 }
@@ -291,6 +297,7 @@ private struct MioLessonReviewRow: View {
     }
 
     private var isAllDay: Bool { suggestion.isAllDay == true || suggestion.needsDateConfirmation == true }
+    private var lessonSubject: String? { suggestion.sessionID.flatMap { sessionModel.session(id: $0)?.subject } }
     /// A plan needs a day for Calendar; a homework reminder may go without one.
     private var canApprove: Bool { suggestion.kind != .plan || hasDate }
     private var yesTitle: String { suggestion.kind == .plan ? "Ja, till Kalender" : "Ja, till Påminnelser" }
@@ -309,6 +316,7 @@ private struct MioLessonReviewRow: View {
                                                         title: suggestion.title, notes: suggestion.body,
                                                         dueDate: hasDate ? date : nil, hasTime: hasDate && !isAllDay,
                                                         listID: UserDefaults.standard.string(forKey: MioReminderPort.lastListKey))
+            // The lesson's subject becomes the exam's subject in the workflow when the title reads as an exam.
             outcome = result
             if result.isSuccess { MioFeedback.success() }
         }

@@ -70,25 +70,25 @@ enum MioCloudError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .disabled: "AI är pausad."
-        case .notPaired: "Para datorn under Inställningar → Parning först."
+        case .notPaired: "Para datorn under Inställningar → Avancerat → Parning först."
         case .invalidServer: "Ange serverns HTTPS-adress utan sökväg, inloggning, frågetecken eller fragment, till exempel https://mio.example.se."
         case .invalidToken: "Ange serverns separata åtkomsttoken: 32–256 bokstäver, siffror, bindestreck eller understreck. Använd aldrig en leverantörs API-nyckel i appen. Vid byte av server krävs en ny token."
         case .keychain: "Kunde inte läsa eller ändra de skyddade anslutningsuppgifterna. Lås upp telefonen och försök igen."
-        case .invalidQuestion: "Skriv en fråga på högst 2 000 UTF-8-byte. Svenska bokstäver kan ta flera byte."
-        case .invalidContext: "Välj högst sex utdrag. Varje rubrik får vara högst 200 byte, varje text 4 000 byte och all vald kontext 10 000 byte. Tomma utdrag behöver tas bort eller fyllas i."
+        case .invalidQuestion: "Frågan är för lång. Korta ner den och försök igen."
+        case .invalidContext: "Det du valt att skicka med är för mycket eller tomt. Välj färre utdrag och försök igen."
         case .changedConfiguration: "Anslutningen till datorn ändrades. Försök igen."
-        case .invalidResponse: "Servern gav inget fullständigt läsbart svar. Försök med en kortare fråga."
-        case .oversizedResponse: "Serverns svar var för stort och avbröts."
+        case .invalidResponse: "Datorn gav inget svar Mio kunde läsa. Försök igen med en kortare fråga."
+        case .oversizedResponse: "Svaret från datorn var för stort. Försök igen med en kortare fråga."
         case .network: "Kunde inte nå datorn. Kontrollera att Tailscale är på i telefonen och att datorn är igång och vaken."
         case .rateLimited(let seconds): "AI-tjänsten är upptagen. Försök igen om \(seconds) sekunder."
         case .gatewayRateLimited(let code, _): MioCloudError.gateway(429, code).errorDescription
-        case .incompatibleGateway: "Gatewayen saknar ett giltigt kontrakt för den valda Mio-uppgiften. Uppdatera eller kontrollera servern innan du fortsätter."
+        case .incompatibleGateway: "Mio på datorn behöver uppdateras. Kör install.sh på datorn och försök igen."
         case .gateway(let status, let code):
             switch code {
             case .gatewayNotConfigured: "AI-gatewayen är inte konfigurerad. Kontrollera att den publicerade serverversionen stöder vald leverantör och modell."
             case .configurationChanged: "Serverns AI-konfiguration ändrades. Granska frågan igen eller aktivera analysen på nytt innan du fortsätter."
             case .taskConfigurationInvalid: "Den valda AI-uppgiften är felkonfigurerad. Kontrollera dess leverantör, modell och krav på servern."
-            case .providerAuthentication: "AI-leverantören nekade serverns inloggningsuppgifter. Kontrollera den serverägda nyckeln."
+            case .providerAuthentication: "AI-tjänsten godkände inte datorns nyckel. Kontrollera nyckeln i Mio Kontroll på datorn."
             case .providerAccount: "AI-kontot saknar åtkomst eller är blockerat. Kontrollera kontot hos leverantören."
             case .providerModelUnavailable: "Den valda modellen är inte tillgänglig för serverns konto. Kontrollera modellåtkomsten."
             case .providerParameters: "AI-leverantören accepterade inte serverns modellinställningar. Kontrollera uppgiftens profil."
@@ -102,7 +102,7 @@ enum MioCloudError: LocalizedError {
             case .providerQuota: "AI-tjänsten är upptagen just nu. Försök igen om en minut."
             case .providerRequestTooLarge: "Frågan och den valda kontexten är för stora för AI-tjänsten. Korta ner frågan eller ta bort kontext."
             case .budgetStoreFailed: "Servern kunde inte kontrollera den gemensamma AI-kvoten. Inget nytt försök görs automatiskt."
-            case .providerModelIncompatible: "Modellen stöder inte Mios krav: reasoning av, temperatur 0 och strikt JSON-schema."
+            case .providerModelIncompatible: "AI-modellen på datorn passar inte Mio. Välj en annan modell i Mio Kontroll på datorn."
             case .upstreamTimeout, .requestTimeout: "AI-anropet tog för lång tid. Försök igen."
             case .rateLimited, .dailyLimitReached, .requestLimit: "AI-kvoten är nådd. Vänta och fortsätt manuellt senare."
             case .invalidUpstreamAnswer, .invalidUpstreamResponse, .incompleteUpstreamResponse, .invalidAnalysisResult, .invalidLessonResult, .providerInvalidResponse: "AI-leverantören gav ett ogiltigt svar. Inget innehåll har godkänts från svaret."
@@ -112,13 +112,13 @@ enum MioCloudError: LocalizedError {
             }
         case .serverStatus(let status):
             switch status {
-            case 401, 403: "Datorn nekade åtkomst. Para om med en ny kod från mio-pair."
-            case 300...399: "Servern hänvisade till en annan adress. Mio följer inte omdirigeringar; para om med en ny kod från mio-pair."
-            case 422: "Modellen stöder inte Mios krav: reasoning av, temperatur 0 och strikt JSON-schema. Kontrollera modellvalet på datorn."
+            case 401, 403: "Datorn kände inte igen telefonen. Para om den med en ny kod från datorn."
+            case 300...399: "Datorn svarade från en annan adress. Para om telefonen med en ny kod från datorn."
+            case 422: "AI-modellen på datorn passar inte Mio. Välj en annan modell i Mio Kontroll på datorn."
             case 413: "Frågan och den valda kontexten är för stora för AI-tjänsten. Korta ner frågan eller ta bort kontext."
-            case 429: "Serverns frågegräns är nådd. Vänta och försök senare."
+            case 429: "Datorn tar inte emot fler frågor just nu. Vänta en stund och försök igen."
             case 504: "Svaret tog för lång tid. Försök senare med en kortare fråga."
-            default: "Servern kunde inte besvara frågan. Kontrollera servern och försök senare."
+            default: "Datorn kunde inte svara. Försök igen om en stund."
             }
         }
     }

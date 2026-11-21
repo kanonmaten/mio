@@ -141,58 +141,100 @@ struct CaptureGapsView: View {
     }
 }
 
-/// The top level of settings: four short groups, each row showing its state. Everything about
-/// the PC, transcription and AI lives behind the first group and nowhere else in the app.
+/// The top level of settings (fas 6): the simple things first (whether everything works,
+/// notifications and their times, the AI pause, storage, backup and signing), and everything
+/// technical (pairing, transcription, AI capacity, release and diagnostics) under a collapsed
+/// Avancerat. Still the one settings sheet.
 struct MioSettingsView: View {
     let model: MioViewModel
     let contentModel: MioContentViewModel
     @Environment(MioAnalysisCoordinator.self) private var analysis
     @Environment(MioWorkflowCoordinator.self) private var workflow
+    @Environment(MioBackupTask.self) private var backup
     @AppStorage("mio.feedback.haptics") private var haptics = true
     @AppStorage(MioAIPreference.enabledKey) private var aiEnabled = MioAIPreference.defaultEnabled
     @AppStorage(MioCloudSettings.serverKey) private var server = ""
+    @State private var advanced = false
 
     var body: some View {
         Form {
-            Section {
-                NavigationLink { MioComputerSettingsView(model: model) } label: {
-                    MioSettingsRow(title: "Parning", symbol: "desktopcomputer", value: pairingState)
-                }
-                .accessibilityIdentifier("mio.settings.pairing")
-                NavigationLink { MioTranscriptionDetailsView(model: model) } label: {
-                    MioSettingsRow(title: "Transkription", symbol: "waveform", value: model.connectionState.title)
-                }
-                NavigationLink { MioAISettingsView(model: model) } label: {
-                    MioSettingsRow(title: "AI", symbol: "text.bubble", value: aiState)
-                }
-                .accessibilityIdentifier("mio.settings.ai")
-            } header: { Text("Dator") } footer: {
-                Text("Ljud går till Pianissimo och text till AI-gatewayen, båda på din egen dator via Tailscale.")
-            }
-            Section("Mio") {
+            Section { MioHealthSummaryRow(model: model) }
+            Section("Notiser") {
                 NavigationLink { MioNotificationSettingsView() } label: {
-                    MioSettingsRow(title: "Notiser", symbol: "bell")
+                    MioSettingsRow(title: "Morgon, kväll och tider", symbol: "bell")
                 }
+                .accessibilityIdentifier("mio.settings.notifications")
                 Toggle(isOn: $haptics) { Label("Diskreta vibrationer", systemImage: "iphone.radiowaves.left.and.right") }
+            }
+            Section {
+                Toggle(isOn: Binding(get: { !aiEnabled }, set: { aiEnabled = !$0 })) {
+                    Label("Pausa AI", systemImage: "pause.circle")
+                }
+                .disabled(server.isEmpty)
+                .accessibilityIdentifier("mio.settings.ai-pause")
+            } header: { Text("AI-paus") } footer: {
+                Text(server.isEmpty ? "Para datorn under Avancerat för att använda AI." : "Pausen gäller tills du slår på AI igen. Inget skickas till AI under tiden.")
+            }
+            Section {
+                LabeledContent("Vardagstext sparas", value: "30 dagar")
+                NavigationLink { MioPrivacySettingsView(model: model, contentModel: contentModel) } label: {
+                    MioSettingsRow(title: "Export, radering och behörigheter", symbol: "hand.raised")
+                }
+            } header: { Text("Lagring") } footer: {
+                Text("Lektioner, anteckningar och det du har sagt Ja till sparas tills du raderar dem.")
+            }
+            Section {
+                NavigationLink { MioBackupSettingsView(model: model) } label: {
+                    MioSettingsRow(title: "Säkerhetskopia", symbol: "externaldrive", value: backupState)
+                }
+                .accessibilityIdentifier("mio.settings.backup")
+                if let expiration = MioSigningInfo.expiration {
+                    LabeledContent("Appens signering", value: MioSigning.text(expiration: expiration, now: .now))
+                        .accessibilityIdentifier("mio.settings.signing")
+                }
+            } footer: {
+                if MioSigningInfo.expiration != nil {
+                    Text("Dagen innan signeringen går ut får du en notis med stegen för att förnya Mio i SideStore.")
+                }
+            }
+            Section {
                 NavigationLink { MioGuideView() } label: {
                     MioSettingsRow(title: "Så använder du Mio", symbol: "questionmark.circle")
                 }
             }
-            Section("Integritet och data") {
-                NavigationLink { MioPrivacySettingsView(model: model, contentModel: contentModel) } label: {
-                    MioSettingsRow(title: "Export, radering och behörigheter", symbol: "hand.raised")
+            Section {
+                DisclosureGroup(isExpanded: $advanced) {
+                    NavigationLink { MioComputerSettingsView(model: model) } label: {
+                        MioSettingsRow(title: "Parning", symbol: "desktopcomputer", value: pairingState)
+                    }
+                    .accessibilityIdentifier("mio.settings.pairing")
+                    NavigationLink { MioTranscriptionDetailsView(model: model) } label: {
+                        MioSettingsRow(title: "Transkription", symbol: "waveform", value: model.connectionState.title)
+                    }
+                    NavigationLink { MioAISettingsView(model: model) } label: {
+                        MioSettingsRow(title: "AI", symbol: "text.bubble", value: aiState)
+                    }
+                    .accessibilityIdentifier("mio.settings.ai")
+                    NavigationLink { MioDiagnosticsView() } label: {
+                        MioSettingsRow(title: "Diagnostik", symbol: "waveform.path.ecg")
+                    }
+                    LabeledContent("Version", value: "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
+                } label: {
+                    Label("Avancerat", systemImage: "slider.horizontal.3")
                 }
-            }
-            Section("Om") {
-                LabeledContent("Version", value: "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
-                NavigationLink { MioDiagnosticsView() } label: {
-                    MioSettingsRow(title: "Diagnostik", symbol: "waveform.path.ecg")
-                }
+                .accessibilityIdentifier("mio.settings.advanced")
+            } footer: {
+                Text("Ljud går till Pianissimo och text till AI-gatewayen, båda på din egen dator via Tailscale.")
             }
         }
         .mioListGround()
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("mio.settings.panel")
+    }
+
+    private var backupState: String {
+        guard let attempt = backup.lastAttempt else { return "Inte än" }
+        return attempt.succeeded ? attempt.at.formatted(date: .abbreviated, time: .shortened) : "Misslyckades"
     }
 
     private var pairingState: String {
@@ -309,7 +351,7 @@ struct MioAIConnectionStatusView: View {
                             let connection = try MioCloudSettings.connection()
                             _ = try await discovery.inspect(connection: connection, forceRefresh: true)
                         } catch {
-                            if !Task.isCancelled { localError = error.localizedDescription }
+                            if !Task.isCancelled { localError = MioErrorText.sentence(for: error) }
                         }
                     }
                 } label: {

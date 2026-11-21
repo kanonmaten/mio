@@ -175,7 +175,7 @@ final class MioWorkflowCoordinator {
                 requestLessonNotes(session, userInitiated: fromCapture)
                 return .success
             } catch is CancellationError { return .cancelled }
-            catch { return .failure("Kunde inte registrera lektionen: \(error.localizedDescription)") }
+            catch { return .failure("Kunde inte registrera lektionen. \(MioErrorText.action(for: error))") }
         }
     }
 
@@ -251,7 +251,7 @@ final class MioWorkflowCoordinator {
                 }
             } catch {
                 if let claim { _ = await assistant.releaseSuggestionApproval(claim) }
-                return .failure("Kunde inte godkänna förslaget: \(error.localizedDescription)")
+                return .failure("Kunde inte godkänna förslaget. \(MioErrorText.action(for: error))")
             }
         }
     }
@@ -260,8 +260,9 @@ final class MioWorkflowCoordinator {
     /// proposal. The reminder carries the proposal's link, so a retry after a failed local write
     /// finds it instead of creating a second one. Denied access leaves the proposal untouched.
     func sendToReminders(id: UUID, expectedRevision: Int, title: String, notes: String,
-                         dueDate: Date?, hasTime: Bool, listID: String?) async -> MioOperationOutcome {
-        await approveHandoff(id: id, expectedRevision: expectedRevision, title: title, kind: .task) { [reminders] suggestion, cleanTitle in
+                         dueDate: Date?, hasTime: Bool, listID: String?, examSubject: String? = nil) async -> MioOperationOutcome {
+        await approveHandoff(id: id, expectedRevision: expectedRevision, title: title, kind: .task,
+                             examDate: dueDate.map { (date: $0, allDay: !hasTime) }, examSubject: examSubject) { [reminders] suggestion, cleanTitle in
             if reminders.access() == .notDetermined { _ = await reminders.requestAccess() }
             guard reminders.access() == .granted else { throw MioReminderError.accessDenied }
             let due = dueDate.map { hasTime ? $0 : Calendar.current.startOfDay(for: $0) }
@@ -276,23 +277,30 @@ final class MioWorkflowCoordinator {
 
     /// Records a handoff the user already completed in Apple's own UI (the Calendar editor or
     /// the share sheet). That action is authoritative, so a newer AI revision does not block it.
+    /// `examDate` is the day she approved before Calendar's editor opened; it is kept only when the
+    /// title reads as an exam (fas 5), since Mio never reads the event back.
     func recordHandoff(id: UUID, kind: MioContentKind, title: String, destination: MioHandoffDestination,
-                       externalIdentifier: String? = nil) async -> MioOperationOutcome {
-        await approveHandoff(id: id, expectedRevision: nil, title: title, kind: kind) { _, _ in
+                       externalIdentifier: String? = nil, examDate: (date: Date, allDay: Bool)? = nil,
+                       examSubject: String? = nil) async -> MioOperationOutcome {
+        await approveHandoff(id: id, expectedRevision: nil, title: title, kind: kind,
+                             examDate: examDate, examSubject: examSubject) { _, _ in
             MioHandoff(destination: destination, externalIdentifier: externalIdentifier, sentAt: .now)
         }
     }
 
     private func approveHandoff(id: UUID, expectedRevision: Int?, title: String, kind: MioContentKind,
+                                examDate: (date: Date, allDay: Bool)? = nil, examSubject: String? = nil,
                                 perform: @escaping @MainActor (MioSuggestion, String) async throws -> MioHandoff) async -> MioOperationOutcome {
         await enqueue { [self] in
-            await performHandoff(id: id, expectedRevision: expectedRevision, title: title, kind: kind, perform: perform)
+            await performHandoff(id: id, expectedRevision: expectedRevision, title: title, kind: kind,
+                                 examDate: examDate, examSubject: examSubject, perform: perform)
         }
     }
 
     /// The body of `approveHandoff`, for callers already inside the command queue.
     private func performHandoff(id: UUID, expectedRevision: Int?, title: String, kind: MioContentKind,
-                                direct: MioDirectRecord? = nil,
+                                direct: MioDirectRecord? = nil, examDate: (date: Date, allDay: Bool)? = nil,
+                                examSubject: String? = nil,
                                 perform: @MainActor (MioSuggestion, String) async throws -> MioHandoff) async -> MioOperationOutcome {
         do {
             var claim: MioSuggestionApprovalClaim?
@@ -309,11 +317,18 @@ final class MioWorkflowCoordinator {
                 guard !cleanTitle.isEmpty else { return .failure("Skriv en rubrik innan du skickar.") }
                 claim = try await assistant.claimSuggestionApproval(id: id, expectedRevision: expectedRevision ?? suggestion.reviewRevision)
                 let handoff = try await perform(suggestion, cleanTitle)
-                // The record keeps no text and no date: Apple's app owns both from now on.
+                // The record keeps no text and no date: Apple's app owns both from now on. The one
+                // exception is an exam's approved day and subject (fas 5), for Hem's countdown.
+                let session = suggestion.sessionID.flatMap { capture.session(id: $0) }
+                let exam = MioExamRecord.make(kind: kind, title: cleanTitle, date: examDate?.date,
+                                              isAllDay: examDate?.allDay ?? false,
+                                              subject: examSubject ?? (session?.isLesson == true ? session?.subject : nil),
+                                              knownSubjects: MioExamSubjects.known(in: capture.allSessions))
                 let item = MioContentItem(id: id, kind: kind, title: cleanTitle, createdAt: suggestion.createdAt,
                     updatedAt: handoff.sentAt, scheduledAt: handoff.sentAt,
-                    sessionID: suggestion.sessionID.flatMap { capture.session(id: $0)?.id }, handoff: handoff,
-                    direct: direct.map { MioDirectRecord(destination: $0.destination, savedAt: handoff.sentAt) })
+                    sessionID: session?.id, handoff: handoff,
+                    direct: direct.map { MioDirectRecord(destination: $0.destination, savedAt: handoff.sentAt) },
+                    exam: exam)
                 let saved = await content.saveApproved(item)
                 guard saved.isSuccess else {
                     if try await content.latestItems().contains(where: { $0.id == id }) {
@@ -333,7 +348,7 @@ final class MioWorkflowCoordinator {
                 }
             } catch {
                 if let claim { _ = await assistant.releaseSuggestionApproval(claim) }
-                return .failure(error.localizedDescription)
+                return .failure(MioErrorText.sentence(for: error))
             }
         }
     }
@@ -398,8 +413,10 @@ final class MioWorkflowCoordinator {
                     dateConfirmed: false, dateChosen: false, isAllDay: false, direct: record)
             case .reminders:
                 let appIsActive = capture.isAppActive()
+                let examDate = origin.hasDate ? (date: suggestion.scheduledAt, allDay: !origin.hasTime) : nil
                 outcome = await performHandoff(id: suggestion.id, expectedRevision: suggestion.reviewRevision,
-                                               title: suggestion.title, kind: .task, direct: record) { [reminders] proposal, cleanTitle in
+                                               title: suggestion.title, kind: .task, direct: record,
+                                               examDate: examDate) { [reminders] proposal, cleanTitle in
                     // iOS can only ask for access on screen; from the background the proposal waits.
                     if reminders.access() == .notDetermined, appIsActive { _ = await reminders.requestAccess() }
                     guard reminders.access() == .granted else { throw MioReminderError.accessDenied }
@@ -531,8 +548,44 @@ final class MioWorkflowCoordinator {
                 if result.isSuccess { exportedRevision = sourceRevision }
                 return result
             } catch is CancellationError { return .cancelled }
-            catch { return .failure("Kunde inte läsa en sammanhängande export: \(error.localizedDescription)") }
+            catch { return .failure("Kunde inte läsa en sammanhängande export. \(MioErrorText.action(for: error))") }
         }
+    }
+
+    /// The nightly copy (fas 6): the same consistent snapshot as the export, read in the command
+    /// queue behind an exclusive snapshot, without diagnostics. Runs only while nothing is being
+    /// captured (a paused capture is allowed, see `checkpointForBackup`).
+    func backupExport() async -> Result<Data, MioBackupError> {
+        let produced = MioBackupResultBox()
+        _ = await enqueue(recordsOutcome: false) { [self] in
+            guard [.off, .failed, .unavailable, .paused].contains(capture.runState) else {
+                produced.value = .failure(.capturing); return .conflict("")
+            }
+            guard await maintenance.beginExclusive(deleting: false) else { produced.value = .failure(.dataBusy); return .conflict("") }
+            defer { maintenance.endExclusive() }
+            do {
+                try Task.checkCancellation()
+                let checkpoint = await capture.checkpointForBackup()
+                guard checkpoint.isSuccess else { produced.value = .failure(.localData); return checkpoint }
+                let export = MioLocalExport(content: try await content.latestItems(), sessions: try await capture.latestSessions(),
+                                            assistant: try await assistant.latestDocument())
+                produced.value = .success(try MioBackupService.encode(export))
+                return .success
+            } catch is CancellationError {
+                produced.value = .failure(.dataBusy); return .cancelled
+            } catch {
+                produced.value = .failure(.localData); return .failure("")
+            }
+        }
+        return produced.value
+    }
+
+    /// Restoring (fas 6) is refused while capture runs or a deletion waits; the copy itself is
+    /// applied at the next launch (`MioBackupRestore`), before any repository opens.
+    var restoreBlocker: MioBackupError? {
+        if ![.off, .failed, .unavailable].contains(capture.runState) { return .capturing }
+        if maintenance.blocksWork { return .dataBusy }
+        return nil
     }
 
     func deleteAll() async -> MioOperationOutcome { await delete(scope: .all, targetID: nil) }
@@ -656,6 +709,7 @@ final class MioWorkflowCoordinator {
                     MioLessonNotesLatencyLog.reset(in: pendingLessonDefaults)
                     MioLessonNotesReadyLog.reset(in: pendingLessonDefaults)
                     MioVocabularyAskedLog.reset(in: capture.vocabularyDefaults)
+                    MioBackupAttempt.clear(in: pendingLessonDefaults)
                 }
                 else if scope == .session, let targetID { clearLessonPending(targetID) }
                 // Invalidation cancelled queued automatic work; surviving lessons are retried.
@@ -763,4 +817,10 @@ final class MioWorkflowCoordinator {
         throw MioCloudError.disabled
         #endif
     }
+}
+
+/// Carries the backup's bytes out of the command queue, whose operations return an outcome only.
+@MainActor
+private final class MioBackupResultBox {
+    var value: Result<Data, MioBackupError> = .failure(.dataBusy)
 }

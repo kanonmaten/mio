@@ -168,7 +168,7 @@ final class MioViewModel {
             previousSessions = sessions.sorted { $0.startedAt > $1.startedAt }
             currentSession = previousSessions.first
         } catch {
-            errorMessage = "Kunde inte läsa tidigare testdata: \(error.localizedDescription)"
+            errorMessage = "Kunde inte läsa tidigare testdata. \(MioErrorText.action(for: error))"
         }
 
         await refreshSupport()
@@ -384,7 +384,7 @@ final class MioViewModel {
         let newPipeline: any MioCapturePipeline
         do { newPipeline = try makePipeline() }
         catch {
-            runState = .paused; errorMessage = error.localizedDescription
+            runState = .paused; errorMessage = MioErrorText.sentence(for: error)
             connectionState = .actionRequired
             statusMessage = "Mikrofonen är av. Kontrollera transkriptionsinställningarna."
             activePipelineID = nil
@@ -426,7 +426,7 @@ final class MioViewModel {
                 return
             }
             runState = .paused
-            errorMessage = error.localizedDescription
+            errorMessage = MioErrorText.sentence(for: error)
             connectionState = error is URLError ? .offline : .actionRequired
             statusMessage = "Mikrofonen är av. Kontrollera anslutningen och tryck Fortsätt."
             appendEvent(kind: .error, message: statusMessage)
@@ -597,7 +597,7 @@ final class MioViewModel {
         do {
             exportURL = try await repository.makeExportFile(for: currentSession)
         } catch {
-            errorMessage = "Kunde inte skapa testfilen: \(error.localizedDescription)"
+            errorMessage = "Kunde inte skapa testfilen. \(MioErrorText.action(for: error))"
         }
         isPreparingExport = false
     }
@@ -619,7 +619,7 @@ final class MioViewModel {
             errorMessage = nil
             return true
         } catch {
-            errorMessage = "Kunde inte spara sessionsändringarna: \(error.localizedDescription)"
+            errorMessage = "Kunde inte spara sessionsändringarna. \(MioErrorText.action(for: error))"
             return false
         }
     }
@@ -654,7 +654,7 @@ final class MioViewModel {
             }
             return true
         } catch {
-            errorMessage = "Kunde inte spara textändringen: \(error.localizedDescription)"
+            errorMessage = "Kunde inte spara textändringen. \(MioErrorText.action(for: error))"
             return false
         }
     }
@@ -759,7 +759,7 @@ final class MioViewModel {
             errorMessage = nil
             return true
         } catch {
-            errorMessage = "Kunde inte spara ämnet: \(error.localizedDescription)"
+            errorMessage = "Kunde inte spara ämnet. \(MioErrorText.action(for: error))"
             return false
         }
     }
@@ -781,7 +781,7 @@ final class MioViewModel {
             errorMessage = nil
             return true
         } catch {
-            errorMessage = "Kunde inte spara talarnamnet: \(error.localizedDescription)"
+            errorMessage = "Kunde inte spara talarnamnet. \(MioErrorText.action(for: error))"
             return false
         }
     }
@@ -821,8 +821,8 @@ final class MioViewModel {
             stateRevision &+= 1
             return .success
         } catch {
-            errorMessage = "Kunde inte radera sessionen: \(error.localizedDescription)"
-            return .failure("Kunde inte radera sessionen: \(error.localizedDescription)")
+            errorMessage = "Kunde inte radera sessionen. \(MioErrorText.action(for: error))"
+            return .failure("Kunde inte radera sessionen. \(MioErrorText.action(for: error))")
         }
     }
 
@@ -857,7 +857,7 @@ final class MioViewModel {
             statusMessage = "All sparad sessionsdata är raderad."
             return .success
         } catch {
-            errorMessage = "Kunde inte radera sessionsdata: \(error.localizedDescription)"
+            errorMessage = "Kunde inte radera sessionsdata. \(MioErrorText.action(for: error))"
             return .failure(errorMessage ?? "Kunde inte radera sessionsdata.")
         }
     }
@@ -1068,7 +1068,7 @@ final class MioViewModel {
     }
 
     private func receiveFailure(_ error: Error) {
-        pauseAfterFailure(error.localizedDescription)
+        pauseAfterFailure(MioErrorText.sentence(for: error))
     }
 
     private func pauseAfterFailure(_ message: String) {
@@ -1159,7 +1159,7 @@ final class MioViewModel {
             } catch is CancellationError {
                 // Expected when saves are coalesced or an immediate save supersedes this task.
             } catch {
-                self.errorMessage = "Kunde inte spara testdata under körningen: \(error.localizedDescription)"
+                self.errorMessage = "Kunde inte spara testdata under körningen. \(MioErrorText.action(for: error))"
             }
         }
     }
@@ -1170,6 +1170,16 @@ final class MioViewModel {
         guard currentSession != nil else { return .success }
         let saved = await forceSave(ignoreMaintenance: true)
         return saved ? .success : .failure("Kunde inte spara den senaste sessionen inför export. Försök igen.")
+    }
+
+    /// The nightly backup (fas 6) may also run while listening is paused: the silence pause can
+    /// leave Mio paused all night, and nothing is recorded while paused, so the saved session is
+    /// whole. Listening, starting or stopping still waits for the next night.
+    func checkpointForBackup() async -> MioOperationOutcome {
+        guard [.off, .failed, .unavailable, .paused].contains(runState) else { return .conflict("Mio lyssnar just nu.") }
+        guard currentSession != nil else { return .success }
+        let saved = await forceSave(ignoreMaintenance: true)
+        return saved ? .success : .failure("Den senaste sessionen kunde inte sparas inför säkerhetskopian.")
     }
 
     @discardableResult
@@ -1202,7 +1212,7 @@ final class MioViewModel {
             return true
         } catch is CancellationError { return false }
         catch {
-            errorMessage = "Kunde inte spara sessionsdata: \(error.localizedDescription)"
+            errorMessage = "Kunde inte spara sessionsdata. \(MioErrorText.action(for: error))"
             return false
         }
     }
@@ -1227,7 +1237,7 @@ final class MioViewModel {
             if currentSession?.id == id { lastPersistedAt = .now }
             return .success
         } catch {
-            return .failure("Kunde inte spara lektionen: \(error.localizedDescription)")
+            return .failure("Kunde inte spara lektionen. \(MioErrorText.action(for: error))")
         }
     }
 

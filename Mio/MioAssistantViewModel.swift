@@ -38,7 +38,7 @@ final class MioAssistantViewModel {
             try await refresh()
             hasBootstrapped = true
         } catch {
-            errorMessage = "Kunde inte läsa assistentens lokala data: \(error.localizedDescription)"
+            errorMessage = "Kunde inte läsa assistentens lokala data. \(MioErrorText.action(for: error))"
         }
     }
 
@@ -91,7 +91,7 @@ final class MioAssistantViewModel {
             return (added, .success)
         } catch is CancellationError { return ([], .cancelled) }
         catch {
-            let message = "Kunde inte läsa lokala Mio-kommandon: \(error.localizedDescription)"
+            let message = "Kunde inte läsa lokala Mio-kommandon. \(MioErrorText.action(for: error))"
             errorMessage = message
             return ([], .failure(message))
         }
@@ -263,13 +263,13 @@ final class MioAssistantViewModel {
         } catch is CancellationError {
             return .cancelled
         } catch let error as MioAssistantRepositoryError {
-            errorMessage = error.localizedDescription
+            errorMessage = MioErrorText.sentence(for: error)
             switch error {
             case .suggestionChanged, .approvalInProgress, .invalidApproval: return .conflict(error.localizedDescription)
-            default: return .failure(error.localizedDescription)
+            default: return .failure(MioErrorText.sentence(for: error))
             }
         } catch {
-            errorMessage = "Kunde inte ändra assistentens lokala data: \(error.localizedDescription)"
+            errorMessage = "Kunde inte ändra assistentens lokala data. \(MioErrorText.action(for: error))"
             return .failure(errorMessage!)
         }
     }
@@ -284,7 +284,7 @@ final class MioAssistantViewModel {
         } catch {
             // The actor already committed. Presentation I/O must not undo the
             // outcome or lose an approval token needed for cleanup/reconciliation.
-            errorMessage = "Ändringen är sparad, men vyn kunde inte uppdateras: \(error.localizedDescription)"
+            errorMessage = "Ändringen är sparad, men vyn kunde inte uppdateras. \(MioErrorText.action(for: error))"
         }
     }
 

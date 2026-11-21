@@ -138,7 +138,7 @@ final class MioAnalysisCoordinator {
             do { try await enable(existingSessions: existingSessions(), assistant: assistant) }
             catch {
                 if resumeRequested || !isWanted() || error is CancellationError { continue }
-                errorMessage = error.localizedDescription
+                errorMessage = MioErrorText.sentence(for: error)
                 status = "AI kunde inte starta. Lokal transkription fortsätter; AI provas igen när du öppnar Mio."
             }
         }
@@ -586,7 +586,7 @@ final class MioAnalysisCoordinator {
                         return
                     }
                     MioConnectionDiscovery.shared.handle(error: error)
-                    self.fail(error.localizedDescription)
+                    self.fail(MioErrorText.sentence(for: error))
                 }
             }
         }

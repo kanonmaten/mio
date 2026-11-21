@@ -397,10 +397,10 @@ fn structure(root: &Path, report: &mut Report) -> Result<(), Fatal> {
                     .collect()
             }));
         report.check(schemes == Some(vec![Some(vec!["mio"])]), "Länkschemat mio://");
-        report.check(string_list(info.get("UIBackgroundModes")) == Some(vec!["audio"]), "Bakgrundsläget audio bevarat");
+        report.check(string_list(info.get("UIBackgroundModes")) == Some(vec!["audio", "processing"]), "Bakgrundsläget audio bevarat");
         report.check(info.get("NSSupportsLiveActivities").and_then(Plist::as_boolean) == Some(true), "Live Activity tillåten");
         report.check(
-            string_list(info.get("BGTaskSchedulerPermittedIdentifiers")) == Some(vec!["app.mio.assistant.lesson-notes.*"]),
+            string_list(info.get("BGTaskSchedulerPermittedIdentifiers")) == Some(vec!["app.mio.assistant.lesson-notes.*", "app.mio.assistant.backup"]),
             "Fortsatt bakgrundsbearbetning för lektionsanteckningar tillåten",
         );
         let arbitrary = info

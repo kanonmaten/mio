@@ -1,12 +1,14 @@
 import SwiftUI
 import UIKit
 
-/// Inställningar → Notiser (0.9.1): only the optional morning and evening notifications. Tasks,
+/// Inställningar → Notiser (0.9.1, fas 5): the optional morning and evening notifications and
+/// their times. Tasks,
 /// events and their alerts belong to Reminders and Calendar; "Tryck för att fortsätta lyssna"
 /// is sent automatically when iOS refuses to restart the microphone.
 struct MioNotificationSettingsView: View {
     @Bindable var service: MioSystemServices
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(MioDailyDigest.morningDetailKey) private var morningDetail = false
 
     init(service: MioSystemServices? = nil) { self.service = service ?? .shared }
 
@@ -32,10 +34,12 @@ struct MioNotificationSettingsView: View {
                 ForEach(MioDailyReminder.allCases) { kind in
                     DailyReminderControls(kind: kind, service: service)
                 }
+                Toggle("Visa dagens prov och läxor i morgonnotisen", isOn: $morningDetail)
+                    .accessibilityIdentifier("mio.notifications.morning-detail")
             } header: {
                 Text("Morgon och kväll")
             } footer: {
-                Text("Dagliga notiser är valfria. De innehåller bara en uppmaning att öppna Mio; översikten beräknas på telefonen när du öppnar appen. Att ändra en tid kräver Spara.")
+                Text("Båda är avstängda tills du sparar en tid. Morgonnotisen säger bara att översikten finns, om du inte slår på prov och läxor: då står ämnen och orden prov och läxa på låsskärmen, men aldrig rubriker eller anteckningar. Kvällsnotisen säger hur många förslag som väntar och öppnar Förslag.")
             }
         }
         .mioListGround()
@@ -47,6 +51,7 @@ struct MioNotificationSettingsView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await service.refresh() } }
         }
+        .onChange(of: morningDetail) { _, _ in Task { await service.replanDailyNotices() } }
     }
 }
 
@@ -56,7 +61,11 @@ private struct DailyReminderControls: View {
     @Bindable var service: MioSystemServices
     @State private var time: Date = .now
 
-    private var existing: MioPendingReminder? { service.reminders.first { $0.id == kind.id } }
+    /// The repeating request or the next planned day (fas 5 plans the evening one day at a time).
+    private var existing: MioPendingReminder? {
+        service.reminders.filter { MioDailyDigest.belongs($0.id, to: kind.id) }
+            .min { ($0.nextDate ?? .distantFuture) < ($1.nextDate ?? .distantFuture) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -72,7 +81,7 @@ private struct DailyReminderControls: View {
                     .accessibilityLabel("Spara \(kind.title.lowercased())")
                 if existing != nil {
                     Spacer()
-                    Button("Stäng av", role: .destructive) { Task { await service.cancelReminder(id: kind.id) } }
+                    Button("Stäng av", role: .destructive) { Task { await service.cancelDailyReminder(kind) } }
                         .accessibilityLabel("Stäng av \(kind.title.lowercased())")
                 }
             }

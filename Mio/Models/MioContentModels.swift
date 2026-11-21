@@ -55,6 +55,9 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
     /// Saved straight from "Mio, kom ihåg/notera" (2026-11-20): a reminder record (with `handoff`)
     /// or a Mio note that keeps its text here. Ångra is offered for 24 hours.
     var direct: MioDirectRecord?
+    /// Fas 5 (2026-11-21): set when the approved plan or reminder reads as an exam. The day she
+    /// approved and her subject drive the countdown on Hem and "Inför provet". Absent otherwise.
+    var exam: MioExamRecord?
 
     init(
         id: UUID = UUID(),
@@ -68,7 +71,8 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
         sessionID: UUID? = nil,
         isAllDay: Bool? = nil,
         handoff: MioHandoff? = nil,
-        direct: MioDirectRecord? = nil
+        direct: MioDirectRecord? = nil,
+        exam: MioExamRecord? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -82,6 +86,7 @@ struct MioContentItem: Identifiable, Codable, Hashable, Sendable {
         self.isAllDay = (kind == .task || kind == .plan) && isAllDay == true ? true : nil
         self.handoff = handoff
         self.direct = direct
+        self.exam = exam
     }
 
     var isCompleted: Bool {

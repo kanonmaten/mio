@@ -112,6 +112,18 @@
 		DE5160000000000000000106 /* MioSuggestedQuestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE5160000000000000000006 /* MioSuggestedQuestions.swift */; };
 		F3A900000000000000000102 /* MioVocabulary.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A900000000000000000002 /* MioVocabulary.swift */; };
 		F3A900000000000000000101 /* MioLessonReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A900000000000000000001 /* MioLessonReview.swift */; };
+		F5B40000000000000000010C /* MioBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B40000000000000000000C /* MioBackupTests.swift */; };
+		F5B40000000000000000010B /* MioSimplicityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B40000000000000000000B /* MioSimplicityTests.swift */; };
+		F5B40000000000000000010A /* MioExamPlanningTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B40000000000000000000A /* MioExamPlanningTests.swift */; };
+		F5B400000000000000000109 /* MioExamViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B400000000000000000009 /* MioExamViews.swift */; };
+		F5B400000000000000000108 /* MioBackupViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B400000000000000000008 /* MioBackupViews.swift */; };
+		F5B400000000000000000107 /* MioCheckAllView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B400000000000000000007 /* MioCheckAllView.swift */; };
+		F5B400000000000000000106 /* MioBackupTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B400000000000000000006 /* MioBackupTask.swift */; };
+		F5B400000000000000000105 /* MioBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B400000000000000000005 /* MioBackupService.swift */; };
+		F5B400000000000000000104 /* MioSigning.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B400000000000000000004 /* MioSigning.swift */; };
+		F5B400000000000000000103 /* MioHealthCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B400000000000000000003 /* MioHealthCheck.swift */; };
+		F5B400000000000000000102 /* MioDailyDigest.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B400000000000000000002 /* MioDailyDigest.swift */; };
+		F5B400000000000000000101 /* MioExamPlanning.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5B400000000000000000001 /* MioExamPlanning.swift */; };
 		BAC600000000000000000104 /* MioListeningAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000004 /* MioListeningAttributes.swift */; };
 		BAC600000000000000000105 /* MioLiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000005 /* MioLiveActivityController.swift */; };
 		BAC600000000000000000106 /* MioLessonNotesBackgroundTask.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAC600000000000000000006 /* MioLessonNotesBackgroundTask.swift */; };
@@ -275,6 +287,18 @@
 		DE5160000000000000000006 /* MioSuggestedQuestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSuggestedQuestions.swift; sourceTree = "<group>"; };
 		F3A900000000000000000002 /* MioVocabulary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioVocabulary.swift; sourceTree = "<group>"; };
 		F3A900000000000000000001 /* MioLessonReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLessonReview.swift; sourceTree = "<group>"; };
+		F5B40000000000000000000C /* MioBackupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioBackupTests.swift; sourceTree = "<group>"; };
+		F5B40000000000000000000B /* MioSimplicityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSimplicityTests.swift; sourceTree = "<group>"; };
+		F5B40000000000000000000A /* MioExamPlanningTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioExamPlanningTests.swift; sourceTree = "<group>"; };
+		F5B400000000000000000009 /* MioExamViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioExamViews.swift; sourceTree = "<group>"; };
+		F5B400000000000000000008 /* MioBackupViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioBackupViews.swift; sourceTree = "<group>"; };
+		F5B400000000000000000007 /* MioCheckAllView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioCheckAllView.swift; sourceTree = "<group>"; };
+		F5B400000000000000000006 /* MioBackupTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioBackupTask.swift; sourceTree = "<group>"; };
+		F5B400000000000000000005 /* MioBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioBackupService.swift; sourceTree = "<group>"; };
+		F5B400000000000000000004 /* MioSigning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioSigning.swift; sourceTree = "<group>"; };
+		F5B400000000000000000003 /* MioHealthCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioHealthCheck.swift; sourceTree = "<group>"; };
+		F5B400000000000000000002 /* MioDailyDigest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioDailyDigest.swift; sourceTree = "<group>"; };
+		F5B400000000000000000001 /* MioExamPlanning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioExamPlanning.swift; sourceTree = "<group>"; };
 		BAC600000000000000000004 /* MioListeningAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioListeningAttributes.swift; sourceTree = "<group>"; };
 		BAC600000000000000000005 /* MioLiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLiveActivityController.swift; sourceTree = "<group>"; };
 		BAC600000000000000000006 /* MioLessonNotesBackgroundTask.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MioLessonNotesBackgroundTask.swift; sourceTree = "<group>"; };
@@ -346,6 +370,10 @@
 				BAC600000000000000000004 /* MioListeningAttributes.swift */,
 				BAC600000000000000000005 /* MioLiveActivityController.swift */,
 				BAC600000000000000000006 /* MioLessonNotesBackgroundTask.swift */,
+				F5B400000000000000000009 /* MioExamViews.swift */,
+				F5B400000000000000000008 /* MioBackupViews.swift */,
+				F5B400000000000000000007 /* MioCheckAllView.swift */,
+				F5B400000000000000000006 /* MioBackupTask.swift */,
 				F3A900000000000000000003 /* MioLessonViews.swift */,
 				F10000000000000000000002 /* ContentView.swift */,
 				DE5160000000000000000005 /* MioListeningBar.swift */,
@@ -388,6 +416,10 @@
 				DE5160000000000000000006 /* MioSuggestedQuestions.swift */,
 				F3A900000000000000000002 /* MioVocabulary.swift */,
 				F3A900000000000000000001 /* MioLessonReview.swift */,
+				F5B400000000000000000004 /* MioSigning.swift */,
+				F5B400000000000000000003 /* MioHealthCheck.swift */,
+				F5B400000000000000000002 /* MioDailyDigest.swift */,
+				F5B400000000000000000001 /* MioExamPlanning.swift */,
 				F10000000000000000000010 /* MioContentModels.swift */,
 			);
 			path = Models;
@@ -406,6 +438,7 @@
 				DA7A00000000000000000003 /* MioLog.swift */,
 				DA7A00000000000000000002 /* MioStoreMigration.swift */,
 				DA7A00000000000000000001 /* MioStores.swift */,
+				F5B400000000000000000005 /* MioBackupService.swift */,
 				0E35F7B9A7AD09365385626A /* MioDeletionJournal.swift */,
 				7A755BDC203D363DFA5588BC /* MioDiagnosticsRepository.swift */,
 				9089093008C57C04D98E1592 /* MicrophoneCapture.swift */,
@@ -463,6 +496,9 @@
 				F1000000000000000000000C /* MioSessionModelsTests.swift */,
 				F10000000000000000000014 /* MioContentModelsTests.swift */,
 				BAC60000000000000000000A /* MioBackgroundPresenceTests.swift */,
+				F5B40000000000000000000C /* MioBackupTests.swift */,
+				F5B40000000000000000000B /* MioSimplicityTests.swift */,
+				F5B40000000000000000000A /* MioExamPlanningTests.swift */,
 				F3A900000000000000000005 /* MioVocabularyTests.swift */,
 				F3A900000000000000000004 /* MioLessonNotesV2Tests.swift */,
 				F10000000000000000000015 /* MioContentRepositoryTests.swift */,
@@ -706,6 +742,15 @@
 				BAC600000000000000000104 /* MioListeningAttributes.swift in Sources */,
 				BAC600000000000000000105 /* MioLiveActivityController.swift in Sources */,
 				BAC600000000000000000106 /* MioLessonNotesBackgroundTask.swift in Sources */,
+				F5B400000000000000000109 /* MioExamViews.swift in Sources */,
+				F5B400000000000000000108 /* MioBackupViews.swift in Sources */,
+				F5B400000000000000000107 /* MioCheckAllView.swift in Sources */,
+				F5B400000000000000000106 /* MioBackupTask.swift in Sources */,
+				F5B400000000000000000105 /* MioBackupService.swift in Sources */,
+				F5B400000000000000000104 /* MioSigning.swift in Sources */,
+				F5B400000000000000000103 /* MioHealthCheck.swift in Sources */,
+				F5B400000000000000000102 /* MioDailyDigest.swift in Sources */,
+				F5B400000000000000000101 /* MioExamPlanning.swift in Sources */,
 				F3A900000000000000000103 /* MioLessonViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -750,6 +795,9 @@
 				B10000000000000000000011 /* MioContentModelsTests.swift in Sources */,
 				B10000000000000000000012 /* MioContentRepositoryTests.swift in Sources */,
 				BAC60000000000000000010B /* MioBackgroundPresenceTests.swift in Sources */,
+				F5B40000000000000000010C /* MioBackupTests.swift in Sources */,
+				F5B40000000000000000010B /* MioSimplicityTests.swift in Sources */,
+				F5B40000000000000000010A /* MioExamPlanningTests.swift in Sources */,
 				F3A900000000000000000105 /* MioVocabularyTests.swift in Sources */,
 				F3A900000000000000000104 /* MioLessonNotesV2Tests.swift in Sources */,
 			);

@@ -1,6 +1,7 @@
 import Foundation
 
-/// Four sections plus the separate capture (mic) tab. Morgon and Kväll live on Hem.
+/// Four sections plus the separate capture (mic) tab. Morgon and Kväll live on Hem; the evening
+/// notification opens Förslag (fas 5).
 enum MioAppTab: String, Hashable, Sendable {
     // 0.9.1: Kalender and Anteckningar gave way to Förslag; Apple's apps own the items.
     case home, lessons, proposals, capture
@@ -67,7 +68,7 @@ enum MioNotificationRoute: Equatable, Sendable {
         switch self {
         case .post: "Du har en påminnelse i Mio. Öppna appen för att se din post."
         case .morning: "Din morgonöversikt finns i Mio. Öppna appen när det passar."
-        case .evening: "Din kvällsöversikt finns i Mio. Öppna appen när det passar."
+        case .evening: "Granska dagens förslag i Mio."
         case .resumeListening: "Tryck för att fortsätta lyssna."
         case .stillListening: "Inget tal på 20 minuter. Svara Ja för att fortsätta lyssna. Annars pausar Mio om fem minuter."
         case .lessonReview: "Anteckningarna från lektionen är klara."

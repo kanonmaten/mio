@@ -256,7 +256,7 @@ struct LessonDetailView: View {
                 continuationError = nil
                 workflow.requestLessonNotes(approvedSession, userInitiated: true)
             } catch is CancellationError { }
-            catch { if continuationID == id { continuationError = error.localizedDescription } }
+            catch { if continuationID == id { continuationError = MioErrorText.sentence(for: error) } }
         }
     }
 }

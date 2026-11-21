@@ -14,6 +14,7 @@ struct MioApp: App {
     @State private var storageMessage: String?
     @State private var liveActivity: MioLiveActivityController
     @State private var lessonNotes: MioLessonNotesBackgroundTask
+    @State private var backup: MioBackupTask
 
     init() {
         // Storage resolves off the main actor (one-time SwiftData migration); the view
@@ -48,6 +49,19 @@ struct MioApp: App {
         _liveActivity = State(initialValue: liveActivity)
         _lessonNotes = State(initialValue: lessonNotes)
         workflow.onLessonNotesStarted = { lessonNotes.begin(sessionID: $0) }
+        // Fas 6: the nightly backup must be registered before launch finishes.
+        let backup = MioBackupTask(workflow: workflow)
+        backup.register()
+        _backup = State(initialValue: backup)
+        // Fas 5: what the morning and evening texts are built from, read when they are planned.
+        MioSystemServices.shared.dailyContent = {
+            let now = Date.now
+            let end = Calendar.current.date(byAdding: .day, value: MioDailyDigest.horizonDays + 1, to: now) ?? now
+            let reminders = workflow.reminders.access() == .granted
+                ? await workflow.reminders.upcoming(DateInterval(start: Calendar.current.startOfDay(for: now), end: end)) : []
+            return MioDailyContentSnapshot(exams: MioExamPlan.all(in: content.items), items: content.items,
+                                           sessions: capture.allSessions, reminders: reminders, pendingCount: assistant.pendingCount)
+        }
         // In the foreground finished notes never take over what she is doing: the review sheet
         // opens only when no other sheet is up and she is not capturing on Fånga, otherwise a
         // small row offers it. In the background a notification with a generic text is posted;
@@ -96,6 +110,7 @@ struct MioApp: App {
                 .environment(workflow)
                 .environment(navigation)
                 .environment(day)
+                .environment(backup)
                 .task { storageMessage = await MioStoreResolver.shared.stores().message }
                 .alert("Datalagring", isPresented: Binding(get: { storageMessage != nil },
                                                           set: { if !$0 { storageMessage = nil } })) {

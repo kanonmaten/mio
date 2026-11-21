@@ -73,7 +73,8 @@ final class MioNavigationCoordinator {
             dailyPeriod = .morning
             onDailyRoute()
         case .evening:
-            selectedTab = .home
+            // Fas 5: the evening notification counts proposals to review, so it opens Förslag.
+            selectedTab = .proposals
             dailyPeriod = .evening
             onDailyRoute()
         case .resumeListening:
