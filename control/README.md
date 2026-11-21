@@ -2,7 +2,7 @@
 
 Mio Kontroll är kontrollpanelen för det Mio kör på datorn: AI-gatewayen, Pianissimo och Tailscale. Den ligger som en ikon i systemfältet och öppnar ett fönster på cirka 720 × 520 när du klickar. Fönstret går att ändra storlek på, maximera och visa i helskärm (F11). Stänger du fönstret ligger ikonen kvar; Avsluta finns i ikonens meny.
 
-Panelen är skriven i Rust med [gpui-kit](https://gpui-kit.com) 0.10.0 och byggd enligt [planen](../docs/PLAN_KONTROLLPANEL.md). Valen och de bortvalda alternativen står i [besluten](../docs/DECISIONS.md), utseendet i [DESIGN.md](DESIGN.md).
+Panelen är skriven i Rust med [gpui-kit](https://gpui-kit.com) 0.10.0 och byggd enligt [planen](../docs/arkiv/PLAN_KONTROLLPANEL.md). Valen och de bortvalda alternativen står i [besluten](../docs/DECISIONS.md), utseendet i [DESIGN.md](DESIGN.md).
 
 **Ej verifierat:** panelen är inte provad på datorn med KDE Plasma och NVIDIA. Se [provet på datorn](#prov-på-datorn) nedan.
 

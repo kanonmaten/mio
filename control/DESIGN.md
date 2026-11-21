@@ -1,6 +1,6 @@
 # Mio Kontroll: utseende
 
-Gäller kontrollpanelen på datorn (`control/`). Appens egen design står i [DESIGN.md](../DESIGN.md) i repots rot; panelen delar namnet och lugnet men inte färgerna. Valen är användarens från 2026-11-17 ([plan](../docs/PLAN_KONTROLLPANEL.md#utseende-och-fönster-användarens-val-2026-11-17)); den här filen beskriver hur de blev ett tema och en ikon.
+Gäller kontrollpanelen på datorn (`control/`). Appens egen design står i [DESIGN.md](../DESIGN.md) i repots rot; panelen delar namnet och lugnet men inte färgerna. Valen är användarens från 2026-11-17 ([plan](../docs/arkiv/PLAN_KONTROLLPANEL.md#utseende-och-fönster-användarens-val-2026-11-17)); den här filen beskriver hur de blev ett tema och en ikon.
 
 ## Läge
 

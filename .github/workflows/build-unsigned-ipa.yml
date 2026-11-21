@@ -527,7 +527,7 @@ jobs:
 
       - name: Diagnostisera strikt concurrency i det riktiga iOS-targetet
         # Diagnostic gate: warnings are recorded and uploaded, but do not block the IPA
-        # until the existing warnings have been fixed (PLAN.md, Developer experience).
+        # until the existing warnings have been fixed (docs/arkiv/PLAN.md, Developer experience).
         # Runs last in the test job so that it delays neither the IPA nor the test results.
         # The verifier is Rust: a toolchain pinned like the Linux gate goes under RUNNER_TEMP, so
         # this works whether or not the runner image ships Rust and leaves nothing on the runner.

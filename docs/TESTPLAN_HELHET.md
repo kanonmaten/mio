@@ -1,6 +1,6 @@
 # Testa hela Mio
 
-Gäller helhetsbygget 0.9.0. Alla telefonprov nedan är instruktioner, inte körresultat. Kör först [verifieringen](INSTALLATION.md#verifiera-före-bygge). Använd syntetiska uppgifter och röster från personer som samtycker; lagra inte testljud i projektet. Registrera resultat i [status](STATUS.md) för exakt revision, med commit, IPA-hash, build, iPhone, iOS samt gatewayrelease/modell och Pianissimo-revision. Äldre mätningar finns i [TESTRESULTAT_V0_1](TESTRESULTAT_V0_1.md) och gäller bara sin historiska revision.
+Gäller 0.9.0 och 0.10.0. Alla telefonprov nedan är instruktioner, inte körresultat. Vilka prov som återstår står i [Linear](https://linear.app/kanonmaten) med etiketten Prov, och varje ärende länkar hit för hur provet går till. Kör först [verifieringen](INSTALLATION.md#verifiera-före-bygge). Använd syntetiska uppgifter och röster från personer som samtycker; lagra inte testljud i projektet. Registrera resultat i [status](STATUS.md) för exakt revision, med commit, IPA-hash, build, iPhone, iOS samt gatewayrelease/modell och Pianissimo-revision. Äldre mätningar finns i [TESTRESULTAT_V0_1](arkiv/TESTRESULTAT_V0_1.md) och gäller bara sin historiska revision.
 
 ## Före installation
 
@@ -191,7 +191,7 @@ För Linux-/native-kommandon, se [verifieringen](INSTALLATION.md#verifiera-före
 
 ## Efter grillningen — nya prov, ej körda på iPhone
 
-Byggda 2026-11-20–21 enligt [planen](PLAN_GRILLNING.md). Kräver att gatewayen och Pianissimo är installerade om på datorn (`./server/install.sh`, `transcription-server/install.sh`) och att Mistral-paren är godkända med Prova i Mio Kontroll.
+Byggda 2026-11-20–21 enligt [planen](arkiv/PLAN_GRILLNING.md). Kräver att gatewayen och Pianissimo är installerade om på datorn (`./server/install.sh`, `transcription-server/install.sh`) och att Mistral-paren är godkända med Prova i Mio Kontroll.
 
 | Prov | Gör så här | Godkänt när |
 |---|---|---|

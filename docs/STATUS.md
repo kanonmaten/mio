@@ -4,7 +4,7 @@ Senast uppdaterad **2026-11-21**. Version **0.10.0, ej släppt** (hette 0.9.1 ti
 
 ## Grillningen, 2026-11-20–21
 
-[Planen](PLAN_GRILLNING.md) genomförd i fyra vågor, `0832127` till sista commiten. Inget är installerat på datorn, ingen riktig modelltrafik har körts och inget är provat på telefonen.
+[Planen](arkiv/PLAN_GRILLNING.md) genomförd i fyra vågor, `0832127` till sista commiten. Inget är installerat på datorn, ingen riktig modelltrafik har körts och inget är provat på telefonen.
 
 | Kontroll | Resultat |
 |---|---|
@@ -55,7 +55,7 @@ Lägsta iOS-version höjd till 27.0 och reservvägen för iOS 26.0 i lyssningsra
 
 ## Mio Kontroll och fler AI-leverantörer 2026-11-17 (`b55fd38`–fas 10)
 
-Kontrollpanelen i `control/` enligt [planen](PLAN_KONTROLLPANEL.md), fas 0 till 10, och fler leverantörer i gatewayen. Se [Mio Kontroll](../control/README.md), [ändringsloggen](../CHANGELOG.md) och [besluten](DECISIONS.md).
+Kontrollpanelen i `control/` enligt [planen](arkiv/PLAN_KONTROLLPANEL.md), fas 0 till 10, och fler leverantörer i gatewayen. Se [Mio Kontroll](../control/README.md), [ändringsloggen](../CHANGELOG.md) och [besluten](DECISIONS.md).
 
 | Kontroll | Resultat |
 |---|---|
@@ -117,7 +117,7 @@ Bara det som användaren faktiskt provat. Varje rad gäller den revision som st�
 
 | Datum | Revision | Vad | Resultat |
 |---|---|---|---|
-| 2026-08-20 | v0.1, iPhone 13 | Transkription 2 min 30 s, Mio-detektion ([mätningar](TESTRESULTAT_V0_1.md)) | Godkänd för den revisionen |
+| 2026-08-20 | v0.1, iPhone 13 | Transkription 2 min 30 s, Mio-detektion ([mätningar](arkiv/TESTRESULTAT_V0_1.md)) | Godkänd för den revisionen |
 | 2026-09-26 | Före build 5 | Tre sessioner, 111 textsegment, cirka 34 min längsta | Ljudavbrott gav "Session activation failed"; inget kontrollerat batteriprov |
 | 2026-10-05 | Build 5 + Cloudflare-gateway | Pianissimo-anslutning efter att en Quad9-DNS-profil stängts av | Fungerar (användarens rapport) |
 | 2026-10-05 | Build 5 + Cloudflare-gateway med Groq | En enkel fråga ("hej") | Svar på telefonen (användarens rapport) |

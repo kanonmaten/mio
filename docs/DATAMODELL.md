@@ -152,7 +152,7 @@ Sessioner, innehåll och assistentdata ligger i en SwiftData-databas, `Mio/store
 
 ## Kontrakt efter grillningen
 
-Skrivna 2026-11-20 i fas 0 av [planen](PLAN_GRILLNING.md), efter [besluten](DECISIONS.md#grillningen-2026-11-19). Gatewayen, Pianissimo, Mio Kontroll och appen byggs mot dem samtidigt. Ett spår som behöver ändra ett kontrakt säger till i stället för att ändra det själv. Alla tillägg är additiva: en äldre app, panel eller server ska fortsätta fungera mot en nyare motpart, och den nyare ska känna igen den äldre på att fältet eller förmågan saknas.
+Skrivna 2026-11-20 i fas 0 av [planen](arkiv/PLAN_GRILLNING.md), efter [besluten](DECISIONS.md#grillningen-2026-11-19). Gatewayen, Pianissimo, Mio Kontroll och appen byggs mot dem samtidigt. Ett spår som behöver ändra ett kontrakt säger till i stället för att ändra det själv. Alla tillägg är additiva: en äldre app, panel eller server ska fortsätta fungera mot en nyare motpart, och den nyare ska känna igen den äldre på att fältet eller förmågan saknas.
 
 ### Direkta anteckningar och fångstregler (våg 2, 2026-11-20)
 
