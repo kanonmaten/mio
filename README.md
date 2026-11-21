@@ -1,66 +1,68 @@
 # Mio
 
-Privat SwiftUI-app för iOS 27+ (första testtelefon iPhone 16 Pro, senare även iPhone 13): privat svensk transkription via Pianissimo på egen CachyOS-dator, anteckningar, planering och en diskret vardagsassistent. Ingen App Store-distribution.
+Mio är en privat iPhone-app för iOS 27 som lyssnar när du ber den, skriver ut vad som sägs och hjälper dig att hålla ordning på lektioner, läxor, prov och vardagens små saker. Talet skrivs ut av Pianissimo på en egen dator med grafikkort, och AI-delen går via en gateway på samma dator. Inget ljud sparas, och appen finns inte i App Store; den installeras med SideStore.
 
-**Aktuell version: 0.10.0 — ej släppt och inte provad på telefonen.** Den hette 0.9.1 fram till 2026-11-21 ([versioner](docs/DECISIONS.md#en-version-för-hela-repot-2026-11-21)). 0.9.0 är revisionen `8f90ddc` med rättningarna efter provet 2026-10-13; 0.10.0 lägger till att Apples appar äger posterna ([plan](docs/PLAN_APPLEAPPAR.md)) och allt från grillningen. Båda är byggda och testade i simulatorn, ingen är installerad eller provad på telefonen. Alla produktdelar utvecklas tillsammans efter beslutet 2026-09-25. Versionsnumret identifierar bygget; det är inte ett påstående om godkända telefonprov. [Status](docs/STATUS.md) skiljer kod, kontroller, Xcode och verklig användning åt.
+Aktuell version är 0.10.0. Den är byggd och testad i simulatorn men inte släppt och inte provad på telefonen. Den hette 0.9.1 fram till 2026-11-21 ([versioner](docs/DECISIONS.md#en-version-för-hela-repot-2026-11-21)). [Status](docs/STATUS.md) visar exakt vad som är kontrollerat och på vilken commit.
 
-**Nästa steg** är att installera och prova 0.10.0 på datorn och telefonen; proven och det som återstår finns som ärenden i [Linear](https://linear.app/kanonmaten/project/mio-0100-pa-telefonen-a0b66e78ebf9). [Planen för tillförlitlighet](PLAN.md) styrde 0.9.0 och [planen för Apples appar](docs/PLAN_APPLEAPPAR.md) en del av 0.10.0; [status](docs/STATUS.md) visar verifierat läge.
+## Vad Mio gör
 
-## Funktioner
+- Fånga skriver ut tal via Tailscale till Pianissimo på datorn. Mikrofonen startar om efter ett samtal eller annat avbrott, men aldrig efter att du själv pausat eller stoppat. Nekar iOS omstarten får du notisen "Tryck för att fortsätta lyssna" eller trycker Fortsätt i Fånga ([användarguiden](docs/ANVANDNING.md)).
+- Lektioner är ett eget läge. Efter lektionen skriver AI en anteckning, föreslår ämne och läxor och öppnar ett granskningsark. Pekade läraren ut något till provet finns det överst i avsnittet "Viktigt till provet" med ett citat per punkt; annars saknas avsnittet.
+- Förslag samlar det AI hittat i vardagen. Inget sparas förrän du säger Ja. En att göra-post hamnar då i Påminnelser och en anteckning i Anteckningar via dela-arket; en kalenderhändelse öppnar Kalenders ruta, och den sparas först när du trycker Lägg till där. "Mio, kom ihåg …" sparas direkt i Påminnelser och "Mio, notera …" som en Mio-anteckning, och båda kan ångras i 24 timmar. Säger du både en tid och en plats blir det i stället ett kalenderförslag under Förslag, som du bekräftar i Kalenders ruta.
+- Hem visar veckan, nästa sak att göra och nedräkning till prov.
+- Inställningarna ligger i ett enda ark. "Kontrollera allt" visar vad som fungerar och vad du behöver göra annars.
+- Säkerhetskopian: när telefonen laddar skickar Mio sin export via Tailscale till datorn, som krypterar den och sparar de 14 senaste. iOS bestämmer när det blir av, oftast på natten, och det kräver nät och en gateway som installerats om; Mio Kontroll visar den senaste kopian, och under Inställningar → Säkerhetskopia finns "Säkerhetskopiera nu".
 
-- **Veckoplaneraren i grafit och blått (design vald 2026-10-11, färg och glas ändrade 2026-11-15):** neutral grafitgrå grund, en blå ton, kort för status och sammanfattning i Liquid Glass och vanliga läsytor för transkript, anteckningar och listor; Dynamic Type och minskad rörelse. Tre flikar, **Hem, Lektioner, Förslag**, och en separat rund mikrofonknapp, **Fånga**, längst till höger i flikfältet.
-- **Hem:** veckonumret som rubrik, veckans sju dagar (tryck på en dag, pilarna byter vecka, **I dag** går tillbaka), **Nästa** med en enda åtgärd, **N att granska**, dagens översikt med Morgon/Kväll (kväll från kl. 17) och ett rutnät över tolv veckor som bara räknar aktivitet. Morgon- och kvällsnotiser öppnar Hem.
-- **Fånga:** transkription via Tailscale, automatisk omstart efter ljudavbrott (aldrig efter din paus eller ditt stopp), Mio-tilltal och förslag med **Ja / Nej / Inte nu**. Mikrofonen visas för sig, och två statusbrickor (Transkription och AI) öppnar inställningarna; en pausknapp bredvid pausar AI direkt. Egna ord för namn och facktermer läggs i en ordlista på datorn ([Pianissimo-guiden](transcription-server/README.md#egna-ord)). Förslag granskas med versionskontroll; en senare komplettering kräver ny granskning och bevarar dina utkaständringar.
-- **Lektioner:** separat Starta lektion-knapp pausar vardags-Mio. AI kan skriva detaljerade, kopierbara anteckningar efter avslut, med separata läxförslag. Färdiga delar sparas för manuell fortsättning efter avbrott. Anteckningar visar om källtexten är aktuell, äldre eller saknar revisionsunderlag. En rättning ändrar inte sparade delar och skickar inget automatiskt. Äldre sessioner, manuella tidsintervall och råtext finns under Historik och råtext.
-- **Apples appar äger posterna (0.9.1):** efter Ja går en händelse till Kalender via Kalenders egen ruta, en att göra-post till Påminnelser och en anteckning eller ett minne till Anteckningar via dela-arket. Mio sparar bara vart den skickades; Hem läser kommande påminnelser.
-- **Anteckningar:** sökbara anteckningar, uppgifter och synliga uttryckliga minnen.
-- **Snabbare vyhärledning:** Tidslinjens sökning byggs i en debouncerad snapshot (250 ms) och Hems veckodata/översikter räknas om per datarevision i stället för vid varje omritning.
-- **Lyssningsraden:** ovanför flikfältet medan en session pågår, med en diskret prick, kort status och paus/fortsätt; tryck för Fånga.
-- **Notiser:** valfri morgon- och kvällsnotis samt "Tryck för att fortsätta lyssna". Mios egna alarm togs bort i 0.9.1.
-- **AI:** på när datorn är parad (beslut 2026-10-11) och kan pausas med ett tryck på Fånga eller under Inställningar → AI. Nya textutdrag analyseras löpande för planer/uppgifter utan Mio-tilltal, samlat högst var femte minut. **Fråga Mio** (knapp på Hem och Fånga) skickar en enskild fråga direkt och visar upp till tre färdiga frågor som bara fyller i textfältet. Ett modellfritt anslutningsprov visar autentisering, protokoll, release, uppgiftsprofiler och kvot; det bevisar inte leverantörsbehörighet eller modellkvalitet. Gatewayen kör på din dator med Groq och Qwen 3.8 27B ([gatewayguiden](server/README.md)), med reasoning av, temperatur 0 och strikt schema. Gatewayen anpassar varje anrop till Groqs gratisnivå (8 000 token per minut, 190 000 per dygn), gör ett nytt försök vid korta väntetider och tillfälliga fel, och appen delar ett för stort textutdrag i mindre delar i stället för att skicka samma igen.
-- **Tillfälligt AI-svar:** granska och redigera svaret innan du uttryckligen sparar det som en vanlig lokal anteckning. Ingen frågehistorik, extra AI-komprimering eller systemåtgärd skapas av svaret.
-- Lokal versionsmärkt JSON-export och återupptagbar radering av appdata, egna notiser och serveranslutningar. Raderingsfel visas med nästa steg. Inget råljud sparas.
+[Användarguiden](docs/ANVANDNING.md) går igenom flödet steg för steg, och [ändringsloggen](CHANGELOG.md) beskriver varje ändring.
 
-Utan AI används en enkel lokal kommandogrammatik. Med aktiverad AI kan även vanligt samtal ge förslag; innehåll och tider måste granskas. Lektionsanteckningar är källkopplade AI-utkast från textdelar, inte en garanti för fullständig sammanfattning. [Status](docs/STATUS.md) skiljer det tidigare bygget från dessa rättningar.
+## Delarna
+
+| Del | Var | Guide |
+|---|---|---|
+| iPhone-appen och widgetarna | `Mio/`, `MioWidgets/` | [Installation](docs/INSTALLATION.md) |
+| Pianissimo, transkriptionen på datorns GPU | `transcription-server/` | [Pianissimo](transcription-server/README.md) |
+| AI-gatewayen på datorn (Mistral, Groq eller Anthropic) | `server/` | [Gatewayen](server/README.md) |
+| Mio Kontroll, kontrollpanelen på datorn | `control/` | [Mio Kontroll](control/README.md) |
+| Verifieraren som CI och pre-push-kroken kör | `tools/` | [Utveckling](#utveckling) |
 
 ## Kom igång
 
 Gör stegen i den här ordningen. Skripten på datorn körs som din vanliga användare, inte med `sudo`.
 
-1. Installera Pianissimo på datorn med `transcription-server/install.sh`. Första gången tar det ungefär en halvtimme. Se [Pianissimo-guiden](transcription-server/README.md).
-2. Installera AI-gatewayen på samma dator med `server/install.sh` (cirka 10 minuter, du behöver en Groq-nyckel). Se [gatewayguiden](server/README.md).
+1. Installera Pianissimo på datorn med `transcription-server/install.sh`. Första gången tar det ungefär en halvtimme. Säger skriptet att Tailscale inte är inloggat på datorn, gör [steg 2 i Pianissimo-guiden](transcription-server/README.md#2-tailscale) (logga in och `tailscale serve`) innan du går vidare.
+2. Installera AI-gatewayen med `./server/install.sh`. Skriptet frågar efter en Mistral-nyckel och provar den med ett kort påhittat anrop.
 3. Installera Tailscale på telefonen, logga in med samma konto som på datorn och slå på VPN On Demand.
 4. Installera Mio på telefonen enligt [installationen](docs/INSTALLATION.md).
 5. Kör `mio-pair` på datorn och skanna QR-koden i Mio under Inställningar → Parning.
 
-På datorn kan [Mio Kontroll](control/README.md) göra steg 1, 2 och 5 åt dig och sedan visa och styra allt som kör där: välj AI-modell, ändra egna ord, uppdatera, verifiera och läs loggarna. Installera den med `./control/install.sh`. Den är inte provad på datorn än.
+[Mio Kontroll](control/README.md) kan göra steg 1, 2 och 5 åt dig och sedan visa och styra allt som kör på datorn. Installera den med `./control/install.sh`. Den är inte provad på datorn än.
 
-`mio-pair` hämtar tokens från båda installationerna, så kör den först när steg 1 och 2 är klara. Kör du den utan Pianissimo får koden bara med AI. Installera då Pianissimo, kör `mio-pair` igen och tryck Para om med QR-kod i Mio.
+`mio-pair` hämtar nycklar från båda installationerna, så kör den när steg 1 och 2 är klara. Utan Pianissimo får koden bara med AI; installera då Pianissimo, kör `mio-pair` igen och para om i Mio.
 
-Fortsätt sedan med [användarguiden](docs/ANVANDNING.md) och [helhetstestet](docs/TESTPLAN_HELHET.md). Anteckningar och planer fungerar utan dator, men inte transkription och AI.
+## Integritet
+
+Lyssningen startas av dig. Ljudet skickas till din egen dator och ligger högst 60 sekunder i telefonens minne, aldrig i en fil. Rättelser och talarnamn läggs ovanpå transkriptet; originaltexten och tiderna ändras aldrig. När AI är på skickas text via din dator till den leverantör du valt i Mio Kontroll, och förslag sparas först efter ditt Ja. Det du skickar till Kalender, Påminnelser och Anteckningar synkas via ditt Apple-konto. Spela bara in andra med deras samtycke.
+
+Data ligger i SwiftData (`Mio/store/Mio.store`) under appidentiteten `app.mio.assistant`. Exporten är versionerad JSON och kan innehålla känslig text, så förvara den utanför repot. [Datamodellen](docs/DATAMODELL.md) beskriver lagring, export och återställning.
 
 ## Utveckling
 
-Öppna `Mio.xcodeproj`, välj schemat **Mio**. Appkod finns i `Mio/`, XCTest i `MioTests/`, tre native UI-smokeprov i `MioUITests/`, ljudservern i `transcription-server/` och text-AI-gatewayen i `server/`. Den gemensamma säkra Linuxgrinden körs från repots rot:
+Planerat arbete, fel och prov är ärenden i [Linear](https://linear.app/kanonmaten). Varje ändring görs på en egen gren och går via en pull request som CI och CodeRabbit granskar innan den slås ihop till `main`. [CLAUDE.md](CLAUDE.md) har reglerna för Claude Code, och [besluten](docs/DECISIONS.md) förklarar varför saker är som de är.
+
+Linux kan inte bygga iOS-appen. Den gemensamma grinden körs från repots rot:
 
 ```sh
 cargo run --locked --manifest-path tools/Cargo.toml -- verify
 ```
 
-Slå på pre-push-kroken en gång per arbetskopia, så att samma grind körs före varje push:
+Slå på pre-push-kroken en gång per arbetskopia, så körs samma grind före varje push:
 
 ```sh
 git config core.hooksPath .githooks
 ```
 
-Kroken stoppar pushen om `verify` misslyckas eller om arbetskopian har ändringar som inte är committade, och hoppar över `verify` när bara Markdown har ändrats. Inställningen är lokal, så molnsessioner utan Swift stoppas inte av den.
+Kroken stoppar pushen om `verify` misslyckas eller om det finns ändringar som inte är committade, och hoppar över `verify` när bara Markdown ändrats.
 
-Samma grind körs automatiskt i GitHub-workflowen **Verifiera Mio på Linux** för varje pull request och push till `main`, och **Bygg Mio IPA** gör en IPA för varje pull request och push som ändrar appen. UI-proven körs varje natt. [Verifieringsavsnittet](docs/INSTALLATION.md#verifiera-före-bygge) beskriver beroenden, grindar och begränsningar. Linux ersätter inte native mikrofon/konvertering, Keychain, URLSession, SwiftUI eller Xcode. Xcode/SDK-/IPA-grinden finns i `.github/workflows/build-unsigned-ipa.yml`; varje körning behöver faktisk runner- och revisionskontroll.
+På GitHub kör **Verifiera Mio på Linux** samma grind för varje pull request och push till `main`. **Bygg Mio IPA** bygger appen på macOS, kör enhetstesterna och gör en osignerad IPA när en ändring rör appen; UI-tester och strikt concurrency-diagnostik körs varje natt och på `v*`-taggar. [Installationen](docs/INSTALLATION.md#verifiera-före-bygge) beskriver vad grindarna täcker och inte täcker.
 
-Läs [CLAUDE.md](CLAUDE.md) (instruktioner för Claude Code), [vision](docs/PRODUKTVISION.md), [roadmap](docs/ROADMAP.md), [beslut](docs/DECISIONS.md), [datamodell](docs/DATAMODELL.md) och [ändringslogg](CHANGELOG.md). Planerat arbete, fel och prov finns som ärenden i [Linear](https://linear.app/kanonmaten). Varje ändring går via en pull request som CI och CodeRabbit granskar innan den slås ihop till `main`; publicering och verkliga modellanrop kräver uttrycklig begäran.
-
-## Integritet och kompatibilitet
-
-Lyssningen startas av dig. Ljudet skickas då till din privata server, med högst 60 s ljud i telefonens RAM och inga ljudfiler. Inställningar finns i ett enda ark bakom kugghjulet. Spela bara in andra med tydligt samtycke och enligt lokala regler. Exporter kan innehålla känslig text och ska förvaras privat utanför repot. Det du skickar till Kalender, Påminnelser och Anteckningar synkas via dina Apple-konton. När AI är på skickas text via din dator till Groq; förslag sparas först efter ditt Ja.
-
-Appidentiteten är `app.mio.assistant`. Sessioner, innehåll och assistentdata ligger i SwiftData (`Mio/store/Mio.store`), migrerat en gång från `content-v1.json`, `sessions.json` och `assistant-v1.json`; textfri `Mio/diagnostics-v1.json`, `Mio/metrickit-v1.json` och den ID-baserade raderingsjournalen `Mio/operations-v1.json` är kvar som JSON. Se [datamodellen](docs/DATAMODELL.md) för skydd, export och återhämtning. Ingen data migreras från prototyperna. Projekt, app-target, scheme och produkt heter **Mio**; versionsnumret ligger separat i Xcode.
+Versionen står i `VERSION` och gäller hela repot. Allt annat om projektet finns i [docs](docs/README.md).

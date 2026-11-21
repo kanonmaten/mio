@@ -28,7 +28,7 @@ Användarens val 2026-11-21 ([KAN-24](https://linear.app/kanonmaten/issue/KAN-24
 
 ## Grillningen, 2026-11-19
 
-Användaren gick igenom Mio med Claude 2026-11-19 och kompletterade 2026-11-20. Mios egentliga användare är användarens flickvän, en gymnasieelev som inte är särskilt teknisk; lektioner och vardagsfångst betyder mest. Besluten nedan genomförs enligt [planen](PLAN_GRILLNING.md). Där planen skriver **antagande** gäller antagandet tills användaren säger annat.
+Användaren gick igenom Mio med Claude 2026-11-19 och kompletterade 2026-11-20. Mios egentliga användare är användarens flickvän, en gymnasieelev som inte är särskilt teknisk; lektioner och vardagsfångst betyder mest. Besluten nedan genomförs enligt [planen](arkiv/PLAN_GRILLNING.md). Där planen skriver **antagande** gäller antagandet tills användaren säger annat.
 
 | Fråga | Val | Bortvalt |
 |---|---|---|
@@ -99,7 +99,7 @@ Användaren gick igenom Mio med Claude 2026-11-19 och kompletterade 2026-11-20. 
 - **Feltexter:** Mios egna svenska meningar visas, allt annat blir "Försök igen, och skicka en felrapport …". Parningens tekniska texter under Avancerat står kvar.
 - **Ikonen** gjordes för hand som `AppIcon.icon` (bakgrunden som dokumentets fyllning, ord och ljudvåg som glaslager) och godtogs av `actool` i "Bygg Mio IPA" #65. PNG-filerna i `AppIcon.appiconset` har samma motiv och finns kvar som reserv.
 
-Reglerna i `CLAUDE.md` ändrades samtidigt: Mistral är standard i `install.sh`, strikt schema gäller där leverantören har det, resonemang är tillåtet bara för `lesson`, och en direkt instruktion räknas som Ja för Påminnelser och Mio-anteckningar. [Produktvisionen](PRODUKTVISION.md) har samma ändringar. Kontrakten mellan gatewayen, Pianissimo, Mio Kontroll och appen står i [datamodellen](DATAMODELL.md#kontrakt-efter-grillningen).
+Reglerna i `CLAUDE.md` ändrades samtidigt: Mistral är standard i `install.sh`, strikt schema gäller där leverantören har det, resonemang är tillåtet bara för `lesson`, och en direkt instruktion räknas som Ja för Påminnelser och Mio-anteckningar. [Produktvisionen](arkiv/PRODUKTVISION.md) har samma ändringar. Kontrakten mellan gatewayen, Pianissimo, Mio Kontroll och appen står i [datamodellen](DATAMODELL.md#kontrakt-efter-grillningen).
 
 Källor (lästa 2026-11-19 och 2026-11-20): Mistral om [resonemang](https://docs.mistral.ai/inference/conversations/reasoning.md), [strukturerad utdata](https://docs.mistral.ai/inference/conversations/structured-output/custom.md), [Large 4](https://docs.mistral.ai/models/mistral-large-4-0), [Small 4](https://docs.mistral.ai/models/mistral-small-4-0-26-03) och [priser](https://docs.mistral.ai/inference/pricing).
 
@@ -143,7 +143,7 @@ Förslag, användarens beslut: behåll Xcode-projektet, "Bygg Mio IPA" och SideS
 
 ## Fler AI-leverantörer i gatewayen, 2026-11-17
 
-Användaren vill kunna välja leverantör på datorn ([planen](PLAN_KONTROLLPANEL.md#leverantörer-och-modeller)) och godkände samma dag de fyra regeländringarna i `CLAUDE.md`: granskade par i stället för "bara Groq", modellväljaren bara i panelen på datorn, en granskad modell får skickas utan temperatur om leverantören vägrar parametern, och resonemang av och strikt JSON-schema är kvar som krav. Varje leverantör granskades i sin officiella dokumentation:
+Användaren vill kunna välja leverantör på datorn ([planen](arkiv/PLAN_KONTROLLPANEL.md#leverantörer-och-modeller)) och godkände samma dag de fyra regeländringarna i `CLAUDE.md`: granskade par i stället för "bara Groq", modellväljaren bara i panelen på datorn, en granskad modell får skickas utan temperatur om leverantören vägrar parametern, och resonemang av och strikt JSON-schema är kvar som krav. Varje leverantör granskades i sin officiella dokumentation:
 
 - **Anthropic, Claude Haiku 5.5 (`claude-haiku-5-5`): granskad.** Tänkandet stängs av med `thinking: {type: "disabled"}`, som Haiku 5.5 bara tar emot vid effort `high` eller lägre; gatewayen skickar `medium`. Schemat tvingas med `output_config.format` (`json_schema`, begränsad avkodning). Temperatur, `top_p` och `top_k` ger 400 på Haiku 5.5 och på alla modeller från API-versionen `2026-10-21`, så parametern skickas inte, och `/v2/status` visar `"temperature": "provider-default"` för uppgiften. En avvisning kommer som HTTP 200 med `stop_reason: "refusal"` och hanteras som andra innehållsberoende avvisningar (delas eller hoppas över i appen, skickas aldrig om likadan). 529 räknas som tillfälligt fel, 413 som för stort anrop. Egen adapter för Messages API (`x-api-key`, `anthropic-version: 2026-10-21`), utan SDK. Opus 5.5 och Sonnet 5.5 kan inte stänga av tänkandet helt och granskas inte. Ingen gratisnivå: 0,10 USD per miljon token in och 0,50 ut. Källor: platform.claude.com/docs, sidorna Structured outputs, Thinking och Refusals and fallback. Inget riktigt anrop är gjort.
 - **Mistral (`mistral-small-2603`, `mistral-medium-3-5`) och NVIDIA NIM (`qwen/qwen3.8-27b`): kandidater, inte valbara.** Dokumentationen visar hur resonemanget stängs av (Mistral `reasoning_effort: "none"`, men inte på Large 4; NIM `chat_template_kwargs: {enable_thinking: false}`), men inte att JSON-schemat tvingas strikt: Mistral lägger schemat i prompten, och NIM beskriver strikt `json_schema` bara för andra Qwen-behållare och inte för sitt hostade API. Användarens val: adaptrar och syntetiska tester finns, men `provider_profile` avvisar paren tills användaren godkänt ett syntetiskt anrop per leverantör.
@@ -154,7 +154,7 @@ Användaren vill kunna välja leverantör på datorn ([planen](PLAN_KONTROLLPANE
 
 ## Kontrollpanelen på datorn (Mio Kontroll), 2026-11-17
 
-Användaren vill ha ett skrivbordsprogram som visar och styr allt Mio kör på datorn ([plan](PLAN_KONTROLLPANEL.md)). Valen nedan är planens och användarens; de bortvalda alternativen står bredvid.
+Användaren vill ha ett skrivbordsprogram som visar och styr allt Mio kör på datorn ([plan](arkiv/PLAN_KONTROLLPANEL.md)). Valen nedan är planens och användarens; de bortvalda alternativen står bredvid.
 
 - **Koden ligger i `control/` i Mio-repot**, visningsnamn "Mio Kontroll", program `mio-control` och `mio-control-helper`. Avböjt: eget repo, eftersom panelen läser samma konfigurationsfiler och skript som `server/` och `transcription-server/`.
 - **Tre crates i en egen Cargo-arbetsyta** (`control/core`, `control/helper`, `control/app`) i stället för planens ett paket med två program. Hjälparen körs som root och ska inte länka GPUI eller dess cirka 700 beroenden, och kärnan ska gå att testa utan grafik. Avböjt: en arbetsyta ihop med `server/` och `tools/` (samma skäl som för verifieraren: `server/install.sh` bygger i `server/`).
@@ -293,7 +293,7 @@ Steget i IPA-workflowen är fortfarande diagnostik (`continue-on-error`). Om det
 
 ## Rättningar efter provet och Apples appar, 2026-10-13
 
-Användarbeslut 2026-10-13 efter exporten samma dag. Hela planen står i [PLAN_APPLEAPPAR.md](PLAN_APPLEAPPAR.md); här står besluten och vad som valdes bort.
+Användarbeslut 2026-10-13 efter exporten samma dag. Hela planen står i [PLAN_APPLEAPPAR.md](arkiv/PLAN_APPLEAPPAR.md); här står besluten och vad som valdes bort.
 
 - **Namn:** Anteckning, Att göra, Händelse (tidigare Plan) och Minne överallt. Lagrade värden ändras inte. Mios inställningsdel "Påminnelser" byter namn till Notiser i 0.9.1. Bortvalt för Plan: Tillfälle och Bokning (Händelse är Apples ord i Kalender).
 - **0.9.0:** ett lektionsblock som underkänns två gånger delas i två halvor; en halva som underkänns igen markeras "kunde inte bearbetas" med originaltexten synlig och lektionen fortsätter (bortvalt: hoppa över hela blocket direkt, stanna och fråga). Förslagets text är det användaren sa, byggt i appen ur källsegmenten; prompten ber inte längre om förtydligande i `body`. Detta ersätter den delen av beslutet "Tomma AI-svar visas och oklar dag ger förslag". Prov, möten och bokningar är alltid händelser; annat blir händelse med klockslag och annars att göra. Datum utan klockslag blir heldag och uppdateras om ett klockslag hörs innan användaren svarat (bortvalt: spärra Ja, snabbval i förslaget). Långa köer slås ihop till större anrop och Hem visar eftersläpningen. Transkriptionen mäts med FLEURS och ett uppläst känt stycke; privata inspelningar mäts aldrig och råljud sparas aldrig.
