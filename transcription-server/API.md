@@ -4,12 +4,12 @@ API:t är oberoende av modell/NeMo-version. HTTPS via Tailscale Serve, Bearer-to
 
 ## GET /health
 
-200 om redo, 503 under laddning/fel. Samma JSON-form vid laddning; `status` är `loading`, `ready` eller `failed`. 401 vid fel token. Inget ljud används.
+200 om redo, 503 under laddning/fel. `serverVersion` är Mios version, samma som i `VERSION` i repots rot. Samma JSON-form vid laddning; `status` är `loading`, `ready` eller `failed`. 401 vid fel token. Inget ljud används.
 
 ```json
 {
   "apiVersion": 1,
-  "serverVersion": "1.0.0",
+  "serverVersion": "0.10.0",
   "status": "ready",
   "metadata": {"model": "KlangAI/pianissimo-sv", "revision": "full-model-commit", "backend": "nemo-pytorch-cuda"},
   "sampleRate": 16000, "channels": 1, "encoding": "pcm_s16le_wav",
