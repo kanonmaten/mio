@@ -255,7 +255,7 @@ private struct SuggestedQuestionReviewView: View {
 /// Reviews one proposal and hands it to the Apple app that owns its kind (user decision
 /// 2026-10-13, version 0.9.1): Händelse → Calendar's editor, Att göra → Reminders,
 /// Anteckning and Minne → the share sheet for Notes. Nothing leaves Mio without Ja.
-private struct SuggestionReviewView: View {
+struct SuggestionReviewView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(MioAssistantViewModel.self) private var assistant

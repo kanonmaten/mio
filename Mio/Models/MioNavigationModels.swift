@@ -21,6 +21,9 @@ enum MioNotificationRoute: Equatable, Sendable {
     /// "Lyssnar Mio fortfarande?" after 20 minutes without speech. Ja keeps listening without
     /// restarting the microphone; opening the notification also counts as Ja and shows Fånga.
     case stillListening
+    /// "Anteckningarna från lektionen är klara" (fas 3): opens the lesson's review sheet. Carries
+    /// only the session's opaque local UUID; the lock-screen text never names the lesson.
+    case lessonReview(UUID)
 
     init?(userInfo: [AnyHashable: Any]) {
         guard let name = userInfo["mioRoute"] as? String else { return nil }
@@ -41,6 +44,10 @@ enum MioNotificationRoute: Equatable, Sendable {
         case "stillListening":
             guard userInfo.count == 1 else { return nil }
             self = .stillListening
+        case "lessonReview":
+            guard userInfo.count == 2, let value = userInfo["mioSessionID"] as? String,
+                  value.utf8.count == 36, let id = UUID(uuidString: value) else { return nil }
+            self = .lessonReview(id)
         default: return nil
         }
     }
@@ -52,6 +59,7 @@ enum MioNotificationRoute: Equatable, Sendable {
         case .evening: ["mioRoute": "evening"]
         case .resumeListening: ["mioRoute": "resumeListening"]
         case .stillListening: ["mioRoute": "stillListening"]
+        case .lessonReview(let id): ["mioRoute": "lessonReview", "mioSessionID": id.uuidString]
         }
     }
 
@@ -62,6 +70,7 @@ enum MioNotificationRoute: Equatable, Sendable {
         case .evening: "Din kvällsöversikt finns i Mio. Öppna appen när det passar."
         case .resumeListening: "Tryck för att fortsätta lyssna."
         case .stillListening: "Inget tal på 20 minuter. Svara Ja för att fortsätta lyssna. Annars pausar Mio om fem minuter."
+        case .lessonReview: "Anteckningarna från lektionen är klara."
         }
     }
 }

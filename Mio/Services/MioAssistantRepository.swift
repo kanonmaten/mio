@@ -343,7 +343,8 @@ final class MioAssistantRepositoryCore {
         records.append(MioAnalysisRecord(id: UUID(), sessionID: session.id, fragmentIDs: request.fragments.map(\.id),
                                          highlights: result.highlights, uncertainties: result.uncertainties, createdAt: .now,
                                          sections: result.sections, metadata: result.metadata,
-                                         sourceRevisions: request.sourceRevisions))
+                                         sourceRevisions: request.sourceRevisions,
+                                         examHints: result.examHints, subjectSuggestion: result.subjectSuggestion))
         document.analyses = records
         document.analysisDecisions = decisions
         try write(document)

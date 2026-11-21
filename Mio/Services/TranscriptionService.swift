@@ -193,11 +193,28 @@ final class TranscriptionClient: TranscriptionTransport, @unchecked Sendable {
         let operation = start(path: "v1/sessions/\(sessionID.uuidString)", chunk: nil, method: "DELETE")
         do { _ = try await operation.body(); return .success(()) } catch { return .failure(error) }
     }
-    private func start(path: String, chunk: AudioChunk?, method: String? = nil) -> TranscriptionOperation {
+    /// One call per word, never retried here: on failure she can send it again from the
+    /// correction. The word is not logged; only the HTTP status is.
+    func uploadVocabulary(_ phrase: String) async throws -> MioVocabularyReply {
+        let body = try MioVocabulary.requestBody(phrase)
+        let operation = start(path: "v1/vocabulary", chunk: nil, method: "POST", json: body)
+        do {
+            return try MioVocabularyReply.decode(try await operation.body())
+        } catch let error as MioVocabularyError { throw error }
+        catch TranscriptionError.http(let status, _) { throw MioVocabularyError.http(status) }
+        catch is CancellationError { throw CancellationError() }
+        catch TranscriptionError.invalidResponse { throw MioVocabularyError.invalidResponse }
+        catch { throw MioVocabularyError.network }
+    }
+    private func start(path: String, chunk: AudioChunk?, method: String? = nil, json: Data? = nil) -> TranscriptionOperation {
         var request = URLRequest(url: connection.origin.appendingPathComponent(path))
         if let method { request.httpMethod = method; request.timeoutInterval = 5 }
         request.setValue("Bearer \(connection.token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let json {
+            request.httpBody = json; request.timeoutInterval = 15
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
         if let chunk {
             request.httpMethod = "POST"; request.httpBody = chunk.wave; request.timeoutInterval = 48
             request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")

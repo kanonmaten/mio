@@ -159,7 +159,7 @@ final class MioTaskDiscoveryTests: XCTestCase {
     }
 
     func testStatusV2EnforcesStreamBodyLimitAndDoesNotFallBackToLegacy() async throws {
-        let oversized = DiscoveryTransport(data: Data(repeating: 32, count: 16_385))
+        let oversized = DiscoveryTransport(data: Data(repeating: 32, count: MioGatewayStatusV2.maxResponseBytes + 1))
         do { _ = try await MioCloudService.statusV2(connection: connection(), transport: { try await oversized.send($0) }); XCTFail("Oversized stream must stop") }
         catch MioCloudError.oversizedResponse {} catch { XCTFail("Unexpected failure: \(error)") }
         let missing = DiscoveryTransport(data: Data(#"{"error":"not_found"}"#.utf8), status: 404)

@@ -23,10 +23,14 @@ protocol TranscriptionTransport: Sendable {
     /// Best effort: asks the server to drop the session's speaker state and text cache now
     /// instead of after its 10-minute idle limit. Never throws or blocks capture.
     func endSession(_ sessionID: UUID) async
+    /// One own word she said Ja to, sent to Pianissimo's word list (`POST /v1/vocabulary`).
+    /// Separate from transcription: a failure here never touches capture.
+    func uploadVocabulary(_ phrase: String) async throws -> MioVocabularyReply
 }
 
 extension TranscriptionTransport {
     func endSession(_ sessionID: UUID) async { }
+    func uploadVocabulary(_ phrase: String) async throws -> MioVocabularyReply { throw MioVocabularyError.unavailable }
 }
 
 typealias AudioCaptureFactory = @Sendable (AsyncStream<CapturedPCMBuffer>.Continuation,

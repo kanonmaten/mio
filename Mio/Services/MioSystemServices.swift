@@ -336,6 +336,30 @@ final class MioSystemServices {
         }
     }
 
+    nonisolated static let lessonNotesReadyPrefix = "app.mio.lesson.notes-ready."
+
+    /// "Anteckningarna från lektionen är klara" when the notes finish while Mio is in the
+    /// background. Generic text only; the payload is the route and the lesson's opaque UUID.
+    /// Without permission nothing is shown, and the sheet opens next time from Lektioner.
+    func postLessonNotesReady(sessionID: UUID) async {
+        let status = await notificationCenter.notificationSettings().authorizationStatus
+        guard status == .authorized || status == .provisional else { return }
+        let route = MioNotificationRoute.lessonReview(sessionID)
+        let content = UNMutableNotificationContent()
+        content.title = "Mio"
+        content.body = route.notificationBody
+        content.userInfo = route.userInfo
+        content.sound = .default
+        try? await notificationCenter.add(UNNotificationRequest(identifier: Self.lessonNotesReadyPrefix + sessionID.uuidString,
+                                                               content: content, trigger: nil))
+    }
+
+    func withdrawLessonNotesReady(sessionID: UUID) {
+        let id = Self.lessonNotesReadyPrefix + sessionID.uuidString
+        notificationCenter.removePendingNotificationRequests(withIdentifiers: [id])
+        notificationCenter.removeDeliveredNotifications(withIdentifiers: [id])
+    }
+
     private func rememberAlarmIDs(_ ids: Set<UUID>) {
         knownAlarmIDs = ids
         if ids.isEmpty {

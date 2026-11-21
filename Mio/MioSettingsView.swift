@@ -339,6 +339,10 @@ struct MioAIConnectionStatusView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             LabeledContent(taskTitle(task), value: (try? status.requireTask(task)) != nil ? "Konfigurerad" : "Inte tillgänglig")
                             if !profile.provider.isEmpty { Text("\(profile.provider) · \(profile.model)").font(.footnote).foregroundStyle(.secondary) }
+                            if let level = profile.reasoningTitle {
+                                Text("Modellen tänker efter (nivå \(level)) innan den svarar. Tankarna sparas aldrig.")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
                             if profile.configurationError != nil { Text("Kontrollera uppgiftens profil på servern.").font(.footnote) }
                         }
                     }

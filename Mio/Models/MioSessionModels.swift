@@ -190,11 +190,19 @@ struct MioSession: Identifiable, Codable, Hashable, Sendable {
     var mutationRevision: UInt64? = nil
     /// Display-only speaker names keyed by speaker number; segments are never rewritten.
     var speakerNames: [Int: String]? = nil
+    /// The lesson's subject as she confirmed or wrote it in the review sheet (2026-11-20, an
+    /// assumption until fas 5). Optional and additive; the AI's suggestion lives on the analysis.
+    var subject: String? = nil
 
     var isLesson: Bool { captureMode == .lesson }
 
+    /// In a lesson "Lärare" and "Elev 1, 2…", otherwise "Talare N"; her own names win.
     func speakerName(for speaker: Int) -> String {
-        MioSpeakerLabel.displayName(for: speaker, names: speakerNames)
+        speakerNames?[speaker] ?? defaultSpeakerName(for: speaker)
+    }
+
+    func defaultSpeakerName(for speaker: Int) -> String {
+        MioSpeakerRoles.defaultName(for: speaker, roles: MioSpeakerRoles.roles(in: self))
     }
 
     /// The speaker label to show above a segment: only where the speaker changes.
@@ -405,13 +413,14 @@ enum MioSpeakerLabel {
     }
 
     /// A blank name, or the default label itself, removes the custom name.
-    static func renamed(_ names: [Int: String]?, speaker: Int, to name: String) -> [Int: String]? {
+    static func renamed(_ names: [Int: String]?, speaker: Int, to name: String,
+                        defaultName: String? = nil) -> [Int: String]? {
         guard range.contains(speaker) else { return names }
         var result = names ?? [:]
         let clean = String(name.trimmingCharacters(in: .whitespacesAndNewlines)
             .components(separatedBy: .newlines).joined(separator: " ")
             .prefix(maximumNameLength))
-        if clean.isEmpty || clean == defaultName(speaker) {
+        if clean.isEmpty || clean == (defaultName ?? Self.defaultName(speaker)) {
             result[speaker] = nil
         } else {
             result[speaker] = clean

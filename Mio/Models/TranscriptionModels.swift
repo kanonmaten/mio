@@ -43,6 +43,9 @@ struct TranscriptionHealth: Decodable, Sendable {
     /// Additive in API v1 (2026-11-15): how many of the user's own words the server's decoder
     /// boosts. Nil from an older server. The word list itself never leaves the PC.
     var vocabulary: Int? = nil
+    /// Additive (contract 2026-11-20): Pianissimo takes own words from the phone at
+    /// `POST /v1/vocabulary`. Mio offers a corrected word as an own word only when this is true.
+    var vocabularyUpload: Bool? = nil
 
     /// Pause-cut chunks reach 1 + 22 + 1 s, exactly API v1's 24 s / 768,044-byte limit.
     static let requiredSeconds = 24

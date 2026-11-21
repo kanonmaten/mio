@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 @MainActor
@@ -47,6 +48,15 @@ struct MioApp: App {
         _liveActivity = State(initialValue: liveActivity)
         _lessonNotes = State(initialValue: lessonNotes)
         workflow.onLessonNotesStarted = { lessonNotes.begin(sessionID: $0) }
+        // Finished notes open the review sheet at once in the foreground; in the background a
+        // notification with a generic text does, when she opens it (fas 3).
+        workflow.onLessonNotesReady = { id in
+            if UIApplication.shared.applicationState == .active {
+                navigation.receive(.lessonReview(id))
+            } else {
+                Task { await MioSystemServices.shared.postLessonNotesReady(sessionID: id) }
+            }
+        }
         MioListeningControl.handler = { command in
             switch command {
             case .pause: await capture.pause(.untilResumed)

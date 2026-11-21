@@ -83,12 +83,18 @@ struct LessonDetailView: View {
     @State private var continuationID = UUID()
     @State private var isPreparingContinuation = false
     @State private var continuationError: String?
+    @State private var showReview = false
     private var session: MioSession? { model.session(id: sessionID) }
 
     var body: some View {
         List {
             if let session {
                 if session.endedAt == nil, model.currentSession?.id == sessionID {
+                    Section {
+                        MioLessonCalmView(model: model, session: session)
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                    }
                     Section {
                         Text("Vardags-Mio är pausat under lektionen.")
                         TranscriptionStatusView(model: model)
@@ -107,6 +113,24 @@ struct LessonDetailView: View {
                 Section { CaptureGapsView(session: session) }
                 let records = assistant.analyses.filter { $0.sessionID == sessionID }
                 let document = MioLessonDocument(session: session, records: records)
+                // First in the note (user decision 2026-11-19), each point with its quote.
+                if !document.examHints.isEmpty {
+                    Section {
+                        ForEach(Array(document.examHints.enumerated()), id: \.offset) { _, hint in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(hint.text).textSelection(.enabled)
+                                DisclosureGroup("Citat") { Text("”\(hint.evidence)”").font(.footnote).textSelection(.enabled) }
+                            }
+                        }
+                    } header: {
+                        Text("Viktigt till provet")
+                    } footer: {
+                        Text("Det läraren pekade ut som viktigt. AI-utkast: jämför med citatet.")
+                    }
+                }
+                if let subject = session.subject {
+                    Section { LabeledContent("Ämne", value: subject) }
+                }
                 Section("Detaljerade lektionsanteckningar · AI-utkast") {
                     if document.orderedRecords.isEmpty {
                         Text("Avsluta lektionen och välj att skapa anteckningar med AI. Du kan sedan kopiera dem till valfri AI för vidare hjälp.")
@@ -181,6 +205,9 @@ struct LessonDetailView: View {
                         Text("Textdelar skickas till din dator, med minst en minut emellan. Arbetet fortsätter i bakgrunden när du lämnar appen; sparade delar finns kvar efter avbrott. Råljud skickas inte.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
+                    if session.endedAt != nil, document.isComplete {
+                        Button("Granska lektionens förslag och ämne") { showReview = true }
+                    }
                     NavigationLink("Granska föreslagna läxor och händelser") { SuggestionInboxView(contentModel: content, sessionModel: model) }
                     NavigationLink("Originaltext, egen anteckning och radering") {
                         SessionEditorView(sessionID: sessionID, contentModel: content, sessionModel: model)
@@ -190,6 +217,9 @@ struct LessonDetailView: View {
         }
         .mioListGround()
         .navigationTitle(session?.title ?? "Lektion")
+        .sheet(isPresented: $showReview) {
+            MioLessonReviewSheet(sessionID: sessionID, model: model, content: content)
+        }
         .onChange(of: assistant.analyses) { _, _ in copied = false }
         .onChange(of: session?.title) { _, _ in copied = false }
         .onChange(of: session?.transcripts) { _, _ in copied = false }

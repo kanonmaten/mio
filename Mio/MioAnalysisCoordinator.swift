@@ -66,6 +66,8 @@ final class MioAnalysisCoordinator {
     @ObservationIgnored private let consentLog: @MainActor () -> MioAIConsentLog
     @ObservationIgnored private let recordConsent: @MainActor (MioAIConsentLog.Kind, Date, Date?) -> Void
     @ObservationIgnored private let recordSkipped: @MainActor (Set<String>, Date) -> Void
+    /// The workflow measures the time to finished notes and opens the review sheet (fas 3).
+    @ObservationIgnored var onLessonNotesComplete: (@MainActor (MioSession) -> Void)?
 
     init(
         loadConnection: @escaping @MainActor () throws -> MioCloudConnection = { try MioCloudSettings.connection() },
@@ -336,7 +338,7 @@ final class MioAnalysisCoordinator {
         guard enabled, session.isLesson, session.endedAt != nil, !deletedSessionIDs.contains(session.id), activeSessionID != session.id,
               !queue.contains(where: { $0.session.id == session.id }) else { return }
         let processed = assistant.analyzedFragmentIDs(for: session.id, detailedLesson: true)
-        let fragments = session.transcripts.flatMap(MioAnalysisFragment.make).filter { !processed.contains($0.id) }
+        let fragments = MioAnalysisFragment.lessonFragments(in: session).filter { !processed.contains($0.id) }
         let remaining = MioAnalysisRequest.batches(mode: .lesson, fragments: fragments)
         queue += remaining.prefix(max(0, 100 - queue.count)).map { Work(session: session, request: $0) }
         startWorker(assistant: assistant)
@@ -496,6 +498,12 @@ final class MioAnalysisCoordinator {
                                 request.contextLimited = true
                             }
                         }
+                        if request.mode == .lesson {
+                            // Version 2 (exam hints, speaker roles, subject) only where the gateway
+                            // offers it; an older gateway keeps getting exactly the v1 request.
+                            request.usesLessonNotesV2 = prepared.status.tasks[.lesson].capabilities
+                                .contains(Self.lessonNotesV2Capability)
+                        }
                         request.queueSize = self.queue.count + 1
                         self.workerMode = request.mode; self.activeSessionID = session.id; self.isWorking = true
                         self.status = request.mode == .lesson ? "AI skriver detaljerade lektionsanteckningar …" : "AI granskar senaste textutdraget …"
@@ -522,7 +530,10 @@ final class MioAnalysisCoordinator {
                         self.activeSessionID = nil; self.sentBatches += 1
                         self.consecutivePauses = 0
                         self.status = "Senast analyserat \(self.now().formatted(date: .omitted, time: .shortened)). \(count) nya förslag."
-                        if request.mode == .lesson { self.status = MioLessonDocument(session: session, records: assistant.analyses).progress }
+                        if request.mode == .lesson {
+                            self.status = MioLessonDocument(session: session, records: assistant.analyses).progress
+                            self.reportIfLessonNotesComplete(session, assistant: assistant)
+                        }
                         self.isWorking = false
                     } catch {
                         // Failures that depend on the batch's content (too large, cut off, refused,
@@ -603,6 +614,7 @@ final class MioAnalysisCoordinator {
             lessonRejections[key] = nil
             try await assistant.markLessonPartUnprocessed(request: work.request, session: work.session)
             status = MioLessonDocument(session: work.session, records: assistant.analyses).progress
+            reportIfLessonNotesComplete(work.session, assistant: assistant)
         }
     }
 
@@ -637,6 +649,15 @@ final class MioAnalysisCoordinator {
         guard everydayShrink > 0 else { everydaySuccesses = 0; return }
         everydaySuccesses += 1
         if everydaySuccesses >= Self.shrinkRelaxCalls { everydayShrink -= 1; everydaySuccesses = 0 }
+    }
+
+    nonisolated static let lessonNotesV2Capability = "lesson-notes-v2"
+
+    /// Called once the last part of a lesson's notes is saved or marked as unprocessed.
+    private func reportIfLessonNotesComplete(_ session: MioSession, assistant: MioAssistantViewModel) {
+        guard MioLessonDocument(session: session, records: assistant.analyses).isComplete,
+              !queue.contains(where: { $0.session.id == session.id && $0.request.mode == .lesson }) else { return }
+        onLessonNotesComplete?(session)
     }
 
     nonisolated static func acceptsBacklog(_ status: MioGatewayStatusV2) -> Bool {

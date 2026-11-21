@@ -10,6 +10,8 @@ final class MioNavigationCoordinator {
     var presentedPost: MioPresentedPost?
     /// A session opened from a `mio://` link in Calendar, Reminders or Notes.
     var presentedSession: MioPresentedPost?
+    /// The review sheet after a lesson's notes are done: proposals with Ja or Nej, and the subject.
+    var presentedLessonReview: MioPresentedPost?
     private(set) var pendingRoute: MioNotificationRoute?
     private(set) var pendingLinkSessionID: UUID?
     @ObservationIgnored private let onDailyRoute: @MainActor () -> Void
@@ -20,11 +22,16 @@ final class MioNavigationCoordinator {
 
     func receive(_ route: MioNotificationRoute) { pendingRoute = route }
 
-    func resolvePending(using destination: (UUID) -> MioAppTab?) {
+    func resolvePending(using destination: (UUID) -> MioAppTab?, lessonExists: (UUID) -> Bool = { _ in false }) {
         guard let route = pendingRoute else { return }
         pendingRoute = nil
         presentedPost = nil
         switch route {
+        case .lessonReview(let id):
+            // A deleted lesson falls back to Hem like a deleted post.
+            guard lessonExists(id) else { presentedLessonReview = nil; selectedTab = .home; return }
+            selectedTab = .lessons
+            presentedLessonReview = MioPresentedPost(id: id)
         case .post(let id):
             guard let tab = destination(id) else { selectedTab = .home; return }
             selectedTab = tab

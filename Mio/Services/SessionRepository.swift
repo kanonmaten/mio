@@ -120,6 +120,10 @@ actor SessionRepository {
                        token: SessionOperationToken) throws -> MioSession {
         try core.renameSpeaker(sessionID: sessionID, speaker: speaker, name: name, token: token)
     }
+    @discardableResult
+    func setSubject(sessionID: UUID, subject: String?, token: SessionOperationToken) throws -> MioSession {
+        try core.setSubject(sessionID: sessionID, subject: subject, token: token)
+    }
     func delete(id: UUID) throws { try core.delete(id: id) }
     func removeTemporaryExports() throws { try core.removeTemporaryExports() }
     @discardableResult
@@ -237,7 +241,17 @@ final class SessionRepositoryCore {
             guard session.transcripts.contains(where: { $0.speaker == speaker }) else {
                 throw SessionRepositoryError.missingSegment
             }
-            session.speakerNames = MioSpeakerLabel.renamed(session.speakerNames, speaker: speaker, to: name)
+            session.speakerNames = MioSpeakerLabel.renamed(session.speakerNames, speaker: speaker, to: name,
+                                                           defaultName: session.defaultSpeakerName(for: speaker))
+        }
+    }
+
+    /// The subject she confirmed in the review sheet; nil or an invalid value removes it.
+    @discardableResult
+    func setSubject(sessionID: UUID, subject: String?, token: SessionOperationToken) throws -> MioSession {
+        try mutateEndedSession(id: sessionID, token: token) { session in
+            guard session.isLesson else { throw SessionRepositoryError.missingSession }
+            session.subject = MioLessonSubject.clean(subject)
         }
     }
 

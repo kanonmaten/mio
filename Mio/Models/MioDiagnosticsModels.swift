@@ -287,15 +287,19 @@ struct MioGatewayStatus: Decodable, Sendable {
 enum MioAITaskID: String, Codable, CaseIterable, Sendable {
     case ask, everyday, lesson
 
+    /// The lesson task may reason (user decision 2026-11-19), so it no longer requires
+    /// `reasoning-off`; its reasoning level is read from `/v2/status` (`reasoning`) instead.
+    /// Ask and everyday still require reasoning off.
     var requiredCapabilities: Set<String> {
-        let taskContract: String
         switch self {
-        case .ask: taskContract = "ask-v1"
-        case .everyday: taskContract = "analysis-context-v2"
-        case .lesson: taskContract = "lesson-notes-v1"
+        case .ask: ["reasoning-off", "temperature-zero", "strict-json", "ask-v1"]
+        case .everyday: ["reasoning-off", "temperature-zero", "strict-json", "analysis-context-v2"]
+        case .lesson: ["temperature-zero", "strict-json", "lesson-notes-v1"]
         }
-        return ["reasoning-off", "temperature-zero", "strict-json", taskContract]
     }
+
+    /// Only the lesson task may run on a model that reasons.
+    var mayReason: Bool { self == .lesson }
 }
 enum MioTaskConfigurationError: String, Codable, Sendable {
     case gatewayConfigurationInvalid = "gateway_configuration_invalid"
@@ -320,6 +324,27 @@ struct MioGatewayTaskStatus: Decodable, Sendable {
     let promptVersion: String
     let capabilities: [String]
     let configurationError: MioTaskConfigurationError?
+    /// Additive (contract 2026-11-20): "off", or the reviewed level ("low", "medium", "high").
+    /// Absent from an older gateway, which never reasons.
+    var reasoning: String? = nil
+    /// Additive: "strict-json-schema" or "json-schema"; null without a valid configuration.
+    var schemaDialect: String? = nil
+    /// Additive (2026-11-17): "provider-default" when the reviewed model refuses temperature.
+    var temperature: String? = nil
+
+    static let reasoningLevels: Set<String> = ["off", "low", "medium", "high"]
+
+    /// True when the gateway reports a reasoning level other than off.
+    var reasons: Bool { reasoning.map { $0 != "off" } ?? false }
+    /// The level in Swedish for settings ("låg", "medel", "hög").
+    var reasoningTitle: String? {
+        switch reasoning {
+        case "low": "låg"
+        case "medium": "medel"
+        case "high": "hög"
+        default: nil
+        }
+    }
 
     var isValid: Bool {
         (provider.isEmpty || MioGatewayMetadata.protocolIdentifier(provider) != nil)
@@ -329,6 +354,9 @@ struct MioGatewayTaskStatus: Decodable, Sendable {
             && (configured || configurationError != nil)
             && capabilities.count <= 32 && Set(capabilities).count == capabilities.count
             && capabilities.allSatisfy { MioGatewayMetadata.protocolIdentifier($0) != nil }
+            && (reasoning.map { Self.reasoningLevels.contains($0) } ?? true)
+            && (schemaDialect.map { MioGatewayMetadata.protocolIdentifier($0) != nil } ?? true)
+            && (temperature.map { MioGatewayMetadata.protocolIdentifier($0) != nil } ?? true)
     }
 }
 struct MioGatewayTasksStatus: Decodable, Sendable {
@@ -366,20 +394,34 @@ struct MioGatewayStatusV2: Decodable, Sendable {
     let configurationRevision: String
     let tasks: MioGatewayTasksStatus
     let quota: MioGatewayQuota?
-    static let maxResponseBytes = 16_384
+    /// Room for the additive `usage` entries (one per task, provider and model this month).
+    static let maxResponseBytes = 32_768
+    /// Required keys, plus additive ones a newer gateway sends (contract 2026-11-20). Any other
+    /// unknown key still makes the status incompatible.
+    static let rootKeys: Set<String> = ["protocolVersion", "release", "configurationRevision", "tasks", "quota"]
+    static let optionalRootKeys: Set<String> = ["usage", "backup"]
+    static let taskKeys: Set<String> = ["configured", "provider", "model", "promptVersion", "capabilities", "configurationError"]
+    static let optionalTaskKeys: Set<String> = ["reasoning", "schemaDialect", "temperature"]
 
     static func decode(_ data: Data) throws -> Self {
         func exact(_ value: Any?, _ keys: Set<String>) -> Bool {
             guard let object = value as? [String: Any] else { return false }
             return Set(object.keys) == keys
         }
+        func allowing(_ value: Any?, _ keys: Set<String>, optional: Set<String>) -> Bool {
+            guard let object = value as? [String: Any] else { return false }
+            let present = Set(object.keys)
+            return present.isSuperset(of: keys) && present.isSubset(of: keys.union(optional))
+        }
         guard data.count <= maxResponseBytes,
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              exact(root, ["protocolVersion", "release", "configurationRevision", "tasks", "quota"]),
+              allowing(root, rootKeys, optional: optionalRootKeys),
+              // Usage and backup are read by Mio Kontroll; the app only accepts their presence.
+              optionalRootKeys.allSatisfy({ root[$0] == nil || root[$0] is NSNull || root[$0] is [String: Any] }),
               // A newer server may add tasks; Mio requires its own three and ignores the rest.
               let tasks = root["tasks"] as? [String: Any], tasks.count <= 16,
               Set(tasks.keys).isSuperset(of: ["ask", "everyday", "lesson"]),
-              ["ask", "everyday", "lesson"].allSatisfy({ exact(tasks[$0], ["configured", "provider", "model", "promptVersion", "capabilities", "configurationError"]) }),
+              ["ask", "everyday", "lesson"].allSatisfy({ allowing(tasks[$0], taskKeys, optional: optionalTaskKeys) }),
               root["quota"] is NSNull || exact(root["quota"], ["limit", "remaining", "resetAt"])
                 || exact(root["quota"], ["limit", "remaining", "resetAt", "unit"]),
               let value = try? JSONDecoder().decode(Self.self, from: data), value.protocolVersion == 2,
@@ -398,6 +440,8 @@ struct MioGatewayStatusV2: Decodable, Sendable {
         let profile = tasks[task]
         guard profile.configured else { throw MioCloudError.gateway(422, .taskConfigurationInvalid) }
         guard Set(profile.capabilities).isSuperset(of: task.requiredCapabilities) else { throw MioCloudError.incompatibleGateway }
+        // Ask and everyday must have reasoning off; the gateway refuses to start otherwise too.
+        guard task.mayReason || !profile.reasons else { throw MioCloudError.incompatibleGateway }
         return profile
     }
 }

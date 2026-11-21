@@ -707,6 +707,10 @@ actor MioSwiftDataSessionRepository: MioSessionStore {
                        token: SessionOperationToken) throws -> MioSession {
         try core.renameSpeaker(sessionID: sessionID, speaker: speaker, name: name, token: token)
     }
+    @discardableResult
+    func setSubject(sessionID: UUID, subject: String?, token: SessionOperationToken) throws -> MioSession {
+        try core.setSubject(sessionID: sessionID, subject: subject, token: token)
+    }
     func delete(id: UUID) throws {
         try core.delete(id: id)
         MioLegacyBackup.discardAfterDeletion()

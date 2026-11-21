@@ -23,7 +23,27 @@ final class MioViewModel {
     var serverVersion: String?
     /// Own words active on the transcription server; nil when it has not reported any count.
     var serverVocabulary: Int?
+    /// Whether Pianissimo takes own words from the phone (`/health` `vocabularyUpload`); nil
+    /// until a health check this run has said either way.
+    var serverVocabularyUpload: Bool?
     var connectionCheckedAt: Date?
+    /// "Ska ”X” bli ett eget ord?" after her own correction (fas 4). Never persisted.
+    private(set) var vocabularyOffer: MioVocabularyOffer?
+    /// Segment whose word is being sent right now.
+    private(set) var vocabularySendingSegmentID: UUID?
+    /// Words she said Ja to that did not reach the PC, per segment, kept in memory only so she can
+    /// send them again from the correction. Never retried automatically and never stored.
+    private(set) var vocabularyFailures: [UUID: String] = [:]
+    /// One sentence about the last word sent, shown next to the correction.
+    private(set) var vocabularyMessage: (segmentID: UUID, text: String)?
+    /// Where the hashes of words already asked about are kept (`MioVocabularyAskedLog`).
+    @ObservationIgnored var vocabularyDefaults: UserDefaults = .standard
+    /// The check started after the latest correction; tests await it.
+    @ObservationIgnored private(set) var vocabularyCheck: Task<Void, Never>?
+    /// Pianissimo for own words: health and `POST /v1/vocabulary`, outside the capture pipeline.
+    @ObservationIgnored var vocabularyTransport: @MainActor () throws -> any TranscriptionTransport = {
+        TranscriptionClient(connection: try TranscriptionSettings.connection())
+    }
     @ObservationIgnored private var finishingPipeline: (any MioCapturePipeline)?
     @ObservationIgnored private var connectionGeneration = UUID()
     private var sessionRegister = MioSessionRegister()
@@ -166,6 +186,7 @@ final class MioViewModel {
             serverMetadata = health.metadata
             serverVersion = health.serverVersion
             serverVocabulary = health.vocabulary
+            serverVocabularyUpload = health.vocabularyUpload == true
             connectionState = .connected
             connectionCheckedAt = .now
         } catch {
@@ -185,7 +206,9 @@ final class MioViewModel {
         if let pipeline { await pipeline.stop(discard: true) }
         await finishingPipeline?.stop(discard: true)
         self.pipeline = nil
-        serverMetadata = nil; serverVersion = nil; serverVocabulary = nil; connectionState = .unchecked; connectionCheckedAt = nil
+        serverMetadata = nil; serverVersion = nil; serverVocabulary = nil; serverVocabularyUpload = nil
+        vocabularyOffer = nil; vocabularyFailures = [:]; vocabularyMessage = nil
+        connectionState = .unchecked; connectionCheckedAt = nil
         if let currentSession, currentSession.endedAt == nil {
             runState = .paused
             statusMessage = "Anslutningen ändrades. Mikrofonen är av; tryck Fortsätt när anslutningen är klar."
@@ -379,6 +402,7 @@ final class MioViewModel {
             serverMetadata = details.health.metadata
             serverVersion = details.health.serverVersion
             serverVocabulary = details.health.vocabulary
+            serverVocabularyUpload = details.health.vocabularyUpload == true
             connectionState = .connected; connectionCheckedAt = .now
             appendEvent(kind: .info, message: "Mikrofonen startade. Privat transkription: \(details.health.metadata.model), revision \(details.health.metadata.revision).")
             // Ask on screen now; iOS cannot show the permission prompt from the background.
@@ -597,7 +621,8 @@ final class MioViewModel {
         }
     }
 
-    func correctTranscript(sessionID: UUID, segmentID: UUID, text: String) async -> Bool {
+    /// `offersVocabulary` is false for "Återställ original": going back is not a new word.
+    func correctTranscript(sessionID: UUID, segmentID: UUID, text: String, offersVocabulary: Bool = true) async -> Bool {
         guard MioMaintenanceState.shared.beginWrite() else { return false }
         defer { MioMaintenanceState.shared.endWrite() }
         guard let session = session(id: sessionID), session.endedAt != nil,
@@ -611,6 +636,7 @@ final class MioViewModel {
             errorMessage = "En textdel kan inte vara tom. Radera hela sessionen om den inte ska sparas."
             return false
         }
+        let before = session.transcripts.first(where: { $0.id == segmentID })?.displayText ?? ""
         do {
             let token = try await operationToken(for: sessionID)
             let stored = try await repository.correctTranscript(sessionID: sessionID, segmentID: segmentID,
@@ -618,9 +644,99 @@ final class MioViewModel {
             replaceSessionInMemory(stored)
             exportURL = nil
             errorMessage = nil
+            // In the background: a health check must never hold up saving the correction.
+            guard offersVocabulary else { return true }
+            vocabularyCheck = Task { [weak self] in
+                await self?.offerVocabulary(sessionID: sessionID, segmentID: segmentID, before: before, after: correction)
+            }
             return true
         } catch {
             errorMessage = "Kunde inte spara textändringen: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    // MARK: Own words from the phone (fas 4)
+
+    /// Asks once per word, only after her own correction of an ended session replaced one word
+    /// or a short phrase, and only when Pianissimo says it takes own words. A failed check just
+    /// means no question; nothing here can affect transcription.
+    func offerVocabulary(sessionID: UUID, segmentID: UUID, before: String, after: String) async {
+        guard let phrase = MioVocabulary.candidate(original: before, correction: after),
+              !MioVocabularyAskedLog.hasAsked(phrase, in: vocabularyDefaults) else { return }
+        if serverVocabularyUpload == nil, let transport = try? vocabularyTransport() {
+            let health = try? await transport.health()
+            transport.cancel()
+            if let health { serverVocabularyUpload = health.vocabularyUpload == true }
+        }
+        guard serverVocabularyUpload == true, session(id: sessionID)?.endedAt != nil else { return }
+        vocabularyOffer = MioVocabularyOffer(sessionID: sessionID, segmentID: segmentID, phrase: phrase)
+    }
+
+    /// Ja sends the word once; Nej only remembers that she was asked. Either way Mio never asks
+    /// about this word again.
+    func answerVocabularyOffer(accept: Bool) async {
+        guard let offer = takeVocabularyOffer() else { return }
+        if accept { _ = await sendVocabulary(segmentID: offer.segmentID, phrase: offer.phrase) }
+    }
+
+    /// For the alert's buttons: the question closes at once, the word is sent afterwards.
+    func respondToVocabularyOffer(accept: Bool) {
+        guard let offer = takeVocabularyOffer(), accept else { return }
+        Task { [weak self] in _ = await self?.sendVocabulary(segmentID: offer.segmentID, phrase: offer.phrase) }
+    }
+
+    private func takeVocabularyOffer() -> MioVocabularyOffer? {
+        guard let offer = vocabularyOffer else { return nil }
+        vocabularyOffer = nil
+        MioVocabularyAskedLog.record(offer.phrase, in: vocabularyDefaults)
+        return offer
+    }
+
+    /// One call per tap. A failure leaves one sentence and a way to send it again from the
+    /// correction; there is no automatic repetition. The word is not logged.
+    @discardableResult
+    func sendVocabulary(segmentID: UUID, phrase: String) async -> Bool {
+        guard vocabularySendingSegmentID == nil, let phrase = MioVocabulary.validPhrase(phrase) else { return false }
+        vocabularySendingSegmentID = segmentID
+        defer { vocabularySendingSegmentID = nil }
+        do {
+            let transport = try vocabularyTransport()
+            defer { transport.cancel() }
+            let reply = try await transport.uploadVocabulary(phrase)
+            // `vocabulary` counts the new word only after the next transcription, so the shown
+            // count stays as the last health check reported it.
+            vocabularyFailures[segmentID] = nil
+            vocabularyMessage = (segmentID, reply.added ? "”\(phrase)” finns nu i ordlistan på datorn."
+                                                        : "”\(phrase)” fanns redan i ordlistan på datorn.")
+            return true
+        } catch {
+            vocabularyFailures[segmentID] = phrase
+            let message = (error as? MioVocabularyError)?.errorDescription
+                ?? MioVocabularyError.network.errorDescription ?? "Ordet kom inte fram till datorn."
+            vocabularyMessage = (segmentID, message)
+            MioLog.notice(.transcription, "own word was not saved on the PC")
+            return false
+        }
+    }
+
+    /// The subject she confirmed in the review sheet; an empty field removes it.
+    func setLessonSubject(sessionID: UUID, subject: String) async -> Bool {
+        guard MioMaintenanceState.shared.beginWrite() else { return false }
+        defer { MioMaintenanceState.shared.endWrite() }
+        guard let session = session(id: sessionID), session.isLesson, session.endedAt != nil else {
+            errorMessage = "Ämnet kan sparas när lektionen har avslutats."
+            return false
+        }
+        do {
+            let token = try await operationToken(for: sessionID)
+            let stored = try await repository.setSubject(sessionID: sessionID, subject: subject, token: token)
+            replaceSessionInMemory(stored)
+            exportURL = nil
+            errorMessage = nil
+            return true
+        } catch {
+            errorMessage = "Kunde inte spara ämnet: \(error.localizedDescription)"
             return false
         }
     }

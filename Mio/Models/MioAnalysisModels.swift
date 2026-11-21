@@ -10,8 +10,11 @@ struct MioAnalysisFragment: Codable, Hashable, Sendable {
     let occurredAt: String
     /// Captured with the approved text; excluded from the established server wire.
     var sourceRevision: Int? = nil
+    /// Lesson notes version 2 only (`speakerRole`); absent when the speaker is unknown. The
+    /// request leaves it out for every other route, whose decoder rejects unknown fields.
+    var speakerRole: MioSpeakerRole? = nil
 
-    private enum CodingKeys: String, CodingKey { case id, text, occurredAt }
+    private enum CodingKeys: String, CodingKey { case id, text, occurredAt, speakerRole }
 
     var segmentID: UUID? {
         let parts = id.split(separator: ":", omittingEmptySubsequences: false)
@@ -34,7 +37,16 @@ struct MioAnalysisFragment: Codable, Hashable, Sendable {
         return text
     }
 
-    static func make(from segment: TranscriptSegment) -> [Self] {
+    static func make(from segment: TranscriptSegment) -> [Self] { make(from: segment, role: nil) }
+
+    /// A lesson's fragments with each speaker's role (most characters = teacher, counted on the
+    /// original segments); the text and identities are exactly those of `make(from:)`.
+    static func lessonFragments(in session: MioSession) -> [Self] {
+        let roles = MioSpeakerRoles.roles(in: session)
+        return session.transcripts.flatMap { make(from: $0, role: $0.speaker.flatMap { roles[$0] }) }
+    }
+
+    static func make(from segment: TranscriptSegment, role: MioSpeakerRole?) -> [Self] {
         var parts: [String] = []
         var part = ""
         var bytes = 0
@@ -52,7 +64,7 @@ struct MioAnalysisFragment: Codable, Hashable, Sendable {
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
             return Self(id: "\(segment.id.uuidString):\(index)", text: text,
                         occurredAt: ISO8601DateFormatter().string(from: segment.audioStartedAt),
-                        sourceRevision: MioSourceRevision.currentRevision(of: segment))
+                        sourceRevision: MioSourceRevision.currentRevision(of: segment), speakerRole: role)
         }
     }
 }
@@ -73,6 +85,9 @@ struct MioAnalysisRequest: Codable, Sendable {
     var contextLimited: Bool = false
     var usesContextContract: Bool = false
     var queueSize: Int? = nil
+    /// Sent to `/v2/lesson-notes` with speaker roles, when the gateway lists `lesson-notes-v2`
+    /// for the lesson task. Decided per send from the status, never stored.
+    var usesLessonNotesV2: Bool = false
 
     var allFragments: [MioAnalysisFragment] { contextFragments + fragments }
 
@@ -95,7 +110,9 @@ struct MioAnalysisRequest: Codable, Sendable {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(mode, forKey: .mode)
         try values.encode(timeZone, forKey: .timeZone)
-        try values.encode(fragments, forKey: .fragments)
+        // Roles only for lesson notes v2: v1 and the everyday routes reject unknown fields.
+        try values.encode(usesLessonNotesV2 ? fragments : fragments.map { var plain = $0; plain.speakerRole = nil; return plain },
+                          forKey: .fragments)
         if usesContextContract {
             try values.encode(contextFragments, forKey: .contextFragments)
             try values.encode(priorDecisions, forKey: .priorDecisions)
@@ -139,7 +156,8 @@ struct MioAnalysisRequest: Codable, Sendable {
               priorDecisions.allSatisfy({ [.plan, .task, .note].contains($0.kind)
                   && (1...Self.maximumHintSources).contains($0.sourceIDs.count) && Set($0.sourceIDs).count == $0.sourceIDs.count
                   && Set($0.sourceIDs).isSubset(of: contextIDs) }),
-              usesContextContract ? mode == .everyday : (contextFragments.isEmpty && priorDecisions.isEmpty && !contextLimited)
+              usesContextContract ? mode == .everyday : (contextFragments.isEmpty && priorDecisions.isEmpty && !contextLimited),
+              !usesLessonNotesV2 || mode == .lesson
         else { throw MioCloudError.invalidContext }
         let data = try JSONEncoder().encode(self)
         guard data.count <= (all.count > 8 ? 40_000 : 20_000) else { throw MioCloudError.invalidContext }
@@ -184,9 +202,42 @@ struct MioAnalysisResult: Codable, Hashable, Sendable {
     let uncertainties: [String]
     var sections: [MioLessonSection]? = nil
     var metadata: MioAnalysisMetadata? = nil
+    /// Lesson notes version 2: the teacher's explicit exam hints ("Viktigt till provet").
+    var examHints: [MioLessonHighlight]? = nil
+    /// Lesson notes version 2: the subject the model suggests. Only shown as a suggestion.
+    var subjectSuggestion: String? = nil
+
+    static let maximumExamHints = 8
+
+    /// Drops exam hints that break the contract (1–300 characters, 1–4 sources from the
+    /// request, an exact quote from one of them) and a subject that is not 1–40 characters on
+    /// one line. The rest of the answer stands, as in the gateway.
+    func droppingInvalidLessonExtras(for request: MioAnalysisRequest) -> Self {
+        var result = self
+        let sources = Dictionary(uniqueKeysWithValues: request.allFragments.map { ($0.id, $0.text) })
+        result.examHints = examHints.map { hints in
+            hints.filter { hint in
+                let text = hint.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return !text.isEmpty && hint.text.count <= 300 && (1...4).contains(hint.sourceIDs.count)
+                    && Set(hint.sourceIDs).count == hint.sourceIDs.count && hint.sourceIDs.allSatisfy { sources[$0] != nil }
+                    && !hint.evidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && hint.evidence.utf8.count <= 600
+                    && hint.sourceIDs.contains { sources[$0]?.contains(hint.evidence) == true }
+            }
+        }
+        result.subjectSuggestion = subjectSuggestion.flatMap { value in
+            MioLessonSubject.clean(value) == value ? value : nil
+        }
+        return result
+    }
 
     func validate(against request: MioAnalysisRequest) throws {
         _ = try request.validatedData()
+        if examHints != nil || subjectSuggestion != nil {
+            guard request.mode == .lesson, request.usesLessonNotesV2, sections != nil else { throw MioCloudError.invalidResponse }
+        }
+        let checked = droppingInvalidLessonExtras(for: request)
+        guard (examHints?.count ?? 0) <= Self.maximumExamHints, checked.examHints == examHints,
+              checked.subjectSuggestion == subjectSuggestion else { throw MioCloudError.invalidResponse }
         if let sections {
             guard request.mode == .lesson, highlights.isEmpty, sections.count <= 12,
                   candidates.allSatisfy({ [.task, .plan].contains($0.kind) }),
@@ -287,12 +338,17 @@ struct MioAnalysisRecord: Identifiable, Codable, Hashable, Sendable {
     /// sections, so it counts as handled and is never sent again automatically; the lesson shows
     /// its original text instead of notes.
     var isUnprocessed: Bool? = nil
+    /// Lesson notes version 2 (additive, 2026-11-20): this part's exam hints, same shape as the answer.
+    var examHints: [MioLessonHighlight]? = nil
+    /// Lesson notes version 2: the model's subject for this part. Her confirmed subject is `MioSession.subject`.
+    var subjectSuggestion: String? = nil
 
     var isUnprocessedLessonPart: Bool { isUnprocessed == true }
 
     /// An unprocessed marker carries no model output at all.
     var unprocessedShapeIsValid: Bool {
-        !isUnprocessedLessonPart || (sections == [] && highlights.isEmpty && uncertainties.isEmpty && metadata == nil)
+        !isUnprocessedLessonPart || (sections == [] && highlights.isEmpty && uncertainties.isEmpty && metadata == nil
+            && (examHints ?? []).isEmpty && subjectSuggestion == nil)
     }
 
     var sourceRevisionsAreValid: Bool {
@@ -333,7 +389,7 @@ struct MioLessonDocument {
     let session: MioSession
     let records: [MioAnalysisRecord]
 
-    var fragments: [MioAnalysisFragment] { session.transcripts.flatMap(MioAnalysisFragment.make) }
+    var fragments: [MioAnalysisFragment] { MioAnalysisFragment.lessonFragments(in: session) }
     var orderedRecords: [MioAnalysisRecord] {
         let segmentOrder = Dictionary(session.transcripts.enumerated().map { ($0.element.id, $0.offset) },
                                       uniquingKeysWith: min)
@@ -352,6 +408,19 @@ struct MioLessonDocument {
                 let left = position($0.element), right = position($1.element)
                 return left == right ? $0.offset < $1.offset : left < right
             }.map(\.element)
+    }
+    /// Every part's exam hints in source order, without exact duplicates ("Viktigt till provet").
+    var examHints: [MioLessonHighlight] {
+        var seen: Set<String> = []
+        return orderedRecords.flatMap { $0.examHints ?? [] }.filter { seen.insert($0.text).inserted }
+    }
+    /// The subject most parts suggested; on a tie the earliest part's.
+    var subjectSuggestion: String? {
+        let suggestions = orderedRecords.compactMap(\.subjectSuggestion)
+        var counts: [String: Int] = [:]
+        for subject in suggestions { counts[subject, default: 0] += 1 }
+        guard let best = counts.values.max() else { return nil }
+        return suggestions.first { counts[$0] == best }
     }
     /// Fragments with notes, or marked as impossible to process; neither is sent again.
     private var handledIDs: Set<String> { Set(orderedRecords.flatMap(\.fragmentIDs)) }
@@ -386,8 +455,14 @@ struct MioLessonDocument {
         return fragments.filter { ids.contains($0.id) }.map(\.text).joined(separator: "\n")
     }
     var markdown: String {
-        var parts = ["# \(session.title ?? "Lektion")", session.startedAt.formatted(date: .abbreviated, time: .shortened),
-                     "AI-utkast. \(progress)"]
+        var parts = ["# \(session.title ?? "Lektion")", session.startedAt.formatted(date: .abbreviated, time: .shortened)]
+        if let subject = session.subject { parts.append("Ämne: \(subject)") }
+        // First in the note and in the copy (user decision 2026-11-19), each with its quote.
+        let hints = examHints
+        if !hints.isEmpty {
+            parts.append("## Viktigt till provet\n\n" + hints.map { "- \($0.text)\n  Citat: ”\($0.evidence)”" }.joined(separator: "\n"))
+        }
+        parts.append("AI-utkast. \(progress)")
         if !orderedRecords.isEmpty { parts.append(freshness.message) }
         if let gaps = session.captureGaps, !gaps.isEmpty {
             parts.append("Ofullständigt ljudunderlag: \(gaps.count) avbrott. Tal under dessa intervall saknas och kan inte återskapas från texten.")

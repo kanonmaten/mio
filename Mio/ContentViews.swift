@@ -252,6 +252,12 @@ struct SessionEditorView: View {
                 } message: {
                     Text("Namnet visas bara på telefonen; AI ser bara \(MioSpeakerLabel.defaultName(renamingSpeaker ?? 1)). Lämna tomt för att återgå.")
                 }
+                .alert("Ska ”\(sessionModel.vocabularyOffer?.phrase ?? "")” bli ett eget ord?", isPresented: vocabularyOfferIsPresented) {
+                    Button("Ja, lägg till") { sessionModel.respondToVocabularyOffer(accept: true) }
+                    Button("Nej", role: .cancel) { sessionModel.respondToVocabularyOffer(accept: false) }
+                } message: {
+                    Text("Mio skickar ordet till ordlistan på datorn, så att transkriptionen känner igen det nästa gång. Ordet går aldrig till AI-tjänsten. Mio frågar bara en gång per ord.")
+                }
             } else {
                 ContentUnavailableView(
                     "Sessionen finns inte",
@@ -434,7 +440,8 @@ struct SessionEditorView: View {
                             Task {
                                 await saveCorrection(
                                     segmentID: segment.id,
-                                    text: segment.text
+                                    text: segment.text,
+                                    offersVocabulary: false
                                 )
                             }
                         }
@@ -442,9 +449,35 @@ struct SessionEditorView: View {
                     }
                 }
                 .font(.subheadline)
+                vocabularyStatus(for: segment)
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// One sentence about the own word from this correction, and "Skicka igen" after a failure.
+    /// Sending again is always her own tap; nothing repeats by itself.
+    @ViewBuilder
+    private func vocabularyStatus(for segment: TranscriptSegment) -> some View {
+        if let message = sessionModel.vocabularyMessage, message.segmentID == segment.id {
+            Text(message.text).font(.footnote).foregroundStyle(.secondary)
+        }
+        if let phrase = sessionModel.vocabularyFailures[segment.id] {
+            Button(sessionModel.vocabularySendingSegmentID == segment.id ? "Skickar …" : "Skicka ”\(phrase)” till datorn igen") {
+                Task { await sessionModel.sendVocabulary(segmentID: segment.id, phrase: phrase) }
+            }
+            .font(.subheadline)
+            .buttonStyle(.borderless)
+            .disabled(sessionModel.vocabularySendingSegmentID != nil)
+        }
+    }
+
+    private var vocabularyOfferIsPresented: Binding<Bool> {
+        Binding(
+            get: { sessionModel.vocabularyOffer?.sessionID == sessionID },
+            // The buttons answer; an alert has no other way to close.
+            set: { _ in }
+        )
     }
 
     @ViewBuilder
@@ -529,12 +562,13 @@ struct SessionEditorView: View {
         isSavingMetadata = false
     }
 
-    private func saveCorrection(segmentID: UUID, text: String) async {
+    private func saveCorrection(segmentID: UUID, text: String, offersVocabulary: Bool = true) async {
         savingSegmentID = segmentID
         let didSave = await sessionModel.correctTranscript(
             sessionID: sessionID,
             segmentID: segmentID,
-            text: text
+            text: text,
+            offersVocabulary: offersVocabulary
         )
         if didSave,
            let segment = sessionModel.session(id: sessionID)?.transcripts.first(where: { $0.id == segmentID }) {

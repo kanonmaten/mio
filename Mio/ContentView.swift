@@ -55,6 +55,10 @@ struct ContentView: View {
             }
             .disabled(maintenance.blocksWork)
         }
+        .sheet(item: $navigation.presentedLessonReview) { review in
+            MioLessonReviewSheet(sessionID: review.id, model: model, content: contentModel)
+                .disabled(maintenance.blocksWork)
+        }
         .onOpenURL { url in
             navigation.receive(link: url)
             resolveLink()
@@ -142,7 +146,8 @@ struct ContentView: View {
     private func resolveNotificationRoute() {
         guard storesLoaded, !maintenance.blocksWork, navigation.pendingRoute != nil else { return }
         if showSettings { showSettings = false; return }
-        navigation.resolvePending(using: notificationDestination)
+        navigation.resolvePending(using: notificationDestination,
+                                  lessonExists: { model.session(id: $0)?.isLesson == true })
     }
 }
 
@@ -181,10 +186,16 @@ private struct MioCaptureView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    StatusHeader(model: model)
-                    ControlsCard(model: model)
-                    if let session = model.currentSession, session.endedAt == nil {
-                        LiveTranscriptCard(model: model, session: session)
+                    // During a lesson a calm view replaces the status and live text (fas 3).
+                    if model.isLessonActive, let session = model.currentSession {
+                        MioLessonCalmView(model: model, session: session)
+                        ControlsCard(model: model)
+                    } else {
+                        StatusHeader(model: model)
+                        ControlsCard(model: model)
+                        if let session = model.currentSession, session.endedAt == nil {
+                            LiveTranscriptCard(model: model, session: session)
+                        }
                     }
                     MioStatusChips(model: model)
                     if !workflow.pendingLessonIDs.isEmpty {

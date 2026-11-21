@@ -302,6 +302,8 @@ enum MioKeychainAccess {
 }
 
 enum MioCloudService {
+    /// Seconds the app waits for `/v1` and `/v2/lesson-notes`.
+    static let lessonNotesTimeout: TimeInterval = 200
     typealias ByteTransport = @Sendable (URLRequest) async throws -> (AsyncThrowingStream<UInt8, Error>, URLResponse)
 
     static func statusV2(connection: MioCloudConnection, transport: ByteTransport? = nil) async throws -> MioGatewayStatusV2 {
@@ -337,7 +339,9 @@ enum MioCloudService {
     static func analyze(_ payload: MioAnalysisRequest, connection: MioCloudConnection, transport: ByteTransport? = nil) async throws -> MioAnalysisResult {
         let contextContract = payload.mode == .everyday && payload.usesContextContract
         let origin = connection.endpoint.deletingLastPathComponent().deletingLastPathComponent()
-        let route = payload.mode == .lesson ? "v1/lesson-notes" : contextContract ? "v2/analyze" : "v1/analyze"
+        let lessonV2 = payload.mode == .lesson && payload.usesLessonNotesV2
+        let route = payload.mode == .lesson ? (lessonV2 ? "v2/lesson-notes" : "v1/lesson-notes")
+            : contextContract ? "v2/analyze" : "v1/analyze"
         let target = MioCloudConnection(endpoint: origin.appendingPathComponent(route), token: connection.token,
             observedConfigurationRevision: connection.observedConfigurationRevision)
         var event = MioDiagnosticEvent(operation: payload.mode == .lesson ? .lessonNotes : contextContract ? .analyzeContext : .analyze)
@@ -359,9 +363,25 @@ enum MioCloudService {
                                      try discovery.requireTask(.everyday)
                                  } : nil,
                                  transport: transport) { data in
-            try validateWire(data, lesson: payload.mode == .lesson, contextContract: contextContract)
+            try validateWire(data, lesson: payload.mode == .lesson, contextContract: contextContract, lessonV2: lessonV2)
             let result: MioAnalysisResult
-            if payload.mode == .lesson {
+            if lessonV2 {
+                struct LessonReplyV2: Decodable {
+                    let examHints: [MioLessonHighlight]
+                    let subject: String?
+                    let candidates: [MioAnalysisCandidate]
+                    let sections: [MioLessonSection]
+                    let uncertainties: [String]
+                    let metadata: MioAnalysisMetadata
+                }
+                guard let reply = try? JSONDecoder().decode(LessonReplyV2.self, from: data),
+                      reply.examHints.count <= MioAnalysisResult.maximumExamHints else { throw MioCloudError.invalidResponse }
+                // An invalid exam hint or subject is dropped and the rest stands (contract v2).
+                result = MioAnalysisResult(candidates: reply.candidates, highlights: [], uncertainties: reply.uncertainties,
+                                           sections: reply.sections, metadata: reply.metadata,
+                                           examHints: reply.examHints, subjectSuggestion: reply.subject)
+                    .droppingInvalidLessonExtras(for: payload)
+            } else if payload.mode == .lesson {
                 struct LessonReply: Decodable {
                     let candidates: [MioAnalysisCandidate]
                     let sections: [MioLessonSection]
@@ -424,7 +444,8 @@ enum MioCloudService {
     }
 
     // Codable ignores unknown keys; validate the wire shape before decoding it.
-    static func validateWire(_ data: Data, lesson: Bool, ask: Bool = false, contextContract: Bool = false) throws {
+    static func validateWire(_ data: Data, lesson: Bool, ask: Bool = false, contextContract: Bool = false,
+                             lessonV2: Bool = false) throws {
         func exact(_ value: Any?, _ keys: Set<String>) -> Bool {
             guard let object = value as? [String: Any] else { return false }
             return Set(object.keys) == keys
@@ -436,7 +457,8 @@ enum MioCloudService {
             guard exact(root, ["answer"]) else { throw MioCloudError.invalidResponse }
             return
         }
-        let expected: Set<String> = lesson ? ["candidates", "sections", "uncertainties", "metadata"]
+        let expected: Set<String> = lessonV2 ? ["examHints", "subject", "candidates", "sections", "uncertainties", "metadata"]
+            : lesson ? ["candidates", "sections", "uncertainties", "metadata"]
             : ["candidates", "highlights", "uncertainties"]
         guard exact(root, expected), let candidates = root["candidates"] as? [[String: Any]],
               candidates.allSatisfy({ exact($0, contextContract
@@ -448,6 +470,12 @@ enum MioCloudService {
                   sections.allSatisfy({ exact($0, ["heading", "body", "sourceIDs", "evidence"]) }),
                   exact(root["metadata"], ["provider", "model", "promptVersion", "lessonIntervalSeconds"])
             else { throw MioCloudError.invalidResponse }
+            if lessonV2 {
+                guard let hints = root["examHints"] as? [[String: Any]],
+                      hints.allSatisfy({ exact($0, ["text", "sourceIDs", "evidence"]) }),
+                      root["subject"] is NSNull || root["subject"] is String
+                else { throw MioCloudError.invalidResponse }
+            }
         } else {
             guard let highlights = root["highlights"] as? [[String: Any]],
                   highlights.allSatisfy({ exact($0, ["text", "sourceIDs", "evidence"]) })
@@ -518,8 +546,11 @@ enum MioCloudService {
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.waitsForConnectivity = false
-        configuration.timeoutIntervalForRequest = 45
-        configuration.timeoutIntervalForResource = 55
+        // Lesson notes may take up to 180 s in the gateway on a reasoning model; the app waits
+        // 200 s so the gateway's own error (provider_timeout) arrives first (contract v2).
+        let lessonNotes = event.operation == .lessonNotes
+        configuration.timeoutIntervalForRequest = lessonNotes ? Self.lessonNotesTimeout : 45
+        configuration.timeoutIntervalForResource = lessonNotes ? Self.lessonNotesTimeout : 55
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
         let request = try makeRequest(body, connection: connection, method: method)
