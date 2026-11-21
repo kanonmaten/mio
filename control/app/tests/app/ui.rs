@@ -4,6 +4,8 @@ use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Bounds, Entity, TestAppContext, WindowBounds, WindowOptions, px, size};
 use mio_control::model::StatusModel;
 use mio_control::shell::{Page, Shell};
+use mio_control_core::backup::BackupStatus;
+use mio_control_core::format::now_seconds;
 use mio_control_core::status::{GatewayStatus, Overview, PianissimoHealth, TailscaleStatus, TaskStatus, UnitState};
 
 fn healthy() -> Overview {
@@ -116,6 +118,68 @@ fn a_low_quota_is_called_out(cx: &mut TestAppContext) {
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
         assert_eq!(window.find("gateway-state").label(), Some("Kvoten nästan slut"));
+    })
+    .unwrap();
+}
+
+fn with_backup(backup: BackupStatus) -> Overview {
+    let mut overview = healthy();
+    overview.gateway.as_mut().unwrap().backup = Some(backup);
+    overview
+}
+
+#[gpui_kit::test]
+fn an_older_gateway_shows_no_backup_card(cx: &mut TestAppContext) {
+    let (handle, status, _) = open(cx);
+    feed(cx, &status, healthy());
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("gateway-state").is_some());
+        assert!(window.try_find("backup-state").is_none());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn the_latest_backup_shows_when_how_many_and_where(cx: &mut TestAppContext) {
+    let (handle, status, _) = open(cx);
+    feed(cx, &status, with_backup(BackupStatus { latest_at: Some(now_seconds() - 2 * 3_600), count: 3, bytes: 4_200_000 }));
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(window.find("backup-state").label(), Some("Aktuell"));
+        assert_eq!(window.find("backup-sparade").label(), Some("3 kopior, 4,2 MB"));
+        assert_eq!(window.find("backup-plats").label(), Some("/var/lib/mio-gateway/backups/"));
+        assert!(window.find("backup-note").label().is_some_and(|note| note.contains("i appen under Inställningar")));
+        // "i natt", "i dag" or "i går" depending on the time zone and hour the test runs at.
+        assert!(window.find("backup-senast").label().is_some_and(|when| when.starts_with("i ")));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn a_backup_older_than_two_days_is_a_warning(cx: &mut TestAppContext) {
+    let (handle, status, _) = open(cx);
+    feed(cx, &status, with_backup(BackupStatus { latest_at: Some(now_seconds() - 3 * 86_400), count: 14, bytes: 12_345_678 }));
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(window.find("backup-state").label(), Some("Äldre än två dygn"));
+        assert_eq!(window.find("backup-senast").label(), Some("för 3 dagar sedan"));
+        // The tooltip says why the dot is amber; the gateway itself still runs.
+        assert_eq!(window.find("overview-summary").label(), Some("Gateway kör, säkerhetskopian är gammal · Pianissimo redo · Tailscale ok"));
+        assert_eq!(window.find("gateway-state").label(), Some("Kör"));
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn no_backup_yet_says_so(cx: &mut TestAppContext) {
+    let (handle, status, _) = open(cx);
+    feed(cx, &status, with_backup(BackupStatus { latest_at: None, count: 0, bytes: 0 }));
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(window.find("backup-state").label(), Some("Ingen än"));
+        assert_eq!(window.find("backup-senast").label(), Some("Ingen säkerhetskopia än"));
+        assert!(window.try_find("backup-sparade").is_none());
     })
     .unwrap();
 }

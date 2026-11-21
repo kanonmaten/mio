@@ -3,6 +3,8 @@
 
 use serde_json::Value;
 
+use crate::backup::BackupStatus;
+use crate::format::now_seconds;
 use crate::tray_icon::TrayStatus;
 
 /// A systemd unit as the panel describes it.
@@ -197,6 +199,8 @@ pub struct GatewayStatus {
     pub tasks: Vec<TaskStatus>,
     /// `None` from a gateway without the counters, or when it answers `usage: null`.
     pub usage: Option<Usage>,
+    /// `None` from a gateway without backups (or a malformed field): the panel then shows nothing.
+    pub backup: Option<BackupStatus>,
 }
 
 impl GatewayStatus {
@@ -229,6 +233,7 @@ impl GatewayStatus {
             quota_reset: quota.and_then(|quota| quota.get("resetAt")).and_then(Value::as_str).map(str::to_owned),
             tasks,
             usage: body.get("usage").and_then(Usage::parse),
+            backup: body.get("backup").and_then(BackupStatus::parse),
         }
     }
 
@@ -239,6 +244,11 @@ impl GatewayStatus {
     /// Less than a tenth of the day's quota left.
     pub fn quota_is_low(&self) -> bool {
         self.quota.as_ref().is_some_and(|(limit, remaining, _)| *limit > 0 && remaining * 10 < *limit)
+    }
+
+    /// The newest nightly backup is more than 48 hours old.
+    pub fn backup_is_stale(&self, now_seconds: u64) -> bool {
+        self.backup.as_ref().is_some_and(|backup| backup.is_stale(now_seconds))
     }
 }
 
@@ -348,9 +358,15 @@ pub struct RecentStarts {
 }
 
 impl Overview {
-    /// The tray dot: red when an installed service is down, amber while something loads or the
-    /// quota runs low, green when everything runs. `None` before anything is known.
+    /// The tray dot now; see [`Overview::tray_status_at`].
     pub fn tray_status(&self) -> Option<TrayStatus> {
+        self.tray_status_at(now_seconds())
+    }
+
+    /// The tray dot: red when an installed service is down, amber while something loads, the
+    /// quota runs low or the nightly backup is older than 48 hours, green when everything runs.
+    /// `None` before anything is known. An old backup never makes it red.
+    pub fn tray_status_at(&self, now_seconds: u64) -> Option<TrayStatus> {
         let units = [&self.gateway_unit, &self.transcription_unit];
         if units.iter().all(|unit| **unit == UnitState::Unknown) {
             return None;
@@ -364,15 +380,24 @@ impl Overview {
         }
         let busy = units.iter().any(|unit| matches!(unit, UnitState::Starting | UnitState::Stopping | UnitState::NotInstalled | UnitState::Unknown))
             || self.pianissimo.as_ref().is_some_and(|health| !health.is_ready())
-            || self.gateway.as_ref().is_some_and(GatewayStatus::quota_is_low);
+            || self.gateway.as_ref().is_some_and(GatewayStatus::quota_is_low)
+            || self.gateway.as_ref().is_some_and(|gateway| gateway.backup_is_stale(now_seconds));
         Some(if busy { TrayStatus::Warning } else { TrayStatus::Ok })
     }
 
-    /// The tray tooltip, one part per service: "Gateway kör · Pianissimo redo · Tailscale ok".
+    /// The tray tooltip now; see [`Overview::summary_at`].
     pub fn summary(&self) -> String {
+        self.summary_at(now_seconds())
+    }
+
+    /// The tray tooltip, one part per service: "Gateway kör · Pianissimo redo · Tailscale ok".
+    pub fn summary_at(&self, now_seconds: u64) -> String {
         let gateway = match (&self.gateway_unit, self.gateway_health) {
             (UnitState::Running, Some(false)) => "Gateway svarar inte".to_owned(),
             (UnitState::Running, _) if self.gateway.as_ref().is_some_and(GatewayStatus::quota_is_low) => "Gateway kör, kvoten nästan slut".to_owned(),
+            (UnitState::Running, _) if self.gateway.as_ref().is_some_and(|gateway| gateway.backup_is_stale(now_seconds)) => {
+                "Gateway kör, säkerhetskopian är gammal".to_owned()
+            }
             (state, _) => format!("Gateway {}", state.label().to_lowercase()),
         };
         let pianissimo = match (&self.transcription_unit, &self.pianissimo) {
@@ -486,6 +511,29 @@ mod tests {
         // A gateway older than the post-grilling contract: no reasoning, dialect or usage.
         assert_eq!((status.tasks[0].reasoning_label(), status.usage.as_ref()), (None, None));
         assert!(!GatewayStatus::parse(&json!({"quota": null})).quota_is_low());
+        assert_eq!(status.backup, None, "a gateway without backups sends no field");
+    }
+
+    #[test]
+    fn the_backup_field_is_read_and_an_old_copy_turns_the_dot_amber_not_red() {
+        // 2026-11-20 03:12:00 UTC, made-up values in the shape of the contract.
+        let night = 1_795_144_320;
+        let body = json!({"backup": {"latestAt": "2026-11-20T03:12:00Z", "count": 3, "bytes": 4_200_000}});
+        let gateway = GatewayStatus::parse(&body);
+        assert_eq!(gateway.backup, Some(BackupStatus { latest_at: Some(night), count: 3, bytes: 4_200_000 }));
+        let mut overview = healthy();
+        overview.gateway = Some(gateway);
+        let fresh = night + 47 * 3_600;
+        let old = night + 49 * 3_600;
+        assert_eq!((overview.tray_status_at(fresh), overview.summary_at(fresh).as_str()), (Some(TrayStatus::Ok), "Gateway kör · Pianissimo redo · Tailscale ok"));
+        assert_eq!(overview.tray_status_at(old), Some(TrayStatus::Warning));
+        assert_eq!(overview.summary_at(old), "Gateway kör, säkerhetskopian är gammal · Pianissimo redo · Tailscale ok");
+        // Still red when a service is down, never redder because of the copy.
+        overview.transcription_unit = UnitState::Failed;
+        assert_eq!(overview.tray_status_at(old), Some(TrayStatus::Error));
+        // No copy yet is not a warning.
+        let none = GatewayStatus::parse(&json!({"backup": {"latestAt": null, "count": 0, "bytes": 0}}));
+        assert!(none.backup.is_some() && !none.backup_is_stale(old));
     }
 
     #[test]

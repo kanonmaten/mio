@@ -13,6 +13,7 @@ use gpui_kit::{
     RenderOnce, SharedString, Styled as _, Subscription, Window, div, prelude::FluentBuilder as _,
 };
 use gpui_kit::TestSupportExt as _;
+use mio_control_core::backup::BACKUP_DIRECTORY;
 use mio_control_core::command::{Command, Unit, UnitAction};
 use mio_control_core::format::{ago, count, now_seconds};
 use mio_control_core::status::{Overview, UnitState};
@@ -39,16 +40,23 @@ pub struct StatusCard {
     tone: Tone,
     state: SharedString,
     rows: Vec<(SharedString, SharedString)>,
+    note: Option<SharedString>,
     action: Option<AnyElement>,
 }
 
 impl StatusCard {
     pub fn new(id: &str, icon: IconName, title: &str, tone: Tone, state: impl Into<SharedString>) -> Self {
-        Self { id: id.to_owned().into(), icon, title: title.to_owned().into(), tone, state: state.into(), rows: Vec::new(), action: None }
+        Self { id: id.to_owned().into(), icon, title: title.to_owned().into(), tone, state: state.into(), rows: Vec::new(), note: None, action: None }
     }
 
     pub fn row(mut self, label: &str, value: impl Into<SharedString>) -> Self {
         self.rows.push((label.to_owned().into(), value.into()));
+        self
+    }
+
+    /// One muted sentence under the rows.
+    pub fn note(mut self, note: &str) -> Self {
+        self.note = Some(note.to_owned().into());
         self
     }
 
@@ -67,6 +75,8 @@ impl RenderOnce for StatusCard {
             Tone::Neutral => (Tag::secondary(), IconName::Info),
         };
         let state_id = ElementId::Name(format!("{}-state", self.id).into());
+        let note_id = ElementId::Name(format!("{}-note", self.id).into());
+        let card_id = self.id.clone();
         v_flex()
             .id(ElementId::Name(self.id.clone()))
             .gap_3()
@@ -91,9 +101,20 @@ impl RenderOnce for StatusCard {
                     h_flex()
                         .gap_3()
                         .justify_between()
-                        .child(div().text_color(cx.theme().muted_foreground).child(label))
-                        .child(div().min_w_0().truncate().child(value))
+                        .child(div().text_color(cx.theme().muted_foreground).child(label.clone()))
+                        .child(
+                            div()
+                                .id(ElementId::Name(format!("{card_id}-{}", label.to_lowercase()).into()))
+                                .test_support()
+                                .aria_label(value.clone())
+                                .min_w_0()
+                                .truncate()
+                                .child(value),
+                        )
                 })))
+            })
+            .when_some(self.note, |card, note| {
+                card.child(div().id(note_id).test_support().aria_label(note.clone()).text_sm().text_color(cx.theme().muted_foreground).child(note))
             })
             .when_some(self.action, |card, action| card.child(h_flex().justify_end().child(action)))
     }
@@ -199,6 +220,31 @@ pub fn gateway_card(overview: &Overview) -> StatusCard {
         }
     }
     card
+}
+
+/// The nightly backup from the gateway's `/v2/status`; `None` from a gateway without backups,
+/// so an older gateway shows no card. `utc_offset` gives the local offset at a time in seconds.
+pub fn backup_card(overview: &Overview, now: u64, utc_offset: impl Fn(u64) -> i64) -> Option<StatusCard> {
+    let backup = overview.gateway.as_ref()?.backup.as_ref()?;
+    let (tone, state) = match backup.latest_at {
+        None => (Tone::Neutral, "Ingen än"),
+        Some(_) if backup.is_stale(now) => (Tone::Warning, "Äldre än två dygn"),
+        Some(_) => (Tone::Ok, "Aktuell"),
+    };
+    let mut card = StatusCard::new("backup", IconName::HardDrive, "Säkerhetskopia", tone, state).row("Senast", backup.when(now, utc_offset));
+    if backup.count > 0 {
+        card = card.row("Sparade", backup.summary());
+    }
+    Some(card.row("Plats", BACKUP_DIRECTORY).note("Mio tar en kopia varje natt medan telefonen laddar. Du återställer en kopia i appen under Inställningar."))
+}
+
+/// The local time zone's offset from UTC at a time, in seconds; 0 if the time is out of range.
+pub fn local_offset(seconds: u64) -> i64 {
+    use chrono::{Offset as _, TimeZone as _};
+    i64::try_from(seconds)
+        .ok()
+        .and_then(|seconds| chrono::Local.timestamp_opt(seconds, 0).single())
+        .map_or(0, |time| i64::from(time.offset().fix().local_minus_utc()))
 }
 
 pub fn pianissimo_card(overview: &Overview) -> StatusCard {
@@ -350,7 +396,8 @@ impl Render for OverviewPage {
                             .child(tailscale_card(&overview, 8_787))
                             .child(gpu_card(&overview))
                             .child(update_card(&overview, now))
-                            .child(verification_card(receipt.as_ref(), now)),
+                            .child(verification_card(receipt.as_ref(), now))
+                            .children(backup_card(&overview, now, local_offset)),
                     ),
             )
     }

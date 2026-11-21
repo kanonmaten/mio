@@ -55,7 +55,7 @@ Två saker följer av siffrorna:
 Ritas i kod ([`core/src/tray_icon.rs`](core/src/tray_icon.rs)), så den behöver ingen bildfil och följer samma färger som temat.
 
 - **Märket:** en orange rundad kvadrat med ett grafit "M" i runda streck. M:et ligger lite upp och till vänster så att pricken bara klipper foten på högra benet.
-- **Pricken:** nere till höger, grön när allt kör, bärnsten när något laddar eller kvoten nästan är slut, röd när en tjänst är nere. En grafit ring skiljer pricken från det orange, så den syns på både ljus och mörk panel. Innan första statusen är läst finns ingen prick.
+- **Pricken:** nere till höger, grön när allt kör, bärnsten när något laddar, kvoten nästan är slut eller senaste säkerhetskopian är äldre än 48 timmar, röd när en tjänst är nere. En grafit ring skiljer pricken från det orange, så den syns på både ljus och mörk panel. Innan första statusen är läst finns ingen prick.
 - **Storlekar:** 22, 32, 48 och 64 px skickas till systemfältet, som väljer själv. Varje pixel är medelvärdet av 4 × 4 punkter, så kanterna blir mjuka även i 22 px.
 - **Verktygstipset** säger samma sak i ord, till exempel "Gateway kör · Pianissimo redo · Tailscale ok", så att färgen aldrig är ensam.
 

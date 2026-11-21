@@ -2,6 +2,7 @@
 
 pub mod ai_settings;
 pub mod atomic;
+pub mod backup;
 pub mod command;
 pub mod computer;
 pub mod credit;

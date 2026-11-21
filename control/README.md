@@ -20,7 +20,7 @@ Panelen läser repot den byggdes i (för uppdateringar och verifiering), så fly
 
 ## Sidorna
 
-Översikt har ett kort per del: gatewayen med dagens kvot, Pianissimo med modell, precision och antal egna ord, Tailscale, GPU:n, nattuppdateringen och senaste verifieringen. Tjänsterna kan startas om härifrån.
+Översikt har ett kort per del: gatewayen med dagens kvot, Pianissimo med modell, precision och antal egna ord, Tailscale, GPU:n, nattuppdateringen och senaste verifieringen. Tjänsterna kan startas om härifrån. Har gatewayen säkerhetskopior visar ett kort när den senaste kopian från telefonen togs ("i natt 03:12", "för 3 dagar sedan"), hur många kopior som sparas och hur mycket de tar sammanlagt, och att de ligger i `/var/lib/mio-gateway/backups/`. Kortet blir gult när senaste kopian är äldre än 48 timmar, eftersom telefonen ska ta en varje natt. En kopia återställs i appen under Inställningar, inte här. En äldre gateway utan säkerhetskopior visar inget kort.
 
 Kom igång är en guide för en ny dator. Den kontrollerar NVIDIA-drivrutinen, Rust och Tailscale, installerar gatewayen och Pianissimo i Konsole, ställer in Tailscale serve och visar parningskoden. Steg som redan är klara hoppas över, men alla går att köra igen.
 
@@ -38,7 +38,7 @@ Verifiering kör samma kontroller som GitHub (`mio-verify verify`) och visar res
 
 På Datorn kan panelen hålla datorn vaken så länge den kör, starta vid inloggning och klara sig utan ikon i systemfältet. Utan ikon öppnas fönstret direkt och panelen avslutas när du stänger det. Valen sparas i `~/.config/mio-control/installningar`.
 
-Ikonens meny har Öppna, omstart av gatewayen och Pianissimo, Pausa AI på datorn (stoppar gatewayen), Visa parningskod och Avsluta. Pricken på ikonen är grön när allt kör, bärnstensfärgad när något startar, laddar eller inte är installerat eller när dagens kvot nästan är slut, och röd när en tjänst har stannat, gatewayen inte svarar eller Tailscale inte är inloggat. Stannar en tjänst, eller startar gatewayen eller Pianissimo fler än tre gånger på tio minuter, kommer också en skrivbordsnotis. Omstarterna räknas ur systemd:s rader i journalen, så de syns bara om ditt konto får läsa den (gruppen `systemd-journal`). Samma notis kommer högst en gång på tio minuter.
+Ikonens meny har Öppna, omstart av gatewayen och Pianissimo, Pausa AI på datorn (stoppar gatewayen), Visa parningskod och Avsluta. Pricken på ikonen är grön när allt kör, bärnstensfärgad när något startar, laddar eller inte är installerat eller när dagens kvot nästan är slut eller senaste säkerhetskopian är äldre än 48 timmar, och röd när en tjänst har stannat, gatewayen inte svarar eller Tailscale inte är inloggat. Stannar en tjänst, eller startar gatewayen eller Pianissimo fler än tre gånger på tio minuter, kommer också en skrivbordsnotis. Omstarterna räknas ur systemd:s rader i journalen, så de syns bara om ditt konto får läsa den (gruppen `systemd-journal`). Samma notis kommer högst en gång på tio minuter.
 
 ## Lösenord och rättigheter
 
@@ -94,3 +94,4 @@ Inget av detta är provat. Kör det på `cachyos-pc` och för in resultatet i [s
 10. Prova mot Mistral: lägg in Mistral-nyckeln under AI, tryck Prova på Mistral Small 4 och sedan Large 4. Kostnadsraden säger att anropen går till Mistral och kostar under en cent för Small 4 och högst cirka 2,6 cent för Large 4 (ett anrop), rapporten visar ett svar per uppgift som provades, och ett godkänt par blir valbart utan att panelen startas om (Large 4 bara för Lektioner). Kontrollera i Mistrals konsol att kostnaden blev ungefär den som stod.
 11. Kreditmätaren: efter några anrop visar AI-sidan månadens token och kostnad per uppgift och modell. Skriv en gräns strax över kostnaden och se mätaren bli gul, sedan en under och se den bli röd. Starta om panelen och se att gränsen är kvar.
 12. Skrivbordsnotisen: stoppa `mio-transcription` och se en notis om att Pianissimo har stannat. Starta om `mio-gateway` fyra gånger inom tio minuter (`sudo systemctl restart mio-gateway`) och se en notis om att den startar om gång på gång, och att den inte kommer igen vid en femte omstart.
+13. Säkerhetskopian: låt telefonen ladda över natten med Mio installerat och parat. På morgonen visar kortet Säkerhetskopia på Översikt "i natt" med en tid, minst en kopia och en storlek, och `sudo ls -l /var/lib/mio-gateway/backups/` visar lika många filer. Att kortet och pricken blir gula efter 48 timmar utan kopia täcks av testerna.
