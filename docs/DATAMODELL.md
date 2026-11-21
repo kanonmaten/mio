@@ -161,6 +161,12 @@ Skrivna 2026-11-20 i fas 0 av [planen](PLAN_GRILLNING.md), efter [besluten](DECI
 - Notisrutten `stillListening` (tystnadsfrågan) läggs till bland de tillåtna `mioRoute`; den öppnar Fånga och startar aldrig mikrofonen.
 - En avslutad vardagssession raderas när den slutade för mer än 30 dagar sedan, vid start och när appen går till bakgrunden. Lektionssessioner, sessioner som delats in i lektioner, anteckningar och godkända poster sparas.
 
+### Lektioner och egna ord i appen (våg 3, 2026-11-21)
+
+- `MioSession.subject` (valfritt, 1–40 tecken, bara på en avslutad lektionssession; tomt tar bort det), `MioAnalysisRecord.examHints` och `subjectSuggestion` ligger i radernas JSON. `MioAnalysisFragment.speakerRole` skickas bara till `/v2/lesson-notes`. SwiftData-schemat är oförändrat.
+- Notisrutten `lessonReview` med `userInfo` `{"mioRoute":"lessonReview","mioSessionID":"<UUID>"}` (extra nycklar avvisas), notis-ID `app.mio.lesson.notes-ready.<UUID>` och generell text. Öppnar Lektioner och granskningsarket, eller Hem om lektionen är borta.
+- `mio.lesson.notesLatency.v1` (sessions-ID, sekunder och tid, högst 30) och `mio.vocabulary.asked.v1` (64-bitars FNV-1a-hashar av normaliserade fraser, aldrig orden) i UserDefaults. Båda nollställs vid fullständig radering.
+
 ### `/v2/status`: resonemang, schema och användning
 
 Varje post under `tasks` får två fält:

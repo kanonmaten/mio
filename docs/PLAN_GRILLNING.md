@@ -141,13 +141,13 @@ Läs först `control/README.md`, `control/DESIGN.md` och lärdomarna om [gpui-ki
 
 ## Fas 3: lektioner
 
-- [ ] Lektionsschemat i gatewayen (`server/src/prompts.rs`, `analysis.rs`, `validate_lesson_result`): lägg till `examHints` (högst åtta, varje punkt med ett citat ur källtexten som valideras som i dag), först i anteckningen. Höj schemaversionen och ta med det i appens avkodning.
-- [ ] Prompten: leta efter "det här kommer på provet", "kom ihåg", "viktigt" och liknande. Hellre för få provtips än gissningar.
-- [ ] Appen: avsnittet "Viktigt till provet" först i anteckningen och med i kopieringen.
-- [ ] Talare: talarnamn finns redan ("Talare N", som kan bytas när sessionen har stoppats). Lägg etiketten "Lärare" på den som pratar mest och "Elev 1, 2…" på de andra, som visningslager (originalet ändras inte). Hon kan byta namn. Skicka etiketten till lektionsanalysen så att lärarens ord väger tyngst.
-- [ ] Lugn vy under lektionen: tid, lyssnarprick och antal provtips och läxor hittills. Transkriptet ett tryck bort. Live Activity som i dag.
-- [ ] Granskningsark när anteckningarna är klara: lektionens förslag med datumfältet förifyllt eller tomt, Ja eller Nej för varje. Notisen "Anteckningarna från lektionen är klara" öppnar arket.
-- [ ] Spara tiden från lektionsslut till färdiga anteckningar lokalt (utan text) och visa den i diagnostiken. Målet är under fem minuter; mätningen på telefonen står i överlämningen.
+- [x] Lektionsschemat i gatewayen (`server/src/prompts.rs`, `analysis.rs`, `validate_lesson_result`): lägg till `examHints` (högst åtta, varje punkt med ett citat ur källtexten som valideras som i dag), först i anteckningen. Höj schemaversionen och ta med det i appens avkodning.
+- [x] Prompten: leta efter "det här kommer på provet", "kom ihåg", "viktigt" och liknande. Hellre för få provtips än gissningar.
+- [x] Appen: avsnittet "Viktigt till provet" först i anteckningen och med i kopieringen.
+- [x] Talare: talarnamn finns redan ("Talare N", som kan bytas när sessionen har stoppats). Lägg etiketten "Lärare" på den som pratar mest och "Elev 1, 2…" på de andra, som visningslager (originalet ändras inte). Hon kan byta namn. Skicka etiketten till lektionsanalysen så att lärarens ord väger tyngst.
+- [x] Lugn vy under lektionen: tid, lyssnarprick och antal provtips och läxor hittills. Transkriptet ett tryck bort. Live Activity som i dag.
+- [x] Granskningsark när anteckningarna är klara: lektionens förslag med datumfältet förifyllt eller tomt, Ja eller Nej för varje. Notisen "Anteckningarna från lektionen är klara" öppnar arket.
+- [x] Spara tiden från lektionsslut till färdiga anteckningar lokalt (utan text) och visa den i diagnostiken. Målet är under fem minuter; mätningen på telefonen står i överlämningen.
 
 ## Fas 4: vardagsfångst och "Mio, …"
 
@@ -157,7 +157,7 @@ Läs först `control/README.md`, `control/DESIGN.md` och lärdomarna om [gpui-ki
 - [x] Batteri: pausa vardagsfångst under 20 % eller i strömsparläge och visa varför. Hon kan starta igen direkt. **Lektioner pausas aldrig av batteriet.** Skriv ett test för just det.
 - [x] Tystnad: efter 20 minuter utan tal en notis "Lyssnar Mio fortfarande?". Utan svar inom fem minuter pausar Mio. Ingen automatisk omstart (befintlig regel).
 - [x] Lagring: vardagstranskript äldre än 30 dagar raderas vid start och i bakgrunden. Lektioner, anteckningar och godkända förslag sparas. Om SwiftData-schemat behöver ändras sker det via `VersionedSchema` och migreringsplanen. Kommentera regeln.
-- [ ] Egna ord från telefonen: när hon rättar ett ord frågar Mio om det ska bli ett eget ord. Vid Ja skickas det via Tailscale till ordlistan på datorn (ny väg i Pianissimo, autentiserad med parningen). Ordet skickas aldrig vidare till AI-leverantören, och ett fel får aldrig stoppa transkriptionen.
+- [x] Egna ord från telefonen: när hon rättar ett ord frågar Mio om det ska bli ett eget ord. Vid Ja skickas det via Tailscale till ordlistan på datorn (ny väg i Pianissimo, autentiserad med parningen). Ordet skickas aldrig vidare till AI-leverantören, och ett fel får aldrig stoppa transkriptionen.
 - [x] Lokal räkning (utan text) av hur ofta hon trycker Nej eller Ångra på direkta anteckningar, för att se om fraserna löses ut fel.
 
 ## Fas 5: Hem, notiser och prov
