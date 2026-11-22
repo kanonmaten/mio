@@ -34,6 +34,8 @@ step "Kontrollerar verktyg"
 missing=()
 command -v cargo >/dev/null || missing+=(rust)
 command -v pkexec >/dev/null || missing+=(polkit)
+# The default terminal outside KDE, and the fallback when Plasma names none (see core/src/terminal.rs).
+command -v xdg-terminal-exec >/dev/null || missing+=(xdg-terminal-exec)
 if ((${#missing[@]})); then
     sudo pacman -S --needed --noconfirm "${missing[@]}"
 fi

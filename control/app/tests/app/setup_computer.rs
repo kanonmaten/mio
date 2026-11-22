@@ -1,4 +1,4 @@
-//! Kom igång and Datorn against fakes: the guide's first open step, its Konsole install and the
+//! Kom igång and Datorn against fakes: the guide's first open step, its terminal install and the
 //! pairing hand-off; keeping awake, the login entry and the saved preferences.
 
 use std::any::Any;
@@ -84,7 +84,7 @@ fn step(cx: &mut TestAppContext, handle: gpui_kit::AnyWindowHandle, act: impl Fn
 }
 
 #[gpui_kit::test]
-fn the_guide_starts_at_the_gateway_and_installs_it_in_konsole(cx: &mut TestAppContext) {
+fn the_guide_starts_at_the_gateway_and_installs_it_in_the_terminal(cx: &mut TestAppContext) {
     let (handle, shell, fakes) = open(cx, Page::Setup);
     step(cx, handle, |window, cx| {
         assert_eq!(window.find("setup-step").label(), Some("AI-gatewayen: inte klart"));

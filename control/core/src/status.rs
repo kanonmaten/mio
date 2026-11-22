@@ -321,7 +321,9 @@ impl GpuStatus {
         let line = csv.lines().find(|line| !line.trim().is_empty())?;
         let fields: Vec<&str> = line.split(',').map(str::trim).collect();
         let [name, used, total, temperature, utilization] = fields.as_slice() else { return None };
-        let number = |text: &str| text.parse::<u64>().ok();
+        // Since driver 620 the temperature comes with decimals ("45.37"); any field may, so every
+        // number is read as a decimal and rounded. A failed parse here reads as "no GPU".
+        let number = |text: &str| text.parse::<f64>().ok().filter(|value| value.is_finite() && *value >= 0.0).map(|value| value.round() as u64);
         Some(Self {
             name: (*name).to_owned(),
             memory_used_mib: number(used)?,
@@ -499,6 +501,10 @@ mod tests {
         let gpu = GpuStatus::parse("NVIDIA GeForce RTX 4060 Ti, 5321, 8188, 54, 37\n").unwrap();
         assert_eq!((gpu.memory_used_mib, gpu.memory_total_mib, gpu.temperature_c, gpu.utilization_percent), (5321, 8188, 54, 37));
         assert_eq!(GpuStatus::parse("NVIDIA-SMI has failed"), None);
+        // Driver 620.73.04 on the PC, 2026-11-22.
+        let gpu = GpuStatus::parse("NVIDIA GeForce RTX 4060 Ti, 937, 8188, 45.37, 13\n").unwrap();
+        assert_eq!((gpu.memory_used_mib, gpu.temperature_c, gpu.utilization_percent), (937, 45, 13));
+        assert_eq!(GpuStatus::parse("GPU, 1, 2, -1, 3"), None);
     }
 
     #[test]
