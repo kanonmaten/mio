@@ -127,6 +127,9 @@ pub struct AiPage {
     trial: Option<TrialReport>,
     /// OpenRouter's public model IDs, fetched once when the editor first opens.
     openrouter_models: Vec<String>,
+    /// The fetch has been started. It is never repeated, even after a failure or an empty
+    /// answer: the list is only extra grey rows, not worth a second wait.
+    openrouter_requested: bool,
     /// The credit meter's limit, saved in the panel's own preferences.
     credit_limit_cents: u64,
     credit_input: Entity<InputState>,
@@ -163,6 +166,7 @@ impl AiPage {
             trying: None,
             trial: None,
             openrouter_models: Vec::new(),
+            openrouter_requested: false,
             credit_limit_cents,
             credit_input,
             credit_input_valid: true,
@@ -176,17 +180,13 @@ impl AiPage {
         cx.notify();
         let settings = operation::run(Command::ReadSettings(SettingsFile::Gateway), None, cx);
         let catalog = operation::catalog(cx);
-        let openrouter = self.openrouter_models.is_empty().then(|| operation::openrouter_models(cx));
+        if !self.openrouter_requested {
+            self.openrouter_requested = true;
+            self.fetch_openrouter_models(window, cx);
+        }
         cx.spawn_in(window, async move |this, cx| {
             let (settings, catalog) = (settings.await, catalog.await);
-            let openrouter = match openrouter {
-                Some(task) => task.await.ok().and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok()).map(|json| parse_openrouter_models(&json)),
-                None => None,
-            };
             let _ = this.update_in(cx, |this, window, cx| {
-                if let Some(models) = openrouter {
-                    this.openrouter_models = models;
-                }
                 this.stage = match (settings, catalog) {
                     (Err(error), _) => Stage::Failed(error.to_string().into()),
                     (_, Err(message)) => Stage::Failed(message.into()),
@@ -200,6 +200,33 @@ impl AiPage {
                         }
                     }
                 };
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Fetches OpenRouter's public list in the background; the editor never waits for it. When
+    /// it arrives, the rows that show OpenRouter get its unreviewed models.
+    fn fetch_openrouter_models(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let task = operation::openrouter_models(cx);
+        cx.spawn_in(window, async move |this, cx| {
+            let models = task.await.ok().and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok()).map(|json| parse_openrouter_models(&json));
+            let Some(models) = models.filter(|models| !models.is_empty()) else { return };
+            let _ = this.update_in(cx, |this, window, cx| {
+                this.openrouter_models = models;
+                let Stage::Editing(editor) = &this.stage else { return };
+                for row in &editor.rows {
+                    let (provider, model) = editor.form.pair_for(row.task).clone();
+                    if provider != "openrouter" {
+                        continue;
+                    }
+                    let list = model_list(&editor.catalog, row.task, &provider, &this.openrouter_models);
+                    row.model.update(cx, |state, cx| {
+                        state.set_items(list, window, cx);
+                        state.set_selected_values(&[SharedString::from(model)], window, cx);
+                    });
+                }
                 cx.notify();
             });
         })

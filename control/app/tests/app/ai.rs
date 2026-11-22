@@ -2,7 +2,7 @@
 //! list of changes, save; the credit meter and reasoning levels from a made-up `/v2/status`.
 //! Nothing reaches a real helper, gateway or provider.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use gpui_kit::test::TestWindowExt as _;
@@ -56,19 +56,22 @@ fn gateway_status() -> Value {
 }
 
 fn open(cx: &mut TestAppContext) -> (gpui_kit::AnyWindowHandle, Entity<Shell>, Calls) {
-    let (handle, shell, calls, _) = open_with(cx, None);
+    let (handle, shell, calls, _, _) = open_with(cx, None);
     (handle, shell, calls)
 }
 
 /// Opens the AI page with an optional gateway status. The panel's preferences go to a temporary
 /// folder, returned so the test can read what the credit limit field saved.
-fn open_with(cx: &mut TestAppContext, gateway: Option<GatewayStatus>) -> (gpui_kit::AnyWindowHandle, Entity<Shell>, Calls, tempfile::TempDir) {
+/// Also returns how many times OpenRouter's public list was fetched (it always fails here).
+fn open_with(cx: &mut TestAppContext, gateway: Option<GatewayStatus>) -> (gpui_kit::AnyWindowHandle, Entity<Shell>, Calls, tempfile::TempDir, Arc<AtomicUsize>) {
     cx.update(gpui_kit::init);
     cx.update(mio_control::theme::init);
     let calls: Calls = Arc::default();
     let recorded = calls.clone();
     // Like the real helper, a passed trial of a candidate approves it in `gateway.env`.
     let approved = Arc::new(AtomicBool::new(false));
+    let fetches = Arc::new(AtomicUsize::new(0));
+    let fetched = fetches.clone();
     cx.update(|cx| {
         cx.set_global(Backend {
             helper: Arc::new(move |command: &Command, stdin: Option<&[u8]>| {
@@ -84,7 +87,10 @@ fn open_with(cx: &mut TestAppContext, gateway: Option<GatewayStatus>) -> (gpui_k
                 })
             }),
             catalog: Arc::new(|| Ok(catalog().to_string().into_bytes())),
-            openrouter_models: Arc::new(|| Err("inte i testet".into())),
+            openrouter_models: Arc::new(move || {
+                fetched.fetch_add(1, Ordering::SeqCst);
+                Err("inte i testet".into())
+            }),
         })
     });
     let folder = tempfile::tempdir().unwrap();
@@ -113,7 +119,7 @@ fn open_with(cx: &mut TestAppContext, gateway: Option<GatewayStatus>) -> (gpui_k
         .expect("open test window")
     });
     cx.update(|cx| shell.update(cx, |shell, cx| shell.show(Page::Ai, cx)));
-    (handle, shell, calls, folder)
+    (handle, shell, calls, folder, fetches)
 }
 
 #[gpui_kit::test]
@@ -234,7 +240,7 @@ fn a_candidate_is_tried_only_when_the_user_presses_prova(cx: &mut TestAppContext
 
 #[gpui_kit::test]
 fn the_credit_meter_turns_yellow_at_eighty_percent_and_follows_the_typed_limit(cx: &mut TestAppContext) {
-    let (handle, _, calls, folder) = open_with(cx, Some(GatewayStatus::parse(&gateway_status())));
+    let (handle, _, calls, folder, _) = open_with(cx, Some(GatewayStatus::parse(&gateway_status())));
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
         assert_eq!(window.find("credit-meter").label(), Some("Nära gränsen. $17,00 av $20,00 i 2026-11 (85 %)"));
@@ -277,7 +283,7 @@ fn the_credit_meter_turns_yellow_at_eighty_percent_and_follows_the_typed_limit(c
 #[gpui_kit::test]
 fn an_older_gateway_shows_no_meter_and_no_reasoning(cx: &mut TestAppContext) {
     let older = GatewayStatus::parse(&json!({ "tasks": { "ask": { "provider": "groq", "model": "qwen/qwen3.8-27b" } } }));
-    let (handle, _, _, _) = open_with(cx, Some(older));
+    let (handle, _, _, _, _) = open_with(cx, Some(older));
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
         assert!(window.try_find("credit-meter").is_none());
@@ -329,7 +335,7 @@ fn mistral_is_first_to_try_with_its_cost_and_large_is_offered_only_for_lessons(c
 
 #[gpui_kit::test]
 fn a_candidate_that_passes_prova_can_be_chosen_without_restarting_the_panel(cx: &mut TestAppContext) {
-    let (handle, _, calls) = open(cx);
+    let (handle, _, calls, _folder, fetches) = open_with(cx, None);
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
         window.click("edit-ai", cx);
@@ -348,6 +354,7 @@ fn a_candidate_that_passes_prova_can_be_chosen_without_restarting_the_panel(cx: 
         let reads = calls.iter().filter(|(command, _)| matches!(command, Command::ReadSettings(SettingsFile::Gateway))).count();
         assert_eq!(reads, 2, "the file is read again after the passed trial");
     }
+    assert_eq!(fetches.load(Ordering::SeqCst), 1, "a failed OpenRouter list is not fetched again");
     // The same page, read again: Mistral Small can now serve Frågor (Groq, Anthropic, Mistral).
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
