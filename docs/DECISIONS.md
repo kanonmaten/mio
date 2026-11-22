@@ -2,6 +2,19 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## OpenAI, OpenRouter och Gemini som leverantörer, 2026-11-22
+
+Användarens beslut ([MIO-39](https://linear.app/kanonmaten/issue/MIO-39), [MIO-40](https://linear.app/kanonmaten/issue/MIO-40)): fler leverantörer går att välja i Mio Kontroll, med flera granskade modeller var. Regeln att bara granskade par körs står kvar, och varje ny modell är en kandidat tills Prova har gått igenom. Dokumentationen lästes 2026-11-22; källorna står vid varje modell i `server/src/model_profiles.rs`.
+
+| Val | Varför | Bortvalt |
+|---|---|---|
+| OpenAI `gpt-6-luna` och `gpt-6.1-terra` för `ask` och `everyday`, `gpt-6.2-sol` för `lesson` | Luna och Terra tar resonemang `none` och listar strikta strukturerade svar och Chat Completions. Sol 6.2 vägrar `none`. Inga daterade versioner finns | `gpt-6.2-astra` och `-pro` (dyra), `gpt-5`-familjen (fasas ut 2026-12-11) |
+| OpenAI får `max_completion_tokens` | Dokumenten nämner inte `max_tokens` för de resonerande modellerna. Om temperatur 0 godtas står inte heller, så provet avgör och modellen får annars samma flagga som Anthropic | Att gissa att temperatur vägras |
+| OpenRouter låses per anrop med `provider: {require_parameters: true, data_collection: "deny", zdr: true}` och `reasoning: {effort, exclude: true}` | OpenRouter skickar vidare till en underleverantör. Utan låsningen kan anropet hamna hos en som tränar på texten, sparar den eller struntar i schemat | Att lita på kontoinställningen ensam; `/api/v1/models?zdr=true`, som bara filtrerar listan och inte styr anropet |
+| OpenRouters modellnamn bekräftades mot den publika listan `/api/v1/models?supported_parameters=structured_outputs` | Listan visar inte parametrar eller pris per modell, så de måste läsas per underleverantör | Namn gissade från leverantörens egna |
+| Gemini `gemini-2.5-flash-lite` för `ask` och `everyday`, `gemini-3.8-flash` för `lesson`, via `https://generativelanguage.googleapis.com/v1beta/openai` | Gemini 3 och 4 kan inte stänga av resonemanget, men 2.5 tar `none`. Strukturerade svar lovar giltig JSON, inte att schemat följs, så de är `json-schema` och varje svar kontrolleras | Gemini 3.8 Flash för vardag (resonerar alltid) |
+| Inget pris för OpenRouter och Gemini än | OpenRouters pris beror på underleverantören. Geminis pris för cachad indata och 2.5 Flash-Lites pris lästes inte | Uppskattade priser |
+
 ## Mio Kontroll använder standardterminalen, 2026-11-22
 
 Användarens val ([MIO-32](https://linear.app/kanonmaten/issue/MIO-32)): allt som ska köras i en terminal körs i den terminal som är vald som standard, inte i en som står i koden. Det ersätter Konsole i avsnitten om fas 7 och 9 nedan.

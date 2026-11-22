@@ -152,7 +152,7 @@ fn environment_files_are_read_like_systemd_reads_them() {
 #[test]
 fn the_reviewed_models_list_the_pairs_the_gateway_accepts() {
     let listed: Value = serde_json::from_str(&reviewed_models()).unwrap();
-    assert_eq!(listed["providers"], json!(["groq", "anthropic", "mistral", "nvidia"]));
+    assert_eq!(listed["providers"], json!(["groq", "anthropic", "mistral", "nvidia", "openai", "openrouter", "gemini"]));
     let pairs: Vec<(Value, Value, Value, Value)> = listed["models"].as_array().unwrap().iter()
         .map(|model| (model["provider"].clone(), model["model"].clone(), model["secretVariable"].clone(), model["temperature"].clone())).collect();
     assert_eq!(pairs, [
@@ -162,6 +162,6 @@ fn the_reviewed_models_list_the_pairs_the_gateway_accepts() {
     assert!(listed["models"].as_array().unwrap().iter().all(|model| model["liveTested"] == false && model["blocked"].is_null()));
     // Candidates are listed with why they cannot be chosen; the gateway refuses them.
     let candidates = listed["candidates"].as_array().unwrap();
-    assert_eq!(candidates.len(), 3);
+    assert_eq!(candidates.len(), 14);
     assert!(candidates.iter().all(|candidate| candidate["blocked"].as_str().is_some_and(|reason| reason.contains("prov"))));
 }

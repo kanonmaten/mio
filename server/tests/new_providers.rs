@@ -1,5 +1,5 @@
-//! Anthropic (reviewed), Mistral and NVIDIA NIM (candidates) without network: request shape,
-//! answers, refusals, cut-off and too-large requests, errors, and the per-provider budget.
+//! Anthropic (reviewed), Mistral, NVIDIA NIM, OpenAI, OpenRouter and Gemini (candidates) without
+//! network: request shape, answers, refusals, cut-off and too-large requests, errors, and the per-provider budget.
 
 mod common;
 
@@ -271,4 +271,74 @@ fn an_approved_candidate_runs_and_an_unknown_approval_is_refused() {
     let other = load_config(&env(&[&base[..], &[("MIO_APPROVED_CANDIDATES", "nvidia=qwen/qwen3.8-27b")]].concat())).unwrap();
     assert!(!resolve_task_profile(&other, "ask").configured);
     assert!(load_config(&env(&[&base[..], &[("MIO_APPROVED_CANDIDATES", "groq=invented")]].concat())).is_err());
+}
+
+#[test]
+fn openai_openrouter_and_gemini_stay_candidates_until_approved() {
+    for (provider, model, secret) in [("openai", "gpt-6-luna", "OPENAI_API_KEY"), ("openrouter", "qwen/qwen3.8-27b", "OPENROUTER_API_KEY"),
+        ("gemini", "gemini-2.5-flash-lite", "GEMINI_API_KEY")] {
+        assert_eq!(provider_profile(provider, model, None), Err(Incompatible::Model), "{provider} {model}");
+        assert_eq!(candidate_profile(provider, model).unwrap().contract_review.status, "candidate");
+        let config = load_config(&env(&[("MIO_AI_PROVIDER", provider), ("MIO_AI_MODEL", model), (secret, "fixture-key"),
+            ("GROQ_API_KEY", "must-not-use-groq-key"), ("MIO_GATEWAY_TOKEN", TOKEN)])).unwrap();
+        assert_eq!(resolve_task_profile(&config, "ask").configuration_error, Some("provider_model_incompatible"));
+        // Approved after a trial, the pair runs with its own provider's key.
+        let approval = format!("{provider}={model}");
+        let approved = load_config(&env(&[("MIO_AI_PROVIDER", provider), ("MIO_AI_MODEL", model), (secret, "fixture-key"),
+            ("GROQ_API_KEY", "must-not-use-groq-key"), ("MIO_GATEWAY_TOKEN", TOKEN), ("MIO_APPROVED_CANDIDATES", &approval)])).unwrap();
+        let resolved = resolve_task_profile(&approved, "everyday");
+        assert!(resolved.configured, "{provider}: {:?}", resolved.configuration_error);
+        assert_eq!(resolved.config.as_ref().unwrap().api_key, "fixture-key");
+    }
+    // A model the provider lists but nobody reviewed never runs, approved or not.
+    assert!(candidate_profile("openai", "gpt-6.2-astra").is_none());
+    assert!(candidate_profile("openrouter", "openai/gpt-6.2-astra").is_none());
+    assert!(load_config(&env(&[("MIO_AI_PROVIDER", "openai"), ("MIO_AI_MODEL", "gpt-6.2-astra"), ("OPENAI_API_KEY", "fixture-key"),
+        ("MIO_GATEWAY_TOKEN", TOKEN), ("MIO_APPROVED_CANDIDATES", "openai=gpt-6.2-astra")])).is_err());
+}
+
+#[test]
+fn openai_candidate_turns_reasoning_off_and_sends_max_completion_tokens() {
+    let profile = candidate_profile("openai", "gpt-6-luna").unwrap();
+    let request = build_for_profile(profile, "fixture-openai", &create_task_request(Mode::Ask, &payload())).unwrap();
+    assert_eq!(request.url, "https://api.openai.com/v1/chat/completions");
+    assert_eq!(request.header("Authorization"), Some("Bearer fixture-openai"));
+    assert_eq!((request.body["reasoning_effort"].clone(), request.body["temperature"].clone()), (json!("none"), json!(0)));
+    assert!(request.body["max_completion_tokens"].is_u64() && request.body.get("max_tokens").is_none());
+    assert_eq!(request.body["response_format"]["json_schema"]["strict"], true);
+    assert!(request.body.get("provider").is_none());
+}
+
+#[test]
+fn openrouter_candidate_pins_strict_private_endpoints_and_excludes_reasoning() {
+    let profile = candidate_profile("openrouter", "openai/gpt-6-luna").unwrap();
+    let request = build_for_profile(profile.clone(), "fixture-openrouter", &create_task_request(Mode::Analyze, &payload())).unwrap();
+    assert_eq!(request.url, "https://openrouter.ai/api/v1/chat/completions");
+    assert_eq!(request.body["provider"], json!({ "require_parameters": true, "data_collection": "deny", "zdr": true }));
+    assert_eq!(request.body["reasoning"], json!({ "effort": "none", "exclude": true }));
+    assert!(request.body.get("reasoning_effort").is_none() && request.body["max_tokens"].is_u64());
+    // An answer that still carries reasoning breaks the reasoning-off contract.
+    let answer = |message: Value| json!({ "choices": [{ "finish_reason": "stop", "message": message }] });
+    let read = |data: &Value| normalize_provider_response(data, &profile, &|_| None);
+    assert_eq!(read(&answer(json!({ "role": "assistant", "content": "{}" }))).unwrap().finish, Finish::Completed);
+    assert_eq!(read(&answer(json!({ "role": "assistant", "content": "{}", "reasoning": "…" }))).unwrap_err().0, "provider_parameters");
+    // A lesson model reasons at the reviewed level, still excluded from the answer.
+    let lesson = candidate_profile("openrouter", "google/gemini-3.8-flash").unwrap();
+    let request = build_for_profile(lesson, "fixture-openrouter", &create_task_request(Mode::Ask, &payload())).unwrap();
+    assert_eq!(request.body["reasoning"], json!({ "effort": "medium", "exclude": true }));
+}
+
+#[test]
+fn gemini_candidates_use_the_openai_compatible_endpoint_and_bind_reasoning_to_lessons() {
+    let profile = candidate_profile("gemini", "gemini-2.5-flash-lite").unwrap();
+    let request = build_for_profile(profile, "fixture-gemini", &create_task_request(Mode::Ask, &payload())).unwrap();
+    assert_eq!(request.url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+    assert_eq!(request.body["reasoning_effort"], "none");
+    // Gemini 3 cannot turn reasoning off, so 3.8 Flash may only serve lessons.
+    let flash = candidate_profile("gemini", "gemini-3.8-flash").unwrap();
+    assert!(flash.reasoning.reasons());
+    let approved = load_config(&env(&[("MIO_AI_PROVIDER", "gemini"), ("MIO_AI_MODEL", "gemini-2.5-flash-lite"), ("GEMINI_API_KEY", "fixture-key"),
+        ("MIO_GATEWAY_TOKEN", TOKEN), ("MIO_APPROVED_CANDIDATES", "gemini=gemini-2.5-flash-lite,gemini=gemini-3.8-flash"),
+        ("MIO_AI_TASK_PROFILES", r#"{"ask":{"provider":"gemini","model":"gemini-3.8-flash"}}"#)]));
+    assert!(approved.is_err() || !resolve_task_profile(&approved.unwrap(), "ask").configured);
 }
