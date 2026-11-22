@@ -105,6 +105,8 @@ pub struct TaskStatus {
     pub reasoning: Option<String>,
     /// `"strict-json-schema"` or `"json-schema"`.
     pub schema_dialect: Option<String>,
+    /// Whether the task can run: a reviewed pair with its key. `None` from a gateway that does not say.
+    pub configured: Option<bool>,
 }
 
 impl TaskStatus {
@@ -220,6 +222,7 @@ impl GatewayStatus {
                             model: field("model").unwrap_or_default(),
                             reasoning: field("reasoning"),
                             schema_dialect: field("schemaDialect"),
+                            configured: value.get("configured").and_then(Value::as_bool),
                         }
                     })
                     .collect()

@@ -134,6 +134,8 @@ pub struct AiPage {
     credit_limit_cents: u64,
     credit_input: Entity<InputState>,
     credit_input_valid: bool,
+    /// Shown inside Kom igång: only the providers, models and trials, scrolled by the guide.
+    embedded: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -170,8 +172,15 @@ impl AiPage {
             credit_limit_cents,
             credit_input,
             credit_input_valid: true,
+            embedded: false,
             _subscriptions: vec![observe, typed],
         }
+    }
+
+    /// The same editor for Kom igång's AI step. It is its own entity: what it saves is in
+    /// `gateway.env`, which the AI page reads again when it is opened.
+    pub fn embedded(status: Entity<StatusModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self { embedded: true, ..Self::new(status, window, cx) }
     }
 
     /// Reads `gateway.env` through the helper (KDE asks for the password once) and the model list.
@@ -740,11 +749,12 @@ fn trial_report(label: &str, output: &[u8]) -> TrialReport {
 
 impl Render for AiPage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let edit_label = if self.embedded { "Välj leverantör och modell…" } else { "Ändra…" };
         let body = match &self.stage {
             Stage::Closed => v_flex()
                 .gap_3()
-                .child(self.render_current(cx))
-                .child(h_flex().child(Button::new("edit-ai").label("Ändra…").icon(IconName::Settings).on_click(cx.listener(|this, _, window, cx| this.open_editor(window, cx)))))
+                .when(!self.embedded, |body| body.child(self.render_current(cx)))
+                .child(h_flex().child(Button::new("edit-ai").label(edit_label).icon(IconName::Settings).on_click(cx.listener(|this, _, window, cx| this.open_editor(window, cx)))))
                 .into_any_element(),
             Stage::Loading => crate::parts::loading_line("Läser inställningarna …", cx).into_any_element(),
             Stage::Failed(message) => v_flex()
@@ -754,6 +764,9 @@ impl Render for AiPage {
                 .into_any_element(),
             Stage::Editing(editor) => self.render_editor(editor, cx).into_any_element(),
         };
+        if self.embedded {
+            return v_flex().id("setup-ai").test_support().child(body).into_any_element();
+        }
         v_flex()
             .id("ai")
             .size_full()
@@ -768,5 +781,6 @@ impl Render for AiPage {
                     .child(self.render_credit(cx))
                     .child(body),
             )
+            .into_any_element()
     }
 }

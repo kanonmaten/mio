@@ -13,6 +13,9 @@
 #   --ny-groq-nyckel     sets the Groq key; on a computer without a configuration it makes a Groq one
 #   --prova-mistral      runs the Mistral trial again, e.g. after a failed one
 #   --nyckel-pa-stdin    reads the key from stdin instead of asking (for Mio Kontroll)
+#   --utan-nyckel        a new configuration gets no key and no trial; the provider, key and
+#                        models are then chosen in Mio Kontroll (Kom igång or AI), which starts
+#                        the installation with this
 set -euo pipefail
 
 source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -80,13 +83,15 @@ key_provider=mistral
 replace_key=false
 key_on_stdin=false
 run_trial=false
+no_key=false
 for argument in "$@"; do
     case "$argument" in
         --ny-mistral-nyckel) replace_key=true; key_provider=mistral ;;
         --ny-groq-nyckel) replace_key=true; key_provider=groq ;;
         --prova-mistral) run_trial=true ;;
         --nyckel-pa-stdin) key_on_stdin=true ;;
-        *) fail "Okänt val: $argument. Använd inget val, --ny-mistral-nyckel, --ny-groq-nyckel, --prova-mistral eller --nyckel-pa-stdin." ;;
+        --utan-nyckel) no_key=true ;;
+        *) fail "Okänt val: $argument. Använd inget val, --ny-mistral-nyckel, --ny-groq-nyckel, --prova-mistral, --nyckel-pa-stdin eller --utan-nyckel." ;;
     esac
 done
 provider_key=""
@@ -160,6 +165,12 @@ elif [[ $key_provider == groq ]]; then
     printf '%s' "$provider_key" | sudo "$app_dir/mio-gateway" write-config "$config" "$groq_model" "$port"
     unset provider_key
     echo "Sparad (endast root kan läsa den)."
+elif $no_key && ! $replace_key; then
+    # From Mio Kontroll: the file gets a gateway token and Mistral as the default with an empty
+    # key, so the gateway starts and answers but no task runs until a key and a model are
+    # chosen in the panel. No provider traffic and no trial here.
+    printf '' | sudo "$app_dir/mio-gateway" write-mistral-config "$config" "$port"
+    echo "Sparad utan nyckel. Välj AI-leverantör, nyckel och modell i Mio Kontroll (Kom igång eller AI)."
 else
     if ! $key_on_stdin; then
         echo "Skapa en nyckel på https://console.mistral.ai/api-keys (Vibe Pro-provet ger krediter i tre månader)."

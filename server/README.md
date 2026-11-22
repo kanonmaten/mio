@@ -34,6 +34,7 @@ Kör `./server/install.sh` igen för att uppdatera; nycklar, vald leverantör, t
 | `--ny-groq-nyckel` | Byter Groq-nyckeln på samma sätt. På en dator utan `gateway.env` skapas en Groq-konfiguration som förut |
 | `--prova-mistral` | Kör Mistral-provet igen, till exempel efter ett misslyckat |
 | `--nyckel-pa-stdin` | Läser nyckeln från stdin i stället för att fråga (det är så [Mio Kontroll](../control/README.md) kör det) |
+| `--utan-nyckel` | En ny konfiguration får ingen nyckel och inget prov; leverantör, nyckel och modell väljs sedan i Mio Kontroll (Kom igång eller AI). Panelen startar installationen med det här valet. En befintlig konfiguration behålls som vanligt |
 
 ### Var saker ligger
 

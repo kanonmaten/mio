@@ -8,18 +8,21 @@ pub enum Step {
     /// NVIDIA driver, Rust and Tailscale.
     Tools,
     Gateway,
+    /// Provider, key and model per task, chosen in the panel.
+    Ai,
     Pianissimo,
     Serve,
     Pair,
 }
 
 impl Step {
-    pub const ALL: [Step; 5] = [Step::Tools, Step::Gateway, Step::Pianissimo, Step::Serve, Step::Pair];
+    pub const ALL: [Step; 6] = [Step::Tools, Step::Gateway, Step::Ai, Step::Pianissimo, Step::Serve, Step::Pair];
 
     pub fn title(self) -> &'static str {
         match self {
             Step::Tools => "Drivrutin och verktyg",
             Step::Gateway => "AI-gatewayen",
+            Step::Ai => "AI-leverantör",
             Step::Pianissimo => "Pianissimo",
             Step::Serve => "Tailscale serve",
             Step::Pair => "Para telefonen",
@@ -32,6 +35,10 @@ impl Step {
         match self {
             Step::Tools => overview.gpu.is_some() && tailscale.is_some_and(|tailscale| tailscale.logged_in),
             Step::Gateway => !matches!(overview.gateway_unit, UnitState::NotInstalled | UnitState::Unknown) && overview.gateway_health == Some(true),
+            // Every task runs: the gateway says so per task once a key and a reviewed model are set.
+            Step::Ai => overview.gateway.as_ref().is_some_and(|gateway| {
+                crate::ai_settings::TASKS.iter().all(|(task, _)| gateway.tasks.iter().any(|status| status.task == *task && status.configured == Some(true)))
+            }),
             Step::Pianissimo => overview.pianissimo.as_ref().is_some_and(|health| health.status == "ready"),
             Step::Serve => tailscale.is_some_and(|tailscale| tailscale.serve_is_correct(gateway_port)),
             Step::Pair => false,
@@ -58,6 +65,16 @@ mod tests {
         assert_eq!(current(&overview, 8_787), Step::Gateway);
         overview.gateway_unit = UnitState::Running;
         overview.gateway_health = Some(true);
+        // Installed without a key: the AI step is next until every task runs.
+        assert_eq!(current(&overview, 8_787), Step::Ai);
+        let mut gateway = crate::status::GatewayStatus::parse(&serde_json::json!({ "tasks": {
+            "ask": { "provider": "mistral", "model": "m", "configured": true },
+            "everyday": { "provider": "mistral", "model": "m", "configured": true },
+            "lesson": { "provider": "mistral", "model": "m", "configured": false } } }));
+        overview.gateway = Some(gateway.clone());
+        assert_eq!(current(&overview, 8_787), Step::Ai);
+        gateway.tasks.iter_mut().for_each(|task| task.configured = Some(true));
+        overview.gateway = Some(gateway);
         overview.pianissimo = Some(PianissimoHealth { status: "loading".into(), ..Default::default() });
         assert_eq!(current(&overview, 8_787), Step::Pianissimo);
         overview.pianissimo = Some(PianissimoHealth { status: "ready".into(), ..Default::default() });

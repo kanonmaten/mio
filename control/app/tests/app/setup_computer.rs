@@ -93,14 +93,23 @@ fn the_guide_starts_at_the_gateway_and_installs_it_in_the_terminal(cx: &mut Test
     });
     let scripts = fakes.scripts.lock().unwrap().clone();
     assert_eq!(scripts.len(), 1);
-    assert!(scripts[0].contains("./server/install.sh") && !scripts[0].contains("git pull"), "installs without pulling");
+    // The panel chooses the key and models itself, so the terminal asks for no key.
+    assert!(scripts[0].contains("./server/install.sh --utan-nyckel") && !scripts[0].contains("git pull"), "installs without pulling");
+
+    // The AI step holds the AI page's editor; nothing is read (no password) until it is opened.
+    step(cx, handle, |window, cx| window.click(gpui_kit::ElementId::NamedInteger("trigger".into(), 2), cx));
+    step(cx, handle, |window, _| {
+        assert_eq!(window.find("setup-step").label(), Some("AI-leverantör: inte klart"));
+        assert!(window.try_find("setup-ai").is_some());
+        assert!(window.try_find("edit-ai").is_some());
+    });
 
     // The last step hands over to Tailscale och parning with the code showing.
     cx.update(|cx| shell.update(cx, |shell, cx| shell.show(Page::Setup, cx)));
-    step(cx, handle, |window, cx| window.click(gpui_kit::ElementId::NamedInteger("trigger".into(), 4), cx));
+    step(cx, handle, |window, cx| window.click(gpui_kit::ElementId::NamedInteger("trigger".into(), 5), cx));
     step(cx, handle, |window, cx| {
         assert_eq!(window.find("setup-step").label(), Some("Para telefonen: inte klart"));
-        window.click("run-4", cx);
+        window.click("run-5", cx);
     });
     assert_eq!(cx.update(|cx| shell.read(cx).page()), Page::Network);
     step(cx, handle, |window, _| assert!(window.try_find("pairing-code").is_some()));

@@ -114,7 +114,7 @@ impl Shell {
         let updates = cx.new(|_| UpdatesPage::new());
         let verify = cx.new(VerifyPage::new);
         let logs = cx.new(|_| LogsPage::new());
-        let setup = cx.new(|cx| SetupPage::new(status_for_setup, cx));
+        let setup = cx.new(|cx| SetupPage::new(status_for_setup, window, cx));
         let computer = cx.new(|_| ComputerPage);
         let pairing = cx.subscribe_in(&setup, window, |shell: &mut Self, _, _: &OpenPairing, window, cx| {
             shell.show(Page::Network, cx);
