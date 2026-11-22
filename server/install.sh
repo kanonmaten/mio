@@ -35,10 +35,22 @@ trim_key() {
     provider_key="${provider_key%"${provider_key##*[![:space:]]}"}"
 }
 
+# Hidden prompt: the key never appears on screen, in argv, shell history or logs. A paste that
+# starts with a line break ends the read at once with nothing, so an empty answer asks again
+# (at most three times) instead of rejecting the key that follows.
+read_hidden_key() {
+    local attempt
+    for attempt in 1 2 3; do
+        IFS= read -rsp "$1" provider_key; echo
+        [[ -n ${provider_key//[[:space:]]/} ]] && return 0
+        ((attempt < 3)) && echo "Inget kom in. Klistra in nyckeln igen."
+    done
+}
+
 # Checks the trimmed key against `pattern` and otherwise says what is wrong with it, never the
 # key itself: only its length and which kind of character does not belong.
 check_key() {
-    local name=$1 pattern=$2 hint=$3
+    local name=$1 pattern=$2 hint=$3 prefix=$4
     trim_key
     # Checked first: Groq and sk- keys also fit Mistral's pattern, since Mistral keys may hold _ and -.
     [[ $name == Mistral && $provider_key == gsk_* ]] \
@@ -46,17 +58,18 @@ check_key() {
     [[ $provider_key == sk-* || $provider_key == sk_* ]] \
         && fail "Det ser ut som en nyckel från en annan tjänst (börjar med sk-), inte en $name-nyckel."
     [[ $provider_key =~ $pattern ]] && return 0
-    local length=${#provider_key}
+    # The 20–200 limit counts what follows a required prefix (gsk_ for Groq).
+    local length=$((${#provider_key} - ${#prefix}))
     if ((length == 0)); then
         fail "Ingen $name-nyckel kom in. Klistra in den och tryck Enter."
     elif [[ $provider_key =~ [[:space:]] ]]; then
         fail "$name-nyckeln har mellanslag eller radbrytning mitt i. Kopiera den igen, i ett stycke."
     elif [[ $name == Groq && $provider_key != gsk_* ]]; then
-        fail "Det ser inte ut som en Groq-nyckel: den börjar inte med gsk_ ($length tecken)."
+        fail "Det ser inte ut som en Groq-nyckel: den börjar inte med gsk_ (${#provider_key} tecken)."
     elif ((length < 20 || length > 200)); then
-        fail "$name-nyckeln är $length tecken lång, väntat 20–200. Kopiera hela nyckeln igen."
+        fail "$name-nyckeln är $length tecken lång${prefix:+ efter $prefix}, väntat 20–200. Kopiera hela nyckeln igen."
     else
-        fail "$name-nyckeln ($length tecken) har andra tecken än $hint. Kopiera den igen."
+        fail "$name-nyckeln (${#provider_key} tecken) har andra tecken än $hint. Kopiera den igen."
     fi
 }
 
@@ -77,7 +90,11 @@ done
 provider_key=""
 if $key_on_stdin; then
     # Read before anything else can consume stdin. The last line may lack a line break.
-    IFS= read -r provider_key || [[ -n $provider_key ]] || fail "Ingen nyckel på stdin."
+    # Blank lines before the key are skipped; the first line with text is the key.
+    provider_key=""
+    while [[ -z ${provider_key//[[:space:]]/} ]]; do
+        IFS= read -r provider_key || [[ -n $provider_key ]] || fail "Ingen nyckel på stdin."
+    done
     provider_key="${provider_key%$'\r'}"
 fi
 
@@ -132,10 +149,9 @@ if sudo test -f "$config" && ! $replace_key; then
 elif [[ $key_provider == groq ]]; then
     if ! $key_on_stdin; then
         echo "Skapa en nyckel på https://console.groq.com/keys (gratisnivån räcker)."
-        # Hidden prompt: the key never appears on screen, in argv, shell history or logs.
-        IFS= read -rsp "Klistra in Groq-nyckeln (syns inte) och tryck Enter: " provider_key; echo
+        read_hidden_key "Klistra in Groq-nyckeln (syns inte) och tryck Enter: "
     fi
-    check_key Groq '^gsk_[A-Za-z0-9]{20,200}$' "gsk_ följt av bokstäver och siffror"
+    check_key Groq '^gsk_[A-Za-z0-9]{20,200}$' "gsk_ följt av bokstäver och siffror" gsk_
     # The key travels only on stdin; the gateway binary writes the root-only file (0600). With an
     # existing file only the GROQ_API_KEY line changes: the token (no re-pairing), limits, port
     # and task profiles you set are kept.
@@ -146,8 +162,7 @@ else
     if ! $key_on_stdin; then
         echo "Skapa en nyckel på https://console.mistral.ai/api-keys (Vibe Pro-provet ger krediter i tre månader)."
         echo "Stäng också av träning på din API-data i Mistrals admin-konsol, https://admin.mistral.ai (se server/README.md)."
-        # Hidden prompt: the key never appears on screen, in argv, shell history or logs.
-        IFS= read -rsp "Klistra in Mistral-nyckeln (syns inte) och tryck Enter: " provider_key; echo
+        read_hidden_key "Klistra in Mistral-nyckeln (syns inte) och tryck Enter: "
     fi
     check_key Mistral '^[A-Za-z0-9_-]{20,200}$' "bokstäver, siffror, _ och -"
     # A new file gets Small 4 for questions and everyday text and Large 4 for lessons, not yet
