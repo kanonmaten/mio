@@ -124,3 +124,16 @@ fn datorn_keeps_awake_and_saves_its_choices(cx: &mut TestAppContext) {
     assert!(!cx.update(|cx| mio_control::computer::is_awake(cx)));
     assert!(!folder.join("autostart/app.mio.control.desktop").exists());
 }
+
+#[gpui_kit::test]
+fn checking_again_spins_until_the_status_is_read(cx: &mut TestAppContext) {
+    // No polling loop runs in the test, so the reading never arrives and the button keeps spinning.
+    let (handle, _shell, _fakes) = open(cx, Page::Setup);
+    step(cx, handle, |window, cx| window.click(gpui_kit::ElementId::NamedInteger("trigger".into(), 0), cx));
+    step(cx, handle, |window, cx| {
+        assert_ne!(window.find("run-0").disabled(), Some(true));
+        window.click("run-0", cx);
+    });
+    // A loading button is as inert as a disabled one, so a second click cannot queue another.
+    step(cx, handle, |window, _| assert_eq!(window.find("run-0").disabled(), Some(true)));
+}

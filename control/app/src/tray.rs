@@ -160,7 +160,7 @@ pub fn listen(commands: Receiver<TrayCommand>, cx: &mut App) {
                 Ok(_) => desktop::notify(&Alert { title: format!("{name} {done}"), body: String::new() }),
                 Err(error) => desktop::notify(&Alert { title: format!("{name} gick inte att ändra"), body: error.to_string() }),
             }
-            cx.update(|cx| model::status(cx).update(cx, |status, _| status.request_refresh()));
+            cx.update(|cx| model::status(cx).update(cx, |status, cx| status.request_refresh(cx)));
         }
     })
     .detach();

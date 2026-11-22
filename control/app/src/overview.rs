@@ -152,7 +152,7 @@ impl OverviewPage {
                     Err(error) => Notification::error(error.to_string()),
                 };
                 window.push_notification(notification, cx);
-                status.update(cx, |status, _| status.request_refresh());
+                status.update(cx, |status, cx| status.request_refresh(cx));
                 cx.notify();
             });
         })

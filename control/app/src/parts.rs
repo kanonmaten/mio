@@ -1,6 +1,7 @@
 //! Small pieces several pages share.
 
-use gpui_kit::component::{ActiveTheme as _, StyledExt as _, Theme, h_flex, v_flex};
+use gpui_kit::component::spinner::Spinner;
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, StyledExt as _, Theme, h_flex, v_flex};
 use gpui_kit::{
     App, InteractiveElement as _, IntoElement, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
     TestSupportExt as _, div, prelude::FluentBuilder as _,
@@ -34,4 +35,9 @@ pub fn page_header(title: &str, purpose: &str, cx: &App) -> impl IntoElement {
 /// A section title inside a page.
 pub fn section(title: &str) -> impl IntoElement {
     div().pt_2().font_semibold().child(title.to_owned())
+}
+
+/// Text for something being read right now, with a spinner beside it (static under reduced motion).
+pub fn loading_line(text: &'static str, cx: &App) -> impl IntoElement {
+    h_flex().gap_2().text_sm().text_color(cx.theme().muted_foreground).child(Spinner::new().small()).child(text)
 }
