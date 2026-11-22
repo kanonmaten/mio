@@ -28,6 +28,38 @@ https_port=8443
 step() { printf '\n==> %s\n' "$1"; }
 fail() { printf 'FEL: %s\n' "$1" >&2; exit 1; }
 
+# A key copied from a browser often brings a space, tab or line break along. Trim them before the
+# check, as Mio Kontroll does, so the same key works whichever way it is given.
+trim_key() {
+    provider_key="${provider_key#"${provider_key%%[![:space:]]*}"}"
+    provider_key="${provider_key%"${provider_key##*[![:space:]]}"}"
+}
+
+# Checks the trimmed key against `pattern` and otherwise says what is wrong with it, never the
+# key itself: only its length and which kind of character does not belong.
+check_key() {
+    local name=$1 pattern=$2 hint=$3
+    trim_key
+    # Checked first: Groq and sk- keys also fit Mistral's pattern, since Mistral keys may hold _ and -.
+    [[ $name == Mistral && $provider_key == gsk_* ]] \
+        && fail "Det är en Groq-nyckel (börjar med gsk_). Kör ./install.sh --ny-groq-nyckel för den."
+    [[ $provider_key == sk-* || $provider_key == sk_* ]] \
+        && fail "Det ser ut som en nyckel från en annan tjänst (börjar med sk-), inte en $name-nyckel."
+    [[ $provider_key =~ $pattern ]] && return 0
+    local length=${#provider_key}
+    if ((length == 0)); then
+        fail "Ingen $name-nyckel kom in. Klistra in den och tryck Enter."
+    elif [[ $provider_key =~ [[:space:]] ]]; then
+        fail "$name-nyckeln har mellanslag eller radbrytning mitt i. Kopiera den igen, i ett stycke."
+    elif [[ $name == Groq && $provider_key != gsk_* ]]; then
+        fail "Det ser inte ut som en Groq-nyckel: den börjar inte med gsk_ ($length tecken)."
+    elif ((length < 20 || length > 200)); then
+        fail "$name-nyckeln är $length tecken lång, väntat 20–200. Kopiera hela nyckeln igen."
+    else
+        fail "$name-nyckeln ($length tecken) har andra tecken än $hint. Kopiera den igen."
+    fi
+}
+
 # Which key a new configuration or a key change is for: Mistral unless --ny-groq-nyckel.
 key_provider=mistral
 replace_key=false
@@ -103,7 +135,7 @@ elif [[ $key_provider == groq ]]; then
         # Hidden prompt: the key never appears on screen, in argv, shell history or logs.
         IFS= read -rsp "Klistra in Groq-nyckeln (syns inte) och tryck Enter: " provider_key; echo
     fi
-    [[ $provider_key =~ ^gsk_[A-Za-z0-9]{20,200}$ ]] || fail "Det ser inte ut som en Groq-nyckel (börjar med gsk_)."
+    check_key Groq '^gsk_[A-Za-z0-9]{20,200}$' "gsk_ följt av bokstäver och siffror"
     # The key travels only on stdin; the gateway binary writes the root-only file (0600). With an
     # existing file only the GROQ_API_KEY line changes: the token (no re-pairing), limits, port
     # and task profiles you set are kept.
@@ -117,7 +149,7 @@ else
         # Hidden prompt: the key never appears on screen, in argv, shell history or logs.
         IFS= read -rsp "Klistra in Mistral-nyckeln (syns inte) och tryck Enter: " provider_key; echo
     fi
-    [[ $provider_key =~ ^[A-Za-z0-9]{20,200}$ ]] || fail "Det ser inte ut som en Mistral-nyckel (bara bokstäver och siffror)."
+    check_key Mistral '^[A-Za-z0-9_-]{20,200}$' "bokstäver, siffror, _ och -"
     # A new file gets Small 4 for questions and everyday text and Large 4 for lessons, not yet
     # approved. An existing file only gets its MISTRAL_API_KEY line: provider, token and the
     # rest stay as they are.
