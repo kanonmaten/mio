@@ -79,11 +79,17 @@ fn ipa_workflow_requires_parallel_ipa_and_test_jobs() {
         ]),
     }});
     assert!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow).is_empty());
-    // A plan job on Linux may choose the tests, as long as the IPA job does not wait for it.
+    // A plan job on Linux may choose the tests and skip both jobs for a PR that does not touch
+    // the app; the IPA job may wait for it (MIO-28), but never for the tests.
     workflow["jobs"]["plan"] = json!({"runs-on": "ubuntu-24.04", "steps": [{"run": "echo run=true"}]});
     workflow["jobs"]["test"]["needs"] = json!("plan");
-    assert!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow).is_empty());
     workflow["jobs"]["ipa"]["needs"] = json!("plan");
+    assert!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow).is_empty());
+    workflow["jobs"]["ipa"]["needs"] = json!(["plan"]);
+    assert!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow).is_empty());
+    workflow["jobs"]["ipa"]["needs"] = json!("test");
+    assert_eq!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow), ["IPA- och testjobb på xcode-27"]);
+    workflow["jobs"]["ipa"]["needs"] = json!(["plan", "test"]);
     assert_eq!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow), ["IPA- och testjobb på xcode-27"]);
     workflow["jobs"]["ipa"].as_object_mut().expect("job").remove("needs");
     workflow["jobs"]["extra"] = job(&["true"]);

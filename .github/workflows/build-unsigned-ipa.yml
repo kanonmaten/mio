@@ -3,12 +3,19 @@ name: Bygg Mio IPA
 run-name: "Bygg Mio IPA #${{ github.run_number }}"
 
 on:
-  # Every pull request and every push to main that touches the app makes an installable IPA, so a
-  # PR can be tried on the phone before merge. tools/ is listed because the diagnostics step runs
-  # the verifier. Path filters are not evaluated for tag pushes.
+  # Every pull request starts this workflow, so its IPA and test checks always report and branch
+  # protection can require them for auto-merge (MIO-28). The plan job skips both jobs when the PR
+  # does not touch the app; GitHub counts a skipped job as passing. A PR's IPA can be tried on the
+  # phone before merge.
   pull_request:
     branches: [main]
-    paths: &app-paths
+  # Every push to main that touches the app makes an installable IPA. tools/ is listed because the
+  # diagnostics step runs the verifier. Path filters are not evaluated for tag pushes. Keep this
+  # list in step with APP_PATHS in the plan job.
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths:
       - 'Mio/**'
       - 'MioWidgets/**'
       - 'MioTests/**'
@@ -16,10 +23,6 @@ on:
       - 'Mio.xcodeproj/**'
       - 'tools/**'
       - '.github/workflows/build-unsigned-ipa.yml'
-  push:
-    branches: [main]
-    tags: ['v*']
-    paths: *app-paths
   # Nightly UI tests and strict concurrency diagnostics against main. GitHub turns scheduled
   # workflows off in public repos after 60 days without activity; re-enable it under Actions.
   schedule:
@@ -56,8 +59,10 @@ jobs:
     timeout-minutes: 5
     permissions:
       actions: read
+      pull-requests: read
     outputs:
       run: ${{ steps.plan.outputs.run }}
+      app: ${{ steps.plan.outputs.app }}
       uitester: ${{ steps.plan.outputs.uitester }}
       diagnostik: ${{ steps.plan.outputs.diagnostik }}
     steps:
@@ -67,11 +72,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           INPUT_UITESTER: ${{ inputs.uitester }}
           INPUT_DIAGNOSTIK: ${{ inputs.diagnostik }}
         run: |
           set -euo pipefail
-          run=true uitester=false diagnostik=false
+          run=true app=true uitester=false diagnostik=false
           case "$EVENT" in
             workflow_dispatch)
               uitester="${INPUT_UITESTER:-false}"
@@ -86,13 +92,28 @@ jobs:
                 run=false
               fi
               ;;
+            pull_request)
+              # Same paths as the push trigger above.
+              APP_PATHS='^(Mio|MioWidgets|MioTests|MioUITests|Mio\.xcodeproj|tools)/|^\.github/workflows/build-unsigned-ipa\.yml$'
+              # A renamed file counts under both its new and its old path, so moving app code out of
+              # Mio/ still builds. If this call fails the job fails, and branch protection requires
+              # this job, so a broken plan blocks the merge instead of skipping the Mac checks.
+              files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[] | .filename, (.previous_filename // empty)')"
+              # The files API stops at 3,000 entries; a PR that large always builds and tests.
+              changed="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.changed_files')"
+              if (( changed < 3000 )) && ! grep -qE "$APP_PATHS" <<<"$files"; then
+                echo "PR:en ändrar inte appen; IPA och tester hoppas över."
+                app=false
+              fi
+              ;;
             push)
               if [[ "$REF" == refs/tags/v* ]]; then uitester=true diagnostik=true; fi
               ;;
           esac
-          echo "run=$run uitester=$uitester diagnostik=$diagnostik"
+          echo "run=$run app=$app uitester=$uitester diagnostik=$diagnostik"
           {
             echo "run=$run"
+            echo "app=$app"
             echo "uitester=$uitester"
             echo "diagnostik=$diagnostik"
           } >> "$GITHUB_OUTPUT"
@@ -102,9 +123,10 @@ jobs:
   # calling a revision tested.
   ipa:
     name: Xcode 27 – IPA
-    # Does not wait for the plan job, so the IPA is ready as soon as possible. The nightly run
-    # exists for the tests and makes no IPA.
-    if: ${{ github.event_name != 'schedule' }}
+    # Waits only for the small plan job (about 15 s), which skips the IPA for a PR that does not
+    # touch the app. The nightly run exists for the tests and makes no IPA.
+    needs: plan
+    if: ${{ github.event_name != 'schedule' && needs.plan.outputs.app == 'true' }}
     runs-on: xcode-27
     timeout-minutes: 20
     env:
@@ -257,7 +279,7 @@ jobs:
   test:
     name: Xcode 27 – tester
     needs: plan
-    if: ${{ needs.plan.outputs.run == 'true' }}
+    if: ${{ needs.plan.outputs.run == 'true' && needs.plan.outputs.app == 'true' }}
     runs-on: xcode-27
     timeout-minutes: 50
     env:

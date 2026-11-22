@@ -2,6 +2,17 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Auto-merge, 2026-11-22
+
+Användarens val 2026-11-22 ([MIO-28](https://linear.app/kanonmaten/issue/MIO-28)), efter att Claude först avrått med fel skäl.
+
+| Val | Varför | Bortvalt |
+|---|---|---|
+| Claude slår på GitHubs auto-merge när PR:en öppnas | En PR slås ihop även om sessionen tar slut medan CI kör, och kraven upprätthålls av GitHub i stället för av en regel i CLAUDE.md. | Claude slår ihop för hand (PR:en blir liggande när sessionen slutar, och inget hindrar en för tidig sammanslagning) |
+| "Bygg Mio IPA" startar för varje PR, och plan-jobbet hoppar över IPA- och testjobben när PR:en inte ändrar appen eller `tools/` | Ett krav på en kontroll som aldrig startar blockerar för alltid, men ett överhoppat jobb räknas som godkänt ([GitHub](https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/using-conditions-to-control-job-execution)). IPA-jobbet väntar nu på plan-jobbet, cirka 15 s; verifieraren tillåter det beroendet men inget annat. | Sökvägsfilter på `pull_request` (då kan iPhone-testerna inte krävas); ett krav bara på Linux-jobben (en appändring kunde slås ihop före simulatortesterna) |
+| Krav för `main`: `verify`, `Mio Kontroll (control/)`, `Välj tester`, `Xcode 27 – IPA`, `Xcode 27 – tester`, `CodeRabbit`, ett godkännande, inga öppna trådar; gamla godkännanden försvinner vid ny commit | CodeRabbits godkännande ([automatic approvals](https://docs.coderabbit.ai/pr-reviews/automatic-approvals)) kommer bara när den granskat sista commiten, alla trådar är lösta och inga kontroller före sammanslagning fallerar. Dess gröna statuskontroll räcker inte ensam: den blir grön också när granskningen hoppats över eller begränsats ([status check](https://docs.coderabbit.ai/pr-reviews/status-check)). `fail_commit_status` gör att en misslyckad granskning stoppar. `Välj tester` krävs eftersom IPA- och testjobben hoppas över, och alltså räknas som godkända, om plan-jobbet fallerar; plan-jobbet läser också en flyttad fils gamla sökväg. | CodeRabbits statuskontroll som enda krav |
+| Författaren får inte godkänna själv (`allow_author_approval: false`) | Claude arbetar som användarens konto, så ett eget godkännande vore inget godkännande. Administratören kan fortfarande gå förbi kraven i en nödsituation. | |
+
 ## En version för hela repot, 2026-11-21
 
 Användarens val 2026-11-21 ([KAN-23](https://linear.app/kanonmaten/issue/KAN-23)).
