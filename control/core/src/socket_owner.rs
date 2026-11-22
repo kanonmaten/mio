@@ -83,7 +83,41 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         assert!(port_owned_by(port, &me));
         assert!(!port_owned_by(port, if me == "root" { "nobody" } else { "root" }));
+        // After the drop, another test or program may bind the same free port at once, so
+        // "nobody listens on the port" is not something this test can assert. What it can
+        // assert is that this listener's own socket (by inode) is gone from the tables.
+        let inode = socket_inode(&listener);
+        assert!(listening_inodes(port).contains(&inode));
         drop(listener);
-        assert!(!port_owned_by(port, &me), "nobody listens any more");
+        assert!(!listening_inodes(port).contains(&inode), "our listener is gone");
+    }
+
+    /// The kernel's inode for a socket, from `/proc/self/fd/<fd>` → `socket:[<inode>]`.
+    fn socket_inode(listener: &std::net::TcpListener) -> String {
+        use std::os::fd::AsRawFd;
+        let link = std::fs::read_link(format!("/proc/self/fd/{}", listener.as_raw_fd())).unwrap();
+        let link = link.to_string_lossy();
+        link.strip_prefix("socket:[").and_then(|rest| rest.strip_suffix(']')).unwrap().to_owned()
+    }
+
+    /// The inodes of every listening socket on `port` in `/proc/net/tcp` and `/proc/net/tcp6`.
+    fn listening_inodes(port: u16) -> Vec<String> {
+        let wanted = format!("{port:04X}");
+        ["/proc/net/tcp", "/proc/net/tcp6"]
+            .iter()
+            .filter_map(|path| std::fs::read_to_string(path).ok())
+            .flat_map(|table| {
+                table
+                    .lines()
+                    .skip(1)
+                    .filter_map(|line| {
+                        let fields: Vec<&str> = line.split_whitespace().collect();
+                        let (local, state, inode) = (fields.get(1)?, fields.get(3)?, fields.get(9)?);
+                        let (_, local_port) = local.rsplit_once(':')?;
+                        (*state == "0A" && local_port.eq_ignore_ascii_case(&wanted)).then(|| (*inode).to_owned())
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 }
