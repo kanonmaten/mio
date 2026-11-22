@@ -29,7 +29,7 @@ Allt tal stannar hos användaren: inget ljud sparas, transkriptionen sker på de
 
 - Tre flikar: Hem, Lektioner, Förslag, plus en separat mikrofonknapp. Ett inställningsark bakom kugghjulet; andra skärmar visar bara statusbrickor som öppnar det.
 - AI är på som standard när datorn är parad, med snabbpaus på Fånga och samma reglage under Inställningar → AI. Enskilda frågor skickas utan förhandsgranskning; förslag kräver Ja.
-- Groqs gratisnivå: vardagsutdrag analyseras i omgångar högst var femte minut, och dygnets tokens kan ta slut. Appen visar då när AI fungerar igen.
+- Leverantörens kvot (Mistral som standard): vardagsutdrag analyseras i omgångar högst var femte minut, och kvoten kan ta slut. Appen visar då när AI fungerar igen.
 - Rättelser är ett visningslager; originaltranskriptet ändras aldrig. Talarnamn är också ett visningslager.
 - Inga icke-mål i 0.9.0: ingen chatthistorik, strömmande svar, TTS eller automatiska åtgärder.
 
