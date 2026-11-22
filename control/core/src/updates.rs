@@ -116,8 +116,39 @@ impl UpdateState {
     }
 }
 
+/// What `git rev-parse --local-env-vars` lists: variables with which a calling git points every
+/// git below it at its own repository. A pre-push hook in a linked worktree gets `GIT_DIR`, and
+/// `-C <repo>` does not override it, so a child git would read or write the caller's repo.
+const REPO_ENV: [&str; 15] = [
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_CONFIG",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_GRAFT_FILE",
+    "GIT_INDEX_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_PREFIX",
+    "GIT_SHALLOW_FILE",
+    "GIT_COMMON_DIR",
+];
+
+/// `git -C <repo>` without input or error output, and without an inherited repository.
+fn git_command(repo: &Path) -> Command {
+    let mut command = Command::new("git");
+    for name in REPO_ENV {
+        command.env_remove(name);
+    }
+    command.arg("-C").arg(repo).stdin(Stdio::null()).stderr(Stdio::null());
+    command
+}
+
 fn git(repo: &Path, arguments: &[&str]) -> Option<String> {
-    let output = Command::new("git").arg("-C").arg(repo).args(arguments).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
+    let output = git_command(repo).args(arguments).output().ok()?;
     output.status.success().then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
@@ -159,13 +190,7 @@ fn part_state(part: Part, repo: &Path, root: &Path, target: Option<&str>) -> Par
     let Some(target) = target.filter(|_| is_commit(installed)) else {
         return PartState::Unknown("okänd version".into());
     };
-    let status = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(["diff", "--quiet", installed, target, "--", directory])
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+    let status = git_command(repo).args(["diff", "--quiet", installed, target, "--", directory]).status();
     match status.map(|status| status.code()) {
         Ok(Some(0)) => PartState::UpToDate,
         Ok(Some(1)) => PartState::Behind,
@@ -238,7 +263,7 @@ mod tests {
     use super::*;
 
     fn run(directory: &Path, arguments: &[&str]) {
-        let status = Command::new("git").arg("-C").arg(directory).args(arguments)
+        let status = git_command(directory).args(arguments)
             .env("GIT_AUTHOR_NAME", "t").env("GIT_AUTHOR_EMAIL", "t@t").env("GIT_COMMITTER_NAME", "t").env("GIT_COMMITTER_EMAIL", "t@t")
             .stdout(Stdio::null()).stderr(Stdio::null()).status().unwrap();
         assert!(status.success(), "git {arguments:?}");
@@ -255,6 +280,39 @@ mod tests {
 
     #[test]
     fn a_part_is_behind_only_when_its_directory_changed_upstream() {
+        behind_scenario();
+    }
+
+    /// A pre-push hook in a linked worktree runs with `GIT_DIR` (and friends) set to that repo,
+    /// and `verify` runs these tests from it. The scenario is rerun in a child process with that
+    /// environment pointing at a decoy repo, which must come out untouched.
+    #[test]
+    fn git_ignores_a_repo_inherited_from_a_calling_git() {
+        const CHILD: &str = "MIO_TEST_INHERITED_GIT_DIR";
+        if std::env::var_os(CHILD).is_some() {
+            behind_scenario();
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let decoy = temp.path().join("decoy");
+        std::fs::create_dir_all(&decoy).unwrap();
+        run(&decoy, &["init", "-q", "-b", "main"]);
+        let before = commit(&decoy, "README", "decoy");
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "updates::tests::git_ignores_a_repo_inherited_from_a_calling_git", "--test-threads=1"])
+            .env(CHILD, "1")
+            .env("GIT_DIR", decoy.join(".git"))
+            .env("GIT_WORK_TREE", &decoy)
+            .env("GIT_INDEX_FILE", decoy.join(".git/index"))
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stdout));
+        assert_eq!(git(&decoy, &["rev-parse", "HEAD"]), Some(before));
+        assert_eq!(git(&decoy, &["config", "--get", "core.bare"]).as_deref(), Some("false"));
+        assert_eq!(git(&decoy, &["status", "--porcelain"]).as_deref(), Some(""));
+    }
+
+    fn behind_scenario() {
         let temp = tempfile::tempdir().unwrap();
         let (origin, clone, root) = (temp.path().join("origin"), temp.path().join("clone"), temp.path().join("root"));
         std::fs::create_dir_all(&origin).unwrap();
