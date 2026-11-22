@@ -51,7 +51,7 @@ impl UnitAction {
 }
 
 /// The gateway's providers (`PROVIDERS` in `server/src/model_profiles.rs`).
-pub const PROVIDER_IDS: [&str; 4] = ["groq", "anthropic", "mistral", "nvidia"];
+pub const PROVIDER_IDS: [&str; 7] = ["groq", "anthropic", "mistral", "nvidia", "openai", "openrouter", "gemini"];
 
 /// A model name the gateway could accept: what `provider_profile` checks before its catalog.
 pub fn is_model_name(model: &str) -> bool {
@@ -231,7 +231,7 @@ mod tests {
             &["status", "installningar", "gateway"],
             &["read", "parningsdata"],
             &["service", "token", "gateway"],
-            &["service", "prova", "openai", "gpt"],
+            &["service", "prova", "deepseek", "gpt"],
             &["service", "prova", "groq", "-rf"],
             &["service", "prova", "groq", "http://evil"],
             &["read", "prova", "groq", "qwen/qwen3.8-27b"],

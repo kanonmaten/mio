@@ -113,10 +113,13 @@ Varje uppgift (`ask`, `everyday`, `lesson`) kör ett granskat par av leverantör
 | Groq | `qwen/qwen3.8-27b` | `GROQ_API_KEY` | Granskad. Gratisnivå, se nedan |
 | Anthropic | `claude-haiku-5-5` | `ANTHROPIC_API_KEY` | Granskad 2026-11-17. Tänkandet av, schemat via `output_config.format`, **utan temperatur** (Anthropic vägrar parametern; `/v2/status` visar `"temperature": "provider-default"`). Ingen gratisnivå: 0,10 USD per miljon token in, 0,50 ut |
 | NVIDIA NIM | `qwen/qwen3.8-27b` | `NVIDIA_API_KEY` | Kandidat av samma skäl, valbar efter ett godkänt prov |
+| OpenAI | `gpt-6-luna`, `gpt-6.1-terra` (`ask`, `everyday`), `gpt-6.2-sol` (bara `lesson`) | `OPENAI_API_KEY` | Kandidater sedan 2026-11-22. Strikt schema och resonemang `none` är dokumenterade, temperatur 0 är det inte, så provet avgör. Gatewayen skickar `max_completion_tokens`. Ingen tränar på API-data; OpenAI sparar loggar för missbruk i upp till 30 dagar |
+| OpenRouter | `openai/gpt-6-luna`, `mistralai/mistral-small-2603`, `qwen/qwen3.8-27b`, `google/gemini-2.5-flash-lite` (`ask`, `everyday`), `mistralai/mistral-large-4-0`, `google/gemini-3.8-flash` (bara `lesson`) | `OPENROUTER_API_KEY` | Kandidater sedan 2026-11-22. Varje anrop låses till underleverantörer som stöder alla parametrar som skickas, inte samlar in data och inte sparar något (`provider: {require_parameters, data_collection: "deny", zdr}`); finns ingen sådan misslyckas anropet. Resonemanget sätts med `reasoning` och tas bort ur svaret. Inget pris, eftersom det beror på underleverantören |
+| Google Gemini | `gemini-2.5-flash-lite` (`ask`, `everyday`), `gemini-3.8-flash` (bara `lesson`) | `GEMINI_API_KEY` | Kandidater sedan 2026-11-22, via Googles OpenAI-kompatibla adress. Gemini 3 och 4 kan inte stänga av resonemanget. Schemat följs inte strikt, så varje svar kontrolleras. Gratisnivån räcker inte för Vardag (cirka 20 anrop om dagen för Flash), och inom EES får bara betalnivån användas för appar |
 
 Mistral Medium 3.5 är borttagen (utfasad 2026-10-31). Cloudflare Workers AI är avböjt: dess JSON-läge garanterar inte schemat. Detaljer och källor i [besluten](../docs/DECISIONS.md).
 
-Tokenbudgeten per minut gäller per leverantör: `MIO_TOKENS_PER_MINUTE` för Groq (8 000 om den saknas) och `MIO_TOKENS_PER_MINUTE_ANTHROPIC`, `_MISTRAL` och `_NVIDIA` för de andra (ingen gräns om den saknas; 2 000–1 000 000).
+Tokenbudgeten per minut gäller per leverantör: `MIO_TOKENS_PER_MINUTE` för Groq (8 000 om den saknas) och `MIO_TOKENS_PER_MINUTE_ANTHROPIC`, `_MISTRAL`, `_NVIDIA`, `_OPENAI`, `_OPENROUTER` och `_GEMINI` för de andra (ingen gräns om den saknas; 2 000–1 000 000).
 
 ### Lägga till en leverantör
 

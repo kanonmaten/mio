@@ -148,7 +148,7 @@ pub fn build_for_profile(profile: Profile, api_key: &str, generation: &Generatio
     }
 }
 
-/// OpenAI-style chat completions (Groq, Mistral, NVIDIA NIM). For Groq the body is byte for
+/// OpenAI-style chat completions (Groq, Mistral, NVIDIA NIM, OpenAI, OpenRouter, Gemini). For Groq the body is byte for
 /// byte what the Node gateway sent (tests/parity.rs).
 fn chat_request(profile: Profile, api_key: &str, generation: &Generation) -> ProviderRequest {
     let mut json_schema = generation.structured_output.as_object().cloned().unwrap_or_default();
@@ -158,12 +158,22 @@ fn chat_request(profile: Profile, api_key: &str, generation: &Generation) -> Pro
     if profile.temperature {
         body.insert("temperature".to_owned(), json!(0));
     }
-    body.insert("max_tokens".to_owned(), json!(generation.max_output_tokens));
+    // OpenAI's reasoning models document `max_completion_tokens`; `max_tokens` is not listed for them.
+    let limit = if profile.provider == "openai" { "max_completion_tokens" } else { "max_tokens" };
+    body.insert(limit.to_owned(), json!(generation.max_output_tokens));
     body.insert("stream".to_owned(), json!(false));
     // Reasoning must be off, not hidden; responses that still carry reasoning are rejected below.
     // The one exception is a reviewed level for a model that cannot turn it off, which only the
     // lesson task may select (resolve_task_profile and validate_config refuse it elsewhere).
     match profile.reasoning {
+        // OpenRouter sets reasoning in its own object; `exclude` keeps a lesson's thinking out of
+        // the answer, so it never reaches the gateway at all.
+        Reasoning::EffortNone if !profile.plain && profile.provider == "openrouter" => {
+            body.insert("reasoning".to_owned(), json!({ "effort": "none", "exclude": true }));
+        }
+        Reasoning::Effort(level) if !profile.plain && profile.provider == "openrouter" => {
+            body.insert("reasoning".to_owned(), json!({ "effort": level, "exclude": true }));
+        }
         Reasoning::EffortNone if !profile.plain => {
             body.insert("reasoning_effort".to_owned(), json!("none"));
         }
@@ -176,6 +186,12 @@ fn chat_request(profile: Profile, api_key: &str, generation: &Generation) -> Pro
         _ => {}
     }
     body.insert("response_format".to_owned(), json!({ "type": kind, "json_schema": json_schema }));
+    // OpenRouter forwards to an upstream endpoint: only one that supports every parameter sent
+    // (the schema, reasoning off, temperature), collects no data and retains nothing may answer.
+    // Without a match the call fails; it never falls back to a laxer endpoint.
+    if profile.provider == "openrouter" {
+        body.insert("provider".to_owned(), json!({ "require_parameters": true, "data_collection": "deny", "zdr": true }));
+    }
     body.insert("messages".to_owned(), generation.messages.iter()
         .map(|message| json!({ "role": message.role, "content": message.content })).collect());
     ProviderRequest { url: format!("{}/chat/completions", profile.base),
@@ -196,7 +212,9 @@ fn messages_request(profile: Profile, api_key: &str, generation: &Generation) ->
     let schema = generation.structured_output.get("schema").cloned().ok_or(Incompatible::Options)?;
     let mut body = Map::new();
     body.insert("model".to_owned(), json!(profile.requested_model));
-    body.insert("max_tokens".to_owned(), json!(generation.max_output_tokens));
+    // OpenAI's reasoning models document `max_completion_tokens`; `max_tokens` is not listed for them.
+    let limit = if profile.provider == "openai" { "max_completion_tokens" } else { "max_tokens" };
+    body.insert(limit.to_owned(), json!(generation.max_output_tokens));
     body.insert("stream".to_owned(), json!(false));
     body.insert("thinking".to_owned(), json!({ "type": "disabled" }));
     body.insert("output_config".to_owned(), json!({ "effort": "medium", "format": { "type": "json_schema", "schema": schema } }));

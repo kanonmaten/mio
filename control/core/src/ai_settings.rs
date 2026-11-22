@@ -146,6 +146,9 @@ pub fn provider_name(provider: &str) -> &str {
         "anthropic" => "Anthropic",
         "mistral" => "Mistral",
         "nvidia" => "NVIDIA",
+        "openai" => "OpenAI",
+        "openrouter" => "OpenRouter",
+        "gemini" => "Google Gemini",
         other => other,
     }
 }
