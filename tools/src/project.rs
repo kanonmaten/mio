@@ -107,7 +107,11 @@ pub fn workflow_contract_issues(name: &str, workflow: &Value) -> Vec<String> {
             let (ipa, test) = (&commands["ipa"], &commands["test"]);
             let only_known_jobs = jobs.keys().all(|key| ["ipa", "test", "plan"].contains(&key.as_str()));
             let ipa_waits = jobs.get("ipa").and_then(Value::as_object).is_some_and(|job| {
-                job.get("needs").is_some_and(|needs| needs.as_str() != Some("plan"))
+                job.get("needs").is_some_and(|needs| match needs {
+                    Value::String(job) => job != "plan",
+                    Value::Array(jobs) => jobs.iter().any(|job| job.as_str() != Some("plan")),
+                    _ => true,
+                })
             });
             let on_xcode = only_known_jobs
                 && !ipa_waits

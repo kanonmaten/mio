@@ -95,7 +95,10 @@ jobs:
             pull_request)
               # Same paths as the push trigger above.
               APP_PATHS='^(Mio|MioWidgets|MioTests|MioUITests|Mio\.xcodeproj|tools)/|^\.github/workflows/build-unsigned-ipa\.yml$'
-              files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[].filename')"
+              # A renamed file counts under both its new and its old path, so moving app code out of
+              # Mio/ still builds. If this call fails the job fails, and branch protection requires
+              # this job, so a broken plan blocks the merge instead of skipping the Mac checks.
+              files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" --jq '.[] | .filename, (.previous_filename // empty)')"
               if ! grep -qE "$APP_PATHS" <<<"$files"; then
                 echo "PR:en ändrar inte appen; IPA och tester hoppas över."
                 app=false

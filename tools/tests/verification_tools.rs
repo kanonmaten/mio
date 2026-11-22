@@ -85,6 +85,8 @@ fn ipa_workflow_requires_parallel_ipa_and_test_jobs() {
     workflow["jobs"]["test"]["needs"] = json!("plan");
     workflow["jobs"]["ipa"]["needs"] = json!("plan");
     assert!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow).is_empty());
+    workflow["jobs"]["ipa"]["needs"] = json!(["plan"]);
+    assert!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow).is_empty());
     workflow["jobs"]["ipa"]["needs"] = json!("test");
     assert_eq!(workflow_contract_issues("build-unsigned-ipa.yml", &workflow), ["IPA- och testjobb på xcode-27"]);
     workflow["jobs"]["ipa"]["needs"] = json!(["plan", "test"]);
