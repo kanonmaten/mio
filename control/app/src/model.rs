@@ -26,6 +26,8 @@ pub struct StatusModel {
     /// From a request until a reading that started after it has been applied: what the
     /// "Kontrollera igen" buttons spin on.
     refreshing: Option<Instant>,
+    /// Counts requests; a reading ends the spinning only if no request came after it started.
+    requests: u64,
     /// Decides which changes become desktop notifications and keeps them from repeating.
     monitor: Monitor,
 }
@@ -62,6 +64,7 @@ impl StatusModel {
     /// Asks the polling loop to read again at once, after the panel changed something.
     pub fn request_refresh(&mut self, cx: &mut Context<Self>) {
         self.refresh_requested = true;
+        self.requests += 1;
         if self.refreshing.is_none() {
             self.refreshing = Some(Instant::now());
             cx.notify();
@@ -95,9 +98,9 @@ pub fn init(cx: &mut App) -> Entity<StatusModel> {
         loop {
             // A request made while this reading runs leaves `refresh_requested` set, so the next
             // reading starts at once and is the one that ends the spinning.
-            let (previous, answers) = model.update(cx, |model, _| {
+            let (previous, answers, requests) = model.update(cx, |model, _| {
                 model.refresh_requested = false;
-                (model.overview.clone(), model.refreshing)
+                (model.overview.clone(), model.refreshing, model.requests)
             });
             let next = cx.background_executor().spawn(async move { probe::overview(DEFAULT_GATEWAY_PORT, &previous) }).await;
             model.update(cx, |model, cx| model.apply(next, cx));
@@ -107,7 +110,8 @@ pub fn init(cx: &mut App) -> Entity<StatusModel> {
                     cx.background_executor().timer(left).await;
                 }
                 model.update(cx, |model, cx| {
-                    if model.refreshing == Some(since) {
+                    // A request during this reading is answered by the next one, which starts at once.
+                    if model.requests == requests {
                         model.refreshing = None;
                         cx.notify();
                     }
