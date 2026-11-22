@@ -75,7 +75,7 @@ Delstegen går att köra var för sig: `project`, `swift-core`, `capture-recover
 | Grind | Täcker | Täcker inte |
 |---|---|---|
 | Struktur | Projektidentitet, targets, länkar, integritets-/konfigurationsregler, workflowinställningar | SwiftUI/iOS-bygge |
-| Rust-gateway | Gateway, Groq-adapter, routing, kvot och sparade räknare, deadlines med fixtures | Nyckel, modellåtkomst, modellkvalitet, installerad tjänst och Tailscale på datorn |
+| Rust-gateway | Gateway, leverantörsadaptrar, routing, kvot och sparade räknare, deadlines med fixtures | Nyckel, modellåtkomst, modellkvalitet, installerad tjänst och Tailscale på datorn |
 | Privat transkriptions-API | Låst Pythonmiljö, API/cache/deadline med fake-backend | Pianissimo, GPU, svensk kvalitet |
 | Portable Swift, capture recovery, strikt concurrency | Modeller, actorpatchar, workflows, återhämtning | AVFoundation, Keychain, URLSession, UIKit/SwiftUI, iOS-filskydd |
 | Långhistorik (valfri) | Syntetisk session-store: kodning, patchskrivning, processminne | iPhone, ljud, batteri |
