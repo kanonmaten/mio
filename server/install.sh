@@ -43,14 +43,16 @@ read_hidden_key() {
     for attempt in 1 2 3; do
         IFS= read -rsp "$1" provider_key; echo
         [[ -n ${provider_key//[[:space:]]/} ]] && return 0
-        ((attempt < 3)) && echo "Inget kom in. Klistra in nyckeln igen."
+        if ((attempt < 3)); then echo "Inget kom in. Klistra in nyckeln igen."; fi
     done
+    fail "Ingen nyckel kom in efter tre försök. Kör skriptet igen och klistra in nyckeln."
 }
 
 # Checks the trimmed key against `pattern` and otherwise says what is wrong with it, never the
 # key itself: only its length and which kind of character does not belong.
 check_key() {
-    local name=$1 pattern=$2 hint=$3 prefix=$4
+    # The prefix is optional (Mistral has none); `set -u` would stop on a missing $4.
+    local name=$1 pattern=$2 hint=$3 prefix=${4-}
     trim_key
     # Checked first: Groq and sk- keys also fit Mistral's pattern, since Mistral keys may hold _ and -.
     [[ $name == Mistral && $provider_key == gsk_* ]] \
