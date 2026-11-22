@@ -6,8 +6,14 @@
 //! then the command. Elsewhere, or when Plasma names nothing usable, `xdg-terminal-exec` picks the
 //! terminal. No terminal is named in the code, and no terminal-specific "hold" flag is needed:
 //! the script waits for Enter itself (see `updates::script`).
+//!
+//! The command handed to the terminal is always one word, the path of an executable script:
+//! some terminals take everything after `-e` as the command and its arguments (Konsole,
+//! Ghostty), others only the next argument (Xfce Terminal), and one word works in both.
 
-use std::path::PathBuf;
+use std::io::Write as _;
+use std::os::unix::fs::OpenOptionsExt as _;
+use std::path::{Path, PathBuf};
 
 use crate::computer::config_home;
 
@@ -16,6 +22,24 @@ use crate::computer::config_home;
 pub struct Launch {
     pub program: String,
     pub args: Vec<String>,
+}
+
+/// Writes `script` to a new private executable file that deletes itself when it starts, and
+/// returns how to open the default terminal running it.
+pub fn launch_script(script: &str) -> std::io::Result<Launch> {
+    let dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).filter(|dir| dir.is_absolute()).unwrap_or_else(std::env::temp_dir);
+    let path = write_script(&dir, script)?;
+    Ok(launch(&[&path.to_string_lossy()]))
+}
+
+/// `script` as `<dir>/mio-kontroll-<pid>-<nanos>.sh`, mode 0700, never over an existing file.
+pub fn write_script(dir: &Path, script: &str) -> std::io::Result<PathBuf> {
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|time| time.as_nanos()).unwrap_or(0);
+    let path = dir.join(format!("mio-kontroll-{}-{nanos}.sh", std::process::id()));
+    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o700).open(&path)?;
+    // bash has the file open once it runs, so removing it first leaves nothing behind.
+    file.write_all(format!("#!/usr/bin/env bash\nrm -f -- \"$0\"\n{script}").as_bytes())?;
+    Ok(path)
 }
 
 /// How to open the default terminal for `command` on this computer.
@@ -57,7 +81,7 @@ pub fn entry_command(entry: &str) -> Option<Vec<String>> {
     if ini_value(entry, group, "Hidden") == Some("true") {
         return None;
     }
-    let mut argv = parse_exec(ini_value(entry, group, "Exec")?)?;
+    let mut argv = parse_exec(&unescape_string(ini_value(entry, group, "Exec")?))?;
     let exec_arg = ini_value(entry, group, "X-TerminalArgExec").or_else(|| ini_value(entry, group, "TerminalArgExec"));
     match exec_arg {
         // An explicitly empty key means the command follows directly.
@@ -66,6 +90,32 @@ pub fn entry_command(entry: &str) -> Option<Vec<String>> {
         None => argv.push("-e".to_owned()),
     }
     Some(argv)
+}
+
+/// A desktop entry string value with its escapes (`\\s`, `\\n`, `\\t`, `\\r`, `\\\\`) decoded; the spec
+/// decodes these before the `Exec` quoting rules apply.
+pub fn unescape_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars();
+    while let Some(char) = chars.next() {
+        if char != '\\' {
+            out.push(char);
+            continue;
+        }
+        match chars.next() {
+            Some('s') => out.push(' '),
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some('r') => out.push('\r'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 /// Splits an `Exec` value as the Desktop Entry spec says: double quotes group, a backslash
@@ -113,9 +163,27 @@ pub fn parse_exec(exec: &str) -> Option<Vec<String>> {
     (!args.is_empty()).then_some(args)
 }
 
-/// The first `applications/<id>` under the XDG data directories, in their order.
+/// The first entry with desktop file ID `id` under the XDG data directories, in their order. An
+/// entry in a subdirectory has its path's `/` turned into `-` in its ID (`kde/foo.desktop` is
+/// `kde-foo.desktop`).
 pub fn find_entry(id: &str, data_dirs: &[PathBuf]) -> Option<PathBuf> {
-    data_dirs.iter().map(|dir| dir.join("applications").join(id)).find(|path| path.is_file())
+    data_dirs.iter().find_map(|dir| find_in(&dir.join("applications"), "", id, 0))
+}
+
+fn find_in(dir: &Path, prefix: &str, id: &str, depth: u8) -> Option<PathBuf> {
+    let direct = dir.join(id.strip_prefix(prefix)?);
+    if direct.is_file() {
+        return Some(direct);
+    }
+    if depth >= 3 {
+        return None;
+    }
+    let mut subdirs: Vec<_> = std::fs::read_dir(dir).ok()?.flatten().filter(|entry| entry.path().is_dir()).collect();
+    subdirs.sort_by_key(std::fs::DirEntry::file_name);
+    subdirs.into_iter().find_map(|entry| {
+        let name = entry.file_name().into_string().ok()?;
+        find_in(&entry.path(), &format!("{prefix}{name}-"), id, depth + 1)
+    })
 }
 
 /// `$XDG_DATA_HOME` (or `~/.local/share`) followed by `$XDG_DATA_DIRS` (or
@@ -151,6 +219,8 @@ fn ini_value<'a>(text: &'a str, group: &str, key: &str) -> Option<&'a str> {
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::PermissionsExt as _;
+
     use super::*;
 
     const GHOSTTY: &str = "[Desktop Entry]\nName=Ghostty\nExec=ghostty --gtk-single-instance=true\nX-TerminalArgExec=-e\nX-TerminalArgHold=--wait-after-command\n\n[Desktop Action new-window]\nExec=ghostty --other\n";
@@ -184,6 +254,36 @@ mod tests {
         assert_eq!(kde_terminal_service(globals).as_deref(), Some("com.mitchellh.ghostty.desktop"));
         assert_eq!(kde_terminal_service("[General]\nTerminalService=../evil.desktop\n"), None);
         assert_eq!(kde_terminal_service("[General]\nTerminalApplication=konsole\n"), None);
+    }
+
+    #[test]
+    fn the_terminal_gets_one_word_a_self_deleting_script() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_script(dir.path(), "echo hej\n").unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with("#!/usr/bin/env bash\nrm -f -- \"$0\"\necho hej"));
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o700);
+        let output = std::process::Command::new(&path).output().unwrap();
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "hej\n");
+        assert!(!path.exists(), "the script removes itself");
+        let launch = resolve(Some(GHOSTTY), &[&path.to_string_lossy()]);
+        assert_eq!(launch.args.len(), 3, "Exec, -e and the one path");
+    }
+
+    #[test]
+    fn exec_is_string_decoded_before_its_quoting() {
+        let entry = "[Desktop Entry]\nExec=\"/home/a\\\\$b/term\"\\sx\n";
+        assert_eq!(entry_command(entry).unwrap(), ["/home/a$b/term", "x", "-e"]);
+    }
+
+    #[test]
+    fn an_entry_in_a_subdirectory_is_found_by_its_id() {
+        let data = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(data.path().join("applications/kde")).unwrap();
+        std::fs::write(data.path().join("applications/kde/term.desktop"), GHOSTTY).unwrap();
+        let dirs = [data.path().to_path_buf()];
+        assert_eq!(find_entry("kde-term.desktop", &dirs), Some(data.path().join("applications/kde/term.desktop")));
+        assert_eq!(find_entry("term.desktop", &dirs), None);
     }
 
     #[test]

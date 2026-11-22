@@ -37,7 +37,8 @@ impl UpdateBackend {
             open_terminal: Arc::new(|script| {
                 // The default terminal (Plasma's choice, else xdg-terminal-exec); the script itself
                 // waits for Enter, so no terminal-specific hold flag is needed.
-                let launch = mio_control_core::terminal::launch(&["bash", "-c", &script]);
+                let launch = mio_control_core::terminal::launch_script(&script)
+                    .map_err(|error| format!("Skriptet för terminalen gick inte att skriva: {error}"))?;
                 std::process::Command::new(&launch.program)
                     .args(&launch.args)
                     .spawn()
