@@ -8,6 +8,10 @@ use serde_json::{Map, Value, json};
 
 pub const TASKS: [(&str, &str); 3] = [("ask", "Frågor"), ("everyday", "Vardag"), ("lesson", "Lektioner")];
 
+/// The task whose pair is the gateway's default. It never reasons, so the default is valid for
+/// every task that follows it.
+pub const DEFAULT_TASK: &str = "ask";
+
 /// Prices per million tokens, in dollars.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Price {
@@ -225,6 +229,41 @@ impl Catalog {
             .collect()
     }
 
+    /// The providers a task row offers, in the gateway's order: those with at least one pair,
+    /// selectable or waiting for a trial, allowed for `task`.
+    pub fn providers_for(&self, task: &str, order: &[&'static str]) -> Vec<&'static str> {
+        order
+            .iter()
+            .copied()
+            .filter(|provider| self.reviewed.iter().chain(&self.candidates).any(|pair| pair.provider == *provider && pair.allows(task)))
+            .collect()
+    }
+
+    /// The models a task row lists for one provider, in three groups: selectable (reviewed or
+    /// approved), waiting for a trial, and, for OpenRouter, models it lists that nobody has
+    /// reviewed. Only the first group can be chosen; the gateway refuses the others.
+    pub fn model_choices(&self, task: &str, provider: &str, listed: &[String]) -> Vec<ModelChoice> {
+        let selectable = self.reviewed.iter().filter(|pair| pair.provider == provider && pair.allows(task))
+            .map(|pair| ModelChoice { model: pair.model.clone(), kind: ChoiceKind::Selectable, note: pair.note() });
+        let waiting = self.candidates.iter().filter(|pair| pair.provider == provider && pair.allows(task))
+            .map(|pair| ModelChoice { model: pair.model.clone(), kind: ChoiceKind::NeedsTrial, note: pair.note() });
+        let mut choices: Vec<ModelChoice> = selectable.chain(waiting).collect();
+        if provider == "openrouter" {
+            let known = |model: &str| self.reviewed.iter().chain(&self.candidates).any(|pair| pair.is(provider, model));
+            choices.extend(listed.iter().filter(|model| !known(model)).map(|model| ModelChoice {
+                model: model.clone(),
+                kind: ChoiceKind::Unreviewed,
+                note: None,
+            }));
+        }
+        choices
+    }
+
+    /// The first model a task may use from `provider`, chosen when the user switches provider.
+    pub fn first_choice(&self, task: &str, provider: &str) -> Option<&Pair> {
+        self.reviewed.iter().find(|pair| pair.provider == provider && pair.allows(task))
+    }
+
     /// The "Prova" list: Mistral first (candidates before reviewed), then the rest as listed.
     pub fn trial_order(&self) -> Vec<&Pair> {
         let all: Vec<&Pair> = self.candidates.iter().chain(&self.reviewed).collect();
@@ -232,6 +271,54 @@ impl Catalog {
         let rest = self.reviewed.iter().chain(&self.candidates).filter(|pair| pair.provider != "mistral");
         mistral.chain(rest).collect()
     }
+}
+
+/// Whether a model in a task's list can be chosen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChoiceKind {
+    Selectable,
+    /// A candidate: selectable after a passed "Prova".
+    NeedsTrial,
+    /// Listed by OpenRouter but not reviewed; the gateway never runs it.
+    Unreviewed,
+}
+
+impl ChoiceKind {
+    /// The heading of the model list's group.
+    pub fn group(self) -> &'static str {
+        match self {
+            Self::Selectable => "Går att välja",
+            Self::NeedsTrial => "Kräver prov",
+            Self::Unreviewed => "Inte granskad än",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelChoice {
+    pub model: String,
+    pub kind: ChoiceKind,
+    pub note: Option<String>,
+}
+
+/// The model IDs in OpenRouter's public list (`GET /api/v1/models`, no key), without variants
+/// such as `:batch` or `:free`, which are separate offers of the same model. Anything that is
+/// not a plain model ID is skipped, so a changed answer can only shorten the list.
+pub fn parse_openrouter_models(json: &Value) -> Vec<String> {
+    let mut models: Vec<String> = json
+        .get("data")
+        .and_then(Value::as_array)
+        .map(|data| {
+            data.iter()
+                .filter_map(|entry| entry.get("id").and_then(Value::as_str))
+                .filter(|id| crate::command::is_model_name(id) && !id.contains(':') && id.contains('/'))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    models.sort();
+    models.dedup();
+    models
 }
 
 /// `gateway.env` as the helper returns it: plain values, and secrets only as set or not.
@@ -274,12 +361,15 @@ pub struct Limit {
 }
 
 /// The limits the gateway reads (`server/src/config.rs`).
-pub const LIMITS: [Limit; 8] = [
+pub const LIMITS: [Limit; 11] = [
     Limit { key: "MIO_REQUESTS_PER_MINUTE", label: "Anrop per minut", help: "1–60. Stoppar en klient som skenar.", min: 1, max: 60, optional: false },
     Limit { key: "MIO_TOKENS_PER_MINUTE", label: "Token per minut (Groq)", help: "2 000–1 000 000, tomt eller 0 för ingen gräns. Groqs gratisnivå: 8 000.", min: 2_000, max: 1_000_000, optional: true },
     Limit { key: "MIO_TOKENS_PER_MINUTE_ANTHROPIC", label: "Token per minut (Anthropic)", help: "2 000–1 000 000, tomt för ingen gräns.", min: 2_000, max: 1_000_000, optional: true },
     Limit { key: "MIO_TOKENS_PER_MINUTE_MISTRAL", label: "Token per minut (Mistral)", help: "2 000–1 000 000, tomt för ingen gräns.", min: 2_000, max: 1_000_000, optional: true },
     Limit { key: "MIO_TOKENS_PER_MINUTE_NVIDIA", label: "Token per minut (NVIDIA)", help: "2 000–1 000 000, tomt för ingen gräns.", min: 2_000, max: 1_000_000, optional: true },
+    Limit { key: "MIO_TOKENS_PER_MINUTE_OPENAI", label: "Token per minut (OpenAI)", help: "2 000–1 000 000, tomt för ingen gräns.", min: 2_000, max: 1_000_000, optional: true },
+    Limit { key: "MIO_TOKENS_PER_MINUTE_OPENROUTER", label: "Token per minut (OpenRouter)", help: "2 000–1 000 000, tomt för ingen gräns.", min: 2_000, max: 1_000_000, optional: true },
+    Limit { key: "MIO_TOKENS_PER_MINUTE_GEMINI", label: "Token per minut (Gemini)", help: "2 000–1 000 000, tomt för ingen gräns.", min: 2_000, max: 1_000_000, optional: true },
     Limit { key: "MIO_TOKENS_PER_DAY", label: "Token per dygn", help: "1–1 000 000, tomt för ingen gräns. Groqs gratisnivå: 200 000.", min: 1, max: 1_000_000, optional: true },
     Limit { key: "MIO_REQUESTS_PER_DAY", label: "Anrop per dygn", help: "1–1 000 000, tomt för ingen gräns.", min: 1, max: 1_000_000, optional: true },
     Limit { key: "MIO_LESSON_INTERVAL_SECONDS", label: "Sekunder mellan lektionsdelar", help: "60–3 600.", min: 60, max: 3_600, optional: false },
@@ -341,6 +431,23 @@ impl AiForm {
         self.per_task.get(task).unwrap_or(&self.default_pair)
     }
 
+    /// Chooses the pair for one task without moving the others. Frågor is the gateway's default
+    /// (`MIO_AI_PROVIDER`, `MIO_AI_MODEL`); the other tasks follow it unless they have a task
+    /// profile, so before the default changes each of them is pinned to the pair it runs with
+    /// now. `task_profiles` leaves out a profile that equals the default.
+    pub fn set_task(&mut self, task: &str, pair: (String, String)) {
+        if task == DEFAULT_TASK {
+            for (other, _) in TASKS.iter().filter(|(other, _)| *other != DEFAULT_TASK) {
+                let current = self.pair_for(other).clone();
+                self.per_task.insert((*other).to_owned(), current);
+            }
+            self.per_task.remove(DEFAULT_TASK);
+            self.default_pair = pair;
+        } else {
+            self.per_task.insert(task.to_owned(), pair);
+        }
+    }
+
     /// `MIO_AI_TASK_PROFILES` for the current choices, or empty when every task follows the default.
     fn task_profiles(&self) -> String {
         let mut profiles = Map::new();
@@ -365,6 +472,7 @@ impl AiForm {
         for (task, label) in TASKS {
             let (provider, model) = self.pair_for(task);
             match catalog.find(provider, model) {
+                None if model.is_empty() => problems.push(format!("{label}: välj en modell från {}.", provider_name(provider))),
                 None => problems.push(format!("{label}: {provider} · {model} är inte en granskad modell.")),
                 Some(pair) if !pair.allows(task) => {
                     problems.push(format!("{label}: {} går bara att välja för en annan uppgift.", pair.label()));
@@ -618,5 +726,73 @@ mod tests {
         let mut form = AiForm::from_file(&file);
         form.default_pair = ("mistral".into(), "mistral-small-x".into());
         assert!(form.problems(&catalog_with_candidates().with_approved(&file), &file).is_empty());
+    }
+
+    #[test]
+    fn a_task_row_lists_selectable_then_trial_models_and_openrouters_unreviewed_ones() {
+        let catalog = Catalog::parse(&json!({ "models": [
+                { "provider": "groq", "model": "qwen/qwen3.8-27b", "secretVariable": "GROQ_API_KEY", "reasoning": "off" }],
+            "candidates": [
+                { "provider": "openrouter", "model": "openai/gpt-6-luna", "secretVariable": "OPENROUTER_API_KEY", "reasoning": "off", "blocked": "Kräver prov." },
+                { "provider": "openrouter", "model": "google/gemini-3.8-flash", "secretVariable": "OPENROUTER_API_KEY", "reasoning": "medium",
+                  "tasks": ["lesson"], "blocked": "Kräver prov." }] }))
+        .unwrap();
+        let order = ["groq", "anthropic", "openrouter"];
+        assert_eq!(catalog.providers_for("ask", &order), ["groq", "openrouter"]);
+        let listed = vec!["openai/gpt-6-luna".to_owned(), "x-ai/new-model".to_owned()];
+        let ask = catalog.model_choices("ask", "openrouter", &listed);
+        let kinds: Vec<(&str, ChoiceKind)> = ask.iter().map(|choice| (choice.model.as_str(), choice.kind)).collect();
+        // The reviewed candidate is listed once; the lesson-only one is not offered for Frågor.
+        assert_eq!(kinds, [("openai/gpt-6-luna", ChoiceKind::NeedsTrial), ("x-ai/new-model", ChoiceKind::Unreviewed)]);
+        let lesson = catalog.model_choices("lesson", "openrouter", &[]);
+        assert_eq!(lesson.len(), 2);
+        // Other providers never get OpenRouter's list.
+        assert_eq!(catalog.model_choices("ask", "groq", &listed).len(), 1);
+        assert_eq!(catalog.first_choice("ask", "openrouter"), None, "nothing selectable until a trial passes");
+        assert_eq!(catalog.first_choice("ask", "groq").map(|pair| pair.model.as_str()), Some("qwen/qwen3.8-27b"));
+    }
+
+    #[test]
+    fn openrouters_public_list_keeps_plain_model_ids_only() {
+        let listed = parse_openrouter_models(&json!({ "data": [
+            { "id": "openai/gpt-6-luna" }, { "id": "openai/gpt-6-luna:batch" }, { "id": "qwen/qwen3.8-27b" },
+            { "id": "openai/gpt-6-luna" }, { "id": "https://evil" }, { "id": "no-author" }, { "id": 7 }, {}] }));
+        assert_eq!(listed, ["openai/gpt-6-luna", "qwen/qwen3.8-27b"]);
+        assert!(parse_openrouter_models(&json!({ "error": "x" })).is_empty());
+    }
+
+    #[test]
+    fn changing_one_task_leaves_the_others_where_they_were() {
+        let file = file();
+        let mut form = AiForm::from_file(&file);
+        // Frågor is the default: Vardag and Lektioner stay on Groq.
+        form.set_task("ask", ("anthropic".into(), "claude-haiku-5-5".into()));
+        assert_eq!(form.pair_for("everyday"), &("groq".to_owned(), "qwen/qwen3.8-27b".to_owned()));
+        assert_eq!(form.pair_for("lesson"), &("groq".to_owned(), "qwen/qwen3.8-27b".to_owned()));
+        let profiles: Value = serde_json::from_str(&form.task_profiles()).unwrap();
+        assert_eq!(profiles, json!({ "everyday": { "provider": "groq", "model": "qwen/qwen3.8-27b" },
+            "lesson": { "provider": "groq", "model": "qwen/qwen3.8-27b" } }));
+        // Moving Vardag to the same pair as Frågor drops its profile.
+        form.set_task("everyday", ("anthropic".into(), "claude-haiku-5-5".into()));
+        let profiles: Value = serde_json::from_str(&form.task_profiles()).unwrap();
+        assert_eq!(profiles, json!({ "lesson": { "provider": "groq", "model": "qwen/qwen3.8-27b" } }));
+    }
+
+    #[test]
+    fn a_provider_without_a_chosen_model_asks_for_one() {
+        let file = file();
+        let mut form = AiForm::from_file(&file);
+        form.set_task("lesson", ("openai".into(), String::new()));
+        let problems = form.problems(&catalog(), &file);
+        assert!(problems.iter().any(|problem| problem == "Lektioner: välj en modell från OpenAI."), "{problems:?}");
+    }
+
+    #[test]
+    fn every_provider_has_a_per_minute_limit_the_helper_may_write() {
+        for provider in crate::command::PROVIDER_IDS.iter().filter(|provider| **provider != "groq") {
+            let key = format!("MIO_TOKENS_PER_MINUTE_{}", provider.to_uppercase());
+            assert!(LIMITS.iter().any(|limit| limit.key == key), "{key} has no field");
+            assert!(crate::settings::SettingsFile::Gateway.writable_keys().contains(&key.as_str()), "{key} is not writable");
+        }
     }
 }

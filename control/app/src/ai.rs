@@ -5,6 +5,9 @@
 
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::collapsible::Collapsible;
+use gpui_kit::component::combobox::{Combobox, ComboboxEvent, ComboboxState};
+use gpui_kit::component::searchable_list::{SearchableGroup, SearchableListItem, SearchableVec};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::progress::Progress;
@@ -12,10 +15,10 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::select::{Select, SelectEvent, SelectState};
 use gpui_kit::component::{ActiveTheme as _, Disableable as _, Icon, IconName, IndexPath, Sizable as _, StyledExt as _, WindowExt as _, h_flex, v_flex};
 use gpui_kit::{
-    AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
+    App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _, Window, div, prelude::FluentBuilder as _,
 };
-use mio_control_core::ai_settings::{AiForm, Catalog, GatewayFile, LIMITS, Pair, TASKS, provider_name};
+use mio_control_core::ai_settings::{AiForm, Catalog, ChoiceKind, GatewayFile, LIMITS, Pair, TASKS, parse_openrouter_models, provider_name};
 use mio_control_core::credit::{CreditLevel, CreditMeter, format_limit, parse_limit};
 use mio_control_core::command::{Command, PROVIDER_IDS, Unit, UnitAction};
 use mio_control_core::settings::{PROVIDER_SECRET_KEYS, SettingsFile};
@@ -27,16 +30,75 @@ use crate::parts::render_changes;
 
 type Choice = SelectState<Vec<SharedString>>;
 
+/// One model in a task's searchable list. Only `Selectable` rows can be chosen; the others are
+/// shown so the user sees what exists and what a trial would unlock.
+#[derive(Clone)]
+struct ModelItem {
+    model: SharedString,
+    kind: ChoiceKind,
+    note: Option<SharedString>,
+}
+
+impl SearchableListItem for ModelItem {
+    type Value = SharedString;
+
+    fn title(&self) -> SharedString {
+        self.model.clone()
+    }
+
+    fn value(&self) -> &SharedString {
+        &self.model
+    }
+
+    fn disabled(&self) -> bool {
+        self.kind != ChoiceKind::Selectable
+    }
+
+    fn render(&self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        v_flex()
+            .child(self.model.clone())
+            .when_some(self.note.clone(), |row, note| row.child(div().text_xs().text_color(cx.theme().muted_foreground).child(note)))
+    }
+}
+
+type ModelList = SearchableVec<SearchableGroup<ModelItem>>;
+
+/// The models `catalog` offers `task` from `provider`, grouped by whether they can be chosen.
+fn model_list(catalog: &Catalog, task: &str, provider: &str, openrouter: &[String]) -> ModelList {
+    let choices = catalog.model_choices(task, provider, openrouter);
+    let groups = [ChoiceKind::Selectable, ChoiceKind::NeedsTrial, ChoiceKind::Unreviewed]
+        .into_iter()
+        .filter_map(|kind| {
+            let items: Vec<ModelItem> = choices
+                .iter()
+                .filter(|choice| choice.kind == kind)
+                .map(|choice| ModelItem { model: choice.model.clone().into(), kind, note: choice.note.clone().map(Into::into) })
+                .collect();
+            (!items.is_empty()).then(|| SearchableGroup::new(kind.group()).items(items))
+        })
+        .collect::<Vec<_>>();
+    SearchableVec::new(groups)
+}
+
+/// A task's two choices: the provider, then one of its models.
+struct TaskRow {
+    task: &'static str,
+    providers: Vec<&'static str>,
+    provider: Entity<Choice>,
+    model: Entity<ComboboxState<ModelList>>,
+}
+
 /// The editor once settings and model list are read.
 struct Editor {
     file: GatewayFile,
     catalog: Catalog,
     form: AiForm,
-    default_select: Entity<Choice>,
-    task_selects: Vec<(&'static str, Entity<Choice>)>,
+    rows: Vec<TaskRow>,
     limit_inputs: Vec<(&'static str, Entity<InputState>)>,
-    key_provider: Entity<Choice>,
+    /// The provider whose key field is open, if any.
+    key_editing: Option<&'static str>,
     key_input: Entity<InputState>,
+    limits_open: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -63,6 +125,11 @@ pub struct AiPage {
     saving_key: bool,
     trying: Option<String>,
     trial: Option<TrialReport>,
+    /// OpenRouter's public model IDs, fetched once when the editor first opens.
+    openrouter_models: Vec<String>,
+    /// The fetch has been started. It is never repeated, even after a failure or an empty
+    /// answer: the list is only extra grey rows, not worth a second wait.
+    openrouter_requested: bool,
     /// The credit meter's limit, saved in the panel's own preferences.
     credit_limit_cents: u64,
     credit_input: Entity<InputState>,
@@ -70,7 +137,6 @@ pub struct AiPage {
     _subscriptions: Vec<Subscription>,
 }
 
-const SAME: &str = "Samma som standard";
 
 impl AiPage {
     pub fn new(status: Entity<StatusModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -99,6 +165,8 @@ impl AiPage {
             saving_key: false,
             trying: None,
             trial: None,
+            openrouter_models: Vec::new(),
+            openrouter_requested: false,
             credit_limit_cents,
             credit_input,
             credit_input_valid: true,
@@ -112,6 +180,10 @@ impl AiPage {
         cx.notify();
         let settings = operation::run(Command::ReadSettings(SettingsFile::Gateway), None, cx);
         let catalog = operation::catalog(cx);
+        if !self.openrouter_requested {
+            self.openrouter_requested = true;
+            self.fetch_openrouter_models(window, cx);
+        }
         cx.spawn_in(window, async move |this, cx| {
             let (settings, catalog) = (settings.await, catalog.await);
             let _ = this.update_in(cx, |this, window, cx| {
@@ -134,47 +206,95 @@ impl AiPage {
         .detach();
     }
 
+    /// Fetches OpenRouter's public list in the background; the editor never waits for it. When
+    /// it arrives, the rows that show OpenRouter get its unreviewed models.
+    fn fetch_openrouter_models(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let task = operation::openrouter_models(cx);
+        cx.spawn_in(window, async move |this, cx| {
+            let models = task.await.ok().and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok()).map(|json| parse_openrouter_models(&json));
+            let Some(models) = models.filter(|models| !models.is_empty()) else { return };
+            let _ = this.update_in(cx, |this, window, cx| {
+                this.openrouter_models = models;
+                let Stage::Editing(editor) = &this.stage else { return };
+                for row in &editor.rows {
+                    let (provider, model) = editor.form.pair_for(row.task).clone();
+                    if provider != "openrouter" {
+                        continue;
+                    }
+                    let list = model_list(&editor.catalog, row.task, &provider, &this.openrouter_models);
+                    row.model.update(cx, |state, cx| {
+                        state.set_items(list, window, cx);
+                        state.set_selected_values(&[SharedString::from(model)], window, cx);
+                    });
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     fn build_editor(&mut self, file: GatewayFile, catalog: Catalog, window: &mut Window, cx: &mut Context<Self>) -> Editor {
         // A candidate that passed "Prova" is listed in the file the helper just read, so it is
         // offered here at once, without restarting the panel.
         let catalog = catalog.with_approved(&file);
         let form = AiForm::from_file(&file);
-        // Each select offers only the pairs allowed where it applies: a pair reviewed for lessons
-        // only (Large 4, which reasons) is never offered for the default, Frågor or Vardag.
-        let labels = |task: Option<&str>| -> Vec<SharedString> { catalog.choices(task).iter().map(|pair| pair.label().into()).collect() };
-        let index_of = |task: Option<&str>, pair: &(String, String)| catalog.choices(task).iter().position(|known| known.is(&pair.0, &pair.1));
         let mut subscriptions = Vec::new();
 
-        let default_index = index_of(None, &form.default_pair).map(|row| IndexPath::default().row(row));
-        let default_labels = labels(None);
-        let default_select = cx.new(|cx| SelectState::new(default_labels, default_index, window, cx));
-        subscriptions.push(cx.subscribe_in(&default_select, window, |this, _, event: &SelectEvent<Vec<SharedString>>, _, cx| {
-            let SelectEvent::Confirm(Some(label)) = event else { return };
-            if let Stage::Editing(editor) = &mut this.stage
-                && let Some(pair) = editor.catalog.reviewed.iter().find(|pair| pair.label() == label.as_ref())
-            {
-                editor.form.default_pair = (pair.provider.clone(), pair.model.clone());
-                cx.notify();
-            }
-        }));
-
-        let mut task_selects = Vec::new();
+        // One row per task. Each select offers only what may serve that task: a pair reviewed
+        // for lessons only (it reasons) is never listed for Frågor or Vardag.
+        let mut rows = Vec::new();
         for (task, _) in TASKS {
-            let mut items: Vec<SharedString> = vec![SAME.into()];
-            items.extend(labels(Some(task)));
-            let selected = form.per_task.get(task).and_then(|pair| index_of(Some(task), pair)).map(|row| row + 1).unwrap_or(0);
-            let select = cx.new(|cx| SelectState::new(items, Some(IndexPath::default().row(selected)), window, cx));
-            subscriptions.push(cx.subscribe_in(&select, window, move |this, _, event: &SelectEvent<Vec<SharedString>>, _, cx| {
+            let (current_provider, current_model) = form.pair_for(task).clone();
+            let mut providers = catalog.providers_for(task, &PROVIDER_IDS);
+            // A provider the file names but the catalog no longer offers still shows, so the
+            // problem list can say what is wrong with it.
+            if let Some(known) = PROVIDER_IDS.iter().copied().find(|id| *id == current_provider)
+                && !providers.contains(&known)
+            {
+                providers.push(known);
+            }
+            let names: Vec<SharedString> = providers.iter().map(|id| provider_name(id).to_owned().into()).collect();
+            let selected = providers.iter().position(|id| *id == current_provider).map(|row| IndexPath::default().row(row));
+            let provider = cx.new(|cx| SelectState::new(names, selected, window, cx));
+            let list = model_list(&catalog, task, &current_provider, &self.openrouter_models);
+            let model = cx.new(|cx| {
+                let mut state = ComboboxState::new(list, Vec::new(), window, cx).searchable(true);
+                state.set_selected_values(&[SharedString::from(current_model.clone())], window, cx);
+                state
+            });
+
+            subscriptions.push(cx.subscribe_in(&provider, window, move |this, _, event: &SelectEvent<Vec<SharedString>>, window, cx| {
                 let SelectEvent::Confirm(Some(label)) = event else { return };
-                if let Stage::Editing(editor) = &mut this.stage {
-                    match editor.catalog.reviewed.iter().find(|pair| pair.label() == label.as_ref()) {
-                        Some(pair) => editor.form.per_task.insert(task.to_owned(), (pair.provider.clone(), pair.model.clone())),
-                        None => editor.form.per_task.remove(task),
-                    };
+                let openrouter = this.openrouter_models.clone();
+                let Stage::Editing(editor) = &mut this.stage else { return };
+                let Some(row) = editor.rows.iter().find(|row| row.task == task) else { return };
+                let Some(chosen) = row.providers.iter().copied().find(|id| provider_name(id) == label.as_ref()) else { return };
+                if editor.form.pair_for(task).0 == chosen {
+                    return;
+                }
+                // The first model this provider may serve the task with, or none until a trial
+                // passes; then the problem list asks for one.
+                let model = editor.catalog.first_choice(task, chosen).map(|pair| pair.model.clone()).unwrap_or_default();
+                editor.form.set_task(task, (chosen.to_owned(), model.clone()));
+                let list = model_list(&editor.catalog, task, chosen, &openrouter);
+                row.model.update(cx, |state, cx| {
+                    state.set_items(list, window, cx);
+                    state.set_selected_values(&[SharedString::from(model)], window, cx);
+                });
+                cx.notify();
+            }));
+            subscriptions.push(cx.subscribe_in(&model, window, move |this, _, event: &ComboboxEvent<ModelList>, _, cx| {
+                let ComboboxEvent::Confirm(values) = event else { return };
+                let Some(model) = values.first() else { return };
+                let Stage::Editing(editor) = &mut this.stage else { return };
+                let provider = editor.form.pair_for(task).0.clone();
+                // Only a selectable row can be confirmed; the check keeps the form honest anyway.
+                if editor.catalog.find(&provider, model).is_some_and(|pair| pair.allows(task)) {
+                    editor.form.set_task(task, (provider, model.to_string()));
                     cx.notify();
                 }
             }));
-            task_selects.push((task, select));
+            rows.push(TaskRow { task, providers, provider, model });
         }
 
         let mut limit_inputs = Vec::new();
@@ -193,10 +313,8 @@ impl AiPage {
             limit_inputs.push((key, input));
         }
 
-        let providers: Vec<SharedString> = PROVIDER_IDS.iter().map(|id| provider_name(id).to_owned().into()).collect();
-        let key_provider = cx.new(|cx| SelectState::new(providers, Some(IndexPath::default()), window, cx));
         let key_input = cx.new(|cx| InputState::new(window, cx).masked(true).placeholder("Klistra in nyckeln"));
-        Editor { file, catalog, form, default_select, task_selects, limit_inputs, key_provider, key_input, _subscriptions: subscriptions }
+        Editor { file, catalog, form, rows, limit_inputs, key_editing: None, key_input, limits_open: false, _subscriptions: subscriptions }
     }
 
     /// Writes the changed settings, then restarts the gateway. The phone notices the new
@@ -240,8 +358,9 @@ impl AiPage {
 
     fn save_key(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Stage::Editing(editor) = &self.stage else { return };
-        let Some(index) = editor.key_provider.read(cx).selected_index(cx).map(|path| path.row) else { return };
-        let Some(variable) = PROVIDER_SECRET_KEYS.get(index).copied() else { return };
+        let Some(provider) = editor.key_editing else { return };
+        // PROVIDER_IDS and PROVIDER_SECRET_KEYS list the providers in the same order.
+        let Some(variable) = PROVIDER_IDS.iter().position(|id| *id == provider).and_then(|index| PROVIDER_SECRET_KEYS.get(index)).copied() else { return };
         let key = editor.key_input.read(cx).value().trim().to_owned();
         if key.is_empty() {
             return;
@@ -256,8 +375,11 @@ impl AiPage {
             let result = task.await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.saving_key = false;
+                if let (Ok(_), Stage::Editing(editor)) = (&result, &mut this.stage) {
+                    editor.key_editing = None;
+                }
                 window.push_notification(match result {
-                    Ok(_) => Notification::success(format!("Nyckeln sparades ({variable}). Starta om gatewayen för att använda den.")),
+                    Ok(_) => Notification::success(format!("Nyckeln för {} sparades. Den används när gatewayen startas om, till exempel med Spara och starta om.", provider_name(provider))),
                     Err(error) => Notification::error(error.to_string()),
                 }, cx);
                 this.open_editor(window, cx);
@@ -403,95 +525,42 @@ impl AiPage {
         let can_save = !changes.is_empty() && problems.is_empty() && !self.saving;
         let theme = cx.theme().clone();
         let section = |title: &str| div().pt_2().font_semibold().child(title.to_owned());
-        let field = |label: &str, control: gpui_kit::AnyElement| {
-            v_flex().gap_1().child(div().text_sm().text_color(theme.muted_foreground).child(label.to_owned())).child(control)
-        };
+        let muted = |text: String| div().text_sm().text_color(theme.muted_foreground).child(text);
+        let mut provider_rows = Vec::new();
+        for (provider, variable) in PROVIDER_IDS.iter().zip(PROVIDER_SECRET_KEYS) {
+            provider_rows.push(self.render_provider(editor, provider, variable, cx));
+        }
+        let mut trial_rows = Vec::new();
+        for pair in editor.catalog.trial_order() {
+            trial_rows.push(self.render_trial_row(editor, pair, cx));
+        }
         v_flex()
             .gap_3()
-            .child(section("Modell"))
-            .child(field("Standard för alla uppgifter", Select::new(&editor.default_select).id("ai-default").into_any_element()))
-            .children(editor.task_selects.iter().map(|(task, select)| {
-                let label = TASKS.iter().find(|(name, _)| name == task).map_or("", |(_, label)| *label);
-                field(label, Select::new(select).id(SharedString::from(format!("ai-task-{task}"))).into_any_element())
-            }))
-            .children(editor.catalog.reviewed.iter().filter_map(|pair| {
-                let note = pair.note()?;
-                Some(h_flex().gap_2().text_xs().text_color(theme.muted_foreground).child(Icon::new(IconName::Info)).child(format!("{}: {note}.", pair.label())))
-            }))
-            .child(section("Gränser"))
-            .child(div().grid().grid_cols(2).gap_3().children(editor.limit_inputs.iter().map(|(key, input)| {
-                let limit = LIMITS.iter().find(|limit| limit.key == *key).expect("known limit");
-                v_flex()
-                    .gap_1()
-                    .child(div().text_sm().text_color(theme.muted_foreground).child(limit.label))
-                    .child(Input::new(input).id(SharedString::from(format!("limit-{key}"))))
-                    .child(div().text_xs().text_color(theme.muted_foreground).child(limit.help))
-            })))
-            .child(section("Nyckel"))
-            .child(
-                h_flex()
-                    .gap_2()
-                    .child(div().w_40().child(Select::new(&editor.key_provider).id("key-provider")))
-                    .child(div().flex_1().child(Input::new(&editor.key_input).id("key-input").mask_toggle()))
-                    .child(Button::new("save-key").label("Spara nyckel").loading(self.saving_key).disabled(self.saving_key).on_click(cx.listener(|this, _, window, cx| this.save_key(window, cx)))),
-            )
-            .child(div().text_xs().text_color(theme.muted_foreground).child(format!(
-                "Nycklar som finns: {}. Panelen visar och sparar aldrig nycklarna själv.",
-                PROVIDER_SECRET_KEYS.iter().map(|key| format!("{key} {}", if editor.file.has_secret(key) { "satt" } else { "saknas" })).collect::<Vec<_>>().join(", ")
-            )))
-            .child(section("Ändringar"))
-            .child(render_changes(&changes, &theme))
-            .children(problems.iter().map(|problem| {
-                h_flex().gap_2().text_sm().child(Icon::new(IconName::CircleX).text_color(theme.danger)).child(problem.clone())
-            }))
-            .child(
-                h_flex().justify_end().child(
-                    Button::new("save-ai")
-                        .primary()
-                        .label("Spara och starta om")
-                        .loading(self.saving)
-                        .disabled(!can_save || self.saving)
-                        .on_click(cx.listener(|this, _, window, cx| this.save(window, cx))),
-                ),
-            )
-            .child(section("Prova modellerna"))
-            .child(div().text_sm().text_color(theme.muted_foreground).child(
-                "Ett kort, påhittat svenskt anrop per uppgift som paret får användas till, med din nyckel, till leverantören som står vid modellen. Det enda som skickar något till en leverantör från panelen, och det kostar som vanliga anrop. En kandidat som klarar provet blir valbar. Mistral står först.",
-            ))
-            .children(editor.catalog.trial_order().into_iter().map(|pair| {
-                let label = pair.label();
-                let id = SharedString::from(format!("try-{}-{}", pair.provider, pair.model));
-                let estimate = SharedString::from(pair.trial_estimate());
-                let pair_for_click = pair.clone();
+            .child(section("Leverantörer"))
+            .child(muted("En nyckel per leverantör. Panelen visar aldrig nycklarna; de sparas i gatewayens fil som bara root kan läsa.".into()))
+            .children(provider_rows)
+            .child(section("Modell per uppgift"))
+            .child(muted("Välj leverantör och sedan modell. Gråa modeller kräver ett godkänt prov eller är inte granskade än.".into()))
+            .children(editor.rows.iter().map(|row| {
+                let label = TASKS.iter().find(|(name, _)| *name == row.task).map_or("", |(_, label)| *label);
                 h_flex()
                     .gap_3()
-                    .justify_between()
-                    .text_sm()
+                    .child(div().w_24().text_sm().text_color(theme.muted_foreground).child(label))
+                    .child(div().w_40().child(Select::new(&row.provider).id(SharedString::from(format!("ai-provider-{}", row.task)))))
                     .child(
-                        v_flex()
+                        div()
+                            .id(SharedString::from(format!("ai-model-{}", row.task)))
+                            .test_support()
+                            .flex_1()
                             .min_w_0()
-                            .child(label.clone())
-                            .when_some(pair.note(), |row, note| row.child(div().text_xs().text_color(theme.muted_foreground).child(note)))
-                            .when_some(pair.blocked.clone(), |row, reason| row.child(div().text_xs().text_color(theme.muted_foreground).child(reason)))
-                            .child(
-                                div()
-                                    .id(SharedString::from(format!("trial-cost-{}-{}", pair.provider, pair.model)))
-                                    .test_support()
-                                    .aria_label(estimate.clone())
-                                    .text_xs()
-                                    .text_color(theme.muted_foreground)
-                                    .child(estimate),
-                            ),
-                    )
-                    .child(
-                        Button::new(id)
-                            .small()
-                            .label("Prova")
-                            .loading(self.trying.as_deref() == Some(label.as_str()))
-                            .disabled(self.trying.is_some())
-                            .on_click(cx.listener(move |this, _, window, cx| this.try_pair(pair_for_click.clone(), window, cx))),
+                            .child(Combobox::new(&row.model).placeholder("Välj modell").search_placeholder("Sök modell")),
                     )
             }))
+            .child(section("Prova modellerna"))
+            .child(muted(
+                "Ett kort, påhittat svenskt anrop per uppgift som paret får användas till, med din nyckel, till leverantören som står vid modellen. Det enda som skickar något till en leverantör från panelen, och det kostar som vanliga anrop. En kandidat som klarar provet blir valbar.".into(),
+            ))
+            .children(trial_rows)
             .when_some(self.trial.as_ref(), |list, trial| {
                 list.child(
                     v_flex()
@@ -509,6 +578,146 @@ impl AiPage {
                         .children(trial.lines.iter().map(|line| div().child(line.clone()))),
                 )
             })
+            .child(
+                h_flex().pt_2().child(
+                    Button::new("toggle-limits")
+                        .ghost()
+                        .label("Gränser")
+                        .icon(if editor.limits_open { IconName::ChevronDown } else { IconName::ChevronRight })
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            if let Stage::Editing(editor) = &mut this.stage {
+                                editor.limits_open = !editor.limits_open;
+                                cx.notify();
+                            }
+                        })),
+                ),
+            )
+            .child(Collapsible::new().open(editor.limits_open).content(div().grid().grid_cols(2).gap_3().children(editor.limit_inputs.iter().map(|(key, input)| {
+                let limit = LIMITS.iter().find(|limit| limit.key == *key).expect("known limit");
+                v_flex()
+                    .gap_1()
+                    .child(div().text_sm().text_color(theme.muted_foreground).child(limit.label))
+                    .child(Input::new(input).id(SharedString::from(format!("limit-{key}"))))
+                    .child(div().text_xs().text_color(theme.muted_foreground).child(limit.help))
+            }))))
+            .child(section("Ändringar"))
+            .child(render_changes(&changes, &theme))
+            .children(problems.iter().map(|problem| {
+                h_flex().gap_2().text_sm().child(Icon::new(IconName::CircleX).text_color(theme.danger)).child(problem.clone())
+            }))
+            .child(
+                h_flex().justify_end().child(
+                    Button::new("save-ai")
+                        .primary()
+                        .label("Spara och starta om")
+                        .loading(self.saving)
+                        .disabled(!can_save || self.saving)
+                        .on_click(cx.listener(|this, _, window, cx| this.save(window, cx))),
+                ),
+            )
+    }
+
+    /// A provider and whether its key is saved; the key field opens in the row itself.
+    fn render_provider(&self, editor: &Editor, provider: &'static str, variable: &str, cx: &mut Context<Self>) -> gpui_kit::AnyElement {
+        let theme = cx.theme().clone();
+        let saved = editor.file.has_secret(variable);
+        let editing = editor.key_editing == Some(provider);
+        let state = if saved { "Nyckel sparad" } else { "Ingen nyckel" };
+        h_flex()
+            .id(SharedString::from(format!("provider-{provider}")))
+            .test_support()
+            .aria_label(SharedString::from(format!("{}: {state}", provider_name(provider))))
+            .gap_3()
+            .text_sm()
+            .child(div().w_24().child(provider_name(provider).to_owned()))
+            .child(
+                h_flex()
+                    .w_32()
+                    .gap_2()
+                    .child(Icon::new(if saved { IconName::CircleCheck } else { IconName::CircleAlert }).text_color(if saved { theme.success } else { theme.muted_foreground }))
+                    .child(div().text_color(theme.muted_foreground).child(state)),
+            )
+            .map(|row| {
+                if editing {
+                    row.child(div().flex_1().min_w_0().child(Input::new(&editor.key_input).id("key-input").mask_toggle()))
+                        .child(
+                            Button::new("save-key")
+                                .primary()
+                                .small()
+                                .label("Spara nyckel")
+                                .loading(self.saving_key)
+                                .disabled(self.saving_key)
+                                .on_click(cx.listener(|this, _, window, cx| this.save_key(window, cx))),
+                        )
+                        .child(Button::new("cancel-key").ghost().small().label("Avbryt").disabled(self.saving_key).on_click(cx.listener(|this, _, window, cx| {
+                            if let Stage::Editing(editor) = &mut this.stage {
+                                editor.key_editing = None;
+                                editor.key_input.update(cx, |input, cx| input.set_value("", window, cx));
+                                cx.notify();
+                            }
+                        })))
+                } else {
+                    row.child(div().flex_1()).child(
+                        Button::new(SharedString::from(format!("key-edit-{provider}")))
+                            .outline()
+                            .small()
+                            .label(if saved { "Byt nyckel…" } else { "Lägg till nyckel…" })
+                            .disabled(self.saving_key)
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                if let Stage::Editing(editor) = &mut this.stage {
+                                    editor.key_editing = Some(provider);
+                                    editor.key_input.update(cx, |input, cx| input.set_value("", window, cx));
+                                    editor.key_input.read(cx).focus_handle(cx).focus(window, cx);
+                                    cx.notify();
+                                }
+                            })),
+                    )
+                }
+            })
+            .into_any_element()
+    }
+
+    /// One pair "Prova" can send a test call for. Without the provider's key the call cannot
+    /// succeed, so the button says why instead of sending it.
+    fn render_trial_row(&self, editor: &Editor, pair: &Pair, cx: &mut Context<Self>) -> gpui_kit::AnyElement {
+        let theme = cx.theme().clone();
+        let label = pair.label();
+        let id = SharedString::from(format!("try-{}-{}", pair.provider, pair.model));
+        let estimate = SharedString::from(pair.trial_estimate());
+        let has_key = editor.file.has_secret(&pair.secret_variable);
+        let pair_for_click = pair.clone();
+        h_flex()
+            .gap_3()
+            .justify_between()
+            .text_sm()
+            .child(
+                v_flex()
+                    .min_w_0()
+                    .child(label.clone())
+                    .when_some(pair.note(), |row, note| row.child(div().text_xs().text_color(theme.muted_foreground).child(note)))
+                    .when_some(pair.blocked.clone(), |row, reason| row.child(div().text_xs().text_color(theme.muted_foreground).child(reason)))
+                    .when(!has_key, |row| {
+                        row.child(div().text_xs().text_color(theme.muted_foreground).child(format!("Lägg till en nyckel för {} först.", provider_name(&pair.provider))))
+                    })
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("trial-cost-{}-{}", pair.provider, pair.model)))
+                            .test_support()
+                            .aria_label(estimate.clone())
+                            .text_xs()
+                            .text_color(theme.muted_foreground)
+                            .child(estimate),
+                    ),
+            )
+            .child(
+                Button::new(id)
+                    .small()
+                    .label("Prova")
+                    .loading(self.trying.as_deref() == Some(label.as_str()))
+                    .disabled(self.trying.is_some() || !has_key)
+                    .on_click(cx.listener(move |this, _, window, cx| this.try_pair(pair_for_click.clone(), window, cx))),
+            )
+            .into_any_element()
     }
 }
 

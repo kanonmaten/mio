@@ -2,6 +2,18 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## AI-sidan: leverantör, nyckel och modell, 2026-11-22
+
+Användarens val ([MIO-41](https://linear.app/kanonmaten/issue/MIO-41)): på AI-sidan i Mio Kontroll väljer man leverantör, nyckel och modell, och samma vy används av Kom igång ([MIO-42](https://linear.app/kanonmaten/issue/MIO-42)). Byggt efter GPUI Kits design- och kodriktlinjer.
+
+| Val | Varför | Bortvalt |
+|---|---|---|
+| Leverantörer överst, en rad var med nyckelns läge och ett nyckelfält som öppnas i raden | Man ser direkt vilka nycklar som finns och kan ha flera samtidigt. Ett fält i raden behöver ingen dialog ovanpå sidan | En dialog per nyckel; en väljare för leverantör bredvid ett enda nyckelfält (som förut, där det inte syntes vilken nyckel fältet gällde) |
+| En rad per uppgift med leverantör (`Select`) och modell (`Combobox`, sökbar, i grupperna Går att välja, Kräver prov och Inte granskad än) | Leverantör först, sedan modell, som användaren bad om. Gråa rader visar vad som finns utan att kunna väljas | En enda lista med alla par; att dölja kandidater och ogranskade modeller |
+| Frågor är gatewayens standard. När den byts får de andra uppgifterna egna profiler | Varje rad ändrar bara sin egen uppgift. Frågor resonerar aldrig, så standarden gäller för alla uppgifter | En egen rad "Standard för alla uppgifter" med "Samma som standard" (två begrepp för en sak) |
+| OpenRouters lista hämtas med `curl` från `https://openrouter.ai/api/v1/models?supported_parameters=structured_outputs`, en gång per körning | Publik adress utan nyckel eller användardata. `curl` finns redan med gatewayen, så panelen behöver ingen HTTP-klient | Ett nytt kommando i gatewayen; en HTTP-klient i panelen |
+| Prova är avstängd med en förklaring tills leverantören har en nyckel | Utan nyckel kan provet inte gå igenom | Att visa bara leverantörer med nyckel |
+
 ## OpenAI, OpenRouter och Gemini som leverantörer, 2026-11-22
 
 Användarens beslut ([MIO-39](https://linear.app/kanonmaten/issue/MIO-39), [MIO-40](https://linear.app/kanonmaten/issue/MIO-40)): fler leverantörer går att välja i Mio Kontroll, med flera granskade modeller var. Regeln att bara granskade par körs står kvar, och varje ny modell är en kandidat tills Prova har gått igenom. Dokumentationen lästes 2026-11-22; källorna står vid varje modell i `server/src/model_profiles.rs`.

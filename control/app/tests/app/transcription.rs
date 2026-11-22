@@ -31,6 +31,7 @@ fn open(cx: &mut TestAppContext, page: Page) -> (gpui_kit::AnyWindowHandle, Enti
                 })
             }),
             catalog: Arc::new(|| Err("ingen gateway i testet".into())),
+            openrouter_models: Arc::new(|| Err("inte i testet".into())),
         })
     });
     let status = cx.update(|cx| cx.new(|_| StatusModel::default()));
