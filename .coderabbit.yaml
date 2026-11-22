@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit for Mio (MIO-21, 2026-11-22). CodeRabbit reads CLAUDE.md by itself as the project's
+# guidelines, so the rules live there and are not repeated here. https://docs.coderabbit.ai/reference/configuration
+language: sv-SE
+tone_instructions: "Skriv kort och konkret på svenska. Användaren är inte utvecklare: säg vad som går fel för den som använder Mio och föreslå en rättelse."
+
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    # Finished plans and old measurements are archived unchanged and never edited.
+    - "!docs/arkiv/**"
+    # Session notes for coding agents, not code or user docs.
+    - "!.trail/**"
+  path_instructions:
+    - path: "tools/**"
+      instructions: "Verifierarens svenska meddelanden citeras i CI-loggar och docs/STATUS.md: föreslå aldrig att ändra befintliga meddelanden, bara nya."
+    - path: "docs/STATUS.md"
+      instructions: "Filen får bara innehålla kontroller som faktiskt körts, med commit och resultat. Påpeka påståenden utan sådant underlag."
+  pre_merge_checks:
+    title:
+      mode: warning
+      requirements: "Titeln börjar med Linear-ärendets nyckel och ett kolon, till exempel 'MIO-12: kort beskrivning på svenska'."
+    issue_assessment:
+      mode: warning
+
+knowledge_base:
+  linear:
+    # Off by default for public repositories; Mio is public and plans in Linear.
+    usage: enabled
+    team_keys: ["MIO"]
+
+chat:
+  auto_reply: true
