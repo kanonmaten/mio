@@ -56,7 +56,7 @@ fn step(cx: &mut TestAppContext, handle: gpui_kit::AnyWindowHandle, act: impl Fn
 }
 
 #[gpui_kit::test]
-fn update_all_runs_only_what_is_behind_in_one_konsole(cx: &mut TestAppContext) {
+fn update_all_runs_only_what_is_behind_in_one_terminal(cx: &mut TestAppContext) {
     let (handle, scripts) = open(cx, false);
     step(cx, handle, |window, cx| {
         assert!(window.try_find("updates-blocked").is_none());
