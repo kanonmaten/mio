@@ -22,7 +22,7 @@ Panelen läser repot den byggdes i (för uppdateringar och verifiering), så fly
 
 Översikt har ett kort per del: gatewayen med dagens kvot, Pianissimo med modell, precision och antal egna ord, Tailscale, GPU:n, nattuppdateringen och senaste verifieringen. Tjänsterna kan startas om härifrån. Har gatewayen säkerhetskopior visar ett kort när den senaste kopian från telefonen togs ("i natt 03:12", "för 3 dagar sedan"), hur många kopior som sparas och hur mycket de tar sammanlagt, och att de ligger i `/var/lib/mio-gateway/backups/`. Kortet blir gult när senaste kopian är äldre än 48 timmar, eftersom telefonen ska ta en varje natt. En kopia återställs i appen under Inställningar, inte här. En äldre gateway utan säkerhetskopior visar inget kort.
 
-Kom igång är en guide för en ny dator. Den kontrollerar NVIDIA-drivrutinen, Rust och Tailscale, installerar gatewayen och Pianissimo i Konsole, ställer in Tailscale serve och visar parningskoden. Steg som redan är klara hoppas över, men alla går att köra igen.
+Kom igång är en guide för en ny dator. Den kontrollerar NVIDIA-drivrutinen, Rust och Tailscale, installerar gatewayen och Pianissimo i din standardterminal, ställer in Tailscale serve och visar parningskoden. Steg som redan är klara hoppas över, men alla går att köra igen.
 
 Under AI väljer du leverantör och modell, för alla uppgifter eller per uppgift (`ask`, `everyday`, `lesson`), ändrar gränserna och byter nyckel. Varje ändring visas som före och efter innan du sparar. Ett par som inte är granskat går inte att spara. Mistral och NVIDIA blir valbara först när du har tryckt Prova och modellen klarat ett kort påhittat anrop per uppgift den får användas till; det anropet går till leverantören och kostar som ett vanligt anrop. Ett godkänt prov skrivs in i `MIO_APPROVED_CANDIDATES` i `gateway.env`, och väljaren visar paret direkt, märkt "Godkänd efter prov". Large 4 resonerar och får bara användas för Lektioner, så den provas med ett enda lektionsanrop och går fortfarande bara att välja för Lektioner. Mistral står först i listan, och under varje par står vart Prova går och ungefär vad det kostar högst, med gatewayens priser eller panelens granskade priser från 2026-11-20: för Small 4 tre anrop, cirka 6 000 token och under en cent; för Large 4 ett anrop med plats för resonemang, cirka 13 500 token och upp till ungefär 2,6 cent.
 
@@ -32,7 +32,7 @@ Under Transkription ställer du in precision, förbehandling, talarmärkning och
 
 Tailscale och parning visar att `serve` skickar 443 till Pianissimo och 8443 till gatewayen, och rättar det med en knapp. Är funnel på visas en röd varning; panelen slår aldrig på funnel. Parningskoden ritas som QR-kod i fönstret och döljs efter en minut eller när fönstret tappar fokus. Där byter du också token, varefter telefonen måste paras om.
 
-Uppdateringar visar vilka delar som ligger efter repot på GitHub och hur många systempaket som väntar. "Uppdatera allt" kör stegen i Konsole, där `sudo` frågar efter lösenordet, och stannar vid första fel. Varje installationsskript skriver vilken commit det installerade från, så en del som installerades före den här versionen står som okänd tills den installerats om en gång.
+Uppdateringar visar vilka delar som ligger efter repot på GitHub och hur många systempaket som väntar. "Uppdatera allt" kör stegen i din standardterminal, där `sudo` frågar efter lösenordet, och stannar vid första fel. Varje installationsskript skriver vilken commit det installerade från, så en del som installerades före den här versionen står som okänd tills den installerats om en gång.
 
 Verifiering kör samma kontroller som GitHub (`mio-verify verify`) och visar resultatet per kontroll. Loggarna hamnar i `~/.local/state/mio-control/verifiering`. Loggar visar journalen för gatewayen, Pianissimo och nattuppdateringen, med nivåfilter och följ-läge. Får ditt konto inte läsa systemets journal säger sidan hur du lägger till det i gruppen `systemd-journal`.
 
@@ -88,7 +88,7 @@ Inget av detta är provat. Kör det på `cachyos-pc` och för in resultatet i [s
 4. Byt modell, spara och se att telefonen fortsätter utan ny parning.
 5. Lägg till ett eget ord och se antalet öka i Mio under Inställningar → Transkription.
 6. Visa parningskoden och skanna den med telefonen.
-7. "Uppdatera allt" på en dator där något ligger efter. Konsole öppnas och stannar vid ett fel.
+7. "Uppdatera allt" på en dator där något ligger efter. Terminalen som är vald under Systeminställningar → Standardprogram öppnas (inte Konsole om du valt en annan), stannar vid ett fel och står kvar tills du trycker Enter.
 8. "Håll datorn vaken" hindrar viloläge.
 9. Loggar visar journalen utan lösenord, och Verifiering kör hela grinden på datorn.
 10. Prova mot Mistral: lägg in Mistral-nyckeln under AI, tryck Prova på Mistral Small 4 och sedan Large 4. Kostnadsraden säger att anropen går till Mistral och kostar under en cent för Small 4 och högst cirka 2,6 cent för Large 4 (ett anrop), rapporten visar ett svar per uppgift som provades, och ett godkänt par blir valbart utan att panelen startas om (Large 4 bara för Lektioner). Kontrollera i Mistrals konsol att kostnaden blev ungefär den som stod.

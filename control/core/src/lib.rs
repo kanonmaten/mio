@@ -17,6 +17,7 @@ pub mod settings;
 pub mod setup;
 pub mod socket_owner;
 pub mod status;
+pub mod terminal;
 pub mod token;
 pub mod transcription_settings;
 pub mod updates;
