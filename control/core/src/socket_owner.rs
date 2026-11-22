@@ -89,6 +89,12 @@ mod tests {
         let inode = socket_inode(&listener);
         assert!(listening_inodes(port).contains(&inode));
         drop(listener);
+        // A process another test forks at this moment holds a copy of the socket until it execs,
+        // so the socket can stay in the tables for a moment after the drop.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while listening_inodes(port).contains(&inode) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
         assert!(!listening_inodes(port).contains(&inode), "our listener is gone");
     }
 
