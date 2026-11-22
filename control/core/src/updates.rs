@@ -2,7 +2,7 @@
 //!
 //! Each installer records the commit it was installed from (`commit` next to the program). A part
 //! is behind when its directory changed between that commit and the repo's upstream. The updates
-//! run in Konsole as the user, because the installers ask for `sudo` themselves and must never run
+//! run in Ghostty as the user, because the installers ask for `sudo` themselves and must never run
 //! as root from files the user can edit.
 
 use std::path::{Path, PathBuf};
@@ -224,7 +224,7 @@ pub fn shell_quote(text: &str) -> String {
 /// Where `transcription-server/install.sh` puts the model updater.
 pub const UPDATE_MODEL: &str = "/opt/mio-transcription/update-model.sh";
 
-/// The script Konsole runs. It stops at the first error, says so, and leaves the output visible.
+/// The script Ghostty runs. It stops at the first error, says so, and leaves the output visible.
 pub fn script(repo: &Path, steps: &[Part], keep_autostart: bool) -> String {
     let mut lines = vec![
         "set -euo pipefail".to_owned(),

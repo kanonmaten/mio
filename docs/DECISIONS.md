@@ -2,6 +2,10 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Mio Kontroll kör installationer i Ghostty, 2026-11-22
+
+Användarens val ([MIO-32](https://linear.app/kanonmaten/issue/MIO-32)). Uppdateringar och Kom igång öppnar `ghostty --wait-after-command=true -e bash -c <skript>` i stället för `konsole --hold`. Skriptet är detsamma. Ghostty startar en egen instans när det får argument på kommandoraden (`gtk-single-instance = detect`), så fönstret får de här inställningarna även om Ghostty redan är öppet, och det står kvar tills en tangent trycks. Det ersätter Konsole i avsnitten om fas 7 och 9 nedan. Avböjt: att låta användaren välja terminal i panelen (en inställning till för en enda dator) och `xdg-terminal-exec` (ingen standard för att hålla fönstret öppet).
+
 ## Auto-merge, 2026-11-22
 
 Användarens val 2026-11-22 ([MIO-28](https://linear.app/kanonmaten/issue/MIO-28)), efter att Claude först avrått med fel skäl.
