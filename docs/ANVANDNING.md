@@ -1,6 +1,6 @@
 # Använd Mio
 
-Detta är guiden för helhetsbygget 0.9.0. Koden behöver först byggas och installationen provas enligt [installation](INSTALLATION.md) och [helhetstest](TESTPLAN_HELHET.md).
+Detta är guiden för 0.10.0. Koden behöver först byggas och installationen provas enligt [installation](INSTALLATION.md) och [helhetstest](TESTPLAN_HELHET.md).
 
 ## Första gången
 
@@ -25,18 +25,20 @@ Mikrofon, transkriptionsanslutning och text-AI visas separat. En aktiv mikrofon 
 
 Spela bara in andra med tydligt samtycke och enligt lokala regler. Talarmärkningen på din dator analyserar rösterna för att skilja talare åt (talare 1–4). Det sker bara i datorns RAM och raderas när sessionen avslutas eller efter 10 minuter, men det är ändå en analys av andras röster: berätta det när du ber om samtycke, och stäng av den på servern (`MIO_SPEAKER_LABELS=0`) om någon inte vill. Paus/stopp ska släcka iOS mikrofonindikator. Långvarig drift med låst skärm behöver verifieras på din telefon; tvångsavslutning startar aldrig om lyssningen automatiskt.
 
-## Be Mio föreslå något
+## Säg åt Mio direkt
 
-Säg till exempel:
+Två saker säger du direkt till Mio, och de sparas med en gång:
 
-- **Mio, anteckna att vi arbetar med procent.**
-- **Mio, påminn mig att ta med boken.**
-- **Mio, planera tandläkaren.**
-- **Mio, kom ihåg att jag föredrar blå pennor.**
+- **Mio, kom ihåg att ta med gympakläder i morgon.** Blir en påminnelse i Påminnelser.
+- **Mio, notera att mötet flyttas.** Blir en Mio-anteckning under **Sparat med rösten** i Förslag.
 
-Tydliga Mio-kommandon blir lokala frågor i fliken **Förslag**, som du också når med **N att granska** på Hem. Vanlig konversation blir inte automatiskt ett minne. Inne i en sparad session finns **Hitta lokala Mio-förslag**.
+Två korta vibrationer betyder sparat. Du kan ångra i 24 timmar; Ångra tar också bort påminnelsen ur Påminnelser. Säger du både en tid och en plats blir det i stället ett kalenderförslag under Förslag, som du bekräftar i Kalenders ruta. En lång vibration betyder att Mio inte förstod eller inte kunde spara; texten ligger då under Förslag. Andra ord efter "Mio", som "påminn", "anteckna", "planera" eller "fråga", är inga kommandon sedan 2026-11-20. Frågor ställer du med **Fråga Mio**. Under en lektion tar Mio inte emot kommandon.
 
-Öppna frågan och kontrollera **typ, rubrik, text, datum och tid**. Lokala kommandon tolkar inte datum. AI kan föreslå en tid, men du måste markera att datum och tid är kontrollerade före Ja för AI-förslag på händelser och att göra. Texten är det du sa i transkriptet, inte AI:ns ord. Hörs en dag men inget klockslag föreslås **Heldag**; säger du klockslaget senare uppdateras förslaget. Saknas dagen ber Mio dig välja den.
+## Granska förslag
+
+Det AI hittar i vanliga samtal hamnar som förslag i fliken **Förslag**, som du också når med **N att granska** på Hem. Det vibrerar aldrig. Vanlig konversation blir inte automatiskt ett minne. Inne i en sparad session finns **Hitta lokala Mio-förslag**, som letar efter kommandon du sagt.
+
+Öppna frågan och kontrollera **typ, rubrik, text, datum och tid**. AI kan föreslå en tid, men du måste markera att datum och tid är kontrollerade före Ja för AI-förslag på händelser och att göra. Texten är det du sa i transkriptet, inte AI:ns ord. Hörs en dag men inget klockslag föreslås **Heldag**; säger du klockslaget senare uppdateras förslaget. Saknas dagen ber Mio dig välja den.
 
 Om underlaget kompletteras medan du granskar kan Mio be dig granska den nya versionen. Dina redigerade utkastfält behålls. Ändring av relevanta fält återställer datumkontrollen; en saknad tid ska väljas uttryckligen och får inte råka bli ”nu”.
 
@@ -47,7 +49,7 @@ Om underlaget kompletteras medan du granskar kan Mio be dig granska den nya vers
 - **Nej, glöm förslaget:** tar bort frågan. Originaltexten i sessionen finns kvar tills du raderar sessionen.
 - **Inte nu:** behåller frågan i inkorgen till senare.
 
-I förgrunden kan upptäckt av Mio ge vibration. Frågor kan behöva granskas genom att du öppnar appen när den har varit i bakgrunden.
+Förslag som kommer medan appen ligger i bakgrunden granskar du när du öppnar den igen.
 
 ## Skickat och länken tillbaka
 
@@ -68,20 +70,20 @@ Hem är veckoplaneraren. Rubriken är veckonumret, till exempel **v. 41**. Under
 
 **Fråga Mio** finns uppe till vänster på Hem och Fånga.
 
-Påminnelserna läses när Hem visas, när du återvänder till appen och när de ändras i Påminnelser; de sparas aldrig i Mio. En uttryckligen vald historisk dag behålls vid vanlig uppdatering. Dagliga notiser för morgon och kväll ställs in under **Inställningar → Notiser**; de visar generell text och öppnar Hem med morgon- respektive kvällsöversikten. En gammal postnotis från före 0.9.1 öppnar Hem. Ingen notisöppning startar mikrofon, AI eller en systemåtgärd; undantaget är **Tryck för att fortsätta lyssna**, som öppnar Fånga och fortsätter en session du själv startat.
+Påminnelserna läses när Hem visas, när du återvänder till appen och när de ändras i Påminnelser; de sparas aldrig i Mio. En uttryckligen vald historisk dag behålls vid vanlig uppdatering. Dagliga notiser för morgon och kväll ställs in under **Inställningar → Notiser**; de visar generell text. Morgonnotisen öppnar Hem och kvällsnotisen öppnar Förslag. En gammal postnotis från före 0.9.1 öppnar Hem. Ingen notisöppning startar mikrofon, AI eller en systemåtgärd; undantaget är **Tryck för att fortsätta lyssna**, som öppnar Fånga och fortsätter en session du själv startat.
 
 ## AI
 
 AI är på från början när datorn är parad (beslut 2026-10-11) och startar när appen öppnas. Pausa med reglaget på **Fånga** eller under **Inställningar → AI**; pausen sparas tills du slår på AI igen. Ingen text skickas medan AI är pausad.
 
-- **Vardag:** nytt vardagstal samlas och skickas högst var femte minut, så att en dags lyssning ryms i Groqs gratiskvot (200 000 token per dygn). Paus/stopp skickar redan fångad text direkt.
+- **Vardag:** nytt vardagstal samlas och skickas högst var femte minut, så att en dags lyssning ryms i leverantörens kvot. Paus/stopp skickar redan fångad text direkt.
 - **Lektioner:** delarna skickas med minst 60 sekunder emellan.
 - **Kvot:** när datorn svarar 429 (även `local_token_limit`) väntar Mio enligt `Retry-After` och visar **AI fortsätter kl. HH:MM**. Vid en lång paus hoppas vardagstalet under pausen över; texten finns kvar lokalt. Svarar inte datorn försöker Mio igen efter fem minuter.
 - **Förslag** sparas fortfarande först när du väljer Ja.
 
 **Kontrollera anslutningen** under Dator och **AI → Kapacitet och uppgifter** gör modellfria statusanrop: gatewayversion, profiler och återstående dagskvot. De bevisar inte modellens svarskvalitet.
 
-**Enskilda frågor:** tryck **Fråga Mio** på Hem eller Fånga. Upp till tre färdiga frågor, byggda på telefonen från senaste lektionen och nästa händelse eller att göra-post, kan fylla i textfältet; inget skickas förrän du själv skickar. Skriv eller ändra frågan, välj vid behov enstaka poster eller sessionsutdrag och tryck **Skicka frågan**. Frågan skickas direkt utan förhandsgranskning; svaret valideras innan det visas. Svaret kan innehålla fel och utför inga åtgärder. Det försvinner när du lämnar vyn om du inte väljer **Granska och spara som anteckning**. En skickad fråga kan inte återkallas.
+**Enskilda frågor:** tryck **Fråga Mio** på Hem eller Fånga. Upp till tre färdiga frågor, byggda på telefonen från senaste lektionen och nästa händelse eller att göra-post, kan fylla i textfältet; inget skickas förrän du själv skickar. Skriv eller ändra frågan, välj vid behov enstaka poster eller sessionsutdrag och tryck **Skicka frågan**. Frågan skickas direkt utan förhandsgranskning; svaret valideras innan det visas. Svaret kan innehålla fel och utför inga åtgärder. Det försvinner när du lämnar vyn om du inte väljer **Granska och spara i Anteckningar**. Där kan du ändra rubrik och text i **Granska anteckning**, och **Spara i Anteckningar** öppnar sedan dela-arket. Svaret sparas först när du väljer Anteckningar där och trycker **Spara**; avbryter du dela-arket är du kvar i granskningen med dina ändringar, och **Avbryt** i granskningen släpper svaret. En skickad fråga kan inte återkallas.
 
 ## Exportera och radera
 
@@ -91,9 +93,7 @@ Stoppa sessionen och gå till **Inställningar → Integritet och data → Expor
 
 ## Nya AI-val och detaljerade lektionsanteckningar
 
-Detta gäller arbetskopians nya kod; befintlig build 5 behöver ersättas med en ny verifierad IPA och gatewayen behöver uppdateras.
-
-**Byta modell eller leverantör:** följ [gatewayguiden](../server/README.md). Modell och API-nyckel ändras på datorn; telefonens parning behålls. Reasoning är av, temperatur 0 och strikt JSON används automatiskt. Modellens JSON visas som vanliga anteckningar och förslag i appen.
+**Byta modell eller leverantör:** välj ett annat granskat par per uppgift (fråga, vardag, lektion) i Mio Kontroll på datorn; se [gatewayguiden](../server/README.md). Från början kör Mistral: Small 4 för fråga och vardag, Large 4 för lektioner. Telefonens parning behålls. Temperatur 0 och strikt JSON används automatiskt. Fråga och vardag resonerar inte; lektionen får resonera, men resonemanget sparas, loggas eller visas aldrig. Modellens JSON visas som vanliga anteckningar och förslag i appen.
 
 Servern kan ha olika kompatibla profiler för enskild fråga, vardag och lektion. Gör det modellfria anslutningsprovet efter ett byte och aktivera/granska på nytt. Det finns ingen modellväljare i appen eller tyst reservmodell.
 
