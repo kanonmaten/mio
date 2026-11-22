@@ -7,8 +7,8 @@
 //! day (C1), key rotation keeps `gateway.env` (C2), the v2 rule filter runs before the six-item
 //! cap (C4) and generated tokens never start like a provider key (D1). The recording used
 //! `openai` as an unknown provider; since OpenAI, OpenRouter and Gemini became providers
-//! (MIO-40, 2026-11-22) status names them, so the one configuration case that differs for that
-//! reason is allowed here and the new behaviour is covered in `new_providers.rs`.
+//! (MIO-40, 2026-11-22) status names them: the one configuration case that differs for that
+//! reason gets exactly those changes in its expected answer and is compared in full.
 
 mod common;
 
@@ -169,10 +169,22 @@ fn pure_functions_answer_as_the_recorded_gateway_did() {
     for (index, case) in cases.iter().enumerate() {
         let kind = case["kind"].as_str().unwrap();
         let later = kind == "configuration" && ["openai", "openrouter", "gemini"].contains(&case["input"]["env"]["MIO_AI_PROVIDER"].as_str().unwrap_or(""));
-        let (actual, wanted) = (evaluate(kind, &case["input"]), expected(kind, &case["expected"]));
+        let (actual, mut wanted) = (evaluate(kind, &case["input"]), expected(kind, &case["expected"]));
         if actual != wanted && later {
+            // Exactly what a known provider changes, and the rest compared as recorded: status
+            // names it, the revision is computed again from the same configuration, and Vardag
+            // accepts backlog because that provider has no per-minute budget set.
             later_providers += 1;
-        } else if actual != wanted {
+            let revision = actual["revision"].clone();
+            assert!(revision.as_str().is_some_and(mio_gateway::status::is_revision) && revision != wanted["revision"], "#{index}");
+            wanted["revision"] = revision.clone();
+            wanted["statusV2"]["configurationRevision"] = revision;
+            wanted["statusV1"]["provider"] = case["input"]["env"]["MIO_AI_PROVIDER"].clone();
+            if let Some(capabilities) = wanted["statusV2"]["tasks"]["everyday"]["capabilities"].as_array_mut() {
+                capabilities.push(json!("analysis-backlog-v1"));
+            }
+        }
+        if actual != wanted {
             let clip = |value: &Value| value.to_string().chars().take(700).collect::<String>();
             failures.push(format!("#{index} {kind}\n  input    {}\n  expected {}\n  actual   {}", clip(&case["input"]), clip(&wanted), clip(&actual)));
         }
