@@ -55,7 +55,9 @@ sudo install -m 644 -o root -g root "$source_dir/polkit/app.mio.control.policy" 
 sudo install -D -m 644 "$source_dir/desktop/app.mio.control.desktop" "$applications/app.mio.control.desktop"
 sudo install -D -m 644 "$source_dir/desktop/app.mio.control.svg" "$icon"
 command -v update-desktop-database >/dev/null && sudo update-desktop-database "$applications" || true
-command -v gtk-update-icon-cache >/dev/null && sudo gtk-update-icon-cache -q /usr/local/share/icons/hicolor || true
+# KDE Plasma finds new menu entries and icons through its own cache (ksycoca, in ~/.cache), not
+# GTK's icon cache, so rebuild it as the user; elsewhere the menu picks the entry up by itself.
+command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 >/dev/null 2>&1 || true
 
 # The commit this was installed from; Mio Kontroll compares it with the repo to show updates.
 if commit="$(git -C "$source_dir" rev-parse HEAD 2>/dev/null)"; then
