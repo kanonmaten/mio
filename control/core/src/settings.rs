@@ -77,7 +77,7 @@ pub fn is_secret_key(key: &str) -> bool {
 
 /// Provider key variables the helper may set. Must match `PROVIDERS` in
 /// `server/src/model_profiles.rs`; a test keeps them in step.
-pub const PROVIDER_SECRET_KEYS: &[&str] = &["GROQ_API_KEY", "ANTHROPIC_API_KEY", "MISTRAL_API_KEY", "NVIDIA_API_KEY"];
+pub const PROVIDER_SECRET_KEYS: &[&str] = &["GROQ_API_KEY", "ANTHROPIC_API_KEY", "MISTRAL_API_KEY", "NVIDIA_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY"];
 
 /// The vocabulary file below the system root (`root:mio-transcription 0640`).
 pub const VOCABULARY_PATH: &str = "etc/mio-transcription-vocabulary.txt";

@@ -17,11 +17,15 @@ pub struct Provider {
     pub wire: &'static str,
 }
 
-pub const PROVIDERS: [Provider; 4] = [
+pub const PROVIDERS: [Provider; 7] = [
     Provider { id: "groq", base: "https://api.groq.com/openai/v1", secret_variable: "GROQ_API_KEY", wire: "chat" },
     Provider { id: "anthropic", base: "https://api.anthropic.com/v1", secret_variable: "ANTHROPIC_API_KEY", wire: "messages" },
     Provider { id: "mistral", base: "https://api.mistral.ai/v1", secret_variable: "MISTRAL_API_KEY", wire: "chat" },
     Provider { id: "nvidia", base: "https://integrate.api.nvidia.com/v1", secret_variable: "NVIDIA_API_KEY", wire: "chat" },
+    // Added 2026-11-22 (user decision, MIO-40). Each runs only through a candidate approved after a trial.
+    Provider { id: "openai", base: "https://api.openai.com/v1", secret_variable: "OPENAI_API_KEY", wire: "chat" },
+    Provider { id: "openrouter", base: "https://openrouter.ai/api/v1", secret_variable: "OPENROUTER_API_KEY", wire: "chat" },
+    Provider { id: "gemini", base: "https://generativelanguage.googleapis.com/v1beta/openai", secret_variable: "GEMINI_API_KEY", wire: "chat" },
 ];
 
 pub const CAPABILITIES: [&str; 3] = ["reasoning-off", "temperature-zero", "strict-json"];
@@ -151,7 +155,7 @@ pub const REVIEWED_MODELS: [Reviewed; 2] = [
 /// so it is bound to `lesson`; `mistral-large-4-0` is the version-locked ID, while
 /// `mistral-large-4` and `mistral-large-latest` are aliases that can move. Whether Mistral accepts
 /// temperature 0 with reasoning on is not documented; the trial settles it.
-pub const CANDIDATE_MODELS: [Reviewed; 3] = [
+pub const CANDIDATE_MODELS: [Reviewed; 14] = [
     Reviewed { provider: "mistral", model: "mistral-small-2603", schema_dialect: "json-schema", plain: false,
         reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-20",
         blocked: Some("Strikt JSON-schema är inte bekräftat i Mistrals dokumentation; kräver ett godkänt prov."),
@@ -169,7 +173,79 @@ pub const CANDIDATE_MODELS: [Reviewed; 3] = [
         blocked: Some("Strikt JSON-schema och modellnamnet i NVIDIAs hostade API är inte bekräftade; kräver ett godkänt prov."),
         sources: &["https://docs.nvidia.com/nim/vision-language-models/2.1.1-variant/get-started/advanced/get-started-qwen3-8-27b.html",
             "https://docs.nvidia.com/nim/large-language-models/1.15.0/structured-generation.html"] },
+    // OpenAI (read 2026-11-22). Luna and Terra take reasoning effort `none` and list
+    // structured_outputs and Chat Completions on their model pages; Sol 6.2 rejects `none`, so
+    // it is bound to lessons. None has a dated snapshot. Whether they take temperature 0 and
+    // `max_tokens` is not documented; the request sends `max_completion_tokens` and the trial
+    // settles temperature.
+    Reviewed { provider: "openai", model: "gpt-6-luna", schema_dialect: "strict-json-schema", plain: false,
+        reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-22",
+        blocked: Some("Om modellen godtar temperatur 0 står inte i OpenAIs dokumentation; kräver ett godkänt prov."),
+        sources: &["https://developers.openai.com/api/docs/models/gpt-6-luna",
+            "https://developers.openai.com/api/docs/guides/structured-outputs",
+            "https://developers.openai.com/api/docs/guides/reasoning"] },
+    Reviewed { provider: "openai", model: "gpt-6.1-terra", schema_dialect: "strict-json-schema", plain: false,
+        reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-22",
+        blocked: Some("Om modellen godtar temperatur 0 står inte i OpenAIs dokumentation; kräver ett godkänt prov."),
+        sources: &["https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+            "https://developers.openai.com/api/docs/guides/structured-outputs",
+            "https://developers.openai.com/api/docs/guides/reasoning"] },
+    Reviewed { provider: "openai", model: "gpt-6.2-sol", schema_dialect: "strict-json-schema", plain: false,
+        reasoning: Reasoning::Effort("medium"), temperature: true, reviewed_at: "2026-11-22",
+        blocked: Some("Resonerar alltid och får bara användas för lektioner. Om modellen godtar temperatur 0 står inte i dokumentationen; kräver ett godkänt prov."),
+        sources: &["https://developers.openai.com/api/docs/models/gpt-6.2-sol",
+            "https://developers.openai.com/api/docs/guides/structured-outputs",
+            "https://developers.openai.com/api/docs/guides/reasoning"] },
+    // Gemini through its OpenAI-compatible endpoint (read 2026-11-22). Reasoning cannot be turned
+    // off for Gemini 3 or 4; only 2.5 takes `none`, and 2.5 Flash-Lite is not deprecated. The
+    // structured-output page promises syntactically valid JSON, not adherence, and does not
+    // mention `strict`, so both are `json-schema` and every answer is validated. Thought text is
+    // not returned by default. The free tier may train on content outside the EEA; inside it the
+    // paid data rules apply, but the terms only allow paid services for API clients there.
+    Reviewed { provider: "gemini", model: "gemini-2.5-flash-lite", schema_dialect: "json-schema", plain: false,
+        reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-22",
+        blocked: Some("Gemini lovar inte att följa svarsschemat strikt; kräver ett godkänt prov."),
+        sources: &["https://aistudio.google.com/docs/openai", "https://aistudio.google.com/docs/structured-output",
+            "https://aistudio.google.com/docs/thinking", "https://aistudio.google.com/docs/models"] },
+    Reviewed { provider: "gemini", model: "gemini-3.8-flash", schema_dialect: "json-schema", plain: false,
+        reasoning: Reasoning::Effort("medium"), temperature: true, reviewed_at: "2026-11-22",
+        blocked: Some("Resonerar alltid och får bara användas för lektioner. Gemini lovar inte att följa svarsschemat strikt; kräver ett godkänt prov."),
+        sources: &["https://aistudio.google.com/docs/openai", "https://aistudio.google.com/docs/structured-output",
+            "https://aistudio.google.com/docs/thinking", "https://aistudio.google.com/docs/models"] },
+    // OpenRouter (read 2026-11-22): the request is pinned by the adapter to endpoints that support
+    // every parameter sent (`require_parameters`), collect no data and retain nothing (`zdr`), with
+    // reasoning set through its own `reasoning` object and excluded from the answer. Structured
+    // output enforcement varies by endpoint, so every answer is validated. IDs checked against
+    // https://openrouter.ai/api/v1/models?supported_parameters=structured_outputs on 2026-11-22.
+    Reviewed { provider: "openrouter", model: "openai/gpt-6-luna", schema_dialect: "strict-json-schema", plain: false,
+        reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-22",
+        blocked: Some("Går via OpenRouter till en underleverantör; kräver ett godkänt prov."),
+        sources: OPENROUTER_SOURCES },
+    Reviewed { provider: "openrouter", model: "mistralai/mistral-small-2603", schema_dialect: "json-schema", plain: false,
+        reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-22",
+        blocked: Some("Går via OpenRouter till en underleverantör; kräver ett godkänt prov."),
+        sources: OPENROUTER_SOURCES },
+    Reviewed { provider: "openrouter", model: "qwen/qwen3.8-27b", schema_dialect: "strict-json-schema", plain: false,
+        reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-22",
+        blocked: Some("Går via OpenRouter till en underleverantör; kräver ett godkänt prov."),
+        sources: OPENROUTER_SOURCES },
+    Reviewed { provider: "openrouter", model: "google/gemini-2.5-flash-lite", schema_dialect: "json-schema", plain: false,
+        reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-22",
+        blocked: Some("Går via OpenRouter till en underleverantör; kräver ett godkänt prov."),
+        sources: OPENROUTER_SOURCES },
+    Reviewed { provider: "openrouter", model: "mistralai/mistral-large-4-0", schema_dialect: "json-schema", plain: false,
+        reasoning: Reasoning::Effort("medium"), temperature: true, reviewed_at: "2026-11-22",
+        blocked: Some("Resonerar alltid och får bara användas för lektioner. Går via OpenRouter till en underleverantör; kräver ett godkänt prov."),
+        sources: OPENROUTER_SOURCES },
+    Reviewed { provider: "openrouter", model: "google/gemini-3.8-flash", schema_dialect: "json-schema", plain: false,
+        reasoning: Reasoning::Effort("medium"), temperature: true, reviewed_at: "2026-11-22",
+        blocked: Some("Resonerar alltid och får bara användas för lektioner. Går via OpenRouter till en underleverantör; kräver ett godkänt prov."),
+        sources: OPENROUTER_SOURCES },
 ];
+
+const OPENROUTER_SOURCES: &[&str] = &["https://openrouter.ai/docs/features/structured-outputs",
+    "https://openrouter.ai/docs/features/provider-routing", "https://openrouter.ai/docs/use-cases/reasoning-tokens",
+    "https://openrouter.ai/docs/features/privacy-and-logging"];
 
 /// A reviewed price in USD per million tokens. Only pairs listed here get a cost in `/v2/status`;
 /// any other (Groq's free tier) gets `estimatedCost: null`.
@@ -187,11 +263,19 @@ pub struct Price {
 /// Read 2026-11-20 on Mistral's pricing page. Reasoning is billed as output (the usage counter
 /// counts it inside `outputTokens`). The page names Small 4 `mistral-small-4-0-26-03`; its model
 /// page gives `mistral-small-2603` as the API ID.
-pub const PRICES: [Price; 2] = [
+pub const PRICES: [Price; 5] = [
     Price { provider: "mistral", model: "mistral-small-2603", input: 0.15, cached_input: 0.015, output: 0.6,
         as_of: "2026-11-20", source: "https://docs.mistral.ai/inference/pricing" },
     Price { provider: "mistral", model: "mistral-large-4-0", input: 0.7, cached_input: 0.07, output: 2.1,
         as_of: "2026-11-20", source: "https://docs.mistral.ai/inference/pricing" },
+    // Read 2026-11-22. OpenRouter's prices depend on the endpoint it routes to, so it has none.
+    // Gemini has none yet: its cached-input price and 2.5 Flash-Lite's price were not read.
+    Price { provider: "openai", model: "gpt-6-luna", input: 0.10, cached_input: 0.01, output: 0.50,
+        as_of: "2026-11-22", source: "https://developers.openai.com/api/docs/pricing" },
+    Price { provider: "openai", model: "gpt-6.1-terra", input: 1.00, cached_input: 0.05, output: 5.00,
+        as_of: "2026-11-22", source: "https://developers.openai.com/api/docs/pricing" },
+    Price { provider: "openai", model: "gpt-6.2-sol", input: 2.00, cached_input: 0.10, output: 10.00,
+        as_of: "2026-11-22", source: "https://developers.openai.com/api/docs/pricing" },
 ];
 
 pub fn price(provider: &str, model: &str) -> Option<&'static Price> {
