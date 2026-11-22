@@ -1,5 +1,5 @@
 //! Uppdateringar: one row per part with what is installed and what the repo has, "Uppdatera allt",
-//! and Ghostty for the work itself (the installers ask for sudo; see `mio_control_core::updates`).
+//! and the default terminal for the work itself (the installers ask for sudo; see `mio_control_core::updates`).
 
 use std::sync::Arc;
 
@@ -35,14 +35,14 @@ impl UpdateBackend {
         Self {
             probe: Arc::new(|| probe(&built_from(), std::path::Path::new("/"), true)),
             open_terminal: Arc::new(|script| {
-                // Any CLI argument makes Ghostty start its own instance (`gtk-single-instance = detect`),
-                // so the window gets these options rather than a running Ghostty's. `-e` must come
-                // last: everything after it is the command. The window stays until a key is pressed.
-                std::process::Command::new("ghostty")
-                    .args(["--wait-after-command=true", "-e", "bash", "-c", &script])
+                // The default terminal (Plasma's choice, else xdg-terminal-exec); the script itself
+                // waits for Enter, so no terminal-specific hold flag is needed.
+                let launch = mio_control_core::terminal::launch(&["bash", "-c", &script]);
+                std::process::Command::new(&launch.program)
+                    .args(&launch.args)
                     .spawn()
                     .map(|_| ())
-                    .map_err(|_| "Ghostty saknas. Installera ghostty eller kör stegen i en egen terminal.".to_owned())
+                    .map_err(|_| format!("Standardterminalen gick inte att starta ({}). Välj en under Systeminställningar → Standardprogram, eller kör stegen i en egen terminal.", launch.program))
             }),
             autostart: Arc::new(|| crate::desktop::autostart_path().is_some_and(|path| path.exists())),
         }
@@ -88,7 +88,7 @@ impl UpdatesPage {
         let backend = backend(cx);
         let text = script(&built_from(), &steps, (backend.autostart)());
         window.push_notification(match (backend.open_terminal)(text) {
-            Ok(()) => Notification::info("Uppdateringen körs i Ghostty och stannar vid första fel. Tryck Sök igen när den är klar."),
+            Ok(()) => Notification::info("Uppdateringen körs i terminalen och stannar vid första fel. Tryck Sök igen när den är klar."),
             Err(message) => Notification::error(message),
         }, cx);
     }
@@ -109,7 +109,7 @@ impl UpdatesPage {
             (Part::System, Some(state)) => match &state.system {
                 Err(message) => (Tag::secondary().child("Okänt"), message.clone()),
                 Ok(0) => (Tag::success().child("Senaste"), String::new()),
-                Ok(count) => (Tag::warning().child("Nytt finns"), format!("{count} paket kan uppdateras. Körs med sudo pacman -Syu i Ghostty.")),
+                Ok(count) => (Tag::warning().child("Nytt finns"), format!("{count} paket kan uppdateras. Körs med sudo pacman -Syu i terminalen.")),
             },
             (_, Some(state)) => match state.part(part) {
                 Some(PartState::UpToDate) => (Tag::success().child("Senaste"), String::new()),
@@ -156,7 +156,7 @@ impl Render for UpdatesPage {
         let everything = self.state.as_ref().map(UpdateState::everything).unwrap_or_default();
         let rows: Vec<_> = Part::ALL.into_iter().map(|part| self.row(part, cx).into_any_element()).collect();
         v_flex().id("updates").size_full().overflow_y_scrollbar().p_4().gap_4()
-            .child(page_header("Uppdateringar", "Hämtar Mio från GitHub och installerar om det som ändrats. Stegen körs i Ghostty, där sudo frågar efter lösenordet, och stannar vid första fel.", cx))
+            .child(page_header("Uppdateringar", "Hämtar Mio från GitHub och installerar om det som ändrats. Stegen körs i terminalen, där sudo frågar efter lösenordet, och stannar vid första fel.", cx))
             .child(h_flex().gap_2()
                 .child(Button::new("update-all").primary().label("Uppdatera allt").icon(IconName::RefreshCw)
                     .disabled(self.state.is_none() || blocked.is_some())

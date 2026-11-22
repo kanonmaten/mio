@@ -45,7 +45,7 @@ impl SetupPage {
         let backend = cx.try_global::<UpdateBackend>().cloned().unwrap_or_else(UpdateBackend::system);
         let text = script(&built_from(), &[part], (backend.autostart)());
         window.push_notification(match (backend.open_terminal)(text) {
-            Ok(()) => Notification::info("Installationen körs i Ghostty. Guiden går vidare när statusen visar att steget är klart."),
+            Ok(()) => Notification::info("Installationen körs i terminalen. Guiden går vidare när statusen visar att steget är klart."),
             Err(message) => Notification::error(message),
         }, cx);
     }
@@ -57,8 +57,8 @@ impl SetupPage {
             Step::Tools => button.label("Kontrollera igen").icon(IconName::RefreshCw).on_click(cx.listener(|this, _, _, cx| {
                 this.status.update(cx, |status, _| status.request_refresh());
             })),
-            Step::Gateway => button.label("Installera gatewayen i Ghostty").on_click(cx.listener(|this, _, window, cx| this.install(Part::Gateway, window, cx))),
-            Step::Pianissimo => button.label("Installera Pianissimo i Ghostty").on_click(cx.listener(|this, _, window, cx| this.install(Part::Pianissimo, window, cx))),
+            Step::Gateway => button.label("Installera gatewayen i terminalen").on_click(cx.listener(|this, _, window, cx| this.install(Part::Gateway, window, cx))),
+            Step::Pianissimo => button.label("Installera Pianissimo i terminalen").on_click(cx.listener(|this, _, window, cx| this.install(Part::Pianissimo, window, cx))),
             Step::Serve => button.label("Ställ in serve").on_click(cx.listener(|this, _, window, cx| {
                 let task = operation::run(Command::SetupServe, None, cx);
                 let status = this.status.clone();

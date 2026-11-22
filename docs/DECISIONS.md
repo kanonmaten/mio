@@ -2,9 +2,15 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
-## Mio Kontroll kör installationer i Ghostty, 2026-11-22
+## Mio Kontroll använder standardterminalen, 2026-11-22
 
-Användarens val ([MIO-32](https://linear.app/kanonmaten/issue/MIO-32)). Uppdateringar och Kom igång öppnar `ghostty --wait-after-command=true -e bash -c <skript>` i stället för `konsole --hold`. Skriptet är detsamma. Ghostty startar en egen instans när det får argument på kommandoraden (`gtk-single-instance = detect`), så fönstret får de här inställningarna även om Ghostty redan är öppet, och det står kvar tills en tangent trycks. Det ersätter Konsole i avsnitten om fas 7 och 9 nedan. Avböjt: att låta användaren välja terminal i panelen (en inställning till för en enda dator) och `xdg-terminal-exec` (ingen standard för att hålla fönstret öppet).
+Användarens val ([MIO-32](https://linear.app/kanonmaten/issue/MIO-32)): allt som ska köras i en terminal körs i den terminal som är vald som standard, inte i en som står i koden. Det ersätter Konsole i avsnitten om fas 7 och 9 nedan.
+
+| Val | Varför | Bortvalt |
+|---|---|---|
+| På KDE Plasma läser panelen `TerminalService` under `[General]` i `kdeglobals`, alltså det som Systeminställningar → Standardprogram skriver, och startar den terminalens desktop-fil enligt freedesktops förslag till terminalspecifikation: `Exec`, sedan `X-TerminalArgExec` (annars `-e`), sedan `bash -c <skript>` | Det är den inställning användaren ser. `xdg-terminal-exec` läser inte KDE:s val utan egna `xdg-terminals.list`, som saknas här, och faller då tillbaka på vilken terminal som helst, alltså kanske Konsole. | Ghostty skrivet i koden (första versionen av den här PR:en); KDE:s äldre `TerminalApplication` (en kommandorad, ingen desktop-fil) |
+| Utanför KDE, eller när posten saknas eller inte går att läsa: `xdg-terminal-exec -- bash -c <skript>` | Freedesktops sätt att starta standardterminalen; en saknad `xdg-terminal-exec` ger ett felmeddelande, ingen tyst reserv. | En lista med kända terminaler att prova i tur och ordning |
+| Skriptet väntar själv på Enter i en `EXIT`-trap, både när det gick bra och efter fel | Flaggan som håller fönstret öppet heter olika i varje terminal (`--hold`, `--wait-after-command`), och alla terminaler har inte en. | `--hold` genom `xdg-terminal-exec` (bara för terminaler vars desktop-fil har `X-TerminalArgHold`) |
 
 ## Auto-merge, 2026-11-22
 

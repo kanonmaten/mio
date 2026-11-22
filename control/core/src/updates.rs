@@ -2,7 +2,7 @@
 //!
 //! Each installer records the commit it was installed from (`commit` next to the program). A part
 //! is behind when its directory changed between that commit and the repo's upstream. The updates
-//! run in Ghostty as the user, because the installers ask for `sudo` themselves and must never run
+//! run in the default terminal as the user, because the installers ask for `sudo` themselves and must never run
 //! as root from files the user can edit.
 
 use std::path::{Path, PathBuf};
@@ -224,12 +224,16 @@ pub fn shell_quote(text: &str) -> String {
 /// Where `transcription-server/install.sh` puts the model updater.
 pub const UPDATE_MODEL: &str = "/opt/mio-transcription/update-model.sh";
 
-/// The script Ghostty runs. It stops at the first error, says so, and leaves the output visible.
+/// The script the default terminal runs. It stops at the first error, says so, and waits for Enter
+/// so the output stays visible in any terminal.
 pub fn script(repo: &Path, steps: &[Part], keep_autostart: bool) -> String {
     let mut lines = vec![
         "set -euo pipefail".to_owned(),
         "step() { printf '\\n==> %s\\n' \"$1\"; }".to_owned(),
         "trap 'printf \"\\nStoppade vid ett fel. Stegen efter det här kördes inte.\\n\"' ERR".to_owned(),
+        // Waiting here, on success and on failure alike, keeps the output readable in any terminal
+        // without a terminal-specific "hold" flag.
+        "trap 'printf \"\\nTryck på Enter för att stänga fönstret.\\n\"; read -r _ || true' EXIT".to_owned(),
         format!("cd {}", shell_quote(&repo.display().to_string())),
     ];
     for part in steps {
@@ -248,7 +252,6 @@ pub fn script(repo: &Path, steps: &[Part], keep_autostart: bool) -> String {
     if steps.contains(&Part::Panel) {
         lines.push("echo 'Mio Kontroll är ny: välj Avsluta i ikonens meny och starta den igen.'".to_owned());
     }
-    lines.push("echo 'Du kan stänga fönstret.'".to_owned());
     lines.join("\n") + "\n"
 }
 
@@ -371,6 +374,7 @@ mod tests {
         assert!(order.is_sorted());
         assert!(!script.contains("transcription-server"));
         assert!(script.contains("starta den igen"));
+        assert!(script.contains("read -r _ || true' EXIT"), "waits for Enter in any terminal");
         let output = Command::new("bash").args(["-n", "-c", &script]).status().unwrap();
         assert!(output.success(), "bash accepts the script");
         assert_eq!(count_packages("linux 6.1 -> 6.2\n\nmesa 1 -> 2\n"), 2);
