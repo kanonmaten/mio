@@ -23,15 +23,14 @@ fn settings() -> Value {
     json!({ "exists": true,
         "values": { "MIO_AI_PROVIDER": "groq", "MIO_AI_MODEL": "qwen/qwen3.8-27b", "MIO_REQUESTS_PER_MINUTE": "10",
             "MIO_TOKENS_PER_MINUTE": "8000", "MIO_TOKENS_PER_DAY": "190000", "MIO_LESSON_INTERVAL_SECONDS": "60", "PORT": "8787" },
-        "secrets": { "GROQ_API_KEY": true, "ANTHROPIC_API_KEY": true, "MIO_GATEWAY_TOKEN": true } })
+        "secrets": { "GROQ_API_KEY": true, "ANTHROPIC_API_KEY": true, "MISTRAL_API_KEY": true, "MIO_GATEWAY_TOKEN": true } })
 }
 
 /// `gateway.env` after a passed Prova of Mistral Small: the helper has added the pair to
-/// `MIO_APPROVED_CANDIDATES` (and the user has added a Mistral key).
+/// `MIO_APPROVED_CANDIDATES`.
 fn settings_after_trial() -> Value {
     let mut settings = settings();
     settings["values"]["MIO_APPROVED_CANDIDATES"] = json!("mistral=mistral-small-2603");
-    settings["secrets"]["MISTRAL_API_KEY"] = json!(true);
     settings
 }
 
@@ -85,6 +84,7 @@ fn open_with(cx: &mut TestAppContext, gateway: Option<GatewayStatus>) -> (gpui_k
                 })
             }),
             catalog: Arc::new(|| Ok(catalog().to_string().into_bytes())),
+            openrouter_models: Arc::new(|| Err("inte i testet".into())),
         })
     });
     let folder = tempfile::tempdir().unwrap();
@@ -131,9 +131,9 @@ fn choose_a_model_and_a_limit_see_the_changes_and_save(cx: &mut TestAppContext) 
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
         assert_eq!(window.find("changes").label(), Some("Inga ändringar."));
-        // Lesson notes on Anthropic, chosen with the keyboard in the menu: same, Groq, Anthropic.
-        window.click("ai-task-lesson", cx);
-        window.press("down", cx);
+        // Lesson notes on Anthropic, chosen with the keyboard: Groq, Anthropic, Mistral. Its
+        // first model for lessons is chosen with it.
+        window.click("ai-provider-lesson", cx);
         window.press("down", cx);
         window.press("enter", cx);
     })
@@ -142,7 +142,14 @@ fn choose_a_model_and_a_limit_see_the_changes_and_save(cx: &mut TestAppContext) 
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
         assert_eq!(window.find("changes").label(), Some("1 ändringar"), "the lesson model");
-        // Twenty requests per minute instead of ten.
+        // The limits are folded away until asked for. Twenty requests per minute instead of ten.
+        assert!(window.try_find("limit-MIO_REQUESTS_PER_MINUTE").is_none());
+        window.click("toggle-limits", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
         window.click("limit-MIO_REQUESTS_PER_MINUTE", cx);
         window.press("ctrl-a", cx);
         window.input("20", cx);
@@ -175,6 +182,12 @@ fn an_invalid_limit_blocks_saving(cx: &mut TestAppContext) {
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
         window.click("edit-ai", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("toggle-limits", cx);
     })
     .unwrap();
     cx.run_until_parked();
@@ -296,9 +309,9 @@ fn mistral_is_first_to_try_with_its_cost_and_large_is_offered_only_for_lessons(c
         // with the panel's reviewed Large price. Not under a cent.
         let large = window.find("trial-cost-mistral-mistral-large-test");
         assert_eq!(large.label(), Some("Går till Mistral: ett kort påhittat anrop med resonemang, högst cirka 13\u{202F}500 token. Uppskattat $0,0262 (priser 2026-11-20)."));
-        // Lessons: same, Groq, Anthropic, Mistral Large; the last one is only here.
-        window.click("ai-task-lesson", cx);
-        window.press("down", cx);
+        // Lessons: Groq, Anthropic, Mistral; Mistral's first lesson model is Large, which is
+        // only offered here.
+        window.click("ai-provider-lesson", cx);
         window.press("down", cx);
         window.press("down", cx);
         window.press("enter", cx);
@@ -335,11 +348,11 @@ fn a_candidate_that_passes_prova_can_be_chosen_without_restarting_the_panel(cx: 
         let reads = calls.iter().filter(|(command, _)| matches!(command, Command::ReadSettings(SettingsFile::Gateway))).count();
         assert_eq!(reads, 2, "the file is read again after the passed trial");
     }
-    // The same page, read again: Mistral Small is now the third choice for the default.
+    // The same page, read again: Mistral Small can now serve Frågor (Groq, Anthropic, Mistral).
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
         assert_eq!(window.find("trial-report").label(), Some("Provet godkänt"));
-        window.click("ai-default", cx);
+        window.click("ai-provider-ask", cx);
         window.press("down", cx);
         window.press("down", cx);
         window.press("enter", cx);
@@ -348,7 +361,8 @@ fn a_candidate_that_passes_prova_can_be_chosen_without_restarting_the_panel(cx: 
     cx.run_until_parked();
     cx.update_window(handle, |_, window, cx| {
         window.render_frame(cx);
-        assert_eq!(window.find("changes").label(), Some("2 ändringar"), "provider and model");
+        // Provider and model, and Vardag and Lektioner stay on Groq through their own profiles.
+        assert_eq!(window.find("changes").label(), Some("3 ändringar"));
         window.click("save-ai", cx);
     })
     .unwrap();
@@ -357,5 +371,82 @@ fn a_candidate_that_passes_prova_can_be_chosen_without_restarting_the_panel(cx: 
     let (_, stdin) = calls.iter().find(|(command, _)| matches!(command, Command::WriteSettings(SettingsFile::Gateway))).expect("an approved pair can be saved");
     let request: Value = serde_json::from_slice(stdin.as_ref().unwrap()).unwrap();
     assert_eq!((&request["set"]["MIO_AI_PROVIDER"], &request["set"]["MIO_AI_MODEL"]), (&json!("mistral"), &json!("mistral-small-2603")));
+    let profiles: Value = serde_json::from_str(request["set"]["MIO_AI_TASK_PROFILES"].as_str().unwrap()).unwrap();
+    assert_eq!(profiles, json!({ "everyday": { "provider": "groq", "model": "qwen/qwen3.8-27b" },
+        "lesson": { "provider": "groq", "model": "qwen/qwen3.8-27b" } }));
     assert!(request["set"].get("MIO_APPROVED_CANDIDATES").is_none(), "the panel never writes approvals itself");
+}
+
+#[gpui_kit::test]
+fn a_key_is_saved_for_the_provider_its_row_names(cx: &mut TestAppContext) {
+    let (handle, _, calls) = open(cx);
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("edit-ai", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(window.find("provider-mistral").label(), Some("Mistral: Nyckel sparad"));
+        assert_eq!(window.find("provider-openai").label(), Some("OpenAI: Ingen nyckel"));
+        assert!(window.try_find("key-input").is_none(), "no key field until one is asked for");
+        window.click("key-edit-openai", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("key-input", cx);
+        window.input("fixture-openai-key", cx);
+        window.click("save-key", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    let calls = calls.lock().unwrap();
+    let (_, stdin) = calls.iter().find(|(command, _)| *command == Command::WriteSecret("OPENAI_API_KEY")).expect("the OpenAI key was written");
+    // The key travels to the helper on stdin, never in the command.
+    assert_eq!(stdin.as_deref(), Some(&b"fixture-openai-key"[..]));
+}
+
+#[gpui_kit::test]
+fn a_model_waiting_for_its_trial_cannot_be_picked_from_the_list(cx: &mut TestAppContext) {
+    let (handle, _, calls) = open(cx);
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("edit-ai", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    // Lessons on Mistral: Large is chosen with it (Groq, Anthropic, Mistral).
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("ai-provider-lesson", cx);
+        window.press("down", cx);
+        window.press("down", cx);
+        window.press("enter", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    // Search the list for Small, which waits for its trial, and try to take it.
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("ai-model-lesson", cx);
+        window.input("small", cx);
+        window.press("enter", cx);
+        window.press("escape", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("save-ai", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    let calls = calls.lock().unwrap();
+    let (_, stdin) = calls.iter().find(|(command, _)| matches!(command, Command::WriteSettings(SettingsFile::Gateway))).expect("saved");
+    let request: Value = serde_json::from_slice(stdin.as_ref().unwrap()).unwrap();
+    let profiles: Value = serde_json::from_str(request["set"]["MIO_AI_TASK_PROFILES"].as_str().unwrap()).unwrap();
+    assert_eq!(profiles, json!({ "lesson": { "provider": "mistral", "model": "mistral-large-test" } }), "Small was not taken");
 }

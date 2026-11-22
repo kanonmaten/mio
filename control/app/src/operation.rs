@@ -16,9 +16,15 @@ pub struct Backend {
     pub helper: HelperFn,
     /// `mio-gateway granskade-modeller`: runs as the user, the binary is world-readable.
     pub catalog: CatalogFn,
+    /// OpenRouter's public model list, for the models nobody has reviewed yet. No key and no
+    /// user data go with the request; a failure only leaves that group of the list empty.
+    pub openrouter_models: CatalogFn,
 }
 
 impl Global for Backend {}
+
+/// Models that support structured output, the only kind the gateway could ever use.
+const OPENROUTER_MODELS: &str = "https://openrouter.ai/api/v1/models?supported_parameters=structured_outputs";
 
 /// Where `server/install.sh` puts the gateway.
 pub const GATEWAY: &str = "/opt/mio-gateway/mio-gateway";
@@ -39,6 +45,15 @@ impl Backend {
                     Err("Gatewayen på datorn är för gammal för panelen. Kör server/install.sh.".to_owned())
                 }
             }),
+            openrouter_models: Arc::new(|| {
+                // curl is installed with the gateway (server/install.sh). HTTPS only, ten seconds.
+                let output = std::process::Command::new("curl")
+                    .args(["--silent", "--fail", "--proto", "=https", "--max-time", "10", OPENROUTER_MODELS])
+                    .stdin(std::process::Stdio::null())
+                    .output()
+                    .map_err(|_| "curl saknas.".to_owned())?;
+                if output.status.success() { Ok(output.stdout) } else { Err("OpenRouters modellista gick inte att hämta.".to_owned()) }
+            }),
         }
     }
 }
@@ -55,4 +70,9 @@ pub fn run(command: Command, stdin: Option<Vec<u8>>, cx: &App) -> Task<Result<Ve
 pub fn catalog(cx: &App) -> Task<Result<Vec<u8>, String>> {
     let catalog = backend(cx).catalog;
     cx.background_executor().spawn(async move { catalog() })
+}
+
+pub fn openrouter_models(cx: &App) -> Task<Result<Vec<u8>, String>> {
+    let fetch = backend(cx).openrouter_models;
+    cx.background_executor().spawn(async move { fetch() })
 }

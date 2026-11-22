@@ -35,6 +35,7 @@ fn open(cx: &mut TestAppContext, page: Page) -> (gpui_kit::AnyWindowHandle, Enti
                 Ok(if *command == Command::PairingData { PAYLOAD.as_bytes().to_vec() } else { b"{}".to_vec() })
             }),
             catalog: Arc::new(|| Err("ingen gateway i testet".into())),
+            openrouter_models: Arc::new(|| Err("inte i testet".into())),
         });
         cx.set_global(UpdateBackend {
             probe: Arc::new(|| unreachable!("the guide never probes")),
