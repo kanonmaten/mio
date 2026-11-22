@@ -158,7 +158,8 @@ impl Render for LogsPage {
             .when_some(self.problem.clone(), |page, problem| page.child(h_flex().gap_2().text_sm()
                 .child(Icon::new(IconName::TriangleAlert).text_color(theme.warning)).child(problem)))
             .child(div().id("log-count").test_support().aria_label(count.clone()).text_xs().text_color(theme.muted_foreground)
-                .child(if self.loading.is_some() { "Läser …".into() } else { count }))
+                .when(self.loading.is_some(), |line| line.child(crate::parts::loading_line("Läser …", cx)))
+                .when(self.loading.is_none(), |line| line.child(count)))
             .child(v_flex().id("log-lines").flex_1().min_h_0().overflow_y_scrollbar().gap_1().p_2().rounded(theme.radius)
                 .bg(theme.muted).font_family("monospace").text_xs().children(lines))
     }

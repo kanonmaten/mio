@@ -115,7 +115,7 @@ impl TranscriptionPage {
                     Ok(_) => Notification::success(done),
                     Err(error) => Notification::error(error.to_string()),
                 }, cx);
-                status.update(cx, |status, _| status.request_refresh());
+                status.update(cx, |status, cx| status.request_refresh(cx));
                 if then_restart {
                     this.open_editor(window, cx);
                 }
@@ -226,7 +226,7 @@ impl Render for TranscriptionPage {
                 .child(h_flex().child(Button::new("edit-transcription").label("Ändra…").icon(IconName::Settings)
                     .on_click(cx.listener(|this, _, window, cx| this.open_editor(window, cx)))))
                 .into_any_element(),
-            Stage::Loading => div().text_sm().text_color(cx.theme().muted_foreground).child("Läser inställningarna …").into_any_element(),
+            Stage::Loading => crate::parts::loading_line("Läser inställningarna …", cx).into_any_element(),
             Stage::Failed(message) => v_flex().gap_3()
                 .child(h_flex().gap_2().text_sm().child(Icon::new(IconName::CircleX).text_color(cx.theme().danger)).child(message.clone()))
                 .child(h_flex().child(Button::new("retry-transcription").label("Försök igen").on_click(cx.listener(|this, _, window, cx| this.open_editor(window, cx)))))

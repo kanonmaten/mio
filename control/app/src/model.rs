@@ -13,13 +13,19 @@ const DEFAULT_GATEWAY_PORT: u16 = 8_787;
 /// How often to read while the window is open, and while only the tray icon runs.
 const WINDOW_INTERVAL: Duration = Duration::from_secs(5);
 const TRAY_INTERVAL: Duration = Duration::from_secs(30);
+/// A check the user asked for spins at least this long, so a fast one is still seen to run.
+const MIN_VISIBLE_CHECK: Duration = Duration::from_millis(400);
 
 /// The latest overview and when it was read. Owned by [`ControlState`].
 #[derive(Default)]
 pub struct StatusModel {
     overview: Overview,
     read_at: Option<Instant>,
+    /// Wakes the polling loop; cleared when a reading starts.
     refresh_requested: bool,
+    /// From a request until a reading that started after it has been applied: what the
+    /// "Kontrollera igen" buttons spin on.
+    refreshing: Option<Instant>,
     /// Decides which changes become desktop notifications and keeps them from repeating.
     monitor: Monitor,
 }
@@ -54,8 +60,17 @@ impl StatusModel {
     }
 
     /// Asks the polling loop to read again at once, after the panel changed something.
-    pub fn request_refresh(&mut self) {
+    pub fn request_refresh(&mut self, cx: &mut Context<Self>) {
         self.refresh_requested = true;
+        if self.refreshing.is_none() {
+            self.refreshing = Some(Instant::now());
+            cx.notify();
+        }
+    }
+
+    /// Whether a requested reading is still on its way.
+    pub fn refreshing(&self) -> bool {
+        self.refreshing.is_some()
     }
 }
 
@@ -78,12 +93,26 @@ pub fn init(cx: &mut App) -> Entity<StatusModel> {
     let model = status.clone();
     cx.spawn(async move |cx| {
         loop {
-            let previous = model.read_with(cx, |model, _| model.overview.clone());
-            let next = cx.background_executor().spawn(async move { probe::overview(DEFAULT_GATEWAY_PORT, &previous) }).await;
-            model.update(cx, |model, cx| {
+            // A request made while this reading runs leaves `refresh_requested` set, so the next
+            // reading starts at once and is the one that ends the spinning.
+            let (previous, answers) = model.update(cx, |model, _| {
                 model.refresh_requested = false;
-                model.apply(next, cx);
+                (model.overview.clone(), model.refreshing)
             });
+            let next = cx.background_executor().spawn(async move { probe::overview(DEFAULT_GATEWAY_PORT, &previous) }).await;
+            model.update(cx, |model, cx| model.apply(next, cx));
+            if let Some(since) = answers {
+                let left = MIN_VISIBLE_CHECK.saturating_sub(since.elapsed());
+                if !left.is_zero() {
+                    cx.background_executor().timer(left).await;
+                }
+                model.update(cx, |model, cx| {
+                    if model.refreshing == Some(since) {
+                        model.refreshing = None;
+                        cx.notify();
+                    }
+                });
+            }
             let interval = if cx.update(|cx| cx.windows().is_empty()) { TRAY_INTERVAL } else { WINDOW_INTERVAL };
             // Sleep in short steps so a requested refresh (after a restart) comes quickly.
             let started = Instant::now();

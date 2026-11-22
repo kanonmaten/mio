@@ -149,7 +149,7 @@ impl NetworkPage {
                     Ok(_) => Notification::success(done),
                     Err(error) => Notification::error(error.to_string()),
                 }, cx);
-                status.update(cx, |status, _| status.request_refresh());
+                status.update(cx, |status, cx| status.request_refresh(cx));
                 cx.notify();
             });
         })
@@ -160,6 +160,7 @@ impl NetworkPage {
         let theme = cx.theme().clone();
         let show = Button::new("show-pairing").primary().label("Visa parningskod").icon(IconName::Eye)
             .loading(matches!(self.pairing, PairingStage::Loading))
+            .disabled(matches!(self.pairing, PairingStage::Loading))
             .on_click(cx.listener(|this, _, window, cx| this.show_pairing(window, cx)));
         match &self.pairing {
             PairingStage::Hidden | PairingStage::Loading => v_flex().gap_2()

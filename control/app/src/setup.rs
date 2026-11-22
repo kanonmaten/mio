@@ -3,6 +3,7 @@
 //! run again.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::Disableable as _;
 use gpui_kit::component::notification::Notification;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::stepper::{Stepper, StepperItem};
@@ -30,6 +31,8 @@ pub struct SetupPage {
     status: Entity<StatusModel>,
     /// The step the user clicked; otherwise the first one not done.
     chosen: Option<Step>,
+    /// "Ställ in serve" is running.
+    serving: bool,
     _observe: Subscription,
 }
 
@@ -38,7 +41,7 @@ impl EventEmitter<OpenPairing> for SetupPage {}
 impl SetupPage {
     pub fn new(status: Entity<StatusModel>, cx: &mut Context<Self>) -> Self {
         let observe = cx.observe(&status, |_, _, cx| cx.notify());
-        Self { status, chosen: None, _observe: observe }
+        Self { status, chosen: None, serving: false, _observe: observe }
     }
 
     fn install(&self, part: Part, window: &mut Window, cx: &mut Context<Self>) {
@@ -54,22 +57,27 @@ impl SetupPage {
         let id = SharedString::from(format!("run-{}", Step::ALL.iter().position(|each| *each == step).unwrap_or(0)));
         let button = Button::new(id).primary();
         match step {
-            Step::Tools => button.label("Kontrollera igen").icon(IconName::RefreshCw).on_click(cx.listener(|this, _, _, cx| {
-                this.status.update(cx, |status, _| status.request_refresh());
-            })),
+            Step::Tools => button.label("Kontrollera igen").icon(IconName::RefreshCw)
+                .loading(self.status.read(cx).refreshing()).disabled(self.status.read(cx).refreshing())
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.status.update(cx, |status, cx| status.request_refresh(cx));
+                })),
             Step::Gateway => button.label("Installera gatewayen i Konsole").on_click(cx.listener(|this, _, window, cx| this.install(Part::Gateway, window, cx))),
             Step::Pianissimo => button.label("Installera Pianissimo i Konsole").on_click(cx.listener(|this, _, window, cx| this.install(Part::Pianissimo, window, cx))),
-            Step::Serve => button.label("Ställ in serve").on_click(cx.listener(|this, _, window, cx| {
+            Step::Serve => button.label("Ställ in serve").loading(self.serving).disabled(self.serving).on_click(cx.listener(|this, _, window, cx| {
+                this.serving = true;
+                cx.notify();
                 let task = operation::run(Command::SetupServe, None, cx);
-                let status = this.status.clone();
-                cx.spawn_in(window, async move |_, cx| {
+                cx.spawn_in(window, async move |this, cx| {
                     let result = task.await;
-                    let _ = cx.update(|window, cx| {
+                    let _ = this.update_in(cx, |this, window, cx| {
+                        this.serving = false;
                         window.push_notification(match result {
                             Ok(_) => Notification::success("Tailscale serve är inställt."),
                             Err(error) => Notification::error(error.to_string()),
                         }, cx);
-                        status.update(cx, |status, _| status.request_refresh());
+                        this.status.update(cx, |status, cx| status.request_refresh(cx));
+                        cx.notify();
                     });
                 })
                 .detach();

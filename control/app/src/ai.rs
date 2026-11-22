@@ -59,6 +59,8 @@ pub struct AiPage {
     status: Entity<StatusModel>,
     stage: Stage,
     saving: bool,
+    /// "Spara nyckel" is writing through the helper.
+    saving_key: bool,
     trying: Option<String>,
     trial: Option<TrialReport>,
     /// The credit meter's limit, saved in the panel's own preferences.
@@ -94,6 +96,7 @@ impl AiPage {
             status,
             stage: Stage::Closed,
             saving: false,
+            saving_key: false,
             trying: None,
             trial: None,
             credit_limit_cents,
@@ -227,7 +230,7 @@ impl AiPage {
                     _ => Notification::success("Sparat. Gatewayen startades om; telefonen läser in den nya konfigurationen själv."),
                 };
                 window.push_notification(notification, cx);
-                status.update(cx, |status, _| status.request_refresh());
+                status.update(cx, |status, cx| status.request_refresh(cx));
                 // Read the file again so the list of changes starts from what is saved.
                 this.open_editor(window, cx);
             });
@@ -246,10 +249,13 @@ impl AiPage {
         let input = editor.key_input.clone();
         // The key goes to the helper on stdin only; the field is cleared at once.
         input.update(cx, |input, cx| input.set_value("", window, cx));
+        self.saving_key = true;
+        cx.notify();
         let task = operation::run(Command::WriteSecret(variable), Some(key.into_bytes()), cx);
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
             let _ = this.update_in(cx, |this, window, cx| {
+                this.saving_key = false;
                 window.push_notification(match result {
                     Ok(_) => Notification::success(format!("Nyckeln sparades ({variable}). Starta om gatewayen för att använda den.")),
                     Err(error) => Notification::error(error.to_string()),
@@ -427,7 +433,7 @@ impl AiPage {
                     .gap_2()
                     .child(div().w_40().child(Select::new(&editor.key_provider).id("key-provider")))
                     .child(div().flex_1().child(Input::new(&editor.key_input).id("key-input").mask_toggle()))
-                    .child(Button::new("save-key").label("Spara nyckel").on_click(cx.listener(|this, _, window, cx| this.save_key(window, cx)))),
+                    .child(Button::new("save-key").label("Spara nyckel").loading(self.saving_key).disabled(self.saving_key).on_click(cx.listener(|this, _, window, cx| this.save_key(window, cx)))),
             )
             .child(div().text_xs().text_color(theme.muted_foreground).child(format!(
                 "Nycklar som finns: {}. Panelen visar och sparar aldrig nycklarna själv.",
@@ -444,7 +450,7 @@ impl AiPage {
                         .primary()
                         .label("Spara och starta om")
                         .loading(self.saving)
-                        .disabled(!can_save)
+                        .disabled(!can_save || self.saving)
                         .on_click(cx.listener(|this, _, window, cx| this.save(window, cx))),
                 ),
             )
@@ -531,7 +537,7 @@ impl Render for AiPage {
                 .child(self.render_current(cx))
                 .child(h_flex().child(Button::new("edit-ai").label("Ändra…").icon(IconName::Settings).on_click(cx.listener(|this, _, window, cx| this.open_editor(window, cx)))))
                 .into_any_element(),
-            Stage::Loading => div().text_sm().text_color(cx.theme().muted_foreground).child("Läser inställningarna …").into_any_element(),
+            Stage::Loading => crate::parts::loading_line("Läser inställningarna …", cx).into_any_element(),
             Stage::Failed(message) => v_flex()
                 .gap_3()
                 .child(h_flex().gap_2().text_sm().child(Icon::new(IconName::CircleX).text_color(cx.theme().danger)).child(message.clone()))

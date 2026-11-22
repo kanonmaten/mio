@@ -96,7 +96,7 @@ impl WordsPage {
                     Ok(_) => Notification::success("Ordlistan sparades. Pianissimo startas om och läser in den."),
                     Err(error) => Notification::error(error.to_string()),
                 }, cx);
-                status.update(cx, |status, _| status.request_refresh());
+                status.update(cx, |status, cx| status.request_refresh(cx));
                 this.open_editor(window, cx);
             });
         })
@@ -118,7 +118,7 @@ impl Render for WordsPage {
                 .child(h_flex().child(Button::new("edit-words").label("Öppna ordlistan…").icon(IconName::FileText)
                     .on_click(cx.listener(|this, _, window, cx| this.open_editor(window, cx)))))
                 .into_any_element(),
-            Stage::Loading => div().text_sm().text_color(theme.muted_foreground).child("Läser ordlistan …").into_any_element(),
+            Stage::Loading => crate::parts::loading_line("Läser ordlistan …", cx).into_any_element(),
             Stage::Failed(message) => v_flex().gap_3()
                 .child(h_flex().gap_2().text_sm().child(Icon::new(IconName::CircleX).text_color(theme.danger)).child(message.clone()))
                 .child(h_flex().child(Button::new("retry-words").label("Försök igen").on_click(cx.listener(|this, _, window, cx| this.open_editor(window, cx)))))
