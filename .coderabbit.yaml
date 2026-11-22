@@ -11,6 +11,15 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
+  # Auto-merge (MIO-28): branch protection requires one approval, and CodeRabbit gives it only when
+  # it has reviewed the latest commit, every required thread is resolved and no pre-merge check
+  # fails. Its green status check alone is not enough: it also passes when a review was skipped or
+  # rate limited. The author (Claude, as the user's account) must not approve its own PR.
+  auto_approvals:
+    enabled: true
+    allow_author_approval: false
+  # A failed review must block the merge instead of ending neutral.
+  fail_commit_status: true
   path_filters:
     # Finished plans and old measurements are archived unchanged and never edited.
     - "!docs/arkiv/**"
