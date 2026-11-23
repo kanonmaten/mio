@@ -9,7 +9,7 @@ use gpui_kit::{
     ParentElement as _, Render, Styled as _, Window, px,
 };
 
-use crate::ai::AiPage;
+use crate::ai::{AiPage, AiSaved};
 use crate::network::NetworkPage;
 use crate::updates::UpdatesPage;
 use crate::verify::VerifyPage;
@@ -98,7 +98,7 @@ pub struct Shell {
     logs: Entity<LogsPage>,
     setup: Entity<SetupPage>,
     computer: Entity<ComputerPage>,
-    _pairing: gpui_kit::Subscription,
+    _subscriptions: Vec<gpui_kit::Subscription>,
 }
 
 impl Shell {
@@ -114,13 +114,21 @@ impl Shell {
         let updates = cx.new(|_| UpdatesPage::new());
         let verify = cx.new(VerifyPage::new);
         let logs = cx.new(|_| LogsPage::new());
-        let setup = cx.new(|cx| SetupPage::new(status_for_setup, cx));
+        let setup = cx.new(|cx| SetupPage::new(status_for_setup, window, cx));
         let computer = cx.new(|_| ComputerPage);
         let pairing = cx.subscribe_in(&setup, window, |shell: &mut Self, _, _: &OpenPairing, window, cx| {
             shell.show(Page::Network, cx);
             shell.network.update(cx, |network, cx| network.show_pairing(window, cx));
         });
-        Self { focus, page: Page::Overview, overview, ai, transcription, words, network, updates, verify, logs, setup, computer, _pairing: pairing }
+        // The AI page and Kom igång's AI step are two editors over one gateway.env: a save in
+        // one makes the other forget what it read, so it never shows an old key state or model.
+        let setup_ai = setup.read(cx).ai().clone();
+        let page_saved = cx.subscribe(&ai, {
+            let setup_ai = setup_ai.clone();
+            move |_, _, _: &AiSaved, cx| setup_ai.update(cx, |page, cx| page.forget_editor(cx))
+        });
+        let step_saved = cx.subscribe(&setup_ai, |shell: &mut Self, _, _: &AiSaved, cx| shell.ai.update(cx, |page, cx| page.forget_editor(cx)));
+        Self { focus, page: Page::Overview, overview, ai, transcription, words, network, updates, verify, logs, setup, computer, _subscriptions: vec![pairing, page_saved, step_saved] }
     }
 
     pub fn page(&self) -> Page {

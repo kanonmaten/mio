@@ -240,7 +240,9 @@ pub fn script(repo: &Path, steps: &[Part], keep_autostart: bool) -> String {
         lines.push(format!("step {}", shell_quote(part.title())));
         lines.push(match part {
             Part::Repo => "if ! git diff --quiet || ! git diff --cached --quiet; then echo 'FEL: Mio-repot har ändringar som inte är sparade i git. Inget uppdaterades.'; exit 1; fi\ngit pull --ff-only".to_owned(),
-            Part::Gateway => "./server/install.sh".to_owned(),
+            // The panel chooses provider, key and models itself, so a new installation asks for
+            // no key in the terminal. An existing one keeps its file either way.
+            Part::Gateway => "./server/install.sh --utan-nyckel".to_owned(),
             Part::Pianissimo => "./transcription-server/install.sh".to_owned(),
             Part::Model => format!("sudo {UPDATE_MODEL}"),
             Part::Panel if keep_autostart => "./control/install.sh".to_owned(),
@@ -367,7 +369,7 @@ mod tests {
         let script = script(Path::new("/home/a b/it's/Mio"), &[Part::Repo, Part::Gateway, Part::Panel, Part::System], false);
         assert!(script.starts_with("set -euo pipefail\n"));
         assert!(script.contains("cd '/home/a b/it'\\''s/Mio'\n"));
-        let order: Vec<usize> = ["git pull --ff-only", "./server/install.sh", "./control/install.sh --utan-autostart", "sudo pacman -Syu"]
+        let order: Vec<usize> = ["git pull --ff-only", "./server/install.sh --utan-nyckel", "./control/install.sh --utan-autostart", "sudo pacman -Syu"]
             .iter()
             .map(|needle| script.find(needle).expect(needle))
             .collect();

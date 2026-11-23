@@ -10,13 +10,15 @@ use gpui_kit::component::stepper::{Stepper, StepperItem};
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, WindowExt as _, h_flex, v_flex};
 use gpui_kit::{
     Context, Entity, EventEmitter, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _, Window, div,
+    AppContext as _, StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _, Window, div,
+    prelude::FluentBuilder as _,
 };
 use mio_control_core::command::Command;
 use mio_control_core::setup::{Step, current};
 use mio_control_core::status::Overview;
 use mio_control_core::updates::{Part, built_from, script};
 
+use crate::ai::AiPage;
 use crate::model::StatusModel;
 use crate::operation;
 use crate::parts::page_header;
@@ -33,15 +35,24 @@ pub struct SetupPage {
     chosen: Option<Step>,
     /// "Ställ in serve" is running.
     serving: bool,
+    /// The AI page's editor for the AI step: the same view, so what is chosen here can be
+    /// changed under AI later.
+    ai: Entity<AiPage>,
     _observe: Subscription,
 }
 
 impl EventEmitter<OpenPairing> for SetupPage {}
 
 impl SetupPage {
-    pub fn new(status: Entity<StatusModel>, cx: &mut Context<Self>) -> Self {
+    pub fn new(status: Entity<StatusModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let observe = cx.observe(&status, |_, _, cx| cx.notify());
-        Self { status, chosen: None, serving: false, _observe: observe }
+        let ai = cx.new(|cx| AiPage::embedded(status.clone(), window, cx));
+        Self { status, chosen: None, serving: false, ai, _observe: observe }
+    }
+
+    /// The AI step's editor, so the shell can keep it and the AI page in step.
+    pub fn ai(&self) -> &Entity<AiPage> {
+        &self.ai
     }
 
     fn install(&self, part: Part, window: &mut Window, cx: &mut Context<Self>) {
@@ -63,6 +74,12 @@ impl SetupPage {
                     this.status.update(cx, |status, cx| status.request_refresh(cx));
                 })),
             Step::Gateway => button.label("Installera gatewayen i terminalen").on_click(cx.listener(|this, _, window, cx| this.install(Part::Gateway, window, cx))),
+            // The step's own controls are the AI editor below; this only reads the status again.
+            Step::Ai => button.label("Kontrollera igen").icon(IconName::RefreshCw).outline()
+                .loading(self.status.read(cx).refreshing()).disabled(self.status.read(cx).refreshing())
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.status.update(cx, |status, cx| status.request_refresh(cx));
+                })),
             Step::Pianissimo => button.label("Installera Pianissimo i terminalen").on_click(cx.listener(|this, _, window, cx| this.install(Part::Pianissimo, window, cx))),
             Step::Serve => button.label("Ställ in serve").loading(self.serving).disabled(self.serving).on_click(cx.listener(|this, _, window, cx| {
                 this.serving = true;
@@ -103,9 +120,25 @@ fn explain(step: Step, overview: &Overview) -> Vec<String> {
             },
         ],
         Step::Gateway => vec![
-            "Installationen bygger gatewayen och frågar efter Groq-nyckeln. Andra leverantörer väljer du sedan under AI.".into(),
+            "Installationen bygger gatewayen i terminalen. Leverantör, nyckel och modell väljer du i nästa steg.".into(),
             yes_no(overview.gateway_health == Some(true), "Gatewayen svarar.", "Gatewayen svarar inte än."),
         ],
+        Step::Ai => {
+            let tasks = overview.gateway.as_ref().map(|gateway| gateway.tasks.clone()).unwrap_or_default();
+            let waiting: Vec<&str> = mio_control_core::ai_settings::TASKS
+                .iter()
+                .filter(|(task, _)| !tasks.iter().any(|status| status.task == *task && status.configured == Some(true)))
+                .map(|(_, label)| *label)
+                .collect();
+            vec![
+                "Lägg till en nyckel för en leverantör, välj modell för Frågor, Vardag och Lektioner, tryck Prova där det behövs och spara. Allt går att ändra senare under AI.".into(),
+                match (overview.gateway.is_some(), waiting.is_empty()) {
+                    (false, _) => "Gatewayen svarar inte, så det syns inte om AI är klar.".into(),
+                    (true, true) => "Alla uppgifter har en modell och en nyckel.".into(),
+                    (true, false) => format!("Saknar modell eller nyckel: {}.", waiting.join(", ")),
+                },
+            ]
+        }
         Step::Pianissimo => vec![
             "Installationen hämtar modellen (cirka 2,5 GB första gången) och väntar tills den är laddad.".into(),
             match overview.pianissimo.as_ref().map(|health| health.status.as_str()) {
@@ -143,6 +176,7 @@ impl Render for SetupPage {
                 .child(h_flex().gap_2().child(Icon::new(if done { IconName::CircleCheck } else { IconName::Info })
                     .text_color(if done { theme.success } else { theme.muted_foreground })).child(div().text_lg().child(step.title())))
                 .children(explain(step, &overview).into_iter().map(|line| div().text_sm().child(line)))
+                .when(step == Step::Ai, |card| card.child(div().pt_2().child(self.ai.clone())))
                 .child(h_flex().pt_2().child(self.action(step, cx))))
     }
 }

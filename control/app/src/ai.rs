@@ -15,7 +15,7 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::select::{Select, SelectEvent, SelectState};
 use gpui_kit::component::{ActiveTheme as _, Disableable as _, Icon, IconName, IndexPath, Sizable as _, StyledExt as _, WindowExt as _, h_flex, v_flex};
 use gpui_kit::{
-    App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
+    App, AppContext as _, Context, Entity, EventEmitter, Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _, Window, div, prelude::FluentBuilder as _,
 };
 use mio_control_core::ai_settings::{AiForm, Catalog, ChoiceKind, GatewayFile, LIMITS, Pair, TASKS, parse_openrouter_models, provider_name};
@@ -117,6 +117,10 @@ struct TrialReport {
     lines: Vec<String>,
 }
 
+/// Emitted after a key or the settings were written, so the shell can close the other AI
+/// view's editor (the AI page and Kom igång's step each hold one) before it shows stale values.
+pub struct AiSaved;
+
 pub struct AiPage {
     status: Entity<StatusModel>,
     stage: Stage,
@@ -134,9 +138,16 @@ pub struct AiPage {
     credit_limit_cents: u64,
     credit_input: Entity<InputState>,
     credit_input_valid: bool,
+    /// Shown inside Kom igång: only the providers, models and trials, scrolled by the guide.
+    embedded: bool,
+    /// Counts readings of `gateway.env`. A reading that finishes after a newer one started, or
+    /// after `forget_editor`, is thrown away, so an old file never becomes the editor again.
+    reading: u64,
     _subscriptions: Vec<Subscription>,
 }
 
+
+impl EventEmitter<AiSaved> for AiPage {}
 
 impl AiPage {
     pub fn new(status: Entity<StatusModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -170,13 +181,35 @@ impl AiPage {
             credit_limit_cents,
             credit_input,
             credit_input_valid: true,
+            embedded: false,
+            reading: 0,
             _subscriptions: vec![observe, typed],
+        }
+    }
+
+    /// The same editor for Kom igång's AI step. It is its own entity: after either view saves,
+    /// the shell makes the other forget what it read (`AiSaved`).
+    pub fn embedded(status: Entity<StatusModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        Self { embedded: true, ..Self::new(status, window, cx) }
+    }
+
+    /// Drops what the editor read, after the other AI view saved: "Ändra…" reads the file again.
+    /// Nothing is read here, so no password prompt appears for a view that is not on screen.
+    pub fn forget_editor(&mut self, cx: &mut Context<Self>) {
+        // A reading still on its way may have started before the other view saved.
+        self.reading += 1;
+        if !matches!(self.stage, Stage::Closed) {
+            self.stage = Stage::Closed;
+            self.trial = None;
+            cx.notify();
         }
     }
 
     /// Reads `gateway.env` through the helper (KDE asks for the password once) and the model list.
     pub fn open_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.stage = Stage::Loading;
+        self.reading += 1;
+        let reading = self.reading;
         cx.notify();
         let settings = operation::run(Command::ReadSettings(SettingsFile::Gateway), None, cx);
         let catalog = operation::catalog(cx);
@@ -187,6 +220,9 @@ impl AiPage {
         cx.spawn_in(window, async move |this, cx| {
             let (settings, catalog) = (settings.await, catalog.await);
             let _ = this.update_in(cx, |this, window, cx| {
+                if this.reading != reading {
+                    return;
+                }
                 this.stage = match (settings, catalog) {
                     (Err(error), _) => Stage::Failed(error.to_string().into()),
                     (_, Err(message)) => Stage::Failed(message.into()),
@@ -342,6 +378,9 @@ impl AiPage {
             };
             let _ = this.update_in(cx, |this, window, cx| {
                 this.saving = false;
+                if written.is_ok() {
+                    cx.emit(AiSaved);
+                }
                 let notification = match (written, restarted) {
                     (Err(error), _) => Notification::error(error.to_string()),
                     (Ok(_), Some(Err(error))) => Notification::warning(format!("Sparat, men gatewayen gick inte att starta om: {error}")),
@@ -377,6 +416,9 @@ impl AiPage {
                 this.saving_key = false;
                 if let (Ok(_), Stage::Editing(editor)) = (&result, &mut this.stage) {
                     editor.key_editing = None;
+                }
+                if result.is_ok() {
+                    cx.emit(AiSaved);
                 }
                 window.push_notification(match result {
                     Ok(_) => Notification::success(format!("Nyckeln för {} sparades. Den används när gatewayen startas om, till exempel med Spara och starta om.", provider_name(provider))),
@@ -740,11 +782,12 @@ fn trial_report(label: &str, output: &[u8]) -> TrialReport {
 
 impl Render for AiPage {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let edit_label = if self.embedded { "Välj leverantör och modell…" } else { "Ändra…" };
         let body = match &self.stage {
             Stage::Closed => v_flex()
                 .gap_3()
-                .child(self.render_current(cx))
-                .child(h_flex().child(Button::new("edit-ai").label("Ändra…").icon(IconName::Settings).on_click(cx.listener(|this, _, window, cx| this.open_editor(window, cx)))))
+                .when(!self.embedded, |body| body.child(self.render_current(cx)))
+                .child(h_flex().child(Button::new("edit-ai").label(edit_label).icon(IconName::Settings).on_click(cx.listener(|this, _, window, cx| this.open_editor(window, cx)))))
                 .into_any_element(),
             Stage::Loading => crate::parts::loading_line("Läser inställningarna …", cx).into_any_element(),
             Stage::Failed(message) => v_flex()
@@ -754,6 +797,9 @@ impl Render for AiPage {
                 .into_any_element(),
             Stage::Editing(editor) => self.render_editor(editor, cx).into_any_element(),
         };
+        if self.embedded {
+            return v_flex().id("setup-ai").test_support().child(body).into_any_element();
+        }
         v_flex()
             .id("ai")
             .size_full()
@@ -768,5 +814,6 @@ impl Render for AiPage {
                     .child(self.render_credit(cx))
                     .child(body),
             )
+            .into_any_element()
     }
 }
