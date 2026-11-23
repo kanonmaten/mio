@@ -41,6 +41,9 @@ enum Part {
 enum Word {
     Digits(String),
     Text { lower: String, capital: bool, sentence_start: bool },
+    /// A comma or other punctuation between words: a list item ends there, so "noll komma fem,
+    /// två" is 0.5 and 2, never 0.52.
+    Pause,
 }
 
 /// A number as compared: digits without leading zeros, and a decimal part without trailing zeros.
@@ -99,6 +102,9 @@ fn words(text: &str) -> Vec<Word> {
             words.push(Word::Text { lower: word.to_lowercase(), capital: character.is_uppercase(), sentence_start });
             sentence_start = false;
         } else {
+            if !character.is_whitespace() && words.last().is_some_and(|last| *last != Word::Pause) {
+                words.push(Word::Pause);
+            }
             if matches!(character, '.' | '!' | '?' | ':' | '\n' | '•' | '–' | '-') {
                 sentence_start = true;
             }
@@ -197,6 +203,10 @@ fn numbers(words: &[Word], quote: bool) -> Vec<String> {
                 flush(&mut spoken, &mut pieces);
                 pieces.push(Piece::Number(value.clone()));
             }
+            Word::Pause => {
+                flush(&mut spoken, &mut pieces);
+                pieces.push(Piece::Break);
+            }
             Word::Text { lower, sentence_start, .. } => {
                 // "tjugo. En sammanfattning" is twenty and then a new sentence, never 21.
                 if *sentence_start {
@@ -269,7 +279,7 @@ pub fn follow_quote(text: &str, quote: &str) -> bool {
     let quote_numbers = numbers(&quote_words, true);
     let quote_text: Vec<&str> = quote_words.iter().filter_map(|word| match word {
         Word::Text { lower, .. } => Some(lower.as_str()),
-        Word::Digits(_) => None,
+        Word::Digits(_) | Word::Pause => None,
     }).collect();
     let text_words = words(text);
     if !numbers(&text_words, false).iter().all(|value| quote_numbers.contains(value)) {
@@ -310,6 +320,7 @@ mod tests {
         assert!(!follow_quote("Temperaturen är 5 grader.", "temperaturen är minus fem grader"));
         assert!(!follow_quote("Koncentrationen är 5 procent.", "Koncentrationen är noll komma noll fem procent."));
         assert!(!follow_quote("Läs sidan 21.", "Läs sidan tjugo. En sammanfattning ska lämnas in."));
+        assert!(!follow_quote("Resultatet är 0,52.", "Resultaten är noll komma fem, två och tre."), "a list comma ends the decimals");
     }
 
     #[test]
@@ -332,6 +343,7 @@ mod tests {
         assert!(follow_quote("Läs sidan 20.", "Läs sidan tjugo. En sammanfattning ska lämnas in."));
         assert!(follow_quote("Läs sidan 21.", "läs sidan tjugo ett"), "one number within a sentence");
         assert!(follow_quote("Läs om Bos resa.", "Läs om Bo."));
+        assert!(follow_quote("Resultatet är 0,5.", "Resultaten är noll komma fem, två och tre."));
         assert!(follow_quote("Gör en sammanfattning av ett kapitel.", "skriv om kapitlet"), "articles are not numbers");
         assert!(follow_quote("Repetera: Fotosyntesen kräver ljus.", "fotosyntesen behöver ljus"), "a capital after a colon starts a sentence");
         assert!(follow_quote("Den andra delen är viktigast.", "det här är viktigast"), "an ordinal word in the text is not a number");
