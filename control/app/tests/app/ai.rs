@@ -65,6 +65,21 @@ fn open(cx: &mut TestAppContext) -> (gpui_kit::AnyWindowHandle, Entity<Shell>, C
 /// folder, returned so the test can read what the credit limit field saved.
 /// Also returns how many times OpenRouter's public list was fetched (it always fails here).
 fn open_with(cx: &mut TestAppContext, gateway: Option<GatewayStatus>) -> (gpui_kit::AnyWindowHandle, Entity<Shell>, Calls, tempfile::TempDir, Arc<AtomicUsize>) {
+    open_full(cx, gateway, &[])
+}
+
+/// The AI page over a `gateway.env` with extra values.
+fn open_with_values(cx: &mut TestAppContext, values: &[(&'static str, &'static str)]) -> (gpui_kit::AnyWindowHandle, Entity<Shell>, Calls) {
+    let (handle, shell, calls, _, _) = open_full(cx, None, values);
+    (handle, shell, calls)
+}
+
+fn open_full(cx: &mut TestAppContext, gateway: Option<GatewayStatus>, values: &[(&'static str, &'static str)]) -> (gpui_kit::AnyWindowHandle, Entity<Shell>, Calls, tempfile::TempDir, Arc<AtomicUsize>) {
+    let mut file = settings();
+    for (key, value) in values {
+        file["values"][*key] = json!(value);
+    }
+    let file = Arc::new(file);
     cx.update(gpui_kit::init);
     cx.update(mio_control::theme::init);
     let calls: Calls = Arc::default();
@@ -79,7 +94,7 @@ fn open_with(cx: &mut TestAppContext, gateway: Option<GatewayStatus>) -> (gpui_k
                 recorded.lock().unwrap().push((command.clone(), stdin.map(<[u8]>::to_vec)));
                 Ok(match command {
                     Command::ReadSettings(SettingsFile::Gateway) if approved.load(Ordering::SeqCst) => settings_after_trial().to_string().into_bytes(),
-                    Command::ReadSettings(SettingsFile::Gateway) => settings().to_string().into_bytes(),
+                    Command::ReadSettings(SettingsFile::Gateway) => file.to_string().into_bytes(),
                     Command::TrialModel { .. } => {
                         approved.store(true, Ordering::SeqCst);
                         json!({ "passed": true, "tasks": [{ "task": "ask", "ok": true, "milliseconds": 900 }] }).to_string().into_bytes()
@@ -218,6 +233,26 @@ fn lessons_on_a_model_that_reasons_get_a_reasoning_level(cx: &mut TestAppContext
     let (_, stdin) = calls.iter().find(|(command, _)| matches!(command, Command::WriteSettings(SettingsFile::Gateway))).expect("settings were written");
     let request: Value = serde_json::from_slice(stdin.as_ref().unwrap()).unwrap();
     assert_eq!(request["set"]["MIO_LESSON_REASONING"], "medium");
+}
+
+#[gpui_kit::test]
+fn a_level_the_lesson_model_is_not_reviewed_for_is_dropped_when_read(cx: &mut TestAppContext) {
+    // The file says high, but lessons run on Groq, which does not reason.
+    let (handle, _, _) = open_with_values(cx, &[("MIO_LESSON_REASONING", "high")]);
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("edit-ai", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("ai-reasoning-lesson").is_none());
+        // The removal is the one change, and nothing stops saving it.
+        assert_eq!(window.find("changes").label(), Some("1 ändringar"));
+        assert_ne!(window.find("save-ai").disabled(), Some(true));
+    })
+    .unwrap();
 }
 
 #[gpui_kit::test]

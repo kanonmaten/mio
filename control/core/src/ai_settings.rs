@@ -529,7 +529,10 @@ impl AiForm {
                 Some(_) => {}
             }
         }
-        if !self.lesson_reasoning.is_empty() && !self.lesson_reasoning_levels(catalog).contains(&self.lesson_reasoning) {
+        // The gateway ignores the level when the lesson model does not reason, so only a level a
+        // reasoning model is not reviewed for stops saving.
+        let levels = self.lesson_reasoning_levels(catalog);
+        if !self.lesson_reasoning.is_empty() && !levels.is_empty() && !levels.contains(&self.lesson_reasoning) {
             problems.push(format!("Lektioner: resonemangsnivån {} är inte granskad för modellen.", self.lesson_reasoning));
         }
         for limit in &LIMITS {
@@ -677,6 +680,11 @@ mod tests {
         form.fit_lesson_reasoning(&catalog);
         assert!(form.lesson_reasoning.is_empty() && form.problems(&catalog, &file()).is_empty());
         assert!(form.changes(&file()).iter().all(|change| change.key != LESSON_REASONING_KEY));
+        // A level left in the file while lessons run on a model without reasoning does not stop
+        // saving: the gateway ignores it.
+        form.set_task("lesson", ("groq".into(), "qwen/qwen3.8-27b".into()));
+        form.lesson_reasoning = "high".into();
+        assert!(form.problems(&catalog, &file()).is_empty());
     }
 
     /// A model list from a gateway after the grilling: a reasoning pair only for lessons. The

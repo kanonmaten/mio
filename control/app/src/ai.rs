@@ -294,7 +294,10 @@ impl AiPage {
         // A candidate that passed "Prova" is listed in the file the helper just read, so it is
         // offered here at once, without restarting the panel.
         let catalog = catalog.with_approved(&file);
-        let form = AiForm::from_file(&file);
+        let mut form = AiForm::from_file(&file);
+        // A level the lesson model is not reviewed for (left from another model) goes back to the
+        // model's own at once, so the select shows what runs and the preview shows the removal.
+        form.fit_lesson_reasoning(&catalog);
         let mut subscriptions = Vec::new();
 
         // One row per task. Each select offers only what may serve that task: a pair reviewed
