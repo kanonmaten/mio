@@ -417,6 +417,43 @@ fn a_key_is_saved_for_the_provider_its_row_names(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+fn a_key_saved_in_kom_igang_closes_the_ai_pages_old_editor(cx: &mut TestAppContext) {
+    let (handle, shell, calls) = open(cx);
+    let step = |cx: &mut TestAppContext, act: &dyn Fn(&mut gpui_kit::Window, &mut gpui_kit::App)| {
+        cx.update_window(handle, |_, window, cx| {
+            window.render_frame(cx);
+            act(window, cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+    };
+    step(cx, &|window, cx| window.click("edit-ai", cx));
+    step(cx, &|window, _| assert_eq!(window.find("provider-openai").label(), Some("OpenAI: Ingen nyckel")));
+
+    // The same key, saved from Kom igång's AI step.
+    cx.update(|cx| shell.update(cx, |shell, cx| shell.show(Page::Setup, cx)));
+    step(cx, &|window, cx| window.click(gpui_kit::ElementId::NamedInteger("trigger".into(), 2), cx));
+    step(cx, &|window, cx| window.click("edit-ai", cx));
+    step(cx, &|window, cx| window.click("key-edit-openai", cx));
+    step(cx, &|window, cx| {
+        window.click("key-input", cx);
+        window.input("fixture-openai-key", cx);
+        window.click("save-key", cx);
+    });
+    assert!(calls.lock().unwrap().iter().any(|(command, _)| *command == Command::WriteSecret("OPENAI_API_KEY")));
+
+    // Back on the AI page the old reading is gone; "Ändra…" reads the file again.
+    let reads = || calls.lock().unwrap().iter().filter(|(command, _)| *command == Command::ReadSettings(SettingsFile::Gateway)).count();
+    let before = reads();
+    cx.update(|cx| shell.update(cx, |shell, cx| shell.show(Page::Ai, cx)));
+    step(cx, &|window, _| {
+        assert!(window.try_find("provider-openai").is_none(), "the editor that read the old file is closed");
+        assert!(window.try_find("edit-ai").is_some());
+    });
+    assert_eq!(reads(), before, "nothing is read for a page that was not on screen");
+}
+
+#[gpui_kit::test]
 fn a_model_waiting_for_its_trial_cannot_be_picked_from_the_list(cx: &mut TestAppContext) {
     let (handle, _, calls) = open(cx);
     cx.update_window(handle, |_, window, cx| {

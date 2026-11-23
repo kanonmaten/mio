@@ -15,7 +15,7 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::select::{Select, SelectEvent, SelectState};
 use gpui_kit::component::{ActiveTheme as _, Disableable as _, Icon, IconName, IndexPath, Sizable as _, StyledExt as _, WindowExt as _, h_flex, v_flex};
 use gpui_kit::{
-    App, AppContext as _, Context, Entity, Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
+    App, AppContext as _, Context, Entity, EventEmitter, Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _, Window, div, prelude::FluentBuilder as _,
 };
 use mio_control_core::ai_settings::{AiForm, Catalog, ChoiceKind, GatewayFile, LIMITS, Pair, TASKS, parse_openrouter_models, provider_name};
@@ -117,6 +117,10 @@ struct TrialReport {
     lines: Vec<String>,
 }
 
+/// Emitted after a key or the settings were written, so the shell can close the other AI
+/// view's editor (the AI page and Kom igång's step each hold one) before it shows stale values.
+pub struct AiSaved;
+
 pub struct AiPage {
     status: Entity<StatusModel>,
     stage: Stage,
@@ -139,6 +143,8 @@ pub struct AiPage {
     _subscriptions: Vec<Subscription>,
 }
 
+
+impl EventEmitter<AiSaved> for AiPage {}
 
 impl AiPage {
     pub fn new(status: Entity<StatusModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -177,10 +183,20 @@ impl AiPage {
         }
     }
 
-    /// The same editor for Kom igång's AI step. It is its own entity: what it saves is in
-    /// `gateway.env`, which the AI page reads again when it is opened.
+    /// The same editor for Kom igång's AI step. It is its own entity: after either view saves,
+    /// the shell makes the other forget what it read (`AiSaved`).
     pub fn embedded(status: Entity<StatusModel>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         Self { embedded: true, ..Self::new(status, window, cx) }
+    }
+
+    /// Drops what the editor read, after the other AI view saved: "Ändra…" reads the file again.
+    /// Nothing is read here, so no password prompt appears for a view that is not on screen.
+    pub fn forget_editor(&mut self, cx: &mut Context<Self>) {
+        if matches!(self.stage, Stage::Editing(_) | Stage::Failed(_)) {
+            self.stage = Stage::Closed;
+            self.trial = None;
+            cx.notify();
+        }
     }
 
     /// Reads `gateway.env` through the helper (KDE asks for the password once) and the model list.
@@ -351,6 +367,9 @@ impl AiPage {
             };
             let _ = this.update_in(cx, |this, window, cx| {
                 this.saving = false;
+                if written.is_ok() {
+                    cx.emit(AiSaved);
+                }
                 let notification = match (written, restarted) {
                     (Err(error), _) => Notification::error(error.to_string()),
                     (Ok(_), Some(Err(error))) => Notification::warning(format!("Sparat, men gatewayen gick inte att starta om: {error}")),
@@ -386,6 +405,9 @@ impl AiPage {
                 this.saving_key = false;
                 if let (Ok(_), Stage::Editing(editor)) = (&result, &mut this.stage) {
                     editor.key_editing = None;
+                }
+                if result.is_ok() {
+                    cx.emit(AiSaved);
                 }
                 window.push_notification(match result {
                     Ok(_) => Notification::success(format!("Nyckeln för {} sparades. Den används när gatewayen startas om, till exempel med Spara och starta om.", provider_name(provider))),

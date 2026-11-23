@@ -50,6 +50,11 @@ impl SetupPage {
         Self { status, chosen: None, serving: false, ai, _observe: observe }
     }
 
+    /// The AI step's editor, so the shell can keep it and the AI page in step.
+    pub fn ai(&self) -> &Entity<AiPage> {
+        &self.ai
+    }
+
     fn install(&self, part: Part, window: &mut Window, cx: &mut Context<Self>) {
         let backend = cx.try_global::<UpdateBackend>().cloned().unwrap_or_else(UpdateBackend::system);
         let text = script(&built_from(), &[part], (backend.autostart)());
