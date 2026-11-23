@@ -2,6 +2,16 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Lektioner på resonerande modeller får leverantörens temperatur, 2026-11-22
+
+Användarens beslut ([MIO-43](https://linear.app/kanonmaten/issue/MIO-43)): temperaturen går inte att ställa in, men den är inte längre 0 för allt. Regeln i `CLAUDE.md` ändrades samtidigt. Dokumentationen lästes 2026-11-23.
+
+| Val | Varför | Bortvalt |
+|---|---|---|
+| En modell som alltid resonerar (Mistral Large 4, GPT-6.2 Sol, Gemini 3.8 Flash, direkt och via OpenRouter) skickas utan `temperature`, så leverantörens standardvärde gäller. `/v2/status` visar `"temperature": "provider-default"` för `lesson` | Ingen av leverantörerna anger ett värde för sina resonerande modeller: Mistrals modell- och resonemangssidor, OpenAIs modellsida och resonemangsguide säger inget om temperatur. Googles sida om textgenerering säger att Gemini 4 och 3.6+ ignorerar `temperature`, `top_p` och `top_k` och ber att de tas bort. OpenRouter skickar ingen temperatur vidare när den saknas, så underleverantörens standard gäller där också | Temperatur 0 för allt (som förut); ett eget värde som 0,7 (ingen källa); en inställning i panelen (användaren valde "Ingen inställning") |
+| Frågor och Vardag, och lektioner på en modell utan resonemang, behåller temperatur 0 | De plockar ut fakta med exakta citat, och samma text ska ge samma svar | Leverantörens standard för alla uppgifter |
+| Anthropic utan temperatur som förut | Haiku 5.5 vägrar parametern | |
+
 ## AI-sidan: leverantör, nyckel och modell, 2026-11-22
 
 Användarens val ([MIO-41](https://linear.app/kanonmaten/issue/MIO-41)): på AI-sidan i Mio Kontroll väljer man leverantör, nyckel och modell, och samma vy används av Kom igång ([MIO-42](https://linear.app/kanonmaten/issue/MIO-42)). Byggt efter GPUI Kits design- och kodriktlinjer.

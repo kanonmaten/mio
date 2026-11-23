@@ -85,6 +85,30 @@ fn large_4_reasons_at_medium_with_room_for_thinking_and_keeps_the_schema_request
 }
 
 #[test]
+fn a_model_that_reasons_gets_its_providers_temperature_and_a_plain_one_gets_zero() {
+    let lesson = create_task_request(Mode::Lesson, &lesson_payload());
+    // Every candidate that always reasons, directly and through OpenRouter: no provider documents a
+    // value for them, and Gemini 3.6+ asks for the parameter to be removed (MIO-43).
+    for (provider, model) in [("mistral", LARGE), ("openai", "gpt-6.2-sol"), ("gemini", "gemini-3.8-flash"),
+        ("openrouter", "mistralai/mistral-large-4-0"), ("openrouter", "google/gemini-3.8-flash")] {
+        let profile = candidate_profile(provider, model).unwrap();
+        assert!(profile.reasoning.reasons() && !profile.temperature, "{provider} {model}");
+        let request = build_for_profile(profile, KEY, &lesson).unwrap();
+        assert!(request.body.get("temperature").is_none(), "{provider} {model}");
+    }
+    // A model with reasoning off keeps temperature 0, for lessons too.
+    for (provider, model) in [("mistral", SMALL), ("openai", "gpt-6-luna"), ("gemini", "gemini-2.5-flash-lite"), ("openrouter", "qwen/qwen3.8-27b")] {
+        let request = build_for_profile(candidate_profile(provider, model).unwrap(), KEY, &lesson).unwrap();
+        assert_eq!(request.body["temperature"], 0, "{provider} {model}");
+    }
+    // The panel's list says the same.
+    let listed: Value = serde_json::from_str(&reviewed_models()).unwrap();
+    let temperature = |model: &str| listed["candidates"].as_array().unwrap().iter()
+        .find(|entry| entry["model"] == model).map(|entry| entry["temperature"].clone()).unwrap();
+    assert_eq!((temperature(LARGE), temperature(SMALL)), (json!("provider-default"), json!("0")));
+}
+
+#[test]
 fn the_thinking_chunk_is_dropped_and_only_the_text_chunk_is_kept_for_lessons() {
     let profile = candidate_profile("mistral", LARGE).unwrap();
     let read = |data: &Value| normalize_provider_response(data, &profile, &|_| None);
@@ -147,8 +171,10 @@ fn status_names_reasoning_and_schema_dialect_per_task() {
     assert_eq!((&status["tasks"]["ask"]["reasoning"], &status["tasks"]["ask"]["schemaDialect"]), (&json!("off"), &json!("json-schema")));
     assert_eq!(status["tasks"]["everyday"]["reasoning"], "off");
     assert_eq!((&status["tasks"]["lesson"]["reasoning"], &status["tasks"]["lesson"]["model"]), (&json!("medium"), &json!(LARGE)));
-    // Temperature 0 is still sent, so no temperature note; the backlog is offered (no minute budget).
-    assert!(status["tasks"]["lesson"].get("temperature").is_none());
+    // Large 4 reasons, so the lesson is sent without temperature and the status says so; ask and
+    // everyday keep temperature 0 and no note. The backlog is offered (no minute budget).
+    assert_eq!(status["tasks"]["lesson"]["temperature"], "provider-default");
+    assert!(status["tasks"]["ask"].get("temperature").is_none() && status["tasks"]["everyday"].get("temperature").is_none());
     assert!(status["tasks"]["everyday"]["capabilities"].as_array().unwrap().contains(&json!("analysis-backlog-v1")));
     let groq = load_config(&env(&[("GROQ_API_KEY", "k"), ("MIO_AI_MODEL", "qwen/qwen3.8-27b"), ("MIO_GATEWAY_TOKEN", TOKEN)])).unwrap();
     let status = gateway_status_v2(&groq, None);
