@@ -18,7 +18,7 @@ use gpui_kit::{
     App, AppContext as _, Context, Entity, EventEmitter, Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _, Window, div, prelude::FluentBuilder as _,
 };
-use mio_control_core::ai_settings::{AiForm, Catalog, ChoiceKind, GatewayFile, LIMITS, Pair, TASKS, parse_openrouter_models, provider_name};
+use mio_control_core::ai_settings::{AiForm, Catalog, ChoiceKind, GatewayFile, LIMITS, Pair, REASONING_TASK, TASKS, parse_openrouter_models, provider_name, reasoning_level_name};
 use mio_control_core::credit::{CreditLevel, CreditMeter, format_limit, parse_limit};
 use mio_control_core::command::{Command, PROVIDER_IDS, Unit, UnitAction};
 use mio_control_core::settings::{PROVIDER_SECRET_KEYS, SettingsFile};
@@ -88,12 +88,33 @@ struct TaskRow {
     model: Entity<ComboboxState<ModelList>>,
 }
 
+/// The reasoning select's names and selection for the lesson model.
+fn reasoning_items(form: &AiForm, catalog: &Catalog) -> (Vec<SharedString>, Option<IndexPath>) {
+    let levels = form.lesson_reasoning_levels(catalog);
+    let current = form.lesson_reasoning_level(catalog);
+    let names = levels.iter().map(|level| SharedString::from(reasoning_level_name(level).to_owned())).collect();
+    let selected = levels.iter().position(|level| Some(level) == current.as_ref()).map(|row| IndexPath::default().row(row));
+    (names, selected)
+}
+
+/// After the lesson model changed: drop a level it is not reviewed for and offer its levels.
+fn refresh_reasoning(editor: &mut Editor, window: &mut Window, cx: &mut App) {
+    editor.form.fit_lesson_reasoning(&editor.catalog);
+    let (names, selected) = reasoning_items(&editor.form, &editor.catalog);
+    editor.reasoning.update(cx, |state, cx| {
+        state.set_items(names, window, cx);
+        state.set_selected_index(selected, window, cx);
+    });
+}
+
 /// The editor once settings and model list are read.
 struct Editor {
     file: GatewayFile,
     catalog: Catalog,
     form: AiForm,
     rows: Vec<TaskRow>,
+    /// The lesson model's reviewed reasoning levels, shown when it has more than one (MIO-44).
+    reasoning: Entity<Choice>,
     limit_inputs: Vec<(&'static str, Entity<InputState>)>,
     /// The provider whose key field is open, if any.
     key_editing: Option<&'static str>,
@@ -317,9 +338,12 @@ impl AiPage {
                     state.set_items(list, window, cx);
                     state.set_selected_values(&[SharedString::from(model)], window, cx);
                 });
+                if task == REASONING_TASK {
+                    refresh_reasoning(editor, window, cx);
+                }
                 cx.notify();
             }));
-            subscriptions.push(cx.subscribe_in(&model, window, move |this, _, event: &ComboboxEvent<ModelList>, _, cx| {
+            subscriptions.push(cx.subscribe_in(&model, window, move |this, _, event: &ComboboxEvent<ModelList>, window, cx| {
                 let ComboboxEvent::Confirm(values) = event else { return };
                 let Some(model) = values.first() else { return };
                 let Stage::Editing(editor) = &mut this.stage else { return };
@@ -327,11 +351,27 @@ impl AiPage {
                 // Only a selectable row can be confirmed; the check keeps the form honest anyway.
                 if editor.catalog.find(&provider, model).is_some_and(|pair| pair.allows(task)) {
                     editor.form.set_task(task, (provider, model.to_string()));
+                    if task == REASONING_TASK {
+                        refresh_reasoning(editor, window, cx);
+                    }
                     cx.notify();
                 }
             }));
             rows.push(TaskRow { task, providers, provider, model });
         }
+
+        let (names, selected) = reasoning_items(&form, &catalog);
+        let reasoning = cx.new(|cx| SelectState::new(names, selected, window, cx));
+        subscriptions.push(cx.subscribe_in(&reasoning, window, |this, _, event: &SelectEvent<Vec<SharedString>>, _, cx| {
+            let SelectEvent::Confirm(Some(label)) = event else { return };
+            let Stage::Editing(editor) = &mut this.stage else { return };
+            let chosen = editor.form.lesson_reasoning_levels(&editor.catalog).iter()
+                .find(|level| reasoning_level_name(level) == label.as_ref()).cloned();
+            if let Some(level) = chosen {
+                editor.form.lesson_reasoning = level;
+                cx.notify();
+            }
+        }));
 
         let mut limit_inputs = Vec::new();
         for limit in &LIMITS {
@@ -350,7 +390,26 @@ impl AiPage {
         }
 
         let key_input = cx.new(|cx| InputState::new(window, cx).masked(true).placeholder("Klistra in nyckeln"));
-        Editor { file, catalog, form, rows, limit_inputs, key_editing: None, key_input, limits_open: false, _subscriptions: subscriptions }
+        Editor { file, catalog, form, rows, reasoning, limit_inputs, key_editing: None, key_input, limits_open: false, _subscriptions: subscriptions }
+    }
+
+    /// The lesson model's reasoning level under the lesson row: a select when more than one level
+    /// is reviewed, a line when only one is, nothing when the model does not reason.
+    fn render_reasoning(&self, editor: &Editor, cx: &Context<Self>) -> Option<gpui_kit::AnyElement> {
+        let levels = editor.form.lesson_reasoning_levels(&editor.catalog);
+        let current = editor.form.lesson_reasoning_level(&editor.catalog)?;
+        let theme = cx.theme();
+        let row = h_flex().gap_3().child(div().w_24().text_sm().text_color(theme.muted_foreground).child("Resonemang"));
+        Some(if levels.len() > 1 {
+            row.child(div().w_40().child(Select::new(&editor.reasoning).id("ai-reasoning-lesson")))
+                .child(div().flex_1().min_w_0().text_sm().text_color(theme.muted_foreground)
+                    .child("Högre nivå tänker längre: bättre anteckningar, men dyrare och långsammare."))
+                .into_any_element()
+        } else {
+            row.child(div().id("ai-reasoning-lesson").test_support().flex_1().text_sm().text_color(theme.muted_foreground)
+                .child(format!("{}, den enda nivå som är granskad för modellen.", reasoning_level_name(&current))))
+                .into_any_element()
+        })
     }
 
     /// Writes the changed settings, then restarts the gateway. The phone notices the new
@@ -585,7 +644,7 @@ impl AiPage {
             .child(muted("Välj leverantör och sedan modell. Gråa modeller kräver ett godkänt prov eller är inte granskade än.".into()))
             .children(editor.rows.iter().map(|row| {
                 let label = TASKS.iter().find(|(name, _)| *name == row.task).map_or("", |(_, label)| *label);
-                h_flex()
+                let task_row = h_flex()
                     .gap_3()
                     .child(div().w_24().text_sm().text_color(theme.muted_foreground).child(label))
                     .child(div().w_40().child(Select::new(&row.provider).id(SharedString::from(format!("ai-provider-{}", row.task)))))
@@ -596,7 +655,9 @@ impl AiPage {
                             .flex_1()
                             .min_w_0()
                             .child(Combobox::new(&row.model).placeholder("Välj modell").search_placeholder("Sök modell")),
-                    )
+                    );
+                let reasoning = (row.task == REASONING_TASK).then(|| self.render_reasoning(editor, cx)).flatten();
+                v_flex().gap_2().child(task_row).children(reasoning)
             }))
             .child(section("Prova modellerna"))
             .child(muted(

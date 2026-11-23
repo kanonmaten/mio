@@ -40,7 +40,8 @@ fn catalog() -> Value {
             { "provider": "groq", "model": "qwen/qwen3.8-27b", "secretVariable": "GROQ_API_KEY", "temperature": "0" },
             { "provider": "anthropic", "model": "claude-haiku-5-5", "secretVariable": "ANTHROPIC_API_KEY", "temperature": "provider-default" },
             // A made-up reasoning pair reviewed for lessons only, in the shape the panel reads.
-            { "provider": "mistral", "model": "mistral-large-test", "secretVariable": "MISTRAL_API_KEY", "reasoning": "high", "tasks": ["lesson"] }],
+            { "provider": "mistral", "model": "mistral-large-test", "secretVariable": "MISTRAL_API_KEY", "reasoning": "high", "tasks": ["lesson"],
+              "reasoningLevels": ["low", "medium", "high"] }],
         "candidates": [{ "provider": "mistral", "model": "mistral-small-2603", "secretVariable": "MISTRAL_API_KEY", "blocked": "Kräver ett godkänt prov." }] })
 }
 
@@ -180,6 +181,43 @@ fn choose_a_model_and_a_limit_see_the_changes_and_save(cx: &mut TestAppContext) 
     let write_at = calls.iter().position(|(command, _)| matches!(command, Command::WriteSettings(_))).unwrap();
     let restart_at = calls.iter().position(|(command, _)| *command == Command::Unit(UnitAction::Restart, Unit::Gateway)).unwrap();
     assert!(restart_at > write_at);
+}
+
+#[gpui_kit::test]
+fn lessons_on_a_model_that_reasons_get_a_reasoning_level(cx: &mut TestAppContext) {
+    let (handle, _, calls) = open(cx);
+    let step = |cx: &mut TestAppContext, act: &dyn Fn(&mut gpui_kit::Window, &mut gpui_kit::App)| {
+        cx.update_window(handle, |_, window, cx| {
+            window.render_frame(cx);
+            act(window, cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+    };
+    step(cx, &|window, cx| window.click("edit-ai", cx));
+    // Lessons on Groq do not reason: no level to choose.
+    step(cx, &|window, cx| {
+        assert!(window.try_find("ai-reasoning-lesson").is_none());
+        // Groq, Anthropic, Mistral: Mistral's model for lessons reasons.
+        window.click("ai-provider-lesson", cx);
+        window.press("down", cx);
+        window.press("down", cx);
+        window.press("enter", cx);
+    });
+    step(cx, &|window, cx| {
+        assert_eq!(window.find("ai-reasoning-lesson").value(), Some("Hög"), "the model's own level");
+        window.click("ai-reasoning-lesson", cx);
+        window.press("up", cx);
+        window.press("enter", cx);
+    });
+    step(cx, &|window, cx| {
+        assert_eq!(window.find("ai-reasoning-lesson").value(), Some("Medel"));
+        window.click("save-ai", cx);
+    });
+    let calls = calls.lock().unwrap();
+    let (_, stdin) = calls.iter().find(|(command, _)| matches!(command, Command::WriteSettings(SettingsFile::Gateway))).expect("settings were written");
+    let request: Value = serde_json::from_slice(stdin.as_ref().unwrap()).unwrap();
+    assert_eq!(request["set"]["MIO_LESSON_REASONING"], "medium");
 }
 
 #[gpui_kit::test]

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde_json::Value;
 
 use crate::js::{ascii_alphanumeric_or, trim};
-use crate::model_profiles::{CANDIDATE_MODELS, Incompatible, PROVIDERS, Profile, REASONING_TASK, approved_profile, pair_reasoning};
+use crate::model_profiles::{CANDIDATE_MODELS, Incompatible, PROVIDERS, Profile, REASONING_TASK, Reasoning, approved_profile, pair_reasoning, reasoning_levels};
 
 pub const MAX_REQUESTS_PER_DAY: u64 = 1_000_000;
 pub const MAX_TOKENS_PER_DAY: u64 = 1_000_000;
@@ -57,6 +57,10 @@ pub struct Config {
     pub task_profiles: Option<Value>,
     pub adapter_options: Option<Value>,
     pub lesson_interval_seconds: Option<u64>,
+    /// The reasoning level for a lesson model that always reasons (`MIO_LESSON_REASONING`);
+    /// `None` keeps the level the pair was reviewed at. Only a level reviewed for the selected
+    /// pair runs: any other makes `profile` refuse, which disables only that task.
+    pub lesson_reasoning: Option<String>,
     pub gateway_token: String,
     pub model: String,
     pub port: u16,
@@ -86,9 +90,24 @@ fn approved_candidates(value: Option<&str>) -> Result<Vec<String>, ConfigError> 
     if entries.iter().all(known) { Ok(entries) } else { Err(ConfigError("Ogiltig godkänd kandidatmodell.")) }
 }
 
+/// `low`, `medium` or `high`; empty or absent means the pair's reviewed level.
+fn lesson_reasoning(value: Option<&str>) -> Result<Option<String>, ConfigError> {
+    match value.map(trim).filter(|value| !value.is_empty()) {
+        None => Ok(None),
+        Some(level) if ["low", "medium", "high"].contains(&level) => Ok(Some(level.to_owned())),
+        Some(_) => Err(ConfigError("Ogiltig resonemangsnivå för lektioner (low, medium eller high).")),
+    }
+}
+
 /// The profile for a config's provider and model, honouring approved candidates.
 pub fn profile(config: &Config) -> Result<Profile, Incompatible> {
-    approved_profile(&config.provider, &config.model, config.adapter_options.as_ref(), &config.approved_candidates)
+    let mut profile = approved_profile(&config.provider, &config.model, config.adapter_options.as_ref(), &config.approved_candidates)?;
+    // Only a pair that always reasons serves lessons alone, so the level never reaches ask or everyday.
+    if let (Reasoning::Effort(_), Some(level)) = (profile.reasoning, config.lesson_reasoning.as_deref()) {
+        let chosen = reasoning_levels(&config.provider, &config.model).iter().find(|each| **each == level).ok_or(Incompatible::Options)?;
+        profile.reasoning = Reasoning::Effort(chosen);
+    }
+    Ok(profile)
 }
 
 impl Config {
@@ -101,7 +120,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self { provider: "groq".to_owned(), api_key: String::new(), provider_secrets: BTreeMap::new(),
-            task_profiles: None, adapter_options: None, lesson_interval_seconds: None,
+            task_profiles: None, adapter_options: None, lesson_interval_seconds: None, lesson_reasoning: None,
             gateway_token: String::new(), model: String::new(), port: 8_787, requests_per_minute: 10,
             tokens_per_minute: None, provider_tokens_per_minute: BTreeMap::new(), approved_candidates: Vec::new(), requests_per_day: None, tokens_per_day: None,
             upstream_timeout_ms: 40_000, body_timeout_ms: 5_000, retry_delay_ms: None,
@@ -173,6 +192,7 @@ pub fn load_config(env: &dyn Fn(&str) -> Option<String>) -> Result<Config, Confi
         task_profiles: env("MIO_AI_TASK_PROFILES").map(Value::String),
         adapter_options: None,
         lesson_interval_seconds: Some(positive_integer(env("MIO_LESSON_INTERVAL_SECONDS").as_deref(), 60, 3_600)?),
+        lesson_reasoning: lesson_reasoning(env("MIO_LESSON_REASONING").as_deref())?,
         gateway_token: env("MIO_GATEWAY_TOKEN").unwrap_or_default(),
         model: env("MIO_AI_MODEL").unwrap_or_default(),
         port: positive_integer(env("PORT").as_deref(), 8_787, 65_535)? as u16,
