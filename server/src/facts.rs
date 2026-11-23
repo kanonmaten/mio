@@ -6,9 +6,11 @@
 //!
 //! Only facts are checked, never meaning: "ska inte" turned into "ska" passes. A paraphrased
 //! number ("hälften" for "50 procent") fails, which drops a true hint now and then but never
-//! passes a wrong number. Spoken numbers in the quote count ("tjugo" is 20, "tredje" is 3), since
-//! the transcript writes what was said.
+//! passes a wrong number. Spoken numbers in the quote count ("tjugo" is 20, "två tusen" is 2000,
+//! "två komma fem" is 2.5, "tredje" is 3), since the transcript writes what was said. A number is
+//! always compared whole: 5,2 never matches a quote that says 2,5.
 
+/// Number words that add their value: 0 to 19.
 const UNITS: [(&str, u64); 21] = [
     ("noll", 0), ("ett", 1), ("en", 1), ("två", 2), ("tre", 3), ("fyra", 4), ("fem", 5), ("sex", 6), ("sju", 7), ("åtta", 8),
     ("nio", 9), ("tio", 10), ("elva", 11), ("tolv", 12), ("tretton", 13), ("fjorton", 14), ("femton", 15), ("sexton", 16),
@@ -22,55 +24,185 @@ const ORDINALS: [(&str, u64); 20] = [
     ("nionde", 9), ("tionde", 10), ("elfte", 11), ("tolfte", 12), ("trettonde", 13), ("fjortonde", 14), ("femtonde", 15),
     ("sextonde", 16), ("sjuttonde", 17), ("artonde", 18), ("nittonde", 19), ("tjugonde", 20),
 ];
-const LARGE: [(&str, u64); 3] = [("hundra", 100), ("etthundra", 100), ("tusen", 1_000)];
 const WEEKDAYS: [&str; 7] = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"];
 const MONTHS: [&str; 12] = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"];
 
-/// The words of a text with whether each starts a sentence.
-fn words(text: &str) -> Vec<(String, bool)> {
+/// One piece of a spoken number.
+#[derive(Clone, Copy, PartialEq)]
+enum Part {
+    Unit(u64),
+    Ten(u64),
+    Hundred,
+    Thousand,
+}
+
+/// A word of a text: a number written with digits (already normalized), or a word.
+#[derive(Clone, PartialEq)]
+enum Word {
+    Digits(String),
+    Text { lower: String, capital: bool, sentence_start: bool },
+}
+
+/// A number as compared: digits without leading zeros, and a decimal part without trailing zeros.
+fn normalized(integer: &str, fraction: &str) -> String {
+    let integer = integer.trim_start_matches('0');
+    let fraction = fraction.trim_end_matches('0');
+    let integer = if integer.is_empty() { "0" } else { integer };
+    if fraction.is_empty() { integer.to_owned() } else { format!("{integer}.{fraction}") }
+}
+
+/// The words of a text. A written number stays whole: "2,5" and "2.5" are one decimal, and
+/// "2 000" (a space before three digits) is one number; "40–50" is two.
+fn words(text: &str) -> Vec<Word> {
+    let characters: Vec<char> = text.chars().collect();
     let mut words = Vec::new();
-    let (mut word, mut sentence_start) = (String::new(), true);
-    let push = |word: &mut String, sentence_start: &mut bool, words: &mut Vec<(String, bool)>| {
-        if !word.is_empty() {
-            words.push((std::mem::take(word), *sentence_start));
-            *sentence_start = false;
-        }
-    };
-    for character in text.chars() {
-        // Digits and letters form separate words, so "3:e" and "20%" give the numbers alone.
-        let same_kind = word.chars().last().is_none_or(|last| last.is_ascii_digit() == character.is_ascii_digit());
-        if character.is_alphanumeric() && same_kind {
-            word.push(character);
+    let mut sentence_start = true;
+    let mut index = 0;
+    while index < characters.len() {
+        let character = characters[index];
+        if character.is_ascii_digit() {
+            let (mut integer, mut fraction, mut in_fraction) = (String::new(), String::new(), false);
+            while let Some(&here) = characters.get(index) {
+                let digit_at = |offset: usize| characters.get(index + offset).is_some_and(char::is_ascii_digit);
+                if here.is_ascii_digit() {
+                    if in_fraction { fraction.push(here) } else { integer.push(here) }
+                } else if matches!(here, ',' | '.') && !in_fraction && digit_at(1) {
+                    in_fraction = true;
+                } else if here == ' ' && !in_fraction && (1..=3).all(digit_at) && !digit_at(4) {
+                    // A thousands separator: "2 000".
+                } else {
+                    break;
+                }
+                index += 1;
+            }
+            words.push(Word::Digits(normalized(&integer, &fraction)));
+            sentence_start = false;
+        } else if character.is_alphabetic() {
+            let mut word = String::new();
+            while index < characters.len() && characters[index].is_alphabetic() {
+                word.push(characters[index]);
+                index += 1;
+            }
+            words.push(Word::Text { lower: word.to_lowercase(), capital: character.is_uppercase(), sentence_start });
+            sentence_start = false;
         } else {
-            push(&mut word, &mut sentence_start, &mut words);
-            if character.is_alphanumeric() {
-                word.push(character);
-            } else if matches!(character, '.' | '!' | '?' | ':' | '\n' | '•' | '–' | '-') {
+            if matches!(character, '.' | '!' | '?' | ':' | '\n' | '•' | '–' | '-') {
                 sentence_start = true;
             }
+            index += 1;
         }
     }
-    push(&mut word, &mut sentence_start, &mut words);
     words
 }
 
-/// The value of a spoken number: a cardinal, a compound such as "tjugofem", or, when `ordinals`,
-/// an ordinal such as "tredje" or "tjugoförsta".
-fn spoken(word: &str, ordinals: bool) -> Option<u64> {
-    let simple = UNITS.iter().chain(LARGE.iter()).chain(TENS.iter())
-        .chain(ordinals.then_some(ORDINALS.iter()).into_iter().flatten());
-    if let Some((_, value)) = simple.clone().find(|(name, _)| *name == word) {
+/// A spoken number word split into its pieces, longest first: "nittonhundrafemton" is 19, hundred,
+/// 15; "tvåtusen" is 2, thousand. `None` when the word is not made only of number pieces.
+fn parts(word: &str) -> Option<Vec<Part>> {
+    let pieces = UNITS.iter().map(|(name, value)| (*name, Part::Unit(*value)))
+        .chain(TENS.iter().map(|(name, value)| (*name, Part::Ten(*value))))
+        .chain([("hundra", Part::Hundred), ("tusen", Part::Thousand)]);
+    let pieces: Vec<(&str, Part)> = pieces.collect();
+    let mut rest = word;
+    let mut found = Vec::new();
+    while !rest.is_empty() {
+        let (name, part) = pieces.iter().filter(|(name, _)| rest.starts_with(name)).max_by_key(|(name, _)| name.len())?;
+        found.push(*part);
+        rest = &rest[name.len()..];
+    }
+    (!found.is_empty()).then_some(found)
+}
+
+/// An ordinal word ("tredje", "tjugoförsta"), read only in quotes.
+fn ordinal(word: &str) -> Option<u64> {
+    if let Some((_, value)) = ORDINALS.iter().find(|(name, _)| *name == word) {
         return Some(*value);
     }
     let (tens, rest) = TENS.iter().find_map(|(name, value)| word.strip_prefix(name).map(|rest| (*value, rest)))?;
-    // "ett" to "nio": the units a compound such as "tjugofem" or "trettioen" ends with.
-    let units = UNITS[1..11].iter().chain(ordinals.then_some(ORDINALS[..9].iter()).into_iter().flatten());
-    units.clone().find(|(name, _)| *name == rest).map(|(_, value)| tens + value)
+    ORDINALS[..9].iter().find(|(name, _)| *name == rest).map(|(_, value)| tens + value)
 }
 
-/// Every number a quote holds, written with digits or spoken.
-fn quote_numbers(words: &[(String, bool)]) -> Vec<u64> {
-    words.iter().filter_map(|(word, _)| word.parse::<u64>().ok().or_else(|| spoken(word, true))).collect()
+/// Reads one spoken number from consecutive pieces: "två tusen" is 2000 (never 2 and 1000),
+/// "tjugo fem" is 25, but "tre fyra" is two numbers.
+#[derive(Default)]
+struct Spoken {
+    total: u64,
+    current: u64,
+    last: Option<Part>,
+    numbers: Vec<u64>,
+}
+
+impl Spoken {
+    fn push(&mut self, part: Part) {
+        let starts_new = match (self.last, part) {
+            (Some(Part::Unit(_)), Part::Unit(_) | Part::Ten(_)) | (Some(Part::Ten(_)), Part::Ten(_)) => true,
+            (Some(Part::Ten(_)), Part::Unit(value)) => value >= 10,
+            _ => false,
+        };
+        if starts_new {
+            self.finish();
+        }
+        match part {
+            Part::Unit(value) | Part::Ten(value) => self.current += value,
+            Part::Hundred => self.current = self.current.max(1) * 100,
+            Part::Thousand => {
+                self.total += self.current.max(1) * 1_000;
+                self.current = 0;
+            }
+        }
+        self.last = Some(part);
+    }
+
+    fn finish(&mut self) {
+        if self.last.is_some() {
+            self.numbers.push(self.total + self.current);
+        }
+        *self = Self { numbers: std::mem::take(&mut self.numbers), ..Self::default() };
+    }
+}
+
+/// Every number in a text as compared. In a quote (`quote`) ordinals count, and "en" or "ett"
+/// count too; in the text they are ordinary words ("en sammanfattning", "den andra delen").
+/// "komma" between two numbers makes a decimal ("två komma fem" is 2.5).
+fn numbers(words: &[Word], quote: bool) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    let mut spoken = Spoken::default();
+    let mut decimal_pending = false;
+    let flush = |spoken: &mut Spoken, found: &mut Vec<String>, decimal_pending: &mut bool| {
+        spoken.finish();
+        for value in std::mem::take(&mut spoken.numbers) {
+            match (std::mem::take(decimal_pending), found.pop()) {
+                (true, Some(whole)) if !whole.contains('.') => found.push(normalized(&whole, &value.to_string())),
+                (_, previous) => {
+                    found.extend(previous);
+                    found.push(value.to_string());
+                }
+            }
+        }
+    };
+    for word in words {
+        match word {
+            Word::Digits(value) => {
+                flush(&mut spoken, &mut found, &mut decimal_pending);
+                found.push(value.clone());
+            }
+            Word::Text { lower, .. } => {
+                let article = !quote && matches!(lower.as_str(), "en" | "ett") && spoken.last.is_none();
+                match parts(lower).filter(|_| !article) {
+                    Some(pieces) => pieces.into_iter().for_each(|piece| spoken.push(piece)),
+                    None => {
+                        flush(&mut spoken, &mut found, &mut decimal_pending);
+                        if lower == "komma" && !found.is_empty() {
+                            decimal_pending = true;
+                        } else if let Some(value) = ordinal(lower).filter(|_| quote) {
+                            found.push(value.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    flush(&mut spoken, &mut found, &mut decimal_pending);
+    found
 }
 
 /// A word that names a weekday or a month ("fredagen", "fredags", "mars"), as its base form.
@@ -78,32 +210,32 @@ fn calendar_word(word: &str) -> Option<&'static str> {
     WEEKDAYS.iter().find(|day| word.starts_with(*day)).or_else(|| MONTHS.iter().find(|month| word == **month)).copied()
 }
 
+/// A name without its genitive s, so "Karls" matches "Karl" but "Karlstad" does not.
+fn name_stem(word: &str) -> &str {
+    if word.chars().count() > 3 { word.strip_suffix('s').unwrap_or(word) } else { word }
+}
+
 /// True when every number, weekday, month and name in `text` is also in `quote`.
 pub fn follow_quote(text: &str, quote: &str) -> bool {
-    let quote_words: Vec<(String, bool)> = words(quote).into_iter().map(|(word, start)| (word.to_lowercase(), start)).collect();
-    let numbers = quote_numbers(&quote_words);
-    let quote_has = |check: &dyn Fn(&str) -> bool| quote_words.iter().any(|(word, _)| check(word));
-    words(text).into_iter().all(|(original, sentence_start)| {
-        let word = original.to_lowercase();
-        if let Ok(value) = word.parse::<u64>() {
-            return numbers.contains(&value);
+    let quote_words = words(quote);
+    let quote_numbers = numbers(&quote_words, true);
+    let quote_text: Vec<&str> = quote_words.iter().filter_map(|word| match word {
+        Word::Text { lower, .. } => Some(lower.as_str()),
+        Word::Digits(_) => None,
+    }).collect();
+    let text_words = words(text);
+    if !numbers(&text_words, false).iter().all(|value| quote_numbers.contains(value)) {
+        return false;
+    }
+    text_words.iter().all(|word| {
+        let Word::Text { lower, capital, sentence_start } = word else { return true };
+        if let Some(base) = calendar_word(lower) {
+            return quote_text.iter().any(|quoted| calendar_word(quoted) == Some(base));
         }
-        // "en" and "ett" are also articles, so the text may use them freely; ordinals ("andra")
-        // double as ordinary words and are only read on the quote's side.
-        if !matches!(word.as_str(), "en" | "ett")
-            && let Some(value) = spoken(&word, false)
-        {
-            return numbers.contains(&value);
-        }
-        if let Some(base) = calendar_word(&word) {
-            return quote_has(&|quoted| calendar_word(quoted) == Some(base));
-        }
-        // A capital inside a sentence is a name. The genitive s is dropped, and the quote may
-        // inflect it ("Napoleon" against "Napoleons").
-        let is_name = !sentence_start && original.chars().next().is_some_and(char::is_uppercase);
-        if is_name {
-            let stem = if word.chars().count() > 3 { word.strip_suffix('s').unwrap_or(&word) } else { &word };
-            return quote_has(&|quoted| quoted.starts_with(stem));
+        // A capital inside a sentence is a name; a number word is not ("Tre" after a colon).
+        if *capital && !*sentence_start && parts(lower).is_none() {
+            let stem = name_stem(lower);
+            return quote_text.iter().any(|quoted| name_stem(quoted) == stem);
         }
         true
     })
@@ -120,6 +252,11 @@ mod tests {
         assert!(!follow_quote("Kriget slutade 1815 med Wellington.", "kriget slutade 1815 med Napoleon"));
         assert!(!follow_quote("Provet är den 3 december.", "provet är den fjärde december"));
         assert!(!follow_quote("Tre uppgifter till måndag.", "fyra uppgifter till måndag"));
+        // A number is compared whole (CodeRabbit on #33).
+        assert!(!follow_quote("Koncentrationen är 5,2 procent.", "Koncentrationen är 2,5 procent."));
+        assert!(!follow_quote("Koncentrationen är 5,2 procent.", "koncentrationen är två komma fem procent"));
+        assert!(!follow_quote("Läs sidan 2.", "Läs sidan två tusen."));
+        assert!(!follow_quote("Läs om Karl.", "Läs om Karlstad."));
     }
 
     #[test]
@@ -129,6 +266,13 @@ mod tests {
         assert!(follow_quote("Provet är den 3 december.", "provet är den tredje december"));
         assert!(follow_quote("Napoleons fälttåg 1812.", "napoleon gick mot moskva 1812"));
         assert!(follow_quote("Läs kapitel 25.", "läs kapitel tjugofem"));
+        assert!(follow_quote("Läs om Karls resa.", "Läs om Karl."), "a genitive s on either side");
+        assert!(follow_quote("Läs sidan 2000.", "Läs sidan två tusen."));
+        assert!(follow_quote("Läs sidan 2 000.", "läs sidan tvåtusen"));
+        assert!(follow_quote("Kriget började 1915.", "det började nittonhundrafemton"));
+        assert!(follow_quote("Koncentrationen är 2,5 procent.", "koncentrationen är två komma fem procent"));
+        assert!(follow_quote("Koncentrationen är 2.5 procent.", "Koncentrationen är 2,5 procent."));
+        assert!(follow_quote("Läs sidorna 40–50.", "läs sidorna fyrtio till femtio"));
         assert!(follow_quote("Gör en sammanfattning av ett kapitel.", "skriv om kapitlet"), "articles are not numbers");
         assert!(follow_quote("Repetera: Fotosyntesen kräver ljus.", "fotosyntesen behöver ljus"), "a capital after a colon starts a sentence");
         assert!(follow_quote("Den andra delen är viktigast.", "det här är viktigast"), "an ordinal word in the text is not a number");
