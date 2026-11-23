@@ -464,3 +464,24 @@ fn a_new_mistral_configuration_loads_and_an_existing_one_keeps_its_provider_and_
     let groq = format!("GROQ_API_KEY=gsk_old\nMIO_GATEWAY_TOKEN={TOKEN}\nMIO_AI_PROVIDER=groq\nPORT=8787\n");
     assert_eq!(String::from_utf8(mistral_gateway_env(KEY, Some(groq.as_bytes()), "8787", FRESH)).unwrap(), format!("{groq}MISTRAL_API_KEY={KEY}\n"));
 }
+
+#[tokio::test]
+async fn a_long_lesson_with_its_thinking_fits_while_ask_keeps_64_kib() {
+    use mio_gateway::generation::upstream_byte_limit;
+    assert_eq!((upstream_byte_limit(1_200), upstream_byte_limit(12_000), upstream_byte_limit(32_000)), (65_536, 288_000, 768_000));
+    // About 150 KB of thinking before the notes: over the old 64 KiB, inside a 20 000-token budget.
+    let long_thought = "Jag tänker på provet. ".repeat(7_000);
+    let body = chat(json!([{ "type": "thinking", "thinking": [{ "type": "text", "text": long_thought }] },
+        { "type": "text", "text": lesson_answer().to_string() }]), "stop", json!({ "prompt_tokens": 900, "completion_tokens": 19_000 }));
+    assert!(body.to_string().len() > 140_000);
+    let provider = Provider::new(move |_, _| Upstream::json(&body));
+    let large = candidate_profile("mistral", LARGE).unwrap();
+    trial_call(large, KEY, Mode::Lesson, &lesson_payload(), &Link(provider), &|| NOVEMBER, None, Some(20_000)).await.unwrap();
+    // An answer to a question is still cut at 64 KiB.
+    let huge = chat(json!(format!("{{\"answer\":\"{}\"}}", "a".repeat(70_000))), "stop", json!({ "prompt_tokens": 5, "completion_tokens": 1 }));
+    let provider = Provider::new(move |_, _| Upstream::json(&huge));
+    let small = candidate_profile("mistral", SMALL).unwrap();
+    let error = trial_call(small, KEY, Mode::Ask, &json!({ "question": "Vad?", "context": [{ "label": "A", "text": "B." }] }),
+        &Link(provider), &|| NOVEMBER, None, None).await.err().unwrap();
+    assert_eq!(error.code, "upstream_response_too_large");
+}

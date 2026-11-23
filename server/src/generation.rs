@@ -19,6 +19,15 @@ use crate::tasks::{Mode, create_task_request, validate_task_result};
 
 const MAX_UPSTREAM_BYTES: usize = 65_536;
 
+/// The most bytes read from a provider for an answer of `max_output_tokens`: 64 KiB, or 24 bytes
+/// per token when that is more. A token of Swedish is up to about four characters, and a
+/// provider may escape each å, ä or ö as `\u00e5` (six bytes); a reasoning model's thinking
+/// arrives in the same body before the adapter drops it. Ask and everyday keep 64 KiB; a long
+/// lesson budget (MIO-45) gets room for its whole answer.
+pub fn upstream_byte_limit(max_output_tokens: u64) -> usize {
+    MAX_UPSTREAM_BYTES.max(usize::try_from(max_output_tokens).unwrap_or(usize::MAX).saturating_mul(24))
+}
+
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// A network failure. It carries no detail: transport errors can quote URLs and headers.
@@ -132,7 +141,7 @@ pub fn usage_tokens(usage: Option<&Usage>) -> i64 {
     usage.total_tokens.unwrap_or(usage.input_tokens.unwrap_or(0) + usage.output_tokens.unwrap_or(0)).max(0)
 }
 
-async fn read_upstream(mut response: Box<dyn UpstreamResponse>, profile: &Profile, now_ms: i64, spent: &Spent) -> Result<Normalized, Failure> {
+async fn read_upstream(mut response: Box<dyn UpstreamResponse>, profile: &Profile, now_ms: i64, spent: &Spent, limit: usize) -> Result<Normalized, Failure> {
     let status = response.status();
     let ok = (200..300).contains(&status);
     let has_json = response.header("content-type").is_some_and(|kind| kind.to_lowercase().starts_with("application/json"));
@@ -146,13 +155,13 @@ async fn read_upstream(mut response: Box<dyn UpstreamResponse>, profile: &Profil
     let declared = response.header("content-length").and_then(|length| length.trim().parse::<f64>().ok());
     // A successful HTTP answer is billed even when Mio cannot use it; it is counted once here
     // with whatever token counts it carries (none when it is unreadable).
-    if declared.is_some_and(|length| length > MAX_UPSTREAM_BYTES as f64) {
+    if declared.is_some_and(|length| length > limit as f64) {
         if ok { spent.answered(None); }
         return Err(too_large("invalid_upstream_response").into());
     }
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| Failure::Unclassified)? {
-        if body.len() + chunk.len() > MAX_UPSTREAM_BYTES {
+        if body.len() + chunk.len() > limit {
             if ok { spent.answered(None); }
             return Err(too_large("upstream_response_too_large").into());
         }
@@ -197,7 +206,7 @@ pub async fn trial_call(profile: Profile, api_key: &str, mode: Mode, payload: &V
     let spent = Spent::default();
     let call = async {
         let response = transport.send(request).await.map_err(|_| RequestError::new(502, "provider_transport"))?;
-        read_upstream(response, &provider.profile, now(), &spent).await.map_err(|failure| match failure {
+        read_upstream(response, &provider.profile, now(), &spent, upstream_byte_limit(generation.max_output_tokens)).await.map_err(|failure| match failure {
             Failure::Request(error) => error,
             Failure::Unclassified => RequestError::new(502, "provider_infrastructure"),
         })
@@ -271,7 +280,7 @@ async fn run(config: &Config, mode: Mode, payload: &Value, transport: &dyn Trans
     let attempt = async || -> Result<Normalized, Failure> {
         let request = UpstreamRequest { url: provider.url.clone(), headers: provider.headers.clone(), body: body.clone() };
         let response = transport.send(request).await.map_err(|_| RequestError::new(502, "provider_transport"))?;
-        read_upstream(response, &provider.profile, now(), spent).await
+        read_upstream(response, &provider.profile, now(), spent, upstream_byte_limit(generation.max_output_tokens)).await
     };
     // One retry with the identical request (user decision 2026-11-15): after a short wait the
     // provider named, or a brief pause after a provider/network failure. Never a second retry,
