@@ -188,8 +188,9 @@ pub fn gateway_status_v2(config: &Config, quota: Option<&QuotaObservation>) -> V
             "promptVersion": task_prompt_version(task), "capabilities": capabilities,
             "configurationError": selected.configuration_error });
         let profile = selected.config.as_ref().and_then(|config| crate::config::profile(config).ok());
-        // A reviewed model whose provider refuses temperature runs without it; that is never silent
-        // (rule approved 2026-11-17). Absent for every model that gets temperature 0.
+        // A model whose provider refuses temperature, or a lesson model that reasons, runs without
+        // it; that is never silent (rules approved 2026-11-17 and 2026-11-22). Absent for every
+        // model that gets temperature 0.
         if profile.as_ref().is_some_and(|profile| !profile.temperature) {
             entry["temperature"] = json!("provider-default");
         }

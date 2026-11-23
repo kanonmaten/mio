@@ -191,7 +191,7 @@ pub fn reviewed_models() -> String {
         let secret = provider(reviewed.provider).map(|provider| provider.secret_variable);
         json!({ "provider": reviewed.provider, "model": reviewed.model, "secretVariable": secret,
             "plain": reviewed.plain, "schemaDialect": reviewed.schema_dialect, "sources": reviewed.sources,
-            "temperature": if reviewed.temperature { "0" } else { "provider-default" },
+            "temperature": if reviewed.sends_zero_temperature() { "0" } else { "provider-default" },
             // A pair that always reasons may only serve lessons (user decision 2026-11-19).
             "reasoning": reviewed.reasoning.level(),
             "tasks": if reviewed.reasoning.reasons() { vec![REASONING_TASK] } else { TASK_IDS.to_vec() },

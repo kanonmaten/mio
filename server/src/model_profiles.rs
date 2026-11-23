@@ -106,9 +106,9 @@ pub struct Profile {
     /// A model without a reasoning switch.
     pub plain: bool,
     pub reasoning: Reasoning,
-    /// Whether `temperature: 0` is sent. False only for a reviewed model whose provider refuses
-    /// the parameter (Anthropic since API version 2026-10-21; user decision 2026-11-17). It is
-    /// then left out, never replaced by another value, and `/v2/status` says so.
+    /// Whether `temperature: 0` is sent (`Reviewed::sends_zero_temperature`). When false the
+    /// parameter is left out, never replaced by another value, so the provider's own default
+    /// applies, and `/v2/status` says so.
     pub temperature: bool,
     pub schema_dialect: &'static str,
     pub capabilities: [&'static str; 3],
@@ -123,10 +123,23 @@ pub struct Reviewed {
     pub sources: &'static [&'static str],
     pub plain: bool,
     pub reasoning: Reasoning,
+    /// Whether the provider takes a temperature at all. False when it refuses the parameter
+    /// (Anthropic since API version 2026-10-21; user decision 2026-11-17).
     pub temperature: bool,
     pub reviewed_at: &'static str,
     /// Why a candidate is not selectable yet; `None` for a reviewed pair.
     pub blocked: Option<&'static str>,
+}
+
+impl Reviewed {
+    /// Temperature 0 for every model that takes it and does not reason. A model that always
+    /// reasons (lessons only) gets its provider's default instead (user decision 2026-11-22,
+    /// MIO-43): no provider documents a value for its reasoning models (read 2026-11-23), and
+    /// Gemini 3.6+ ignores the parameter and asks for it to be removed. Ask and everyday quote
+    /// facts and stay at 0.
+    pub const fn sends_zero_temperature(&self) -> bool {
+        self.temperature && !self.reasoning.reasons()
+    }
 }
 
 /// Every reviewed pair. The control panel lists exactly these (`mio-gateway granskade-modeller`).
@@ -153,8 +166,8 @@ pub const REVIEWED_MODELS: [Reviewed; 2] = [
 /// stay `json-schema` and every answer is validated (user decision 2026-11-20). Medium 3.5 was
 /// deprecated 2026-10-31 and removed. Large 4 always reasons (`low`/`medium`/`high`, no `none`),
 /// so it is bound to `lesson`; `mistral-large-4-0` is the version-locked ID, while
-/// `mistral-large-4` and `mistral-large-latest` are aliases that can move. Whether Mistral accepts
-/// temperature 0 with reasoning on is not documented; the trial settles it.
+/// `mistral-large-4` and `mistral-large-latest` are aliases that can move. Large 4 reasons, so it
+/// is sent without temperature (`Reviewed::sends_zero_temperature`); Mistral documents no value.
 pub const CANDIDATE_MODELS: [Reviewed; 14] = [
     Reviewed { provider: "mistral", model: "mistral-small-2603", schema_dialect: "json-schema", plain: false,
         reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-20",
@@ -177,7 +190,7 @@ pub const CANDIDATE_MODELS: [Reviewed; 14] = [
     // structured_outputs and Chat Completions on their model pages; Sol 6.2 rejects `none`, so
     // it is bound to lessons. None has a dated snapshot. Whether they take temperature 0 and
     // `max_tokens` is not documented; the request sends `max_completion_tokens` and the trial
-    // settles temperature.
+    // settles temperature for Luna and Terra. Sol reasons and is sent without temperature.
     Reviewed { provider: "openai", model: "gpt-6-luna", schema_dialect: "strict-json-schema", plain: false,
         reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-22",
         blocked: Some("Om modellen godtar temperatur 0 står inte i OpenAIs dokumentation; kräver ett godkänt prov."),
@@ -192,7 +205,7 @@ pub const CANDIDATE_MODELS: [Reviewed; 14] = [
             "https://developers.openai.com/api/docs/guides/reasoning"] },
     Reviewed { provider: "openai", model: "gpt-6.2-sol", schema_dialect: "strict-json-schema", plain: false,
         reasoning: Reasoning::Effort("medium"), temperature: true, reviewed_at: "2026-11-22",
-        blocked: Some("Resonerar alltid och får bara användas för lektioner. Om modellen godtar temperatur 0 står inte i dokumentationen; kräver ett godkänt prov."),
+        blocked: Some("Resonerar alltid och får bara användas för lektioner; kräver ett godkänt prov."),
         sources: &["https://developers.openai.com/api/docs/models/gpt-6.2-sol",
             "https://developers.openai.com/api/docs/guides/structured-outputs",
             "https://developers.openai.com/api/docs/guides/reasoning"] },
@@ -200,7 +213,8 @@ pub const CANDIDATE_MODELS: [Reviewed; 14] = [
     // off for Gemini 3 or 4; only 2.5 takes `none`, and 2.5 Flash-Lite is not deprecated. The
     // structured-output page promises syntactically valid JSON, not adherence, and does not
     // mention `strict`, so both are `json-schema` and every answer is validated. Thought text is
-    // not returned by default. The free tier may train on content outside the EEA; inside it the
+    // not returned by default. Gemini 3.6+ ignores temperature and asks for it to be removed
+    // (text-generation page, read 2026-11-23); 3.8 Flash reasons, so none is sent. The free tier may train on content outside the EEA; inside it the
     // paid data rules apply, but the terms only allow paid services for API clients there.
     Reviewed { provider: "gemini", model: "gemini-2.5-flash-lite", schema_dialect: "json-schema", plain: false,
         reasoning: Reasoning::EffortNone, temperature: true, reviewed_at: "2026-11-22",
@@ -298,7 +312,7 @@ pub fn provider(id: &str) -> Option<&'static Provider> {
 
 fn profile_for(provider: &'static Provider, reviewed: &'static Reviewed, model: &str) -> Profile {
     Profile { provider: provider.id, base: provider.base, wire: provider.wire, requested_model: model.to_owned(),
-        plain: reviewed.plain, reasoning: reviewed.reasoning, temperature: reviewed.temperature,
+        plain: reviewed.plain, reasoning: reviewed.reasoning, temperature: reviewed.sends_zero_temperature(),
         schema_dialect: reviewed.schema_dialect, capabilities: CAPABILITIES,
         contract_review: ContractReview { reviewed_at: reviewed.reviewed_at,
             status: if reviewed.blocked.is_some() { "candidate" } else { "documentation-reviewed" },
