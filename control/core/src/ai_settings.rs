@@ -123,8 +123,9 @@ impl Pair {
     }
 
     /// What pressing "Prova" sends and costs, in one sentence for the row under the pair.
-    /// `chosen` gives the answer budget set for a task, which the trial uses too (MIO-45): a
-    /// reasoning lesson may fill it, other answers stay short.
+    /// `chosen` gives the saved answer budget for a task, which the trial sends too (MIO-45), so
+    /// the most it can cost is reckoned with it; without one, a reasoning lesson may fill its
+    /// 12 000 and other answers stay short.
     pub fn trial_estimate(&self, chosen: impl Fn(&str) -> Option<u64>) -> String {
         let provider = provider_name(&self.provider);
         let tasks = self.trial_tasks();
@@ -132,9 +133,9 @@ impl Pair {
         let output: u64 = tasks
             .iter()
             .map(|task| match chosen(task) {
-                _ if !(self.reasons() && *task == "lesson") => chosen(task).map_or(TRIAL_OUTPUT_TOKENS_PER_CALL, |limit| limit.min(TRIAL_OUTPUT_TOKENS_PER_CALL)),
                 Some(limit) => limit,
-                None => TRIAL_REASONING_OUTPUT_TOKENS,
+                None if self.reasons() && *task == "lesson" => TRIAL_REASONING_OUTPUT_TOKENS,
+                None => TRIAL_OUTPUT_TOKENS_PER_CALL,
             })
             .sum();
         let calls = match tasks.len() {
@@ -773,6 +774,8 @@ mod tests {
         // A plain pair limited to two tasks is tried on those two.
         let two = Pair { tasks: Some(vec!["ask".into(), "lesson".into()]), ..groq.clone() };
         assert_eq!(two.trial_estimate(|_| None), "Går till Groq: två korta påhittade anrop, högst cirka 4\u{202F}000 token, debiteras som vanliga anrop.");
+        // A plain pair with a saved budget may fill it too: 3 × 1 500 in, 500 + 500 + 32 000 out.
+        assert_eq!(groq.trial_estimate(|task| (task == "lesson").then_some(32_000)), "Går till Groq: tre korta påhittade anrop, högst cirka 37\u{202F}500 token, debiteras som vanliga anrop.");
         // A chosen lesson budget is what a reasoning trial may use: 1 500 + 20 000 token.
         assert_eq!(large.trial_estimate(|task| (task == "lesson").then_some(20_000)), "Går till Mistral: ett kort påhittat anrop med resonemang, högst cirka 21\u{202F}500 token. Uppskattat $0,0430 (priser 2026-11-21).");
         assert_eq!(catalog.candidates[1].price.as_ref(), None, "mistral-medium has no reviewed price");

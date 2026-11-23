@@ -789,7 +789,9 @@ impl AiPage {
         let theme = cx.theme().clone();
         let label = pair.label();
         let id = SharedString::from(format!("try-{}-{}", pair.provider, pair.model));
-        let estimate = SharedString::from(pair.trial_estimate(|task| editor.form.output_tokens(task)));
+        // Prova sends what is saved, not what is typed, so the estimate reads the file.
+        let saved = AiForm::from_file(&editor.file);
+        let estimate = SharedString::from(pair.trial_estimate(|task| saved.output_tokens(task)));
         let has_key = editor.file.has_secret(&pair.secret_variable);
         let pair_for_click = pair.clone();
         h_flex()

@@ -190,6 +190,24 @@ fn positive_integer(value: Option<&str>, fallback: u64, maximum: u64) -> Result<
 }
 
 /// Unset, empty or `0` means no limit.
+/// `MIO_MAX_OUTPUT_TOKENS_<TASK>`: empty or absent keeps the task's own budget. Unlike the other
+/// limits, 0 is not "no limit" but an error, as is anything outside `OUTPUT_RANGES`; the message
+/// names the key.
+fn answer_budgets(env: &dyn Fn(&str) -> Option<String>) -> Result<BTreeMap<String, u64>, ConfigError> {
+    let mut budgets = BTreeMap::new();
+    for (task, smallest, largest) in OUTPUT_RANGES {
+        let error = ConfigError(match task {
+            "ask" => "Ogiltig MIO_MAX_OUTPUT_TOKENS_ASK (300–4000 token, eller tom).",
+            "everyday" => "Ogiltig MIO_MAX_OUTPUT_TOKENS_EVERYDAY (500–6000 token, eller tom).",
+            _ => "Ogiltig MIO_MAX_OUTPUT_TOKENS_LESSON (1200–32000 token, eller tom).",
+        });
+        let Some(value) = env(&format!("MIO_MAX_OUTPUT_TOKENS_{}", task.to_uppercase())).filter(|value| !trim(value).is_empty()) else { continue };
+        let limit = trim(&value).parse::<u64>().ok().filter(|limit| (smallest..=largest).contains(limit)).ok_or(error)?;
+        budgets.insert(task.to_owned(), limit);
+    }
+    Ok(budgets)
+}
+
 fn optional_limit(value: Option<&str>, maximum: u64) -> Result<Option<u64>, ConfigError> {
     match value {
         None | Some("" | "0") => Ok(None),
@@ -209,10 +227,7 @@ pub fn load_config(env: &dyn Fn(&str) -> Option<String>) -> Result<Config, Confi
         adapter_options: None,
         lesson_interval_seconds: Some(positive_integer(env("MIO_LESSON_INTERVAL_SECONDS").as_deref(), 60, 3_600)?),
         lesson_reasoning: lesson_reasoning(env("MIO_LESSON_REASONING").as_deref())?,
-        max_output_tokens: OUTPUT_RANGES.iter()
-            .map(|(task, _, _)| Ok((task.to_string(), optional_limit(env(&format!("MIO_MAX_OUTPUT_TOKENS_{}", task.to_uppercase())).as_deref(), MAX_TOKENS_PER_DAY)?)))
-            .collect::<Result<Vec<_>, ConfigError>>()?.into_iter()
-            .filter_map(|(task, limit)| limit.map(|limit| (task, limit))).collect(),
+        max_output_tokens: answer_budgets(env)?,
         gateway_token: env("MIO_GATEWAY_TOKEN").unwrap_or_default(),
         model: env("MIO_AI_MODEL").unwrap_or_default(),
         port: positive_integer(env("PORT").as_deref(), 8_787, 65_535)? as u16,

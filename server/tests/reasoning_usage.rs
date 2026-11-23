@@ -167,8 +167,11 @@ fn a_chosen_answer_budget_replaces_the_tasks_own_within_its_range() {
     assert_eq!(configuration_revision(&empty), configuration_revision(&mistral_config()));
     // Outside the reviewed range the gateway does not start.
     for (key, value) in [("MIO_MAX_OUTPUT_TOKENS_ASK", "299"), ("MIO_MAX_OUTPUT_TOKENS_ASK", "4001"), ("MIO_MAX_OUTPUT_TOKENS_EVERYDAY", "6001"),
-        ("MIO_MAX_OUTPUT_TOKENS_LESSON", "1199"), ("MIO_MAX_OUTPUT_TOKENS_LESSON", "32001"), ("MIO_MAX_OUTPUT_TOKENS_LESSON", "många")] {
-        assert!(load_config(&env(&mistral_env(&[(key, value)]))).is_err(), "{key}={value}");
+        ("MIO_MAX_OUTPUT_TOKENS_LESSON", "1199"), ("MIO_MAX_OUTPUT_TOKENS_LESSON", "32001"), ("MIO_MAX_OUTPUT_TOKENS_LESSON", "många"),
+        ("MIO_MAX_OUTPUT_TOKENS_ASK", "0"), ("MIO_MAX_OUTPUT_TOKENS_LESSON", "0")] {
+        // 0 is not "no limit" here; the message names the key.
+        let error = load_config(&env(&mistral_env(&[(key, value)]))).err().unwrap_or_else(|| panic!("{key}={value}"));
+        assert!(error.0.contains(key), "{key}={value}: {}", error.0);
     }
 }
 
