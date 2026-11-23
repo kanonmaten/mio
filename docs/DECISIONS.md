@@ -2,6 +2,17 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Svarslängd per uppgift, 2026-11-22
+
+Användarens beslut ([MIO-45](https://linear.app/kanonmaten/issue/MIO-45)): hur många token ett svar får bli går att ställa in per uppgift på AI-sidan.
+
+| Val | Varför | Bortvalt |
+|---|---|---|
+| `MIO_MAX_OUTPUT_TOKENS_ASK` 300–4 000, `_EVERYDAY` 500–6 000, `_LESSON` 1 200–32 000; tom ger uppgiftens egen | Det minsta är gatewayens golv i `fit_to_minute_budget`, där ett giltigt svar inte längre ryms. Det största är ungefär tre gånger dagens värde för Frågor och Vardag, och för lektioner vad en resonerande modell hinner skriva inom lektionens 180 sekunder | Fritt värde upp till 65 536 (anropet hinner inte klart inom tidsgränsen); en gräns per leverantör |
+| Ett värde för lektioner, med resonemanget inräknat | Leverantörerna räknar tänkandet mot `max_tokens`, så det är den siffran som styr kostnaden | Separata värden för anteckningen och tänkandet |
+| Minutbudgeten krymper fortfarande anropet, och Prova använder samma värde | Groqs gratisnivå räknar det reserverade svaret per minut; ett prov ska kosta som ett riktigt anrop | |
+| Värdet ingår i `configurationRevision` bara när ett är valt | Appen märker ändringen, och övriga revisioner (och paritetstesterna) är oförändrade | |
+
 ## Resonemangsnivå för lektioner, 2026-11-22
 
 Användarens beslut ([MIO-44](https://linear.app/kanonmaten/issue/MIO-44)): för Lektioner går resonemangsnivån att välja på AI-sidan. Frågor och Vardag resonerar aldrig. Dokumentationen lästes 2026-11-23.

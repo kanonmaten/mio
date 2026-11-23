@@ -151,6 +151,28 @@ fn a_level_not_reviewed_for_the_pair_disables_only_lessons() {
 }
 
 #[test]
+fn a_chosen_answer_budget_replaces_the_tasks_own_within_its_range() {
+    use mio_gateway::config::answer_limit;
+    let config = load_config(&env(&mistral_env(&[("MIO_MAX_OUTPUT_TOKENS_LESSON", "20000"), ("MIO_MAX_OUTPUT_TOKENS_ASK", "")]))).unwrap();
+    assert_eq!(config.max_output_tokens.get("lesson"), Some(&20_000));
+    assert_eq!(config.max_output_tokens.get("ask"), None, "empty keeps the task's own");
+    let large = candidate_profile("mistral", LARGE).unwrap();
+    let small = candidate_profile("mistral", SMALL).unwrap();
+    assert_eq!(answer_limit(Some(20_000), "lesson", &large, 3_500), 20_000);
+    assert_eq!(answer_limit(None, "lesson", &large, 3_500), LESSON_REASONING_MAX_OUTPUT_TOKENS);
+    assert_eq!(answer_limit(None, "ask", &small, 1_200), 1_200);
+    // A new budget is a new configuration; none chosen leaves the revision as it was.
+    assert_ne!(configuration_revision(&config), configuration_revision(&mistral_config()));
+    let empty = load_config(&env(&mistral_env(&[("MIO_MAX_OUTPUT_TOKENS_LESSON", "")]))).unwrap();
+    assert_eq!(configuration_revision(&empty), configuration_revision(&mistral_config()));
+    // Outside the reviewed range the gateway does not start.
+    for (key, value) in [("MIO_MAX_OUTPUT_TOKENS_ASK", "299"), ("MIO_MAX_OUTPUT_TOKENS_ASK", "4001"), ("MIO_MAX_OUTPUT_TOKENS_EVERYDAY", "6001"),
+        ("MIO_MAX_OUTPUT_TOKENS_LESSON", "1199"), ("MIO_MAX_OUTPUT_TOKENS_LESSON", "32001"), ("MIO_MAX_OUTPUT_TOKENS_LESSON", "många")] {
+        assert!(load_config(&env(&mistral_env(&[(key, value)]))).is_err(), "{key}={value}");
+    }
+}
+
+#[test]
 fn the_thinking_chunk_is_dropped_and_only_the_text_chunk_is_kept_for_lessons() {
     let profile = candidate_profile("mistral", LARGE).unwrap();
     let read = |data: &Value| normalize_provider_response(data, &profile, &|_| None);
@@ -296,6 +318,15 @@ async fn the_usage_counter_counts_every_billed_answer_per_task_and_model() {
 }
 
 #[tokio::test]
+async fn the_chosen_answer_budget_reaches_the_provider() {
+    let provider = Provider::new(|_, _| Upstream::json(&chat(json!("{\"answer\":\"Ja.\"}"), "stop", json!({ "prompt_tokens": 5, "completion_tokens": 1 }))));
+    let config = load_config(&env(&mistral_env(&[("MIO_MAX_OUTPUT_TOKENS_ASK", "2500")]))).unwrap();
+    let server = start(Gateway::new(config, Arc::new(Link(provider.clone()))).unwrap().with_clock(|| NOVEMBER)).await;
+    assert_eq!(server.post("/v1/ask", &json!({ "question": "Vad?", "context": [{ "label": "A", "text": "B." }] })).await.status, 200);
+    assert_eq!(provider.body(0)["max_tokens"], 2_500);
+}
+
+#[tokio::test]
 async fn an_unknown_usage_file_is_never_overwritten_and_status_reports_null() {
     let path = scratch("unknown");
     let foreign = r#"{"schemaVersion":2,"months":{"2026-11":[]},"framtid":true}"#;
@@ -408,7 +439,7 @@ async fn the_trial_gives_a_reasoning_lesson_180_seconds_and_a_plain_one_40() {
         let profile = candidate_profile("mistral", model).unwrap();
         let provider = Provider::fixed(Upstream::Hang);
         let started = tokio::time::Instant::now();
-        let error = trial_call(profile, KEY, Mode::Lesson, &lesson_payload(), &Link(provider), &|| NOVEMBER, None).await.err().unwrap();
+        let error = trial_call(profile, KEY, Mode::Lesson, &lesson_payload(), &Link(provider), &|| NOVEMBER, None, None).await.err().unwrap();
         assert_eq!((error.status, error.code, started.elapsed()), (504, "upstream_timeout", limit), "{model}");
     }
 }

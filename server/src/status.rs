@@ -167,6 +167,11 @@ pub fn configuration_revision(config: &Config) -> String {
         "tokensPerDay": positive(config.tokens_per_day), "tokensPerMinute": positive(config.tokens_per_minute),
         "lessonIntervalSeconds": config.lesson_interval_seconds.unwrap_or(60),
         "upstreamTimeoutMs": config.upstream_timeout_ms, "bodyTimeoutMs": config.body_timeout_ms, "concurrency": 2 } });
+    // A chosen answer budget is a new configuration; without one the revision is what it was.
+    let mut public = public;
+    if !config.max_output_tokens.is_empty() {
+        public["limits"]["maxOutputTokens"] = json!(config.max_output_tokens);
+    }
     sha256(canonical(&public).to_string().as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect()
 }
 

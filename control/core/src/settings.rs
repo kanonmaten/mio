@@ -53,6 +53,9 @@ impl SettingsFile {
                 "MIO_REQUESTS_PER_DAY",
                 "MIO_LESSON_INTERVAL_SECONDS",
                 "MIO_LESSON_REASONING",
+                "MIO_MAX_OUTPUT_TOKENS_ASK",
+                "MIO_MAX_OUTPUT_TOKENS_EVERYDAY",
+                "MIO_MAX_OUTPUT_TOKENS_LESSON",
             ],
             SettingsFile::Transcription => &[
                 "MIO_PRECISION",

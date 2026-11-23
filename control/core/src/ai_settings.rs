@@ -123,13 +123,19 @@ impl Pair {
     }
 
     /// What pressing "Prova" sends and costs, in one sentence for the row under the pair.
-    pub fn trial_estimate(&self) -> String {
+    /// `chosen` gives the answer budget set for a task, which the trial uses too (MIO-45): a
+    /// reasoning lesson may fill it, other answers stay short.
+    pub fn trial_estimate(&self, chosen: impl Fn(&str) -> Option<u64>) -> String {
         let provider = provider_name(&self.provider);
         let tasks = self.trial_tasks();
         let input = TRIAL_INPUT_TOKENS_PER_CALL * tasks.len() as u64;
         let output: u64 = tasks
             .iter()
-            .map(|task| if self.reasons() && *task == "lesson" { TRIAL_REASONING_OUTPUT_TOKENS } else { TRIAL_OUTPUT_TOKENS_PER_CALL })
+            .map(|task| match chosen(task) {
+                _ if !(self.reasons() && *task == "lesson") => chosen(task).map_or(TRIAL_OUTPUT_TOKENS_PER_CALL, |limit| limit.min(TRIAL_OUTPUT_TOKENS_PER_CALL)),
+                Some(limit) => limit,
+                None => TRIAL_REASONING_OUTPUT_TOKENS,
+            })
             .sum();
         let calls = match tasks.len() {
             1 => "ett kort påhittat anrop".to_owned(),
@@ -381,7 +387,7 @@ pub struct Limit {
 }
 
 /// The limits the gateway reads (`server/src/config.rs`).
-pub const LIMITS: [Limit; 11] = [
+pub const LIMITS: [Limit; 14] = [
     Limit { key: "MIO_REQUESTS_PER_MINUTE", label: "Anrop per minut", help: "1–60. Stoppar en klient som skenar.", min: 1, max: 60, optional: false },
     Limit { key: "MIO_TOKENS_PER_MINUTE", label: "Token per minut (Groq)", help: "2 000–1 000 000, tomt eller 0 för ingen gräns. Groqs gratisnivå: 8 000.", min: 2_000, max: 1_000_000, optional: true },
     Limit { key: "MIO_TOKENS_PER_MINUTE_ANTHROPIC", label: "Token per minut (Anthropic)", help: "2 000–1 000 000, tomt för ingen gräns.", min: 2_000, max: 1_000_000, optional: true },
@@ -393,7 +399,16 @@ pub const LIMITS: [Limit; 11] = [
     Limit { key: "MIO_TOKENS_PER_DAY", label: "Token per dygn", help: "1–1 000 000, tomt för ingen gräns. Groqs gratisnivå: 200 000.", min: 1, max: 1_000_000, optional: true },
     Limit { key: "MIO_REQUESTS_PER_DAY", label: "Anrop per dygn", help: "1–1 000 000, tomt för ingen gräns.", min: 1, max: 1_000_000, optional: true },
     Limit { key: "MIO_LESSON_INTERVAL_SECONDS", label: "Sekunder mellan lektionsdelar", help: "60–3 600.", min: 60, max: 3_600, optional: false },
+    // The gateway's OUTPUT_RANGES (MIO-45). Empty keeps each task's own budget.
+    Limit { key: "MIO_MAX_OUTPUT_TOKENS_ASK", label: "Svarslängd, Frågor (token)", help: "300–4 000, tomt för gatewayens 1 200.", min: 300, max: 4_000, optional: true },
+    Limit { key: "MIO_MAX_OUTPUT_TOKENS_EVERYDAY", label: "Svarslängd, Vardag (token)", help: "500–6 000, tomt för gatewayens 1 500.", min: 500, max: 6_000, optional: true },
+    Limit { key: "MIO_MAX_OUTPUT_TOKENS_LESSON", label: "Svarslängd, Lektioner (token)", help: "1 200–32 000, tomt för gatewayens 3 500, eller 12 000 när modellen resonerar. Resonemanget räknas in.", min: 1_200, max: 32_000, optional: true },
 ];
+
+/// The `gateway.env` key for a task's chosen answer budget.
+pub fn output_tokens_key(task: &str) -> String {
+    format!("MIO_MAX_OUTPUT_TOKENS_{}", task.to_uppercase())
+}
 
 /// Checks one limit as the gateway would. Spaces (thousands separators) are allowed while typing.
 pub fn check_limit(limit: &Limit, text: &str) -> Result<String, String> {
@@ -470,6 +485,13 @@ impl AiForm {
         if !self.lesson_reasoning_levels(catalog).contains(&self.lesson_reasoning) {
             self.lesson_reasoning.clear();
         }
+    }
+
+    /// The answer budget chosen for a task, or `None` for the gateway's own.
+    pub fn output_tokens(&self, task: &str) -> Option<u64> {
+        let key = output_tokens_key(task);
+        let limit = LIMITS.iter().find(|limit| limit.key == key)?;
+        check_limit(limit, self.limits.get(&key).map(String::as_str).unwrap_or("")).ok()?.parse().ok()
     }
 
     /// The pair a task runs with.
@@ -687,6 +709,19 @@ mod tests {
         assert!(form.problems(&catalog, &file()).is_empty());
     }
 
+    #[test]
+    fn an_answer_budget_is_saved_per_task_within_the_gateways_range() {
+        let mut form = AiForm::from_file(&file());
+        assert_eq!(form.output_tokens("lesson"), None, "empty keeps the gateway's own");
+        form.limits.insert(output_tokens_key("lesson"), "20 000".into());
+        assert_eq!(form.output_tokens("lesson"), Some(20_000));
+        let change = form.changes(&file()).into_iter().find(|change| change.key == "MIO_MAX_OUTPUT_TOKENS_LESSON").unwrap();
+        assert_eq!(change.after.as_deref(), Some("20000"));
+        form.limits.insert(output_tokens_key("ask"), "5000".into());
+        assert_eq!(form.output_tokens("ask"), None);
+        assert_eq!(form.problems(&catalog(), &file()), ["Svarslängd, Frågor (token): 300–4 000, tomt för gatewayens 1 200."]);
+    }
+
     /// A model list from a gateway after the grilling: a reasoning pair only for lessons. The
     /// field names (`reasoning`, `tasks`, `prices`) are what the panel reads; values are made up.
     fn catalog_with_lesson_only() -> Catalog {
@@ -728,16 +763,18 @@ mod tests {
         // Large reasons, so it is tried on lessons alone, with room for a full answer and its
         // thinking: 1 500 + 12 000 token, 1 500 × $0,70/M + 12 000 × $2,10/M.
         let large = catalog.find("mistral", "mistral-large-x").unwrap();
-        assert_eq!(large.trial_estimate(), "Går till Mistral: ett kort påhittat anrop med resonemang, högst cirka 13\u{202F}500 token. Uppskattat $0,0262 (priser 2026-11-21).");
+        assert_eq!(large.trial_estimate(|_| None), "Går till Mistral: ett kort påhittat anrop med resonemang, högst cirka 13\u{202F}500 token. Uppskattat $0,0262 (priser 2026-11-21).");
         let small = catalog.find("mistral", "mistral-small-x").unwrap();
         assert_eq!(small.price.as_ref().map(|price| (price.input_per_million, price.as_of.as_str())), Some((0.15, "2026-11-20")));
-        assert_eq!(small.trial_estimate(), "Går till Mistral: tre korta påhittade anrop, högst cirka 6\u{202F}000 token. Uppskattat $0,0016, under en cent (priser 2026-11-20).");
+        assert_eq!(small.trial_estimate(|_| None), "Går till Mistral: tre korta påhittade anrop, högst cirka 6\u{202F}000 token. Uppskattat $0,0016, under en cent (priser 2026-11-20).");
         // No price known: no amount is made up.
         let groq = catalog.find("groq", "qwen/qwen3.8-27b").unwrap();
-        assert_eq!(groq.trial_estimate(), "Går till Groq: tre korta påhittade anrop, högst cirka 6\u{202F}000 token, debiteras som vanliga anrop.");
+        assert_eq!(groq.trial_estimate(|_| None), "Går till Groq: tre korta påhittade anrop, högst cirka 6\u{202F}000 token, debiteras som vanliga anrop.");
         // A plain pair limited to two tasks is tried on those two.
         let two = Pair { tasks: Some(vec!["ask".into(), "lesson".into()]), ..groq.clone() };
-        assert_eq!(two.trial_estimate(), "Går till Groq: två korta påhittade anrop, högst cirka 4\u{202F}000 token, debiteras som vanliga anrop.");
+        assert_eq!(two.trial_estimate(|_| None), "Går till Groq: två korta påhittade anrop, högst cirka 4\u{202F}000 token, debiteras som vanliga anrop.");
+        // A chosen lesson budget is what a reasoning trial may use: 1 500 + 20 000 token.
+        assert_eq!(large.trial_estimate(|task| (task == "lesson").then_some(20_000)), "Går till Mistral: ett kort påhittat anrop med resonemang, högst cirka 21\u{202F}500 token. Uppskattat $0,0430 (priser 2026-11-21).");
         assert_eq!(catalog.candidates[1].price.as_ref(), None, "mistral-medium has no reviewed price");
     }
 

@@ -186,9 +186,11 @@ const TRIAL_TIMEOUT_MS: u64 = 40_000;
 /// One synthetic call for `mio-gateway prova`, started by the user in Mio Kontroll: the same
 /// request, reading and validation as a real call, without the service's quota counters (they
 /// live in its own process) and without the retry, so a failure shows as it is.
+/// `answer_limit` is the user's chosen budget for the task, so the trial costs what a real call would.
+#[allow(clippy::too_many_arguments)]
 pub async fn trial_call(profile: Profile, api_key: &str, mode: Mode, payload: &Value, transport: &dyn Transport,
-    now: Clock<'_>, minute_budget: Option<u64>) -> Result<(Value, Normalized), RequestError> {
-    let generation = fit_to_minute_budget(task_request(mode, payload, &profile), mode.task_id(), minute_budget)?;
+    now: Clock<'_>, minute_budget: Option<u64>, answer_limit: Option<u64>) -> Result<(Value, Normalized), RequestError> {
+    let generation = fit_to_minute_budget(task_request(mode, payload, &profile, answer_limit), mode.task_id(), minute_budget)?;
     let limit = Duration::from_millis(crate::config::call_limit_ms(mode.task_id(), &profile, TRIAL_TIMEOUT_MS));
     let provider = build_for_profile(profile, api_key, &generation).map_err(|_| RequestError::new(422, "task_configuration_invalid"))?;
     let request = UpstreamRequest { url: provider.url.clone(), headers: provider.headers.clone(), body: provider.body.to_string() };
@@ -216,11 +218,11 @@ pub struct Generated {
 pub type Reserve<'a> = &'a mut (dyn FnMut() -> Result<(), RequestError> + Send);
 pub type Clock<'a> = &'a (dyn Fn() -> i64 + Send + Sync);
 
-/// The task's request, with the answer budget its profile needs (`config::output_limit`: a
-/// lesson on a reasoning profile gets room for the thinking; everything else is unchanged).
-fn task_request(mode: Mode, payload: &Value, profile: &Profile) -> Generation {
+/// The task's request, with the user's chosen answer budget or the one its profile needs
+/// (`config::output_limit`: a lesson on a reasoning profile gets room for the thinking).
+fn task_request(mode: Mode, payload: &Value, profile: &Profile, chosen: Option<u64>) -> Generation {
     let mut generation = create_task_request(mode, payload);
-    generation.max_output_tokens = crate::config::output_limit(mode.task_id(), profile, generation.max_output_tokens);
+    generation.max_output_tokens = crate::config::answer_limit(chosen, mode.task_id(), profile, generation.max_output_tokens);
     generation
 }
 
@@ -258,7 +260,8 @@ async fn run(config: &Config, mode: Mode, payload: &Value, transport: &dyn Trans
     let invalid_task = RequestError::new(422, "task_configuration_invalid");
     let Some(selected) = resolve_task_profile(config, task_id).config else { return Err(invalid_task.into()) };
     let profile = crate::config::profile(&selected).map_err(|_| invalid_task.clone())?;
-    let generation = fit_to_minute_budget(task_request(mode, payload, &profile), task_id, config.minute_budget(&selected.provider))?;
+    let chosen = config.max_output_tokens.get(task_id).copied();
+    let generation = fit_to_minute_budget(task_request(mode, payload, &profile, chosen), task_id, config.minute_budget(&selected.provider))?;
     // Options and immutable policy must be checked before consuming shared quota.
     let provider = build_provider_request(&selected, &generation).map_err(|_| invalid_task)?;
     let body = provider.body.to_string();
