@@ -6,6 +6,7 @@ pub mod analysis;
 pub mod backup;
 pub mod config;
 pub mod error;
+pub mod facts;
 pub mod generation;
 pub mod js;
 pub mod model_profiles;

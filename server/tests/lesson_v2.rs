@@ -108,7 +108,8 @@ fn exam_hints_are_grounded_repaired_or_dropped_one_by_one() {
 
 #[test]
 fn at_most_eight_hints_and_four_sources_each() {
-    let many: Vec<Value> = (0..12).map(|index| hint(&format!("Tips {index}"), &[FIRST], "Kom ihåg formeln.")).collect();
+    // Letters, not numbers: a number the quote does not hold would drop the hint (MIO-46).
+    let many: Vec<Value> = (b'a'..b'm').map(|letter| hint(&format!("Tips {}", char::from(letter)), &[FIRST], "Kom ihåg formeln.")).collect();
     let result = validate_lesson_v2_result(&answer(many, json!(null)), &payload()).unwrap();
     assert_eq!(result["examHints"].as_array().unwrap().len(), 8);
     // Five listed sources: only those holding the quote stay.
@@ -212,4 +213,28 @@ async fn a_reasoning_v2_lesson_gets_180_seconds() {
             assert_eq!(sent["max_tokens"], 12_000, "room for thinking as in v1");
         }
     }
+}
+
+#[test]
+fn a_hint_or_homework_that_names_a_fact_its_quote_lacks_is_dropped() {
+    // MIO-46: the quote is in the transcript, but the hint and homework name another day or number.
+    let said = "Provet är på torsdag och handlar om kapitel tjugofem. Läs sidorna fyrtio till femtio till fredag.";
+    let payload = json!({ "mode": "lesson", "timeZone": "Europe/Stockholm", "fragments": [
+        { "id": FIRST, "occurredAt": "2026-11-20T08:00:00Z", "text": said, "speakerRole": "teacher" }] });
+    let homework = |title: &str| json!({ "kind": "task", "title": title, "body": "", "scheduledAt": "2026-11-27T08:00:00+01:00",
+        "sourceIDs": [FIRST], "evidence": "Läs sidorna fyrtio till femtio till fredag" });
+    let mut answer = answer(vec![
+        hint("Provet är på torsdag, kapitel 25.", &[FIRST], "Provet är på torsdag och handlar om kapitel tjugofem"),
+        hint("Provet är på fredag.", &[FIRST], "Provet är på torsdag"),
+        hint("Kapitel 26 kommer på provet.", &[FIRST], "handlar om kapitel tjugofem"),
+    ], json!(null));
+    answer["candidates"] = json!([homework("Läs sidorna 40–50 till fredag"), homework("Läs sidorna 40–52 till fredag")]);
+    answer["sections"] = json!([{ "heading": "Provet", "body": "Provet är på torsdag.", "sourceIDs": [FIRST], "evidence": "Provet är på torsdag" }]);
+    let result = validate_lesson_v2_result(&answer, &payload).unwrap();
+    let hints: Vec<&str> = result["examHints"].as_array().unwrap().iter().map(|hint| hint["text"].as_str().unwrap()).collect();
+    assert_eq!(hints, ["Provet är på torsdag, kapitel 25."]);
+    let titles: Vec<&str> = result["candidates"].as_array().unwrap().iter().map(|item| item["title"].as_str().unwrap()).collect();
+    assert_eq!(titles, ["Läs sidorna 40–50 till fredag"]);
+    // The notes themselves are unchanged: the rule applies to the extras only.
+    assert_eq!(result["sections"].as_array().unwrap().len(), 1);
 }

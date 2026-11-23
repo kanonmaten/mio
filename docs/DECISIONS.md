@@ -2,6 +2,18 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Provtips och läxor måste ha citatets fakta, 2026-11-23
+
+Användarens val ([MIO-46](https://linear.app/kanonmaten/issue/MIO-46)): gatewayen bevisade att varje citat står i transkriptet, men inte att texten bredvid säger samma sak. Undersökningen står som kommentar i ärendet. Användaren valde regler först.
+
+| Val | Varför | Bortvalt |
+|---|---|---|
+| Varje tal, veckodag, månad och namn i ett provtips, eller i en läxas rubrik, måste också stå i citatet; annars tas just det bort (`server/src/facts.rs`) | Fel siffra, dag eller namn skadar mest inför ett prov. Regeln kostar inget och tar under en millisekund | Ett andra AI-anrop som bedömer varje text mot citatet (fångar också omvänd betydelse, men är en ny uppgift med modelltrafik och kan själv ha fel); tas upp igen om provet på datorn (MIO-47) visar fel som reglerna missar |
+| Uppsagda tal i citatet räknas ("tjugo", "tjugofem", "tredje"), men i texten räknas inte "en", "ett" eller ordningstal | Transkriptet skriver det som sades. "En", "ett" och "andra" är också vanliga ord, så de skulle ge falsklarm | |
+| Ett namn är ett ord med stor bokstav mitt i en mening, jämfört på ordstammen utan genitiv-s | "Napoleons" ska matcha "Napoleon" | Exakt ord |
+| Gäller bara v2:s provtips och läxor, inte avsnitten och inte `/v1/lesson-notes` | Ett avsnitt som inte godkänns underkänner hela lektionsdelen, så regeln vore för hård där; v1 ska vara oförändrad byte för byte | |
+| Ett borttaget tips tas bort tyst, som ett tips utan citat | Samma regel som för andra ogiltiga punkter; appen räknar bara det den själv tar bort | En notis från gatewayen |
+
 ## Svarslängd per uppgift, 2026-11-22
 
 Användarens beslut ([MIO-45](https://linear.app/kanonmaten/issue/MIO-45)): hur många token ett svar får bli går att ställa in per uppgift på AI-sidan.

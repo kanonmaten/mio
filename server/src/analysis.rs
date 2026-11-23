@@ -462,14 +462,20 @@ pub fn validate_ask_result(value: &Value) -> Checked<Value> {
 pub fn validate_lesson_result(value: &Value, payload: &Value) -> Checked<Value> {
     let fields = exact_keys(value, &["candidates", "sections", "uncertainties"]).ok_or(Invalid)?;
     let sources = sources_of(fragments_of(payload, "fragments"));
-    check_lesson(fields, &sources, payload)
+    check_lesson(fields, &sources, payload, false)
 }
 
 /// The part v1 and v2 share: candidates, sections and uncertainties, checked exactly as v1 does.
-fn check_lesson(fields: &Map<String, Value>, sources: &Sources, payload: &Value) -> Checked<Value> {
+/// `check_facts` (v2 only, so v1 stays byte for byte what it was) also drops homework whose title
+/// names a number, day or name its quote does not hold (MIO-46).
+fn check_lesson(fields: &Map<String, Value>, sources: &Sources, payload: &Value, check_facts: bool) -> Checked<Value> {
     let sections = fields["sections"].as_array().filter(|sections| sections.len() <= 12).ok_or(Invalid)?;
+    let mut follows = |candidate: &Map<String, Value>| !check_facts || match (candidate["title"].as_str(), candidate["evidence"].as_str()) {
+        (Some(title), Some(quote)) => crate::facts::follow_quote(title, quote),
+        _ => false,
+    };
     let checked = check_analysis(&fields["candidates"], &[], &fields["uncertainties"], sources,
-        time_zone_of(payload), true, &CANDIDATE_KEYS, &mut |_| true)?;
+        time_zone_of(payload), true, &CANDIDATE_KEYS, &mut follows)?;
     // Sections are the notes themselves: one that cannot be grounded rejects the part, and the
     // app retries or splits it. Homework candidates are extras and are dropped one by one.
     let sections = sections.iter().map(|section| {
@@ -495,6 +501,10 @@ fn clean_exam_hint(item: &Value, sources: &Sources) -> Option<Map<String, Value>
         return None;
     }
     let (mut ids, quote) = ground(item, sources)?;
+    // A hint that names a number, day or name its quote does not hold says something else.
+    if !crate::facts::follow_quote(hint, &quote) {
+        return None;
+    }
     if ids.len() > MAX_HINT_SOURCES {
         // Keep the sources that hold the exact quote, so the evidence stays provable.
         ids.retain(|id| sources.iter().any(|(known, source)| known == id && source.contains(quote.as_str())));
@@ -515,7 +525,7 @@ pub fn validate_lesson_v2_result(value: &Value, payload: &Value) -> Checked<Valu
     let fields = exact_keys(value, &["examHints", "subject", "candidates", "sections", "uncertainties"]).ok_or(Invalid)?;
     let hints = fields["examHints"].as_array().ok_or(Invalid)?;
     let sources = sources_of(fragments_of(payload, "fragments"));
-    let notes = check_lesson(fields, &sources, payload)?;
+    let notes = check_lesson(fields, &sources, payload, true)?;
     let hints: Vec<_> = hints.iter().filter_map(|item| clean_exam_hint(item, &sources)).take(MAX_EXAM_HINTS).collect();
     Ok(json!({ "examHints": hints, "subject": clean_subject(&fields["subject"]),
         "candidates": notes["candidates"], "sections": notes["sections"], "uncertainties": notes["uncertainties"] }))
