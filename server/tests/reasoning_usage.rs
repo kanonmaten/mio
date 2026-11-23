@@ -10,9 +10,9 @@ use common::{Link, Provider, TOKEN, Upstream, authorized, env, start};
 use mio_gateway::adapters::{Finish, build_for_profile, normalize_provider_response, response_usage};
 use mio_gateway::config::{Config, LESSON_REASONING_MAX_OUTPUT_TOKENS, LESSON_REASONING_TIMEOUT_MS, load_config};
 use mio_gateway::generation::{Spent, execute_generation, trial_call};
-use mio_gateway::model_profiles::candidate_profile;
+use mio_gateway::model_profiles::{CANDIDATE_MODELS, REASONING_LEVELS, candidate_profile, reasoning_levels};
 use mio_gateway::server::Gateway;
-use mio_gateway::status::gateway_status_v2;
+use mio_gateway::status::{configuration_revision, gateway_status_v2};
 use mio_gateway::task_profiles::resolve_task_profile;
 use mio_gateway::tasks::{Mode, create_task_request};
 use mio_gateway::tools::{mistral_gateway_env, reviewed_models, trial};
@@ -106,6 +106,48 @@ fn a_model_that_reasons_gets_its_providers_temperature_and_a_plain_one_gets_zero
     let temperature = |model: &str| listed["candidates"].as_array().unwrap().iter()
         .find(|entry| entry["model"] == model).map(|entry| entry["temperature"].clone()).unwrap();
     assert_eq!((temperature(LARGE), temperature(SMALL)), (json!("provider-default"), json!("0")));
+}
+
+#[test]
+fn every_pair_that_reasons_has_reviewed_levels_including_its_own() {
+    for candidate in CANDIDATE_MODELS.iter().filter(|candidate| candidate.reasoning.reasons()) {
+        let levels = reasoning_levels(candidate.provider, candidate.model);
+        assert!(levels.contains(&candidate.reasoning.level()), "{} {}", candidate.provider, candidate.model);
+    }
+    assert!(REASONING_LEVELS.iter().all(|(provider, model, _)| CANDIDATE_MODELS.iter()
+        .any(|candidate| candidate.provider == *provider && candidate.model == *model && candidate.reasoning.reasons())));
+    assert!(reasoning_levels("mistral", SMALL).is_empty());
+}
+
+#[test]
+fn the_chosen_lesson_level_is_sent_published_and_part_of_the_revision() {
+    let high = load_config(&env(&mistral_env(&[("MIO_LESSON_REASONING", "high")]))).unwrap();
+    let lesson = resolve_task_profile(&high, "lesson").config.unwrap();
+    let request = build_for_profile(mio_gateway::config::profile(&lesson).unwrap(), KEY, &create_task_request(Mode::Lesson, &lesson_payload())).unwrap();
+    assert_eq!(request.body["reasoning_effort"], "high");
+    let status = gateway_status_v2(&high, None);
+    assert_eq!((&status["tasks"]["lesson"]["reasoning"], &status["tasks"]["ask"]["reasoning"]), (&json!("high"), &json!("off")));
+    // Ask on Small 4 is untouched: reasoning stays off whatever the lesson level is.
+    let ask = resolve_task_profile(&high, "ask").config.unwrap();
+    assert_eq!(build_for_profile(mio_gateway::config::profile(&ask).unwrap(), KEY, &create_task_request(Mode::Lesson, &lesson_payload())).unwrap().body["reasoning_effort"], "none");
+    // Empty means the reviewed level; a new level is a new configuration for the app.
+    let default = load_config(&env(&mistral_env(&[("MIO_LESSON_REASONING", "")]))).unwrap();
+    assert_eq!(gateway_status_v2(&default, None)["tasks"]["lesson"]["reasoning"], "medium");
+    assert_ne!(configuration_revision(&default), configuration_revision(&high));
+    let medium = load_config(&env(&mistral_env(&[("MIO_LESSON_REASONING", "medium")]))).unwrap();
+    assert_eq!(configuration_revision(&default), configuration_revision(&medium));
+}
+
+#[test]
+fn a_level_not_reviewed_for_the_pair_disables_only_lessons() {
+    // GPT-6.2 Sol is reviewed at medium only.
+    let sol = load_config(&env(&[("MIO_AI_PROVIDER", "mistral"), ("MIO_AI_MODEL", SMALL), ("MISTRAL_API_KEY", KEY), ("OPENAI_API_KEY", KEY),
+        ("MIO_GATEWAY_TOKEN", TOKEN), ("MIO_AI_TASK_PROFILES", r#"{"lesson":{"provider":"openai","model":"gpt-6.2-sol"}}"#),
+        ("MIO_APPROVED_CANDIDATES", "mistral=mistral-small-2603,openai=gpt-6.2-sol"), ("MIO_LESSON_REASONING", "high")])).unwrap();
+    assert_eq!(resolve_task_profile(&sol, "lesson").configuration_error, Some("provider_options_incompatible"));
+    assert!(resolve_task_profile(&sol, "ask").configured && resolve_task_profile(&sol, "everyday").configured);
+    // A word that is no level at all stops the gateway, like any malformed setting.
+    assert!(load_config(&env(&mistral_env(&[("MIO_LESSON_REASONING", "max")]))).is_err());
 }
 
 #[test]

@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use crate::config::{is_gateway_token, load_config, looks_like_provider_key};
 use crate::generation::{Transport, trial_call};
 use crate::tasks::Mode;
-use crate::model_profiles::{CANDIDATE_MODELS, PROVIDERS, REASONING_TASK, REVIEWED_MODELS, Reviewed, price, provider};
+use crate::model_profiles::{CANDIDATE_MODELS, PROVIDERS, REASONING_TASK, REVIEWED_MODELS, Reviewed, price, provider, reasoning_levels};
 use crate::task_profiles::{TASK_IDS, resolve_task_profile, task_configuration_identifiers};
 
 /// The value of `NAME=value` on its own line, when it has the shape of a Mio token. A file
@@ -194,6 +194,8 @@ pub fn reviewed_models() -> String {
             "temperature": if reviewed.sends_zero_temperature() { "0" } else { "provider-default" },
             // A pair that always reasons may only serve lessons (user decision 2026-11-19).
             "reasoning": reviewed.reasoning.level(),
+            // The levels the panel offers for lessons (MIO-44); empty when reasoning is off.
+            "reasoningLevels": reasoning_levels(reviewed.provider, reviewed.model),
             "tasks": if reviewed.reasoning.reasons() { vec![REASONING_TASK] } else { TASK_IDS.to_vec() },
             // USD per million tokens from the reviewed table, or null (Groq's free tier, Haiku).
             "prices": price(reviewed.provider, reviewed.model).map(|price| json!({ "inputPerMillion": price.input,

@@ -150,12 +150,17 @@ pub fn configuration_revision(config: &Config) -> String {
         let (provider, model) = task_configuration_identifiers(config, task);
         // The endpoint identity affects review even though neither it nor credentials
         // are published. Only the profile's validated credential-free base is used.
-        let endpoint = selected.config.as_ref()
-            .and_then(|config| crate::config::profile(config).ok())
-            .map(|profile| profile.base);
-        tasks.insert(task.to_owned(), json!({ "provider": provider, "model": model, "configured": selected.configured,
+        let profile = selected.config.as_ref().and_then(|config| crate::config::profile(config).ok());
+        let endpoint = profile.as_ref().map(|profile| profile.base);
+        let mut entry = json!({ "provider": provider, "model": model, "configured": selected.configured,
             "configurationError": selected.configuration_error, "promptVersion": task_prompt_version(task),
-            "capabilities": task_capabilities(task, config), "options": {}, "endpoint": endpoint }));
+            "capabilities": task_capabilities(task, config), "options": {}, "endpoint": endpoint });
+        // A new lesson reasoning level is a new configuration. Only a pair that reasons carries
+        // the key, so every other revision stays what it was.
+        if let Some(profile) = profile.filter(|profile| profile.reasoning.reasons()) {
+            entry["reasoning"] = json!(profile.reasoning.level());
+        }
+        tasks.insert(task.to_owned(), entry);
     }
     let public = json!({ "protocolVersion": 2, "release": RELEASE, "tasks": tasks, "limits": {
         "requestsPerMinute": config.requests_per_minute, "requestsPerDay": positive(config.requests_per_day),

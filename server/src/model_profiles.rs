@@ -85,6 +85,26 @@ impl Reasoning {
     }
 }
 
+/// The reasoning levels reviewed for each pair that always reasons; the user picks one for
+/// lessons (`MIO_LESSON_REASONING`, user decision 2026-11-22, MIO-44). Read 2026-11-23: Mistral's
+/// reasoning page lists `low`, `medium` and `high` for Large 4; Google's thinking page lists the
+/// same for Gemini 3.8 Flash; OpenRouter's `reasoning.effort` takes them. OpenAI's guide says the
+/// values are model-dependent but GPT-6.2 Sol's page lists none, so Sol keeps the one level it
+/// was reviewed at. Every candidate that always reasons is listed (tests/reasoning_usage.rs).
+pub const REASONING_LEVELS: [(&str, &str, &[&str]); 5] = [
+    ("mistral", "mistral-large-4-0", &["low", "medium", "high"]),
+    ("gemini", "gemini-3.8-flash", &["low", "medium", "high"]),
+    ("openrouter", "mistralai/mistral-large-4-0", &["low", "medium", "high"]),
+    ("openrouter", "google/gemini-3.8-flash", &["low", "medium", "high"]),
+    ("openai", "gpt-6.2-sol", &["medium"]),
+];
+
+/// The levels a user may choose for a pair; empty for one with reasoning off.
+pub fn reasoning_levels(provider: &str, model: &str) -> &'static [&'static str] {
+    REASONING_LEVELS.iter().find(|(each_provider, each_model, _)| *each_provider == provider && *each_model == model)
+        .map_or(&[], |(_, _, levels)| *levels)
+}
+
 /// The only task a reasoning pair may serve. Everything else needs reasoning off.
 pub const REASONING_TASK: &str = "lesson";
 

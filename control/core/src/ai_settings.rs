@@ -40,6 +40,22 @@ pub const TRIAL_REASONING_OUTPUT_TOKENS: u64 = 12_000;
 /// helper: `provider=model` entries separated by commas (`server/src/config.rs`).
 pub const APPROVED_CANDIDATES_KEY: &str = "MIO_APPROVED_CANDIDATES";
 
+/// The lesson reasoning level in `gateway.env` (MIO-44).
+pub const LESSON_REASONING_KEY: &str = "MIO_LESSON_REASONING";
+
+/// The one task a model that always reasons may serve, as in the gateway.
+pub const REASONING_TASK: &str = "lesson";
+
+/// A reasoning level as the panel shows it.
+pub fn reasoning_level_name(level: &str) -> &str {
+    match level {
+        "low" => "Låg",
+        "medium" => "Medel",
+        "high" => "Hög",
+        other => other,
+    }
+}
+
 /// One provider and model pair from `mio-gateway granskade-modeller`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Pair {
@@ -54,6 +70,8 @@ pub struct Pair {
     pub approved: bool,
     /// `"off"` or the reviewed reasoning level; `None` from a gateway that does not say.
     pub reasoning: Option<String>,
+    /// The levels the user may choose for lessons (`reasoningLevels`); empty when reasoning is off.
+    pub reasoning_levels: Vec<String>,
     /// The tasks the pair may be chosen for; `None` means all of them.
     pub tasks: Option<Vec<String>>,
     /// From the model list's `prices`, or the reviewed constant above.
@@ -188,6 +206,8 @@ impl Catalog {
                         blocked: text("blocked"),
                         approved: false,
                         reasoning: text("reasoning"),
+                        reasoning_levels: pair.get("reasoningLevels").and_then(Value::as_array)
+                            .map(|levels| levels.iter().filter_map(Value::as_str).map(str::to_owned).collect()).unwrap_or_default(),
                         tasks: pair.get("tasks").and_then(Value::as_array).map(|tasks| tasks.iter().filter_map(Value::as_str).map(str::to_owned).collect()),
                         price: listed_price.or_else(|| reviewed_price(&provider, &model)),
                         provider,
@@ -396,6 +416,9 @@ pub struct AiForm {
     pub limits: BTreeMap<String, String>,
     /// Task profile fields other than provider and model (`adapterOptions`), kept as they were.
     kept_options: BTreeMap<String, Value>,
+    /// `MIO_LESSON_REASONING`: a level for a lesson model that always reasons, or empty for the
+    /// level the model was reviewed at.
+    pub lesson_reasoning: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -423,7 +446,30 @@ impl AiForm {
             }
         }
         let limits = LIMITS.iter().map(|limit| (limit.key.to_owned(), file.value(limit.key).unwrap_or_default().to_owned())).collect();
-        Self { default_pair, per_task, limits, kept_options }
+        let lesson_reasoning = file.value(LESSON_REASONING_KEY).unwrap_or_default().to_owned();
+        Self { default_pair, per_task, limits, kept_options, lesson_reasoning }
+    }
+
+    /// The levels the lesson row offers: the lesson pair's reviewed levels, empty when it does
+    /// not reason.
+    pub fn lesson_reasoning_levels<'catalog>(&self, catalog: &'catalog Catalog) -> &'catalog [String] {
+        let (provider, model) = self.pair_for(REASONING_TASK);
+        catalog.find(provider, model).filter(|pair| pair.reasons()).map_or(&[], |pair| &pair.reasoning_levels)
+    }
+
+    /// The level lessons run at: the chosen one, or the pair's own when none is chosen.
+    pub fn lesson_reasoning_level(&self, catalog: &Catalog) -> Option<String> {
+        let (provider, model) = self.pair_for(REASONING_TASK);
+        let pair = catalog.find(provider, model).filter(|pair| pair.reasons())?;
+        Some(if self.lesson_reasoning.is_empty() { pair.reasoning.clone()? } else { self.lesson_reasoning.clone() })
+    }
+
+    /// After the lesson model changed: a level the new model is not reviewed for goes back to
+    /// the model's own, so the gateway never gets a level it would refuse.
+    pub fn fit_lesson_reasoning(&mut self, catalog: &Catalog) {
+        if !self.lesson_reasoning_levels(catalog).contains(&self.lesson_reasoning) {
+            self.lesson_reasoning.clear();
+        }
     }
 
     /// The pair a task runs with.
@@ -483,6 +529,12 @@ impl AiForm {
                 Some(_) => {}
             }
         }
+        // The gateway ignores the level when the lesson model does not reason, so only a level a
+        // reasoning model is not reviewed for stops saving.
+        let levels = self.lesson_reasoning_levels(catalog);
+        if !self.lesson_reasoning.is_empty() && !levels.is_empty() && !levels.contains(&self.lesson_reasoning) {
+            problems.push(format!("Lektioner: resonemangsnivån {} är inte granskad för modellen.", self.lesson_reasoning));
+        }
         for limit in &LIMITS {
             if let Err(message) = check_limit(limit, self.limits.get(limit.key).map(String::as_str).unwrap_or("")) {
                 problems.push(message);
@@ -497,6 +549,7 @@ impl AiForm {
             ("MIO_AI_PROVIDER".to_owned(), self.default_pair.0.clone()),
             ("MIO_AI_MODEL".to_owned(), self.default_pair.1.clone()),
             ("MIO_AI_TASK_PROFILES".to_owned(), self.task_profiles()),
+            (LESSON_REASONING_KEY.to_owned(), self.lesson_reasoning.clone()),
         ];
         for limit in &LIMITS {
             let text = self.limits.get(limit.key).map(String::as_str).unwrap_or("");
@@ -599,6 +652,39 @@ mod tests {
         assert_eq!(form.problems(&catalog(), &file()).len(), 3);
         assert!(form.problems(&catalog(), &file())[0].contains("inte en granskad modell"));
         assert_eq!(GatewayFile::parse(&json!({ "exists": false })), None);
+    }
+
+    #[test]
+    fn the_lesson_level_is_one_the_lesson_model_is_reviewed_for() {
+        let catalog = Catalog::parse(&json!({ "models": [
+                { "provider": "groq", "model": "qwen/qwen3.8-27b", "secretVariable": "GROQ_API_KEY", "reasoning": "off", "reasoningLevels": [] },
+                { "provider": "mistral", "model": "large", "secretVariable": "GROQ_API_KEY", "reasoning": "medium", "tasks": ["lesson"],
+                  "reasoningLevels": ["low", "medium", "high"] },
+                { "provider": "openai", "model": "sol", "secretVariable": "GROQ_API_KEY", "reasoning": "medium", "tasks": ["lesson"],
+                  "reasoningLevels": ["medium"] }] }))
+        .unwrap();
+        let mut form = AiForm::from_file(&file());
+        // Groq does not reason: no levels, nothing to save.
+        assert!(form.lesson_reasoning_levels(&catalog).is_empty());
+        assert_eq!(form.lesson_reasoning_level(&catalog), None);
+        form.set_task("lesson", ("mistral".into(), "large".into()));
+        assert_eq!(form.lesson_reasoning_levels(&catalog), ["low", "medium", "high"]);
+        assert_eq!(form.lesson_reasoning_level(&catalog).as_deref(), Some("medium"), "the model's own level until one is chosen");
+        form.lesson_reasoning = "high".into();
+        assert!(form.problems(&catalog, &file()).is_empty());
+        let change = form.changes(&file()).into_iter().find(|change| change.key == LESSON_REASONING_KEY).unwrap();
+        assert_eq!(change.after.as_deref(), Some("high"));
+        // Sol is reviewed at medium only: high would be refused, so moving there drops it.
+        form.set_task("lesson", ("openai".into(), "sol".into()));
+        assert_eq!(form.problems(&catalog, &file()), ["Lektioner: resonemangsnivån high är inte granskad för modellen."]);
+        form.fit_lesson_reasoning(&catalog);
+        assert!(form.lesson_reasoning.is_empty() && form.problems(&catalog, &file()).is_empty());
+        assert!(form.changes(&file()).iter().all(|change| change.key != LESSON_REASONING_KEY));
+        // A level left in the file while lessons run on a model without reasoning does not stop
+        // saving: the gateway ignores it.
+        form.set_task("lesson", ("groq".into(), "qwen/qwen3.8-27b".into()));
+        form.lesson_reasoning = "high".into();
+        assert!(form.problems(&catalog, &file()).is_empty());
     }
 
     /// A model list from a gateway after the grilling: a reasoning pair only for lessons. The

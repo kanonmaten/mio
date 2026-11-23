@@ -2,6 +2,17 @@
 
 Aktuella beslut står först. Daterade avsnitt bevarar beslutens historia; ett senare uttryckligt beslut ersätter ett äldre där de skiljer sig. [Ändringsloggen](../CHANGELOG.md) beskriver källändringar; [status](STATUS.md) beskriver faktiskt utförda kontroller.
 
+## Resonemangsnivå för lektioner, 2026-11-22
+
+Användarens beslut ([MIO-44](https://linear.app/kanonmaten/issue/MIO-44)): för Lektioner går resonemangsnivån att välja på AI-sidan. Frågor och Vardag resonerar aldrig. Dokumentationen lästes 2026-11-23.
+
+| Val | Varför | Bortvalt |
+|---|---|---|
+| En inställning, `MIO_LESSON_REASONING` (`low`, `medium` eller `high`, tom för modellens granskade nivå), som bara gäller en lektionsmodell som alltid resonerar | Bara lektioner får resonera, så en nivå per uppgift vore tre inställningar där två aldrig används | Ett fält i `MIO_AI_TASK_PROFILES` (där bara `provider`, `model` och `adapterOptions` får stå) |
+| Granskade nivåer per modell i `REASONING_LEVELS`: `low`, `medium`, `high` för Mistral Large 4 och Gemini 3.8 Flash, direkt och via OpenRouter; bara `medium` för GPT-6.2 Sol | Mistrals resonemangssida och Googles sida om tänkande listar de tre nivåerna. OpenAIs guide säger att värdena beror på modellen, men Sols modellsida listar inga | `xhigh` och `max` (inte dokumenterade för någon av modellerna); att gissa Sols nivåer |
+| En nivå som inte är granskad för modellen gör bara lektionsuppgiften ogiltig, och panelen återställer nivån när modellen byts | Frågor och Vardag ska fungera även om lektionsinställningen är fel | Att gatewayen vägrar starta |
+| Nivån ingår i `configurationRevision` bara när lektionsmodellen resonerar | Appen ska märka en ny nivå, men alla andra revisioner (och paritetstesterna) ska vara som förut | Att alltid ta med nivån |
+
 ## Lektioner på resonerande modeller får leverantörens temperatur, 2026-11-22
 
 Användarens beslut ([MIO-43](https://linear.app/kanonmaten/issue/MIO-43)): temperaturen går inte att ställa in, men den är inte längre 0 för allt. Regeln i `CLAUDE.md` ändrades samtidigt. Dokumentationen lästes 2026-11-23.

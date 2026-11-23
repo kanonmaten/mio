@@ -52,6 +52,7 @@ impl SettingsFile {
                 "MIO_TOKENS_PER_DAY",
                 "MIO_REQUESTS_PER_DAY",
                 "MIO_LESSON_INTERVAL_SECONDS",
+                "MIO_LESSON_REASONING",
             ],
             SettingsFile::Transcription => &[
                 "MIO_PRECISION",

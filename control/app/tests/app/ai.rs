@@ -40,7 +40,8 @@ fn catalog() -> Value {
             { "provider": "groq", "model": "qwen/qwen3.8-27b", "secretVariable": "GROQ_API_KEY", "temperature": "0" },
             { "provider": "anthropic", "model": "claude-haiku-5-5", "secretVariable": "ANTHROPIC_API_KEY", "temperature": "provider-default" },
             // A made-up reasoning pair reviewed for lessons only, in the shape the panel reads.
-            { "provider": "mistral", "model": "mistral-large-test", "secretVariable": "MISTRAL_API_KEY", "reasoning": "high", "tasks": ["lesson"] }],
+            { "provider": "mistral", "model": "mistral-large-test", "secretVariable": "MISTRAL_API_KEY", "reasoning": "high", "tasks": ["lesson"],
+              "reasoningLevels": ["low", "medium", "high"] }],
         "candidates": [{ "provider": "mistral", "model": "mistral-small-2603", "secretVariable": "MISTRAL_API_KEY", "blocked": "Kräver ett godkänt prov." }] })
 }
 
@@ -64,6 +65,21 @@ fn open(cx: &mut TestAppContext) -> (gpui_kit::AnyWindowHandle, Entity<Shell>, C
 /// folder, returned so the test can read what the credit limit field saved.
 /// Also returns how many times OpenRouter's public list was fetched (it always fails here).
 fn open_with(cx: &mut TestAppContext, gateway: Option<GatewayStatus>) -> (gpui_kit::AnyWindowHandle, Entity<Shell>, Calls, tempfile::TempDir, Arc<AtomicUsize>) {
+    open_full(cx, gateway, &[])
+}
+
+/// The AI page over a `gateway.env` with extra values.
+fn open_with_values(cx: &mut TestAppContext, values: &[(&'static str, &'static str)]) -> (gpui_kit::AnyWindowHandle, Entity<Shell>, Calls) {
+    let (handle, shell, calls, _, _) = open_full(cx, None, values);
+    (handle, shell, calls)
+}
+
+fn open_full(cx: &mut TestAppContext, gateway: Option<GatewayStatus>, values: &[(&'static str, &'static str)]) -> (gpui_kit::AnyWindowHandle, Entity<Shell>, Calls, tempfile::TempDir, Arc<AtomicUsize>) {
+    let mut file = settings();
+    for (key, value) in values {
+        file["values"][*key] = json!(value);
+    }
+    let file = Arc::new(file);
     cx.update(gpui_kit::init);
     cx.update(mio_control::theme::init);
     let calls: Calls = Arc::default();
@@ -78,7 +94,7 @@ fn open_with(cx: &mut TestAppContext, gateway: Option<GatewayStatus>) -> (gpui_k
                 recorded.lock().unwrap().push((command.clone(), stdin.map(<[u8]>::to_vec)));
                 Ok(match command {
                     Command::ReadSettings(SettingsFile::Gateway) if approved.load(Ordering::SeqCst) => settings_after_trial().to_string().into_bytes(),
-                    Command::ReadSettings(SettingsFile::Gateway) => settings().to_string().into_bytes(),
+                    Command::ReadSettings(SettingsFile::Gateway) => file.to_string().into_bytes(),
                     Command::TrialModel { .. } => {
                         approved.store(true, Ordering::SeqCst);
                         json!({ "passed": true, "tasks": [{ "task": "ask", "ok": true, "milliseconds": 900 }] }).to_string().into_bytes()
@@ -180,6 +196,63 @@ fn choose_a_model_and_a_limit_see_the_changes_and_save(cx: &mut TestAppContext) 
     let write_at = calls.iter().position(|(command, _)| matches!(command, Command::WriteSettings(_))).unwrap();
     let restart_at = calls.iter().position(|(command, _)| *command == Command::Unit(UnitAction::Restart, Unit::Gateway)).unwrap();
     assert!(restart_at > write_at);
+}
+
+#[gpui_kit::test]
+fn lessons_on_a_model_that_reasons_get_a_reasoning_level(cx: &mut TestAppContext) {
+    let (handle, _, calls) = open(cx);
+    let step = |cx: &mut TestAppContext, act: &dyn Fn(&mut gpui_kit::Window, &mut gpui_kit::App)| {
+        cx.update_window(handle, |_, window, cx| {
+            window.render_frame(cx);
+            act(window, cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+    };
+    step(cx, &|window, cx| window.click("edit-ai", cx));
+    // Lessons on Groq do not reason: no level to choose.
+    step(cx, &|window, cx| {
+        assert!(window.try_find("ai-reasoning-lesson").is_none());
+        // Groq, Anthropic, Mistral: Mistral's model for lessons reasons.
+        window.click("ai-provider-lesson", cx);
+        window.press("down", cx);
+        window.press("down", cx);
+        window.press("enter", cx);
+    });
+    step(cx, &|window, cx| {
+        assert_eq!(window.find("ai-reasoning-lesson").value(), Some("Hög"), "the model's own level");
+        window.click("ai-reasoning-lesson", cx);
+        window.press("up", cx);
+        window.press("enter", cx);
+    });
+    step(cx, &|window, cx| {
+        assert_eq!(window.find("ai-reasoning-lesson").value(), Some("Medel"));
+        window.click("save-ai", cx);
+    });
+    let calls = calls.lock().unwrap();
+    let (_, stdin) = calls.iter().find(|(command, _)| matches!(command, Command::WriteSettings(SettingsFile::Gateway))).expect("settings were written");
+    let request: Value = serde_json::from_slice(stdin.as_ref().unwrap()).unwrap();
+    assert_eq!(request["set"]["MIO_LESSON_REASONING"], "medium");
+}
+
+#[gpui_kit::test]
+fn a_level_the_lesson_model_is_not_reviewed_for_is_dropped_when_read(cx: &mut TestAppContext) {
+    // The file says high, but lessons run on Groq, which does not reason.
+    let (handle, _, _) = open_with_values(cx, &[("MIO_LESSON_REASONING", "high")]);
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("edit-ai", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("ai-reasoning-lesson").is_none());
+        // The removal is the one change, and nothing stops saving it.
+        assert_eq!(window.find("changes").label(), Some("1 ändringar"));
+        assert_ne!(window.find("save-ai").disabled(), Some(true));
+    })
+    .unwrap();
 }
 
 #[gpui_kit::test]
