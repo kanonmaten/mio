@@ -51,15 +51,28 @@ fn normalized(integer: &str, fraction: &str) -> String {
     if fraction.is_empty() { integer.to_owned() } else { format!("{integer}.{fraction}") }
 }
 
+/// A number with its sign; zero has none.
+fn signed(negative: bool, value: String) -> String {
+    if negative && value != "0" { format!("-{value}") } else { value }
+}
+
 /// The words of a text. A written number stays whole: "2,5" and "2.5" are one decimal, and
 /// "2 000" (a space before three digits) is one number; "40–50" is two.
 fn words(text: &str) -> Vec<Word> {
     let characters: Vec<char> = text.chars().collect();
     let mut words = Vec::new();
     let mut sentence_start = true;
+    let mut negative = false;
     let mut index = 0;
     while index < characters.len() {
         let character = characters[index];
+        // A minus sign right before a digit and not after one: "-5" is negative, "40-50" is a range.
+        let after_word = index > 0 && characters[index - 1].is_alphanumeric();
+        if matches!(character, '-' | '−') && !after_word && characters.get(index + 1).is_some_and(char::is_ascii_digit) {
+            negative = true;
+            index += 1;
+            continue;
+        }
         if character.is_ascii_digit() {
             let (mut integer, mut fraction, mut in_fraction) = (String::new(), String::new(), false);
             while let Some(&here) = characters.get(index) {
@@ -75,7 +88,7 @@ fn words(text: &str) -> Vec<Word> {
                 }
                 index += 1;
             }
-            words.push(Word::Digits(normalized(&integer, &fraction)));
+            words.push(Word::Digits(signed(std::mem::take(&mut negative), normalized(&integer, &fraction))));
             sentence_start = false;
         } else if character.is_alphabetic() {
             let mut word = String::new();
@@ -164,44 +177,78 @@ impl Spoken {
 /// count too; in the text they are ordinary words ("en sammanfattning", "den andra delen").
 /// "komma" between two numbers makes a decimal ("två komma fem" is 2.5).
 fn numbers(words: &[Word], quote: bool) -> Vec<String> {
-    let mut found: Vec<String> = Vec::new();
+    /// What the words say about numbers, in order, before decimals and signs are put together.
+    enum Piece {
+        Number(String),
+        Comma,
+        Minus,
+        /// Anything else, including a sentence boundary: no number continues across it.
+        Break,
+    }
+    let mut pieces = Vec::new();
     let mut spoken = Spoken::default();
-    let mut decimal_pending = false;
-    let flush = |spoken: &mut Spoken, found: &mut Vec<String>, decimal_pending: &mut bool| {
+    let flush = |spoken: &mut Spoken, pieces: &mut Vec<Piece>| {
         spoken.finish();
-        for value in std::mem::take(&mut spoken.numbers) {
-            match (std::mem::take(decimal_pending), found.pop()) {
-                (true, Some(whole)) if !whole.contains('.') => found.push(normalized(&whole, &value.to_string())),
-                (_, previous) => {
-                    found.extend(previous);
-                    found.push(value.to_string());
-                }
-            }
-        }
+        pieces.extend(std::mem::take(&mut spoken.numbers).into_iter().map(|value| Piece::Number(value.to_string())));
     };
     for word in words {
         match word {
             Word::Digits(value) => {
-                flush(&mut spoken, &mut found, &mut decimal_pending);
-                found.push(value.clone());
+                flush(&mut spoken, &mut pieces);
+                pieces.push(Piece::Number(value.clone()));
             }
-            Word::Text { lower, .. } => {
+            Word::Text { lower, sentence_start, .. } => {
+                // "tjugo. En sammanfattning" is twenty and then a new sentence, never 21.
+                if *sentence_start {
+                    flush(&mut spoken, &mut pieces);
+                    pieces.push(Piece::Break);
+                }
                 let article = !quote && matches!(lower.as_str(), "en" | "ett") && spoken.last.is_none();
                 match parts(lower).filter(|_| !article) {
-                    Some(pieces) => pieces.into_iter().for_each(|piece| spoken.push(piece)),
+                    Some(found) => found.into_iter().for_each(|piece| spoken.push(piece)),
                     None => {
-                        flush(&mut spoken, &mut found, &mut decimal_pending);
-                        if lower == "komma" && !found.is_empty() {
-                            decimal_pending = true;
-                        } else if let Some(value) = ordinal(lower).filter(|_| quote) {
-                            found.push(value.to_string());
-                        }
+                        flush(&mut spoken, &mut pieces);
+                        pieces.push(match lower.as_str() {
+                            "komma" => Piece::Comma,
+                            "minus" => Piece::Minus,
+                            _ => ordinal(lower).filter(|_| quote).map_or(Piece::Break, |value| Piece::Number(value.to_string())),
+                        });
                     }
                 }
             }
         }
     }
-    flush(&mut spoken, &mut found, &mut decimal_pending);
+    flush(&mut spoken, &mut pieces);
+    // "två komma fem" is 2.5 and "noll komma noll fem" is 0.05: every number after "komma" adds
+    // its digits to the decimals, so leading zeros stay. "minus fem" is -5.
+    let mut found = Vec::new();
+    let mut index = 0;
+    while index < pieces.len() {
+        let negative = matches!(pieces[index], Piece::Minus);
+        let start = index + usize::from(negative);
+        let Some(Piece::Number(whole)) = pieces.get(start) else {
+            index += 1;
+            continue;
+        };
+        index = start + 1;
+        let mut value = whole.clone();
+        if !whole.contains('.') && matches!(pieces.get(index), Some(Piece::Comma)) {
+            let mut decimals = String::new();
+            let mut next = index + 1;
+            while let Some(Piece::Number(digits)) = pieces.get(next) {
+                if digits.contains('.') || digits.starts_with('-') {
+                    break;
+                }
+                decimals.push_str(digits);
+                next += 1;
+            }
+            if !decimals.is_empty() {
+                value = normalized(whole, &decimals);
+                index = next;
+            }
+        }
+        found.push(if negative && !value.starts_with('-') { signed(true, value) } else { value });
+    }
     found
 }
 
@@ -212,7 +259,8 @@ fn calendar_word(word: &str) -> Option<&'static str> {
 
 /// A name without its genitive s, so "Karls" matches "Karl" but "Karlstad" does not.
 fn name_stem(word: &str) -> &str {
-    if word.chars().count() > 3 { word.strip_suffix('s').unwrap_or(word) } else { word }
+    // "Bos" is Bo's: a name of two letters still has a genitive.
+    if word.chars().count() >= 3 { word.strip_suffix('s').unwrap_or(word) } else { word }
 }
 
 /// True when every number, weekday, month and name in `text` is also in `quote`.
@@ -257,6 +305,11 @@ mod tests {
         assert!(!follow_quote("Koncentrationen är 5,2 procent.", "koncentrationen är två komma fem procent"));
         assert!(!follow_quote("Läs sidan 2.", "Läs sidan två tusen."));
         assert!(!follow_quote("Läs om Karl.", "Läs om Karlstad."));
+        // The sign, spoken decimals and sentence boundaries (CodeRabbit on #33, second round).
+        assert!(!follow_quote("Temperaturen är 5 grader.", "Temperaturen är -5 grader."));
+        assert!(!follow_quote("Temperaturen är 5 grader.", "temperaturen är minus fem grader"));
+        assert!(!follow_quote("Koncentrationen är 5 procent.", "Koncentrationen är noll komma noll fem procent."));
+        assert!(!follow_quote("Läs sidan 21.", "Läs sidan tjugo. En sammanfattning ska lämnas in."));
     }
 
     #[test]
@@ -273,6 +326,12 @@ mod tests {
         assert!(follow_quote("Koncentrationen är 2,5 procent.", "koncentrationen är två komma fem procent"));
         assert!(follow_quote("Koncentrationen är 2.5 procent.", "Koncentrationen är 2,5 procent."));
         assert!(follow_quote("Läs sidorna 40–50.", "läs sidorna fyrtio till femtio"));
+        assert!(follow_quote("Läs sidorna 40-50.", "läs sidorna fyrtio till femtio"), "a hyphen between numbers is a range");
+        assert!(follow_quote("Temperaturen är -5 grader.", "temperaturen är minus fem grader"));
+        assert!(follow_quote("Koncentrationen är 0,05 procent.", "Koncentrationen är noll komma noll fem procent."));
+        assert!(follow_quote("Läs sidan 20.", "Läs sidan tjugo. En sammanfattning ska lämnas in."));
+        assert!(follow_quote("Läs sidan 21.", "läs sidan tjugo ett"), "one number within a sentence");
+        assert!(follow_quote("Läs om Bos resa.", "Läs om Bo."));
         assert!(follow_quote("Gör en sammanfattning av ett kapitel.", "skriv om kapitlet"), "articles are not numbers");
         assert!(follow_quote("Repetera: Fotosyntesen kräver ljus.", "fotosyntesen behöver ljus"), "a capital after a colon starts a sentence");
         assert!(follow_quote("Den andra delen är viktigast.", "det här är viktigast"), "an ordinal word in the text is not a number");
