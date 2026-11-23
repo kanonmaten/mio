@@ -406,7 +406,7 @@ impl AiPage {
         Some(if levels.len() > 1 {
             row.child(div().w_40().child(Select::new(&editor.reasoning).id("ai-reasoning-lesson")))
                 .child(div().flex_1().min_w_0().text_sm().text_color(theme.muted_foreground)
-                    .child("Högre nivå tänker längre: bättre anteckningar, men dyrare och långsammare."))
+                    .child("Högre nivå tänker längre: bättre anteckningar, men dyrare och långsammare. Tänkandet räknas in i svarslängden, så Hög kan behöva en längre svarslängd för Lektioner under Gränser. Prova provar på nivån du sparat."))
                 .into_any_element()
         } else {
             row.child(div().id("ai-reasoning-lesson").test_support().flex_1().text_sm().text_color(theme.muted_foreground)

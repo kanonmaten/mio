@@ -396,6 +396,30 @@ fn the_trial_tries_large_4_on_lessons_only() {
     assert_eq!(provider.count(), 1);
     let sent: Value = serde_json::from_str(&provider.calls.lock().unwrap()[0].body).unwrap();
     assert_eq!((sent["reasoning_effort"].clone(), sent["max_tokens"].clone()), (json!("medium"), json!(12_000)));
+    // The saved level and answer budget are what the trial sends (MIO-48, MIO-45).
+    let chosen = format!("{env_file}MIO_LESSON_REASONING=high\nMIO_MAX_OUTPUT_TOKENS_LESSON=20000\n");
+    trial(&chosen, "mistral", LARGE, &Link(provider.clone())).unwrap();
+    let sent: Value = serde_json::from_str(&provider.calls.lock().unwrap()[1].body).unwrap();
+    assert_eq!((sent["reasoning_effort"].clone(), sent["max_tokens"].clone()), (json!("high"), json!(20_000)));
+}
+
+#[test]
+fn the_level_is_looked_up_for_the_tried_pair() {
+    // One saved level, "low", tried against two pairs. Gemini 3.8 Flash through OpenRouter is
+    // reviewed at low and sends it in OpenRouter's own reasoning object; Sol is reviewed at medium
+    // only and falls back to it. Before MIO-48 both were tried at medium.
+    let env_file = format!("OPENAI_API_KEY={KEY}\nOPENROUTER_API_KEY={KEY}\nMIO_GATEWAY_TOKEN={TOKEN}\nMIO_AI_PROVIDER=openai\n\
+        MIO_AI_MODEL=gpt-6-luna\nMIO_LESSON_REASONING=low\n");
+    let sent = |provider_id: &str, model: &str| {
+        let provider = Provider::new(|_, _| Upstream::json(&chat(json!(lesson_answer().to_string()), "stop",
+            json!({ "prompt_tokens": 900, "completion_tokens": 2_000 }))));
+        let _ = trial(&env_file, provider_id, model, &Link(provider.clone()));
+        let body: Value = serde_json::from_str(&provider.calls.lock().unwrap()[0].body).unwrap();
+        body
+    };
+    let gemini = sent("openrouter", "google/gemini-3.8-flash");
+    assert_eq!((gemini["reasoning"]["effort"].clone(), gemini.get("reasoning_effort").cloned()), (json!("low"), None));
+    assert_eq!(sent("openai", "gpt-6.2-sol")["reasoning_effort"], "medium");
 }
 
 /// Runs `mode` against a provider that never answers, on paused time, and returns how long the
