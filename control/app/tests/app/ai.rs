@@ -454,6 +454,33 @@ fn a_key_saved_in_kom_igang_closes_the_ai_pages_old_editor(cx: &mut TestAppConte
 }
 
 #[gpui_kit::test]
+fn a_reading_that_lands_after_the_other_view_saved_is_thrown_away(cx: &mut TestAppContext) {
+    // The shell's window stays open: it holds the faked backend's globals.
+    let (_shell_window, _, calls) = open(cx);
+    // A lone AI view in a second window, so the test can reach its entity.
+    let status = cx.update(|cx| cx.new(|_| StatusModel::default()));
+    let (lone, page) = cx.update(|cx| {
+        gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| cx.new(|cx| mio_control::ai::AiPage::new(status, window, cx))).expect("open test window")
+    });
+    // The reading starts, then the other view saves before it lands.
+    cx.update_window(lone, |_, window, cx| {
+        page.update(cx, |page, cx| {
+            page.open_editor(window, cx);
+            page.forget_editor(cx);
+        })
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert!(calls.lock().unwrap().iter().any(|(command, _)| *command == Command::ReadSettings(SettingsFile::Gateway)), "the reading ran");
+    cx.update_window(lone, |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.try_find("provider-openai").is_none(), "the old reading did not become the editor");
+        assert!(window.try_find("edit-ai").is_some());
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
 fn a_model_waiting_for_its_trial_cannot_be_picked_from_the_list(cx: &mut TestAppContext) {
     let (handle, _, calls) = open(cx);
     cx.update_window(handle, |_, window, cx| {

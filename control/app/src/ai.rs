@@ -140,6 +140,9 @@ pub struct AiPage {
     credit_input_valid: bool,
     /// Shown inside Kom igång: only the providers, models and trials, scrolled by the guide.
     embedded: bool,
+    /// Counts readings of `gateway.env`. A reading that finishes after a newer one started, or
+    /// after `forget_editor`, is thrown away, so an old file never becomes the editor again.
+    reading: u64,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -179,6 +182,7 @@ impl AiPage {
             credit_input,
             credit_input_valid: true,
             embedded: false,
+            reading: 0,
             _subscriptions: vec![observe, typed],
         }
     }
@@ -192,7 +196,9 @@ impl AiPage {
     /// Drops what the editor read, after the other AI view saved: "Ändra…" reads the file again.
     /// Nothing is read here, so no password prompt appears for a view that is not on screen.
     pub fn forget_editor(&mut self, cx: &mut Context<Self>) {
-        if matches!(self.stage, Stage::Editing(_) | Stage::Failed(_)) {
+        // A reading still on its way may have started before the other view saved.
+        self.reading += 1;
+        if !matches!(self.stage, Stage::Closed) {
             self.stage = Stage::Closed;
             self.trial = None;
             cx.notify();
@@ -202,6 +208,8 @@ impl AiPage {
     /// Reads `gateway.env` through the helper (KDE asks for the password once) and the model list.
     pub fn open_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.stage = Stage::Loading;
+        self.reading += 1;
+        let reading = self.reading;
         cx.notify();
         let settings = operation::run(Command::ReadSettings(SettingsFile::Gateway), None, cx);
         let catalog = operation::catalog(cx);
@@ -212,6 +220,9 @@ impl AiPage {
         cx.spawn_in(window, async move |this, cx| {
             let (settings, catalog) = (settings.await, catalog.await);
             let _ = this.update_in(cx, |this, window, cx| {
+                if this.reading != reading {
+                    return;
+                }
                 this.stage = match (settings, catalog) {
                     (Err(error), _) => Stage::Failed(error.to_string().into()),
                     (_, Err(message)) => Stage::Failed(message.into()),
