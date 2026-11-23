@@ -244,7 +244,8 @@ pub fn trial(text: &str, provider_id: &str, model: &str, transport: &dyn Transpo
     let tasks: Vec<Value> = trial_payloads().into_iter()
         .filter(|(task, _, _)| !profile.reasoning.reasons() || *task == REASONING_TASK).map(|(task, mode, payload)| {
         let started = std::time::Instant::now();
-        let outcome = runtime.block_on(trial_call(profile.clone(), &key, mode, &payload, transport, &now, config.minute_budget(provider_id)));
+        let chosen = config.max_output_tokens.get(task).copied();
+        let outcome = runtime.block_on(trial_call(profile.clone(), &key, mode, &payload, transport, &now, config.minute_budget(provider_id), chosen));
         let milliseconds = started.elapsed().as_millis() as u64;
         passed &= outcome.is_ok();
         match outcome {

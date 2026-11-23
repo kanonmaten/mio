@@ -71,6 +71,7 @@ QR-koden innehåller kompakt JSON:
 | `MIO_TOKENS_PER_DAY` | 190 000 (högst 1 000 000, tomt = av) | Gratisnivån tillåter 200 000 token per dygn; marginalen täcker avrundning |
 | `MIO_REQUESTS_PER_DAY` | tomt (av) | Valfri extra gräns per UTC-dygn |
 | `MIO_LESSON_INTERVAL_SECONDS` | 60 (60–3600) | Minsta tid mellan lektionsdelar |
+| `MIO_MAX_OUTPUT_TOKENS_ASK`, `_EVERYDAY`, `_LESSON` | tom (300–4000, 500–6000, 1200–32000) | Svarslängd per uppgift, alltså `max_tokens`. Tom ger uppgiftens egen: 1 200 för `ask`, 1 500 för `everyday`, 3 500 för `lesson` och 12 000 för en lektion som resonerar (resonemanget räknas in). Till skillnad från de andra gränserna betyder 0 inte "ingen gräns": 0 eller ett värde utanför intervallet stoppar gatewayen, och felet namnger nyckeln. Minutbudgeten krymper fortfarande anropet, och Prova använder samma värde |
 | `MIO_LESSON_REASONING` | tom (`low`, `medium` eller `high`) | Resonemangsnivå för lektioner på en modell som alltid resonerar. Tom ger nivån modellen granskades på. En nivå som inte är granskad för modellen stänger av bara lektioner (`provider_options_incompatible`); ett annat ord stoppar gatewayen |
 
 Räknarna sparas i `counters.json` efter varje reservation, så en omstart nollställer dem inte. Tokenräknaren använder Groqs rapporterade förbrukning. Är dygnets tokens slut svarar gatewayen 429 `local_token_limit` med `Retry-After` till nästa UTC-midnatt, och appen visar när AI fungerar igen.

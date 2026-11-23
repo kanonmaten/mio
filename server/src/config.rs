@@ -39,6 +39,19 @@ pub fn output_limit(task: &str, profile: &Profile, task_limit: u64) -> u64 {
     if task == REASONING_TASK && profile.reasoning.reasons() { LESSON_REASONING_MAX_OUTPUT_TOKENS } else { task_limit }
 }
 
+/// The answer budgets the user may choose per task (`MIO_MAX_OUTPUT_TOKENS_<TASK>`, user decision
+/// 2026-11-22, MIO-45), as (task, smallest, largest). The smallest is the gateway's own floor in
+/// `fit_to_minute_budget`, below which a schema-valid answer does not fit. The largest is about
+/// three times today's budget for ask and everyday, and for lessons what a reasoning model can
+/// write within the 180 s lesson limit; the per-minute budget still shrinks any of them.
+pub const OUTPUT_RANGES: [(&str, u64, u64); 3] = [("ask", 300, 4_000), ("everyday", 500, 6_000), ("lesson", 1_200, 32_000)];
+
+/// The answer budget for `task` on `profile` with the user's choice: the chosen value when one is
+/// set, otherwise `output_limit`.
+pub fn answer_limit(chosen: Option<u64>, task: &str, profile: &Profile, task_limit: u64) -> u64 {
+    chosen.unwrap_or_else(|| output_limit(task, profile, task_limit))
+}
+
 /// True when a pair that always reasons stands for a task other than `lesson` (user decision
 /// 2026-11-19: only lessons may reason). The gateway then refuses to start.
 pub fn reasoning_outside_lesson(config: &Config) -> bool {
@@ -61,6 +74,9 @@ pub struct Config {
     /// `None` keeps the level the pair was reviewed at. Only a level reviewed for the selected
     /// pair runs: any other makes `profile` refuse, which disables only that task.
     pub lesson_reasoning: Option<String>,
+    /// The chosen answer budget per task (`MIO_MAX_OUTPUT_TOKENS_<TASK>`), within `OUTPUT_RANGES`;
+    /// a task missing here keeps its own budget.
+    pub max_output_tokens: BTreeMap<String, u64>,
     pub gateway_token: String,
     pub model: String,
     pub port: u16,
@@ -120,7 +136,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self { provider: "groq".to_owned(), api_key: String::new(), provider_secrets: BTreeMap::new(),
-            task_profiles: None, adapter_options: None, lesson_interval_seconds: None, lesson_reasoning: None,
+            task_profiles: None, adapter_options: None, lesson_interval_seconds: None, lesson_reasoning: None, max_output_tokens: BTreeMap::new(),
             gateway_token: String::new(), model: String::new(), port: 8_787, requests_per_minute: 10,
             tokens_per_minute: None, provider_tokens_per_minute: BTreeMap::new(), approved_candidates: Vec::new(), requests_per_day: None, tokens_per_day: None,
             upstream_timeout_ms: 40_000, body_timeout_ms: 5_000, retry_delay_ms: None,
@@ -174,6 +190,24 @@ fn positive_integer(value: Option<&str>, fallback: u64, maximum: u64) -> Result<
 }
 
 /// Unset, empty or `0` means no limit.
+/// `MIO_MAX_OUTPUT_TOKENS_<TASK>`: empty or absent keeps the task's own budget. Unlike the other
+/// limits, 0 is not "no limit" but an error, as is anything outside `OUTPUT_RANGES`; the message
+/// names the key.
+fn answer_budgets(env: &dyn Fn(&str) -> Option<String>) -> Result<BTreeMap<String, u64>, ConfigError> {
+    let mut budgets = BTreeMap::new();
+    for (task, smallest, largest) in OUTPUT_RANGES {
+        let error = ConfigError(match task {
+            "ask" => "Ogiltig MIO_MAX_OUTPUT_TOKENS_ASK (300–4000 token, eller tom).",
+            "everyday" => "Ogiltig MIO_MAX_OUTPUT_TOKENS_EVERYDAY (500–6000 token, eller tom).",
+            _ => "Ogiltig MIO_MAX_OUTPUT_TOKENS_LESSON (1200–32000 token, eller tom).",
+        });
+        let Some(value) = env(&format!("MIO_MAX_OUTPUT_TOKENS_{}", task.to_uppercase())).filter(|value| !trim(value).is_empty()) else { continue };
+        let limit = trim(&value).parse::<u64>().ok().filter(|limit| (smallest..=largest).contains(limit)).ok_or(error)?;
+        budgets.insert(task.to_owned(), limit);
+    }
+    Ok(budgets)
+}
+
 fn optional_limit(value: Option<&str>, maximum: u64) -> Result<Option<u64>, ConfigError> {
     match value {
         None | Some("" | "0") => Ok(None),
@@ -193,6 +227,7 @@ pub fn load_config(env: &dyn Fn(&str) -> Option<String>) -> Result<Config, Confi
         adapter_options: None,
         lesson_interval_seconds: Some(positive_integer(env("MIO_LESSON_INTERVAL_SECONDS").as_deref(), 60, 3_600)?),
         lesson_reasoning: lesson_reasoning(env("MIO_LESSON_REASONING").as_deref())?,
+        max_output_tokens: answer_budgets(env)?,
         gateway_token: env("MIO_GATEWAY_TOKEN").unwrap_or_default(),
         model: env("MIO_AI_MODEL").unwrap_or_default(),
         port: positive_integer(env("PORT").as_deref(), 8_787, 65_535)? as u16,
@@ -246,6 +281,10 @@ pub fn validate_config(config: &Config) -> Result<(), ConfigError> {
     }
     if config.requests_per_minute < 1 || config.upstream_timeout_ms < 1 || config.body_timeout_ms < 1 {
         return Err(ConfigError("Ogiltig servergräns."));
+    }
+    if config.max_output_tokens.iter().any(|(task, limit)| !OUTPUT_RANGES.iter()
+        .any(|(each, smallest, largest)| each == task && (smallest..=largest).contains(&limit))) {
+        return Err(ConfigError("Ogiltig svarslängd (ask 300–4000, everyday 500–6000, lesson 1200–32000 token)."));
     }
     if reasoning_outside_lesson(config) {
         return Err(ConfigError("En modell som alltid resonerar får bara användas för lektioner (provider_options_incompatible)."));
