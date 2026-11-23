@@ -396,6 +396,22 @@ fn the_trial_tries_large_4_on_lessons_only() {
     assert_eq!(provider.count(), 1);
     let sent: Value = serde_json::from_str(&provider.calls.lock().unwrap()[0].body).unwrap();
     assert_eq!((sent["reasoning_effort"].clone(), sent["max_tokens"].clone()), (json!("medium"), json!(12_000)));
+    // The saved level and answer budget are what the trial sends (MIO-48, MIO-45).
+    let chosen = format!("{env_file}MIO_LESSON_REASONING=high\nMIO_MAX_OUTPUT_TOKENS_LESSON=20000\n");
+    trial(&chosen, "mistral", LARGE, &Link(provider.clone())).unwrap();
+    let sent: Value = serde_json::from_str(&provider.calls.lock().unwrap()[1].body).unwrap();
+    assert_eq!((sent["reasoning_effort"].clone(), sent["max_tokens"].clone()), (json!("high"), json!(20_000)));
+}
+
+#[test]
+fn a_level_not_reviewed_for_the_tried_pair_falls_back_to_its_own() {
+    // Lessons run on Large 4 at high; Sol, reviewed at medium only, is tried at medium.
+    let env_file = format!("OPENAI_API_KEY={KEY}\nMIO_GATEWAY_TOKEN={TOKEN}\nMIO_AI_PROVIDER=openai\nMIO_AI_MODEL=gpt-6-luna\nMIO_LESSON_REASONING=high\n");
+    let provider = Provider::new(|_, _| Upstream::json(&chat(json!(lesson_answer().to_string()), "stop",
+        json!({ "prompt_tokens": 900, "completion_tokens": 2_000 }))));
+    let _ = trial(&env_file, "openai", "gpt-6.2-sol", &Link(provider.clone()));
+    let sent: Value = serde_json::from_str(&provider.calls.lock().unwrap()[0].body).unwrap();
+    assert_eq!(sent["reasoning_effort"], "medium");
 }
 
 /// Runs `mode` against a provider that never answers, on paused time, and returns how long the

@@ -231,9 +231,16 @@ fn trial_payloads() -> [(&'static str, Mode, Value); 3] {
 pub fn trial(text: &str, provider_id: &str, model: &str, transport: &dyn Transport) -> Result<String, String> {
     let variables = environment_file(text);
     let config = load_config(&|name| variables.get(name).cloned()).map_err(|error| error.0.to_owned())?;
-    let profile = crate::model_profiles::provider_profile(provider_id, model, None)
+    let mut profile = crate::model_profiles::provider_profile(provider_id, model, None)
         .ok().or_else(|| crate::model_profiles::candidate_profile(provider_id, model))
         .ok_or_else(|| "Paret är varken granskat eller kandidat.".to_owned())?;
+    // The lesson runs at the chosen reasoning level when it is reviewed for this pair (MIO-48),
+    // so a level that thinks past the answer budget shows here, not on a real lesson.
+    if let (crate::model_profiles::Reasoning::Effort(_), Some(level)) = (profile.reasoning, config.lesson_reasoning.as_deref())
+        && let Some(chosen) = reasoning_levels(provider_id, model).iter().find(|each| **each == level)
+    {
+        profile.reasoning = crate::model_profiles::Reasoning::Effort(chosen);
+    }
     let key = config.provider_secrets.get(provider_id).cloned().unwrap_or_default();
     if key.trim().is_empty() {
         return Err(format!("Nyckel saknas: {}.", provider(provider_id).map_or("", |entry| entry.secret_variable)));
